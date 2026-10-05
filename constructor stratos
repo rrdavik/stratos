@@ -1,0 +1,16 @@
+constructor stratos
+
+
+exec(open('C:/Users/DareDave/Downloads/est/fase1_tempo_beatstep.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase2_seq1_baliza.py').read())
+
+
+
+exec(open('C:/Users/DareDave/Downloads/est/fase3_semilla.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase4_desborde.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase5_especies.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase6_ciclo.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase7_erosion.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase8_conchas.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase9_arqueologia.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase10_direccion.py').read())
