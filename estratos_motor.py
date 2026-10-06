@@ -19,13 +19,14 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v2'
+MOTOR_VERSION = 'motor v7'
 
 import math
 
-COLS, ROWS = 12, 8
-N = COLS * ROWS
-LAT_SPAN = 0.86            # igual que reticula_callbacks: evita los polos
+# La reticula la decide el rango de notas (ver set_grid): N cambia.
+POLO_SUR_DEF, POLO_NORTE_DEF = 24, 108     # do1 y do8 (MIDI 60 = do4)
+FUERA_MODES = ['plegar', 'ignorar', 'limitar']
+N = 0
 
 NOTE_NAMES = ['do', 'do#', 're', 're#', 'mi', 'fa',
               'fa#', 'sol', 'sol#', 'la', 'la#', 'si']
@@ -69,65 +70,186 @@ DEFAULT_CFG = dict(
 # 1. NUCLEO - geometria del reticulo
 # -----------------------------------------------------------------------------
 
-def idx(col, row):
-    return int(row) * COLS + int(col) % COLS
+# La reticula va de polo a polo. La nota mas grave del rango
+# (Notapolosur) es el POLO SUR y la mas aguda (Notapolonorte) el POLO
+# NORTE; las de en medio se reparten en ANILLOS, uno por octava, como en la
+# reticula de bandas: la clase de nota es el meridiano y la octava el
+# anillo. Con do1-do8: un anillo de 11 (do#1-si1), seis de 12 (do2-si7) y
+# el polo norte en do8. Los dos polos van entre do1 (24) y do8 (108).
+# Vecinas: las dos del anillo, las del anillo contiguo cuyo arco se solapa
+# y, en los anillos extremos, el polo. El polo: todo su anillo.
+
+def ring_layout(lo, hi):
+    """Reticula en anillos. lo = polo sur, hi = polo norte (notas MIDI).
+    Entre medias, un anillo por octava: la clase de nota es el meridiano.
+    Los anillos incompletos (el primero y el ultimo, si el rango no empieza
+    o acaba en do) reparten sus celdas por igual alrededor.
+    Devuelve (normales, anillo de cada celda, celdas de cada anillo,
+    alto de banda en grados, radio del casquete polar en grados)."""
+    K = hi - lo
+    first = (lo + 1) // 12
+    rings = []
+    ring_of = [-1] * (K + 1)
+    for k in range(1, K):
+        j = (lo + k) // 12 - first
+        while len(rings) <= j:
+            rings.append([])
+        rings[j].append(k)
+        ring_of[k] = j
+    R = max(1, len(rings))
+    band = 180.0 / (R + 0.5)
+    cap = band * 0.25
+    normals = [None] * (K + 1)
+    normals[0] = (0.0, -1.0, 0.0)
+    normals[K] = (0.0, 1.0, 0.0)
+    for j, cells in enumerate(rings):
+        phi = math.radians(-90.0 + cap + band * (j + 0.5))
+        m = len(cells)
+        for q, k in enumerate(cells):
+            if m == 12:
+                th = 2.0 * math.pi * ((lo + k) % 12) / 12.0
+            else:
+                th = 2.0 * math.pi * (q + 0.5) / m
+            normals[k] = (math.cos(phi) * math.cos(th), math.sin(phi),
+                          math.cos(phi) * math.sin(th))
+    return normals, ring_of, rings, band, cap
 
 
-def colrow(i):
-    return i % COLS, i // COLS
+GRID = dict(lo=None, hi=None, mode=0)
+NORMALS = []
+SIZE_EW = []          # ancho este-oeste de cada celda (rad, esfera unidad)
+SIZE_NS = []          # alto norte-sur (rad)
+NEIGH = []
+RING_OF = []
+RINGS = []
+POLE_S = 0
+POLE_N = 0
+NOTA_MIN, NOTA_MAX = 24, 108        # do1 y do8: limites de los polos
 
 
-def note_to_cell(note):
-    return int(note) % COLS, (int(note) // COLS) % ROWS
+def _arc_overlap(a, wa, b, wb):
+    d = abs((a - b + math.pi) % (2 * math.pi) - math.pi)
+    return d < wa + wb - 1e-6
+
+
+def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0):
+    """Rehace la reticula para el rango de notas [lo, hi]. Devuelve True si
+    ha cambiado la geometria (el mundo hay que vaciarlo)."""
+    global N, NORMALS, SIZE_EW, SIZE_NS, NEIGH, POLE_S, POLE_N, RING_OF, RINGS
+    lo = max(NOTA_MIN, min(NOTA_MAX - 2, int(lo)))
+    hi = max(lo + 2, min(NOTA_MAX, int(hi)))
+    GRID['mode'] = int(mode)
+    if GRID['lo'] == lo and GRID['hi'] == hi:
+        return False
+    GRID['lo'], GRID['hi'] = lo, hi
+    K = hi - lo
+    N = K + 1
+    POLE_S, POLE_N = 0, K
+    NORMALS, RING_OF, RINGS, band, cap = ring_layout(lo, hi)
+    nb = [[] for _ in range(N)]
+
+    def link(a, b):
+        if a != b:
+            if b not in nb[a]:
+                nb[a].append(b)
+            if a not in nb[b]:
+                nb[b].append(a)
+
+    def theta(k):
+        x, _, z = NORMALS[k]
+        return math.atan2(z, x)
+
+    for j, cells in enumerate(RINGS):
+        m = len(cells)
+        for q, k in enumerate(cells):
+            if m > 1:
+                link(k, cells[(q + 1) % m])
+        if j + 1 < len(RINGS):
+            nxt = RINGS[j + 1]
+            if m == 12 and len(nxt) == 12:
+                # dos anillos completos: hexagonal desplazada, como las bandas
+                # (los pares miran a (c-1, c), los impares a (c, c+1))
+                pc_a = dict(((lo + k) % 12, k) for k in cells)
+                offs = (-1, 0) if (j + 1) % 2 == 0 else (0, 1)
+                for b in nxt:
+                    c = (lo + b) % 12
+                    for o in offs:
+                        link(b, pc_a[(c + o) % 12])
+            else:
+                for a in cells:
+                    for b in nxt:
+                        if _arc_overlap(theta(a), math.pi / m, theta(b), math.pi / len(nxt)):
+                            link(a, b)
+    for k in RINGS[0]:
+        link(POLE_S, k)
+    for k in RINGS[-1]:
+        link(POLE_N, k)
+    NEIGH = nb
+    SIZE_EW, SIZE_NS = [], []
+    for k in range(N):
+        if k in (POLE_S, POLE_N):
+            d = 2.0 * math.sin(math.radians(cap))
+            SIZE_EW.append(d)
+            SIZE_NS.append(d)
+            continue
+        m = len(RINGS[RING_OF[k]])
+        phi = math.asin(max(-1.0, min(1.0, NORMALS[k][1])))
+        SIZE_EW.append(2.0 * math.pi * math.cos(phi) / m)
+        SIZE_NS.append(math.radians(band))
+    return True
+
+
+def is_pole(i):
+    return i == POLE_S or i == POLE_N
+
+
+def fold_note(note, mode=None):
+    """Nota MIDI -> nota dentro del rango, o None si se ignora.
+    plegar: por octavas (conserva la clase de nota); limitar: al polo mas
+    cercano; ignorar: no deja nada."""
+    lo, hi = GRID['lo'], GRID['hi']
+    mode = GRID['mode'] if mode is None else int(mode)
+    n = int(note)
+    if lo <= n <= hi:
+        return n
+    if mode == 1:
+        return None
+    if mode == 0:
+        while n > hi:
+            n -= 12
+        while n < lo:
+            n += 12
+        if lo <= n <= hi:
+            return n
+    return lo if int(note) < lo else hi
 
 
 def note_cell(note):
-    c, r = note_to_cell(note)
-    return idx(c, r)
+    n = fold_note(note)
+    return None if n is None else n - GRID['lo']
+
+
+def cell_note(i):
+    return GRID['lo'] + int(i)
 
 
 def note_name(note):
     return '%s%d' % (NOTE_NAMES[int(note) % 12], int(note) // 12 - 1)
 
 
-def cell_angles(col, row):
-    theta = (col / float(COLS)) * 2.0 * math.pi
-    phi = ((row + 0.5) / float(ROWS) - 0.5) * math.pi * LAT_SPAN
-    return theta, phi
-
-
-def cell_normal(col, row):
-    theta, phi = cell_angles(col, row)
-    return (math.cos(phi) * math.cos(theta),
-            math.sin(phi),
-            math.cos(phi) * math.sin(theta))
+def cell_label(i):
+    if i == POLE_S:
+        return 'polo sur'
+    if i == POLE_N:
+        return 'polo norte'
+    return 'anillo %d' % (RING_OF[int(i)] + 1)
 
 
 def normal_i(i):
-    c, r = colrow(i)
-    return cell_normal(c, r)
+    return NORMALS[i]
 
 
-def _build_neighbors():
-    # Reticula hexagonal desplazada: 2 vecinas en la misma banda y 2 en
-    # cada banda contigua. Las bandas pares miran a (c-1, c), las impares a
-    # (c, c+1). Es simetrica: si A es vecina de B, B lo es de A.
-    # En los polos (bandas 0 y 7) solo hay 4 vecinas: el desborde se reparte
-    # entre las que existen (rebota, no se pierde).
-    out = []
-    for i in range(N):
-        c, r = colrow(i)
-        res = [idx((c - 1) % COLS, r), idx((c + 1) % COLS, r)]
-        offs = (-1, 0) if r % 2 == 0 else (0, 1)
-        for rr in (r - 1, r + 1):
-            if 0 <= rr < ROWS:
-                for o in offs:
-                    res.append(idx((c + o) % COLS, rr))
-        out.append(res)
-    return out
-
-
-NEIGH = _build_neighbors()
+set_grid()
 
 
 def rings(i, k):
@@ -404,10 +526,13 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['hits'][s] = W['hits'].get(s, 0) + 1
     W['hit_t'][s] = now
     i = note_cell(note)
-    W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
     if cfg['nivel'] >= 6:
         st = clock_note(W, cfg, now, tempo)
         det_note(W, cfg, s, int(note), st)
+    if i is None:                       # fuera del rango, modo ignorar
+        W['ev']['ultima'] = dict(s=s, celda=-1, occ=0, estado='fuera de rango', t=now)
+        return dict(estado='fuera de rango', inc=0.0, celda=-1)
+    W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
     res = grow(W, cfg, i, s, vel, now)
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
     W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now)
@@ -713,8 +838,8 @@ def pick_target(W, cfg, pad, vel):
         src = l2 or l1
     else:
         src = (l1 or l2) if pad % 2 == 0 else (l2 or l1)
-    c, r = colrow(src['cell'])
-    return idx((c + int(vel) % 3 - 1) % COLS, r)
+    i = src['cell']
+    return max(0, min(N - 1, i + int(vel) % 3 - 1))     # un semitono a un lado
 
 
 def degrade(W, cfg, i, k):
@@ -925,11 +1050,10 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
 # 1. NUCLEO - instancias para dibujar
 # -----------------------------------------------------------------------------
 
-def _cell_sizes(r, row):
-    _, phi = cell_angles(0, row)
-    cw = 2.0 * math.pi * r * math.cos(phi) / COLS
-    cl = math.pi * LAT_SPAN * r / ROWS
-    return cw, cl
+def _cell_sizes(r, i):
+    """(ancho este-oeste, largo norte-sur) de la celda i a radio r: la
+    medida de su anillo."""
+    return r * SIZE_EW[i], r * SIZE_NS[i]
 
 
 def _row(p, n, sx, sy, sz, col):
@@ -952,8 +1076,10 @@ COL_CROWN = (1.00, 0.70, 0.30)
 COL_SCAR = (0.10, 0.90, 1.00)
 
 
-def _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out):
+def _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None):
     e, t = tangents(n)
+    cx = min(cl, cw) if cw else cl      # ancho este-oeste real de la celda
+    kx = cx / cl
     occ = max(1, W['occ'][i])
     count = 1 + (1 if occ >= 2 else 0) + (1 if occ >= 3 else 0)
     if W['par'][i] >= 0:
@@ -963,27 +1089,28 @@ def _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out):
     main_dir, main_top = n, p0
     for k in range(count):
         u1, u2, u3, u4 = (_hash01(i, k, q) for q in (1, 2, 3, 4))
-        off = (0.0, 0.0) if k == 0 else ((u1 - 0.5) * 0.7 * cl, (u2 - 0.5) * 0.7 * cl)
+        off = (0.0, 0.0) if k == 0 else ((u1 - 0.5) * 0.7 * cx, (u2 - 0.5) * 0.7 * cl)
         lean = 0.10 + 0.25 * u3
-        d = _norm(_add(_add(n, e, lean * (u4 - 0.5) * 2), t, lean * (u1 - 0.5) * 2))
+        d = _norm(_add(_add(n, e, kx * lean * (u4 - 0.5) * 2), t, lean * (u1 - 0.5) * 2))
         p = _add(_add(p0, e, off[0]), t, off[1])
         w = wk[k] * cl * scale * (0.8 + 0.4 * u2)
         hh = vh * hk[k]
-        out.append(_row(p, d, w, hh, w * (0.7 + 0.5 * u3), _tint(col, 0.9 + 0.2 * u4)))
+        out.append(_row(p, d, w * kx, hh, w * (0.7 + 0.5 * u3), _tint(col, 0.9 + 0.2 * u4)))
         if k == 0:
             main_dir, main_top = d, _add(p, d, hh)
     return main_dir, main_top
 
 
-def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out):
+def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None):
     lim = limit(cfg)
     floor_h = 0.25 * lim
     w = 0.48 * cl * scale
+    wx = 0.48 * (min(cl, cw) if cw else cl) * scale
     k = 0
     while k * floor_h < vh - 1e-4 and k < 32:
         hh = min(floor_h, vh - k * floor_h) * 0.86
         p = _add(p0, n, k * floor_h)
-        out.append(_row(p, n, w, hh, w, _tint(col, 0.95 + 0.08 * (k % 2))))
+        out.append(_row(p, n, wx, hh, w, _tint(col, 0.95 + 0.08 * (k % 2))))
         k += 1
     return n, _add(p0, n, vh)
 
@@ -996,15 +1123,14 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     for i in range(N):
         vh = W['vh'][i]
         own = W['own'][i]
-        c, r = colrow(i)
         n = normal_i(i)
         base = base_radius(W, cfg, i)
         p0 = _mul(n, base)
-        cw, cl = _cell_sizes(base, r)
+        cw, cl = _cell_sizes(base, i)
         if vh <= 0.005 or not own:
             if lvl >= 7 and W['huella'][i] > 0 and W['occ'][i] == 0:
                 out['formas_porosas'].append(
-                    _row(_add(p0, n, 0.01), n, 0.45 * cl, 0.03, 0.45 * cl, COL_HUELLA))
+                    _row(_add(p0, n, 0.01), n, 0.45 * min(cl, cw), 0.03, 0.45 * cl, COL_HUELLA))
             continue
         pulido = W['vel'][i] >= cfg['vel_umbral']
         lst = out['formas_pulidas'] if pulido else out['formas_porosas']
@@ -1015,9 +1141,9 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         if sat:
             col = _tint(col, 0.85)
         if own == GEO:
-            d, top = _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst)
+            d, top = _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst, cw)
         else:
-            d, top = _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst)
+            d, top = _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst, cw)
         e, t = tangents(n)
         # hibridos: la otra especie deja su rastro
         if W['sp'][i] == HIB:
@@ -1026,10 +1152,10 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                     hh = 0.10 * lim
                     p = _add(p0, n, (0.15 + 0.3 * k) * vh)
                     ww = (0.48 - 0.14 * k) * cl * scale
-                    lst.append(_row(p, n, ww, hh, ww, _tint(COL_ARQ, 1.1)))
+                    lst.append(_row(p, n, ww * min(1.0, cw / cl), hh, ww, _tint(COL_ARQ, 1.1)))
             else:                   # torre mineralizada
                 for k, side in enumerate((1.0, -1.0)):
-                    p = _add(_add(p0, n, (0.3 + 0.25 * k) * vh), e, side * 0.17 * cl * scale)
+                    p = _add(_add(p0, n, (0.3 + 0.25 * k) * vh), e, side * 0.17 * min(cl, cw) * scale)
                     dd = _norm(_add(n, e, side * 0.9))
                     ww = 0.07 * cl * scale
                     lst.append(_row(p, dd, ww, 0.35 * vh, ww, _tint(COL_GEO, 1.05)))
@@ -1069,19 +1195,15 @@ def build_tiles(W, cfg, now):
         for c in range(N):
             if sh['rm'][c]:
                 continue
-            col_i, row_i = colrow(c)
             n = normal_i(c)
-            cw, cl = _cell_sizes(r_mid, row_i)
             col = _tint(base_col, 0.75 + 0.35 * min(1.0, sh['occ'][c] / 4.0))
             t0 = W['scars'].get(s * 1000 + c)
             if t0 is not None:
                 col = _mix(COL_SCAR, col, max(0.0, min(1.0, (now - t0) / st)))
+            cw, cl = _cell_sizes(r_mid, c)
+            if is_pole(c):
+                cw, cl = cw * 1.25, cl * 1.25
             rows.append(_row(_mul(n, r_mid - th * 0.5), n, cw * 1.04, th * 0.98, cl * 1.04, col))
-        # casquetes polares
-        cap = 2.0 * r_mid * math.sin(math.radians(90.0 * (1 - LAT_SPAN) + 0.5)) * 1.15
-        for pole in ((0.0, 1.0, 0.0), (0.0, -1.0, 0.0)):
-            rows.append(_row(_mul(pole, r_mid - th * 0.5), pole, cap, th * 0.98, cap,
-                             _tint(base_col, 0.8)))
     return rows
 
 
@@ -1221,16 +1343,35 @@ def cfg():
     return c
 
 
+def sync_grid():
+    """Lee el rango de los parametros y rehace la reticula si ha cambiado."""
+    lo = _p('Notapolosur', POLO_SUR_DEF)
+    hi = _p('Notapolonorte', POLO_NORTE_DEF)
+    mode = _menu('Fuerarango', FUERA_MODES, 0)
+    return set_grid(lo, hi, mode)
+
+
 def world():
+    sync_grid()
     W = me.fetch('W', None)
-    if W is None:
+    key = [GRID['lo'], GRID['hi']]
+    if W is None or W.get('grid') != key or len(W.get('occ', [])) != N:
+        if W is not None:
+            print('ESTRATOS  rango %s-%s: reticula de %d celdas, el mundo empieza vacio'
+                  % (key[0], key[1], N))
         W = new_world()
+        W['grid'] = key
         me.store('W', W)
+        _CACHE['inst'] = None
+        _CACHE['tiles'] = None
     return ensure(W)
 
 
 def reset_world():
-    me.store('W', new_world())
+    sync_grid()
+    W = new_world()
+    W['grid'] = [GRID['lo'], GRID['hi']]
+    me.store('W', W)
     _CACHE['inst'] = None
     _CACHE['tiles'] = None
     _CACHE['frame'] = None
@@ -1268,6 +1409,8 @@ def surface_point(note, lift, radius):
     """Punto de la baliza del SEQ1 (lo usa baliza_callbacks)."""
     W, c = world(), cfg()
     i = note_cell(note)
+    if i is None:
+        return (0.0, -9999.0, 0.0)
     d = base_radius(W, c, i) + W['vh'][i] + lift + radius
     return _mul(normal_i(i), d)
 
@@ -1466,6 +1609,13 @@ def on_value(name, val):
 # --- balanceo del eje (rotacion extra, desde la fase 3) ----------------------
 
 def wobble(frame=None):
+    try:
+        return _wobble()
+    except Exception:
+        return 0.0
+
+
+def _wobble():
     """Grados de rx de todas las geometrias del planeta. Inclina el eje
     hacia la camara y en contra, para que se vean los dos polos. Ajeno al
     reloj del secuenciador. Pagina Fase3: Rotextra, Balanceo, Balanceoper."""
@@ -1542,13 +1692,23 @@ def cam(key, k, frame=None):
 # --- leyenda -----------------------------------------------------------------
 
 def legend(frame=None):
+    try:
+        return _legend()
+    except Exception as e:
+        return '\n  MOTOR    fallo en la leyenda: %s' % e
+
+
+def _legend():
     W, c = world(), cfg()
     lvl = c['nivel']
     lines = ['']
     occ = occupied(W)
     mx = max(W['occ'])
-    lines.append('  MUNDO    ocupadas %d/96 (%d%%)   max %d   fase %d'
-                 % (occ, int(occ * 100 / 96), mx, lvl))
+    lines.append('  MUNDO    ocupadas %d/%d (%d%%)   max %d   fase %d'
+                 % (occ, N, int(occ * 100 / N), mx, lvl))
+    lines.append('  RANGO    %s %d (polo sur) a %s %d (polo norte)   %d celdas   fuera: %s'
+                 % (note_name(GRID['lo']), GRID['lo'], note_name(GRID['hi']), GRID['hi'],
+                    N, FUERA_MODES[GRID['mode']]))
     u = W['ev'].get('ultima')
     if u:
         lines.append('  ULTIMA   %s celda %d   ocupacion %d   %s'
@@ -1577,7 +1737,7 @@ def legend(frame=None):
             lines.append('  AVISO    %s' % W['aviso'])
     if lvl >= 7:
         e = W['ev'].get('erosion')
-        dens = occupied(W) / 96.0
+        dens = occupied(W) / float(N)
         flag = '  x%g' % c['rad_mult'] if dens > c['dens_umbral'] else ''
         if e:
             lines.append('  EROSION  pad %d   -%d   radio %d   celda %d   densidad %d%%%s'

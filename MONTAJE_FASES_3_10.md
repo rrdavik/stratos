@@ -1,7 +1,7 @@
 # Estratos · Montaje
 ## Fases 3 a 10: de la baliza al planeta estratificado
 
-*Continúa `MONTAJE_FASE1.md` (fases 1 y 2). Plan de referencia: `PLAN_FASES.md`.*
+*Continúa `MONTAJE_FASE1.md` (fases 1 y 2, ahora en un solo script: `fase12_base.py`). Plan de referencia: `PLAN_FASES.md`.*
 
 ---
 
@@ -17,10 +17,11 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v2` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v2` |
-| `fase3_semilla.py` | Ocupación, semilla, crecimiento, material, balanceo del eje | `fase3 v2` |
-| `fase4_desborde.py` | Desbordamiento, satélites, fusión, coronación | `fase4 v1` |
+| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render | `fase12 v2` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v7` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v5` |
+| `fase3_semilla.py` | Ocupación, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v5` |
+| `fase4_desborde.py` | Desbordamiento, satélites, fusión, coronación | `fase4 v3` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
 | `fase6_ciclo.py` | Longitud de pattern, biblioteca, ciclo, vuelta por ciclo | `fase6 v1` |
 | `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v1` |
@@ -28,9 +29,10 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase9_arqueologia.py` | Cortes, estratigrafía, cicatriz cian, destello | `fase9 v1` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v1` |
 
-Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior:
+Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
 
 ```python
+exec(open('C:/Users/DareDave/Downloads/est/fase12_base.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase3_semilla.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase4_desborde.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase5_especies.py').read())
@@ -84,7 +86,9 @@ formas_pulidas    formas_porosas    coronas        estratos       baliza2     (G
 | `reticula_callbacks` | Radio fijo 6 | Marcadores sobre la superficie actual (suben con las conchas) |
 | `rotulo` | Tempo + nota | Tempo + nota + motor |
 
-**No relances la fase 2 después de la 3**: recrearía el `midi_callbacks` antiguo. Si lo haces, relanza la última fase. **No relances la fase 1**: crea una FASE1 nueva y vacía (la vieja queda como `FASE1_anterior`).
+**No relances `fase12_base.py` sobre un proyecto en marcha**: crea una FASE1 nueva y vacía (la vieja queda como `FASE1_anterior`, apagada) y obliga a aplicar de nuevo las fases 3 en adelante. Para refrescar el motor, relanza la última fase aplicada.
+
+**Diagnóstico del render.** `fase12_base.py` y cada fase terminan con un bloque `DIAGNOSTICO DEL RENDER`: qué geometrías dibuja el render, con qué cámara y luces, y qué nodos de la cadena hasta `salida` tienen errores (motor, Script CHOP, rótulo…). Si no ves la imagen, pégame ese bloque. Las leyendas ya no pueden romper la salida: si fallan, escriben el fallo en el rótulo.
 
 ---
 
@@ -103,12 +107,23 @@ Cada nota del SEQ1 suma 1 a la ocupación de su celda.
 - **Animación**: la altura visible se acerca a la real en ~0,1 s; las formaciones brotan, no aparecen de golpe.
 - **Balanceo del eje** (v2): además del giro al tempo, el eje se balancea hacia la cámara y en contra, `Balanceo` grados (60) cada `Balanceoper` segundos (90), para ver los dos polos. Va aparte del reloj del secuenciador y se congela con `Pausa`. `Rotextra` lo enciende y lo apaga; entra y sale en 3 s, sin saltos. Lo llevan todas las geometrías que giran con el planeta (núcleo, retícula, balizas, formas, coronas, estratos) y la luz de destello. Orden de rotación: `Ry Rx Rz` (giro, balanceo, inclinación).
 
-**Página Fase3:** `Shellthick` 0,5 · `Alturafactor` 3 · `Semillafrac` 0,25 · `Growstep` 0,30 · `Gatemode` · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90
+**Página Fase3:** `Shellthick` 0,5 · `Alturafactor` 3 · `Semillafrac` 0,25 · `Growstep` 0,30 · `Gatemode` · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
 
-**Leyenda:** `MUNDO ocupadas 23/96 (24%) max 4 fase 3` y `ULTIMA geo celda 64 ocupacion 3 crecimiento`
+Los tres últimos los crea ya `fase12_base.py` en esta página; si venían de la página Fase1 (versión anterior), la fase 3 los mueve aquí conservando su valor.
+
+**Leyenda:** `MUNDO ocupadas 23/85 (27%) max 4 fase 3`, `RANGO do1 24 (polo sur) a do8 108 (polo norte) 85 celdas fuera: plegar` y `ULTIMA geo celda 40 ocupacion 3 crecimiento`. En la línea NOTA: `celda 40 de 85 anillo 4`, y `(como do1 24)` si la nota se ha plegado.
 
 **Probar sin BeatStep:** elige `Nota` (página Fase2) y pulsa `Sembrar` varias veces.
 
+**Retícula de polo a polo** (motor v7):
+
+- **Los polos son las notas extremas del rango.** `Notapolosur` (24, do1) es el **polo sur** y `Notapolonorte` (108, do8) el **polo norte**. Los dos van entre do1 y do8: `Notapolosur` de 24 a 106, `Notapolonorte` de 26 a 108.
+- **En medio, un anillo por octava, como la retícula de bandas.** La clase de nota es el meridiano y la octava el anillo. Con do1–do8: un anillo de 11 (do#1–si1), seis de 12 (do2–si7) y do8 en el polo norte; 85 celdas. Si el rango no empieza o acaba en do, el primer y el último anillo quedan incompletos y reparten sus celdas por igual alrededor.
+- **Los anillos se reparten por igual entre los dos casquetes polares.** Con do1–do8, 24° de alto cada uno; el casquete del polo, 6° de radio.
+- **Notación:** MIDI 60 = do4. Los límites van en número MIDI, el de la columna `nota` de `midi_log`.
+- **`Fuerarango`:** `plegar` (por defecto) lleva la nota por octavas dentro del rango y conserva su meridiano; `ignorar` no deja nada, aunque la nota sigue contando para la detección de patterns; `limitar` la manda al polo más cercano.
+- **Cambiar el rango rehace la retícula y vacía el mundo** (también las conchas). Es para ajustarlo antes de tocar.
+- En los anillos cercanos a los polos la celda es estrecha de este a oeste. El ancho y la dispersión de agujas, torres y excrecencias se ajustan al ancho real de la celda: ninguna pieza invade a la vecina.
 ---
 
 ## FASE 4 · El límite como motor
@@ -126,7 +141,7 @@ Desde la ocupación 4, cada señal que llega a una formación se desborda a una 
 - **Desborde a una formación ajena:** le suma ocupación (presión), sin cascada. Si es de la otra especie, la marca como híbrida.
 - **Un satélite que recibe una nota directa** se independiza.
 
-**Decisión: 6 vecinas.** La retícula se trata como hexagonal desplazada: 2 vecinas en la misma banda, 2 en la de arriba y 2 en la de abajo. Las bandas pares miran a los meridianos (c−1, c), las impares a (c, c+1). Las celdas no se mueven: cambia solo quién es vecino de quién. En los polos solo hay 4 vecinas y el desborde se reparte entre ellas: rebota, no se pierde.
+**Decisión: 6 vecinas.** Entre dos anillos completos, la retícula se trata como hexagonal desplazada: 2 vecinas en el mismo anillo, 2 en el de arriba y 2 en el de abajo (los pares miran a los meridianos c−1 y c, los impares a c y c+1). En un anillo incompleto, las vecinas del anillo contiguo son las celdas cuyo arco se solapa con el suyo, y en los anillos extremos se suma el polo. El polo tiene de vecinas todo su anillo (11 con do1).
 
 **Decisión: quién elige la vecina.** No el azar del software:
 
@@ -233,9 +248,9 @@ Las 8 pistas de batería son las 8 señales de destrucción. Cada una tiene su p
 
 - `alterna` (defecto): los pads impares caen donde está el SEQ1, los pares donde está el SEQ2;
 - `seq1` / `seq2`: siempre donde está ese secuenciador;
-- `velocidad`: la velocidad del golpe elige una de las 96 celdas.
+- `velocidad`: la velocidad del golpe elige una de las celdas.
 
-En las tres primeras, la velocidad desplaza el golpe un meridiano a un lado, al otro o a ninguno. La destrucción persigue a la construcción.
+En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al otro o a ninguno. La destrucción persigue a la construcción.
 
 **Página Fase7:** `Canaldrum` 10 · `Notabase` 36 · `Objetivo` · `Umbraldensidad` 0,6 · `Multradio` 2 · `Padprueba` · `Erosionar`
 
@@ -249,13 +264,13 @@ En las tres primeras, la velocidad desplaza el golpe un meridiano a un lado, al 
 
 En cada fin de ciclo:
 
-1. **La capa se entierra** como una concha de 96 losetas (más dos casquetes polares) con el color de su generación. Las celdas que estaban ocupadas quedan más claras: los continentes se leen en el color. Sus formaciones se descartan.
+1. **La capa se entierra** como una concha de losetas, una por celda, con el color de su generación. Las celdas que estaban ocupadas quedan más claras: los continentes se leen en el color. Sus formaciones se descartan.
 2. **El planeta engorda** `Shellthick`.
 3. **Herencia:** el 25 % de la ocupación de cada celda pasa a la capa nueva. La fracción que no llega a 1 se acumula para el ciclo siguiente: una celda con ocupación 2 en ciclos seguidos acaba heredando. Lo heredado vuelve a brotar desde la nueva superficie.
 
 **Paleta de generaciones:** ámbar en la base, después grises minerales y negros que se alternan en claro y oscuro para que las bandas se distingan.
 
-**Decisión: el horneado.** El marco pide hornear cada concha a una textura proyectada sobre una esfera. Aquí cada concha es una capa de 96 losetas instanciadas:
+**Decisión: el horneado.** El marco pide hornear cada concha a una textura proyectada sobre una esfera. Aquí cada concha es una capa de losetas instanciadas, todas del mismo tamaño porque las celdas son de área igual:
 
 - igual de barata: una sola geometría;
 - sin shaders;
@@ -322,7 +337,8 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | `No puedo leer .../estratos_motor.py` | `CARPETA` no apunta a la carpeta de los archivos | Corrige `CARPETA` al principio del script de fase |
 | `FASE1 esta en la fase N. Aplica antes la fase N+1` | Fases saltadas | Aplícalas en orden |
 | `FALLO en el motor: ...` en el Textport | Error dentro del motor | Pégame la línea; el resto de FASE1 sigue funcionando |
-| Las notas no dejan formaciones | El `midi_callbacks` antiguo (fase 2 relanzada) | Relanza la última fase aplicada |
+| Las notas no dejan formaciones | Línea de tiempo parada, o el `midi_callbacks` antiguo | Play en la línea de tiempo; si sigue, relanza la última fase aplicada |
+| No se ve nada en `salida` | Un nodo de la cadena con error | Mira el bloque `DIAGNOSTICO DEL RENDER` del Textport y pégamelo |
 | Formaciones tumbadas o metidas en el planeta | El orden de rotación de instancias no es X → Y | En cada geometría (`formas_*`, `coronas`, `estratos`): Instance → Rotate Order = `Rx Ry Rz` |
 | El planeta da tumbos en vez de balancearse | El Rotate Order de la geometría (pestaña Xform) no es `Ry Rx Rz` | El informe lo avisa con `..`; ponlo a mano en esa geometría |
 | Todas las formaciones del mismo color | El modo de color por instancia no es Replace | En cada geometría: Instance → Color Mode = Replace |
@@ -348,9 +364,9 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | Fase | Pregunta | Decisión |
 |---|---|---|
 | 3 | ¿Incremento de altura por gate o fijo? | Por gate, con el fijo de respaldo (`Gatemode`) |
-| 4 | ¿6 vecinas? | Retícula hexagonal desplazada, sin mover las celdas |
+| 4 | ¿6 vecinas? | Hexagonal desplazada entre anillos completos; solape de arcos en los incompletos |
 | 4 | ¿Quién elige la vecina? | Velocidad + ocupación (`Vecina`) |
-| 4 | ¿Desborde en los polos? | Rebota entre las 4 vecinas que hay |
+| 4 | ¿Desborde en los polos? | El polo desborda a cualquiera de las celdas de su anillo |
 | 5 | Canal del SEQ2 | 14 (`Canal2`), por confirmar |
 | 6 | Paso de cada nota sin leer el reloj | Del tempo del proyecto, reanclado en cada nota |
 | 6 | ¿Qué es un ciclo de ecosistema? | 8 repeticiones del pattern más largo (`Repsporciclo`, `Modociclo`) |
@@ -359,6 +375,7 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
 | 8 | Grosor de concha | 0,5 (límite de altura 1,5) |
+| 3 | ¿Cómo se reparten las notas? | `Notapolosur` y `Notapolonorte` (entre do1 y do8) son los polos; en medio, un anillo por octava; el rango decide el número de celdas; `Fuerarango` para las de fuera |
 
 ### Cómo se ha probado
 

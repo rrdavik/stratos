@@ -4,7 +4,7 @@ ESTRATOS - PIEZAS COMUNES DE LAS FASES 3 A 10
 =============================================================================
 No se ejecuta solo: lo carga cada script de fase. Contiene:
 
-  - utilidades para crear nodos y parametros (las mismas de las fases 1 y 2)
+  - utilidades para crear nodos y parametros (las mismas de fase12_base.py)
   - install_core(): instala o refresca el 'motor' y los DAT que lo usan
     (midi_callbacks, latido, baliza_callbacks, reticula_callbacks,
     formas_callbacks, pulsos). Todas las fases lo llaman: relanzar una
@@ -17,7 +17,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v2'
+VERSION_COMUN = 'comun v5'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -47,6 +47,68 @@ def print_report():
     for line in report:
         print(line)
     print()
+    try:
+        diagnostico_render(op(COMP_PATH))
+    except Exception as e:
+        print('  (no pude hacer el diagnostico del render: %s)' % e)
+
+
+def _errs(o):
+    out = []
+    for fn in ('errors', 'scriptErrors'):
+        try:
+            e = getattr(o, fn)()
+            if e:
+                out.append(str(e).strip())
+        except Exception:
+            pass
+    return ' | '.join(out)
+
+
+def diagnostico_render(base):
+    """Que dibuja el render y que nodos de la cadena tienen errores."""
+    print('DIAGNOSTICO DEL RENDER')
+    print('-' * 66)
+    r = base.op('render')
+    try:
+        geo = str(r.par.geometry.val)
+        print('  render geometria : %r' % geo)
+        print('  render camara    : %r   luces: %r' % (r.par.camera.val, r.par.lights.val))
+    except Exception as e:
+        geo = ''
+        print('  FALLO  no pude leer el render: %s' % e)
+    for nm in geo.split():
+        g = base.op(nm)
+        if g is None:
+            print('  FALLO  %-15s no existe' % nm)
+            continue
+        e = _errs(g)
+        if e:
+            print('  FALLO  %-15s %s' % (nm, e))
+    malos = []
+    for nm in ['motor', 'latido', 'ritmo', 'reticula_chop', 'baliza_chop', 'formas_callbacks',
+               'i_formas_pulidas', 'i_formas_porosas', 'i_coronas', 'i_estratos',
+               'i_baliza2', 'camara', 'render', 'rotulo', 'con_rotulo', 'salida']:
+        o = base.op(nm)
+        if o is None:
+            continue
+        try:
+            o.cook(force=True)
+        except Exception:
+            pass
+        e = _errs(o)
+        if e:
+            malos.append((nm, e))
+    for nm, e in malos:
+        print('  FALLO  %-15s %s' % (nm, e))
+    if not malos:
+        print('  OK     ningun nodo de la cadena hasta salida tiene errores')
+    try:
+        if not base.op('ritmo').module.playing():
+            print('  AVISO  linea de tiempo PARADA: las formaciones no brotan hasta darle a play')
+    except Exception:
+        pass
+    print('-' * 66)
 
 
 # -----------------------------------------------------------------------------
@@ -203,13 +265,13 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
 def require_base(fase):
     base = op(COMP_PATH)
     if base is None:
-        raise RuntimeError('No encuentro %s. Construye antes las fases 1 y 2.' % COMP_PATH)
+        raise RuntimeError('No encuentro %s. Aplica antes fase12_base.py.' % COMP_PATH)
     for n in ['ritmo', 'nucleo', 'reticula', 'render', 'rotulo']:
         if base.op(n) is None:
-            raise RuntimeError('Falta %s en FASE1: aplica fase1_tempo_beatstep.py.' % n)
+            raise RuntimeError('Falta %s en FASE1: aplica fase12_base.py.' % n)
     for n in ['baliza', 'baliza_chop', 'midi_in', 'midi_callbacks']:
         if base.op(n) is None:
-            raise RuntimeError('Falta %s en FASE1: aplica fase2_seq1_baliza.py.' % n)
+            raise RuntimeError('Falta %s en FASE1: aplica fase12_base.py.' % n)
     lvl = current_level(base)
     if fase > 3 and lvl < fase - 1:
         raise RuntimeError('FASE1 esta en la fase %d. Aplica antes la fase %d.'
@@ -373,7 +435,8 @@ def onCook(scriptOp):
 '''
 
 RETICULA_CB = r'''# Posicion de las 96 celdas sobre la superficie ACTUAL del planeta.
-# La clase de nota elige el meridiano; la octava, la banda.
+# De polo a polo: los polos son las notas extremas del rango y en medio
+# un anillo por octava; la clase de nota elige el meridiano.
 # (Reescrito por estratos_comun.py: la geometria la da el motor, para que
 # la reticula suba con las conchas.)
 
@@ -394,12 +457,11 @@ def onCook(scriptOp):
     rows = []
     if show:
         R = m.surface_radius() + 0.06
-        for r in range(m.ROWS):
-            for c in range(m.COLS):
-                nx, ny, nz = m.cell_normal(c, r)
-                t = r / float(m.ROWS - 1)
-                rows.append([nx * R, ny * R, nz * R, nx, ny, nz,
-                             0.30 + 0.45 * t, 0.55, 0.75 - 0.35 * t])
+        for i in range(m.N):
+            nx, ny, nz = m.normal_i(i)
+            t = i / float(max(1, m.N - 1))
+            rows.append([nx * R, ny * R, nz * R, nx, ny, nz,
+                         0.30 + 0.45 * t, 0.55, 0.75 - 0.35 * t])
     if not rows:
         rows = [[0, -9999, 0, 0, 1, 0, 0, 0, 0]]
     n = len(rows)
@@ -459,10 +521,7 @@ def onCook(scriptOp):
         if m.performance():
             p = (0.0, -9999.0, 0.0)
     except Exception:
-        c, r = m.note_to_cell(note)
-        n = m.cell_normal(c, r)
-        d = 6.0 + LIFT + radius
-        p = (n[0] * d, n[1] * d, n[2] * d)
+        p = (0.0, -9999.0, 0.0)
     scriptOp.numSamples = 1
     for name, v in [('tx', p[0]), ('ty', p[1]), ('tz', p[2]),
                     ('env', env), ('radius', radius), ('note', note)]:
@@ -478,7 +537,14 @@ def legend(frame=None):
         env = float(b['env'][0])
     except Exception:
         note, env = current_note(), 0.0
-    c, r = m.note_to_cell(note)
+    i = m.note_cell(note)
+    if i is None:
+        donde = 'fuera de rango (ignorada)'
+    else:
+        f = m.fold_note(note)
+        donde = 'celda %2d de %d   %s' % (i, m.N, m.cell_label(i))
+        if f != note:
+            donde += '   (como %s %d)' % (m.note_name(f), f)
     n = int(round(max(0.0, min(1.0, env)) * 12))
     try:
         ch = int(parent().par.Canal)
@@ -487,7 +553,7 @@ def legend(frame=None):
     hits = b.fetch('hits', 0) if b is not None else 0
     lines = [
         '',
-        '  NOTA     %-5s %3d    meridiano %2d    banda %d' % (m.note_name(note), note, c, r),
+        '  NOTA     %-5s %3d    %s' % (m.note_name(note), note, donde),
         '  PULSO    [%s]' % ('#' * n + '.' * (12 - n)),
         '  SEQ1     canal %d    notas recibidas: %d' % (ch, hits),
     ]
@@ -555,6 +621,7 @@ def install_core(base, carpeta, fase):
     setp_any(pulsos, ['onpulse'], True)
     ok('pulsos: botones de las paginas de fase -> motor')
 
+    add_grid_pars(base)
     apply_wobble(base)
     set_legend(base)
     return motor
@@ -603,6 +670,55 @@ def set_spin(geo):
     setexpr(geo, 'rx', WOBBLE_EXPR)
     setexpr(geo, 'rz', 'parent().par.Tilt')
     return setmenu(geo, ['rord'], ['yxz'])
+
+
+GRID_PARS = ('Notapolosur', 'Notapolonorte', 'Fuerarango')
+
+
+def add_grid_pars(base):
+    """Rango de notas de la reticula, en la pagina Fase3. Si estaban en
+    otra pagina (version anterior), se mueven conservando su valor. Los
+    polos van entre do1 (24) y do8 (108)."""
+    page = get_page(base, 'Fase3')
+    keep = {}
+    for nm in GRID_PARS:
+        try:
+            p = getattr(base.par, nm, None)
+            if p is not None and p.page.name != 'Fase3':
+                keep[nm] = p.eval()
+                p.destroy()
+        except Exception:
+            pass
+    add_par(base, page, 'int', 'Notapolosur', 'Polo sur: nota MIDI (24 do1 - 106)', 24, 24, 106, clamp=True)
+    add_par(base, page, 'int', 'Notapolonorte', 'Polo norte: nota MIDI (26 - 108 do8)', 108, 26, 108, clamp=True)
+    add_par(base, page, 'menu', 'Fuerarango', 'Notas fuera del rango', 'plegar',
+            menu=['plegar', 'ignorar', 'limitar'],
+            menu_labels=['Plegar por octavas', 'Ignorar', 'Limitar al polo'])
+    for nm, lo, hi in (('Notapolosur', 24, 106), ('Notapolonorte', 26, 108)):
+        try:
+            p = getattr(base.par, nm)
+            p.min, p.max, p.normMin, p.normMax = lo, hi, lo, hi
+            p.clampMin = p.clampMax = True
+            if nm in keep:
+                p.val = max(lo, min(hi, int(keep[nm])))
+            elif not (lo <= int(p.eval()) <= hi):
+                p.val = max(lo, min(hi, int(p.eval())))
+        except Exception:
+            pass
+    if 'Fuerarango' in keep:
+        try:
+            base.par.Fuerarango = keep['Fuerarango']
+        except Exception:
+            pass
+    ok('pagina Fase3: Notapolosur (24, do1), Notapolonorte (108, do8), Fuerarango '
+       '(plegar / ignorar / limitar). Cambiar el rango vacia el mundo')
+    for nm in GRID_PARS:
+        try:
+            pg = getattr(base.par, nm).page.name
+            if pg != 'Fase3':
+                info('%s sigue en la pagina %s: no pude moverlo a Fase3' % (nm, pg))
+        except Exception:
+            pass
 
 
 def apply_wobble(base):

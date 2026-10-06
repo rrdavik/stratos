@@ -2,7 +2,7 @@
 =============================================================================
 ESTRATOS - FASE 3: LA SEMILLA (OCUPACION Y CRECIMIENTO VERTICAL)
 =============================================================================
-Se apoya en las fases 1 y 2. No las rehace: les anade piezas.
+Se apoya en fase12_base.py (fases 1 y 2). No la rehace: le anade piezas.
 
 QUE HACE
 --------
@@ -16,6 +16,15 @@ una formacion geologica:
 
 El MATERIAL lo fija la velocidad de la primera nota y no vuelve a cambiar:
 velocidad alta = pulido, casi metalico; baja = poroso y mate.
+
+RETICULA DE POLO A POLO (v5): cada semitono entre Notapolosur (24, do1)
+y Notapolonorte (108, do8) es una celda; los dos polos van entre do1 y
+do8. La mas grave es el polo sur, la mas aguda el polo norte, y las de
+en medio se reparten en anillos, uno por octava: la clase de nota es el
+meridiano. Con do1-do8: un anillo de 11 (do#1-si1), seis de 12 (do2-si7)
+y do8 en el polo norte. Fuerarango decide que pasa con las notas de
+fuera: plegar por octavas, ignorar o limitar al polo. Los tres estan en
+la pagina Fase3. Cambiar el rango rehace la reticula y vacia el mundo.
 
 BALANCEO DEL EJE (v2): ademas del giro al tempo, el eje del planeta se
 balancea lentamente hacia la camara y en contra (rx), para ver los dos
@@ -48,7 +57,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v2  (ocupacion, semilla, crecimiento, material, balanceo del eje)'
+VERSION = 'fase3 v5  (ocupacion, semilla, crecimiento, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -136,7 +145,7 @@ def prueba(t):
     t.check('i_formas_porosas tiene piezas', chop2.numSamples >= 1,
             '%d piezas' % chop2.numSamples)
     leg = m.legend()
-    t.check('leyenda MUNDO', 'MUNDO' in leg and 'ocupadas 2/96' in leg)
+    t.check('leyenda MUNDO', 'MUNDO' in leg and ('ocupadas 2/%d' % m.N) in leg)
     sin_bal = [n for n in ('nucleo', 'reticula', 'baliza', 'formas_pulidas', 'formas_porosas')
                if 'wobble(' not in (base.op(n).par.rx.expr or '')]
     t.check('balanceo del eje en el planeta', not sin_bal,
@@ -147,6 +156,15 @@ def prueba(t):
     t.check('balanceo dentro de la amplitud', 0 < w <= 60.0, '%.1f grados' % w)
     v = m.world_dir((0.0, 1.0, 0.0), 0.0, 0.0, 90.0)
     t.check('balanceo de 90: el polo mira a la camara', abs(v[2] - 1.0) < 1e-6)
+    lo, hi = m.GRID['lo'], m.GRID['hi']
+    t.check('Notapolosur y Notapolonorte caen en los polos',
+            m.note_cell(lo) == m.POLE_S and m.note_cell(hi) == m.POLE_N
+            and m.normal_i(m.POLE_S)[1] < -0.999 and m.normal_i(m.POLE_N)[1] > 0.999,
+            '%s %d y %s %d, %d celdas' % (m.note_name(lo), lo, m.note_name(hi), hi, m.N))
+    t.check('vecindad simetrica', all(i in m.NEIGH[j] for i in range(m.N) for j in m.NEIGH[i]))
+    t.check('fuera de rango: plegar / ignorar / limitar',
+            m.fold_note(lo - 1, 0) == lo + 11 and m.fold_note(lo - 1, 1) is None
+            and m.fold_note(hi + 5, 2) == hi)
 
 
 run_test(base, prueba)

@@ -15,9 +15,11 @@ puede subir se DESBORDA a una celda vecina:
 
 LA VECINDAD (decision tomada)
 -----------------------------
-La reticula se trata como hexagonal desplazada: 6 vecinas exactas (2 en
-la misma banda, 2 arriba, 2 abajo). En los polos solo hay 4: el desborde
-se reparte entre las que existen. Las celdas siguen donde estaban.
+Polos y anillos (uno por octava). Entre dos anillos completos, hexagonal
+desplazada: 2 vecinas en el anillo, 2 arriba y 2 abajo. En los anillos
+incompletos, las del anillo contiguo cuyo arco se solapa con el suyo, y
+en los anillos extremos tambien el polo. El polo tiene de vecinas todo su
+anillo.
 
 QUIEN ELIGE LA VECINA (decision tomada)
 ---------------------------------------
@@ -38,7 +40,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase4 v1  (desborde, satelites, fusion, coronacion)'
+VERSION = 'fase4 v3  (desborde, satelites, fusion, coronacion; polos y anillos)'
 banner(VERSION)
 
 base = require_base(4)
@@ -61,8 +63,8 @@ make_instanced(base, 'coronas', 520, 460, 'mat_corona')
 set_render(base)
 
 leeme(base, 4, """FASE 4 - EL LIMITE COMO MOTOR
-  Desde la ocupacion 4 la senal se desborda a una vecina (6 en reticula
-  hexagonal; 4 en los polos). La elige la velocidad (+ ocupacion).
+  Desde la ocupacion 4 la senal se desborda a una vecina (6 entre anillos
+  completos; el polo, todo su anillo). La elige la velocidad (+ ocupacion).
     4-5 satelites, 6-7 fusion (macizo bajo), 8+ coronacion (aguja ambar).
   La presion sobre una formacion ajena le suma ocupacion sin cascada.
   Umbrales y tamanos en la pagina Fase4.""")
@@ -89,8 +91,12 @@ def prueba(t):
     cor = base.op('i_coronas')
     cor.cook(force=True)
     t.check('i_coronas: una corona', cor.numSamples == 1, '%d' % cor.numSamples)
-    vec = [len(m.NEIGH[x]) for x in range(m.N)]
-    t.check('vecindad: 6 vecinas, 4 en los polos', min(vec) == 4 and max(vec) == 6)
+    vec = [len(m.NEIGH[x]) for x in range(m.N) if not m.is_pole(x)]
+    t.check('vecindad: hasta 6 vecinas entre anillos; el polo, todo su anillo',
+            max(vec) <= 8 and min(vec) >= 1
+            and len(m.NEIGH[m.POLE_S]) == len(m.RINGS[0])
+            and len(m.NEIGH[m.POLE_N]) == len(m.RINGS[-1]),
+            'celdas %d-%d, polo %d' % (min(vec), max(vec), len(m.NEIGH[m.POLE_S])))
     leg = m.legend()
     t.check('leyenda DESBORDE', 'DESBORDE' in leg)
 

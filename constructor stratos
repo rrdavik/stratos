@@ -1,8 +1,7 @@
 constructor stratos
 
 
-exec(open('C:/Users/DareDave/Downloads/est/fase1_tempo_beatstep.py').read())
-exec(open('C:/Users/DareDave/Downloads/est/fase2_seq1_baliza.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase12_base.py').read())
 
 
 
