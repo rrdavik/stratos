@@ -18,14 +18,14 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v7` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v5` |
-| `fase3_semilla.py` | Ocupación, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v5` |
-| `fase4_desborde.py` | Desbordamiento, satélites, fusión, coronación | `fase4 v3` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v8` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v6` |
+| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v6` |
+| `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v4` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
 | `fase6_ciclo.py` | Longitud de pattern, biblioteca, ciclo, vuelta por ciclo | `fase6 v1` |
-| `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v1` |
-| `fase8_conchas.py` | Conchas, herencia, radio que crece | `fase8 v1` |
+| `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v2` |
+| `fase8_conchas.py` | Conchas, herencia, radio que crece | `fase8 v2` |
 | `fase9_arqueologia.py` | Cortes, estratigrafía, cicatriz cian, destello | `fase9 v1` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v1` |
 
@@ -94,24 +94,35 @@ formas_pulidas    formas_porosas    coronas        estratos       baliza2     (G
 
 ## FASE 3 · La semilla
 
-Cada nota del SEQ1 suma 1 a la ocupación de su celda.
+Cada nota del SEQ1 suma 1 a la **carga** de su celda. Cuando la carga llega al **coste**, se dispara un **trigger de construcción**: la ocupación sube 1 y la carga vuelve a 0. La ocupación cuenta triggers, no notas.
 
-| Ocupación | Resultado |
-|---|---|
-| 1 | Semilla: altura `Semillafrac` × límite |
-| 2–3 | Crece `Growstep` × límite por señal |
-| 4+ | Límite de altura = `Alturafactor` × `Shellthick` (3 × 0,5 = 1,5) |
+- **El coste sube con la altura** (motor v8). Es 1 abajo y `Costemax` (5) en el límite: coste = 1 + ⌊(`Costemax` − 1) × altura / límite⌋, con la altura nominal de la ocupación actual. Desde el límite, cada trigger cuesta `Costemax` (ramificación, fusión, coronación y cumbre).
+- **Frenada:** cada nota sube la formación `Growstep` × límite / coste. Un trigger completo sube siempre un escalón, pero repartido entre más notas conforme la formación crece, así que cuanto más alta, más despacio.
+- **Latido:** cada nota hincha la formación un 5 % y la aclara durante ~0,2 s, aunque no dispare ningún trigger. Así se ve que la nota ha llegado.
+- `Costemax` 1 deja el comportamiento antiguo: un trigger por nota.
 
-- **El gate decide cuánto crece** (`Gatemode`). Al llegar el note off se mide cuánto duró la nota respecto a un paso: un gate al 50 % da el crecimiento normal, un gate corto la mitad o menos (hasta ¼) y uno ligado hasta el doble. Sin note off, crecimiento normal.
+| Ocupación | Estado | Altura | Coste del siguiente | Notas acumuladas |
+|---|---|---|---|---|
+| 1 | semilla | 20 % | 1 | 1 |
+| 2 | brote | 40 % | 2 | 2 |
+| 3 | crecimiento | 60 % | 3 | 4 |
+| 4 | madurez | 80 % | 4 | 7 |
+| 5+ | límite: `Alturafactor` × `Shellthick` (3,75 × 0,5 = 1,875) | 100 % | 5 | 11 |
+
+Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es un 25 % más alto (1,875 en vez de 1,5). Con una nota por pattern (16 pasos a 120 BPM) son ~20 s en vez de 6.
+
+- **El gate decide cuánto crece** (`Gatemode`). Al llegar el note off se mide cuánto duró la nota respecto a un paso: un gate al 50 % da el crecimiento normal, un gate corto la mitad o menos (hasta ¼) y uno ligado hasta el doble. Sin note off, crecimiento normal. Se aplica al trozo de escalón de cada nota; no cambia la carga.
 - **Material**: la velocidad de la primera nota decide (`Umbralvel`, 64). Por encima, `mat_pulido`: brillo alto, casi metálico. Por debajo, `mat_poroso`: mate. No vuelve a cambiar.
 - **Animación**: la altura visible se acerca a la real en ~0,1 s; las formaciones brotan, no aparecen de golpe.
 - **Balanceo del eje** (v2): además del giro al tempo, el eje se balancea hacia la cámara y en contra, `Balanceo` grados (60) cada `Balanceoper` segundos (90), para ver los dos polos. Va aparte del reloj del secuenciador y se congela con `Pausa`. `Rotextra` lo enciende y lo apaga; entra y sale en 3 s, sin saltos. Lo llevan todas las geometrías que giran con el planeta (núcleo, retícula, balizas, formas, coronas, estratos) y la luz de destello. Orden de rotación: `Ry Rx Rz` (giro, balanceo, inclinación).
 
-**Página Fase3:** `Shellthick` 0,5 · `Alturafactor` 3 · `Semillafrac` 0,25 · `Growstep` 0,30 · `Gatemode` · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
+**Página Fase3:** `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
 
 Los tres últimos los crea ya `fase12_base.py` en esta página; si venían de la página Fase1 (versión anterior), la fase 3 los mueve aquí conservando su valor.
 
-**Leyenda:** `MUNDO ocupadas 23/85 (27%) max 4 fase 3`, `RANGO do1 24 (polo sur) a do8 108 (polo norte) 85 celdas fuera: plegar` y `ULTIMA geo celda 40 ocupacion 3 crecimiento`. En la línea NOTA: `celda 40 de 85 anillo 4`, y `(como do1 24)` si la nota se ha plegado.
+**Leyenda:** `MUNDO ocupadas 23/85 (27%) max 4 fase 3`, `RANGO do1 24 (polo sur) a do8 108 (polo norte) 85 celdas fuera: plegar` y `ULTIMA geo celda 40 ocupacion 3 crecimiento carga 1/3`. `Sembrar` también escribe la carga en el Textport.
+
+**Proyecto en marcha:** al relanzar la fase 3 o la 4, `Alturafactor`, `Semillafrac`, `Growstep` y los umbrales de la fase 4 pasan a sus valores nuevos solo si seguían en el valor de antes. Lo que hayas ajustado a mano se queda como está; las líneas `..` del informe dicen qué ha cambiado. En la línea NOTA: `celda 40 de 85 anillo 4`, y `(como do1 24)` si la nota se ha plegado.
 
 **Probar sin BeatStep:** elige `Nota` (página Fase2) y pulsa `Sembrar` varias veces.
 
@@ -128,17 +139,18 @@ Los tres últimos los crea ya `fase12_base.py` en esta página; si venían de la
 
 ## FASE 4 · El límite como motor
 
-Desde la ocupación 4, cada señal que llega a una formación se desborda a una vecina.
+Desde el límite (ocupación 5), cada trigger se desborda a una vecina. En el límite cada trigger cuesta `Costemax` notas (5): las notas intermedias solo cargan y hacen latir la formación.
 
-| Ocupación | Resultado |
-|---|---|
-| 4–5 | Satélites en la vecindad (más pequeños: `Tamsatelite`) |
-| 6–7 | Fusión: un macizo bajo bajo el núcleo y sus satélites los une en una masa |
-| 8+ | Coronación: aguja ámbar (geología) o antena con remate (arquitectura) |
+| Ocupación | Resultado | Notas acumuladas |
+|---|---|---|
+| 5–6 | Satélites en la vecindad (más pequeños: `Tamsatelite`) | 11 |
+| 7–8 | Fusión: un macizo bajo bajo el núcleo y sus satélites los une en una masa | 21 |
+| 9–10 | Coronación: aguja ámbar (geología) o antena con remate (arquitectura) | 31 |
+| 11+ | **Cumbre:** cada trigger alarga la corona un 25 % (y la ensancha un poco), hasta `Tramoscumbre` tramos (4: corona al doble, con 56 notas) | 41 |
 
 - **Desborde a una celda vacía:** nace un satélite de esa formación.
 - **Desborde a su propio satélite:** el satélite crece, hasta `Limsatelite`.
-- **Desborde a una formación ajena:** le suma ocupación (presión), sin cascada. Si es de la otra especie, la marca como híbrida.
+- **Desborde a una formación ajena (presión):** le suma 1 a la carga, como si le llegara una nota: crece su trozo de escalón y, si completa la carga, sube su ocupación. No hay cascada: aunque esté en el límite, no desborda a su vez. Si es de la otra especie, la marca como híbrida.
 - **Un satélite que recibe una nota directa** se independiza.
 
 **Decisión: 6 vecinas.** Entre dos anillos completos, la retícula se trata como hexagonal desplazada: 2 vecinas en el mismo anillo, 2 en el de arriba y 2 en el de abajo (los pares miran a los meridianos c−1 y c, los impares a c y c+1). En un anillo incompleto, las vecinas del anillo contiguo son las celdas cuyo arco se solapa con el suyo, y en los anillos extremos se suma el polo. El polo tiene de vecinas todo su anillo (11 con do1).
@@ -150,9 +162,9 @@ Desde la ocupación 4, cada señal que llega a una formación se desborda a una 
 
 Si el knob RANDOMNESS del SEQ1 varía la velocidad, la decisión pasa a ser del aparato. **Por confirmar**: gira RANDOMNESS y mira la columna `vel` de `midi_log`.
 
-**Página Fase4:** `Umbralram` 4 · `Umbralfusion` 6 · `Umbralcorona` 8 · `Tamsatelite` 0,6 · `Limsatelite` 0,6 · `Vecina`
+**Página Fase4:** `Umbralram` 5 · `Umbralfusion` 7 · `Umbralcorona` 9 · `Umbralcumbre` 11 · `Tramoscumbre` 4 · `Tamsatelite` 0,6 · `Limsatelite` 0,6 · `Vecina`
 
-**Leyenda:** `DESBORDE 57 -> 44 satelites 3 fusiones 1 coronas 0`
+**Leyenda:** `DESBORDE 57 -> 44 satelites 3 fusiones 1 coronas 0 cumbres 0`
 
 ---
 
@@ -240,7 +252,7 @@ Las 8 pistas de batería son las 8 señales de destrucción. Cada una tiene su p
 | 7 | 3 | 1 | 3 | corte |
 | 8 | 3 | 2 | 4 | corte profundo |
 
-**Orden de caída** (inverso al crecimiento): primero los satélites, luego la altura, y al final la **huella**, una mancha oscura que dura hasta que la celda se vuelve a sembrar o se entierra.
+**Orden de caída** (inverso al crecimiento): el golpe vacía antes la carga acumulada (sin gastar reducción); después caen los satélites, luego la altura, y al final la **huella**, una mancha oscura que dura hasta que la celda se vuelve a sembrar o se entierra.
 
 **Presupuesto de densidad.** Por encima de `Umbraldensidad` (60 % de celdas ocupadas), el radio de todos los eventos se multiplica por `Multradio` (×2); un radio 0 pasa a 1, para que también los arañazos ayuden a aligerar. La leyenda marca `x2` mientras dura.
 
@@ -374,7 +386,8 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
-| 8 | Grosor de concha | 0,5 (límite de altura 1,5) |
+| 8 | Grosor de concha | 0,5 (límite de altura 1,875) |
+| 3–4 | ¿Cuántas notas por trigger? | De 1 a `Costemax` (5) según la altura, con frenada; 5 desde el límite. La presión suma carga |
 | 3 | ¿Cómo se reparten las notas? | `Notapolosur` y `Notapolonorte` (entre do1 y do8) son los polos; en medio, un anillo por octava; el rango decide el número de celdas; `Fuerarango` para las de fuera |
 
 ### Cómo se ha probado

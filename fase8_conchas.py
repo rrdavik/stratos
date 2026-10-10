@@ -43,7 +43,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v1  (conchas, herencia, radio que crece)'
+VERSION = 'fase8 v2  (conchas, herencia, radio que crece)'
 banner(VERSION)
 
 base = require_base(8)
@@ -84,7 +84,7 @@ def prueba(t):
     c = m.cfg()
     W = m.new_world()
     for g in range(4):
-        for k in range(8):
+        for k in range(16):
             m.note_on(W, c, 1, 64, 100, g * 10 + k)
         m.end_cycle(W, c, g * 10 + 9)
     i = m.note_cell(64)
@@ -93,7 +93,7 @@ def prueba(t):
             abs(m.top_radius(W, c) - (c['core_radius'] + 4 * c['shell_thick'])) < 1e-6,
             '%.2f' % m.top_radius(W, c))
     t.check('herencia: la celda insistente sigue ocupada', W['occ'][i] >= 2, str(W['occ'][i]))
-    t.check('losetas: 98 por concha', len(m.build_tiles(W, c, 0.0)) == 4 * 98)
+    t.check('losetas: una por celda y concha', len(m.build_tiles(W, c, 0.0)) == 4 * m.N)
     # por el camino real
     m.reset_world()
     t.midi(0x9C, 0x40, 0x64)
@@ -103,7 +103,7 @@ def prueba(t):
     m._CACHE['inst'] = m.build_instances(m.world(), m.cfg(), 0.0)
     est = base.op('i_estratos')
     est.cook(force=True)
-    t.check('i_estratos dibuja la concha', est.numSamples == 98, '%d' % est.numSamples)
+    t.check('i_estratos dibuja la concha', est.numSamples == m.N, '%d de %d' % (est.numSamples, m.N))
     t.check('leyenda CONCHAS', 'CONCHAS' in m.legend())
 
 

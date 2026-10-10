@@ -17,7 +17,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v5'
+VERSION_COMUN = 'comun v6'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -256,6 +256,27 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
     if default is not None:
         p[0].default = p[0].val = default
     return True
+
+
+def renew_default(base, name, old, new):
+    """Cambia el valor por defecto de un parametro que ya existia. Solo
+    toca el valor si seguia en el defecto viejo: lo ajustado a mano se
+    respeta."""
+    p = getattr(base.par, name, None) if has_par(base, name) else None
+    if p is None:
+        return False
+    try:
+        p.default = new
+    except Exception:
+        pass
+    try:
+        if abs(float(p.eval()) - float(old)) < 1e-6:
+            p.val = new
+            info('%s: %g -> %g (nuevo valor por defecto)' % (name, old, new))
+            return True
+    except Exception:
+        pass
+    return False
 
 
 # -----------------------------------------------------------------------------
