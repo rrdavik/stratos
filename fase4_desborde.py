@@ -46,7 +46,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase4 v4  (desborde con carga, satelites, fusion, coronacion, cumbre)'
+VERSION = 'fase4 v5  (desborde con carga, satelites, fusion, coronacion, cumbre)'
 banner(VERSION)
 
 base = require_base(4)
@@ -68,6 +68,9 @@ renew_default(base, 'Growstep', 0.30, 0.20)
 if not has_par(base, 'Costemax'):
     add_par(base, get_page(base, 'Fase3'), 'int', 'Costemax', 'Notas por trigger en el limite',
             5, 1, 12, clamp=True)
+if not has_par(base, 'Gatemax'):
+    add_par(base, get_page(base, 'Fase3'), 'float', 'Gatemax', 'Gate ligado: crecimiento max. (x)',
+            1.25, 1.0, 2.0)
 add_par(base, page, 'float', 'Tamsatelite', 'Tamano de satelite', 0.6, 0.2, 1.0)
 add_par(base, page, 'float', 'Limsatelite', 'Altura max. de satelite (x limite)', 0.6, 0.2, 1.0)
 add_par(base, page, 'menu', 'Vecina', 'Quien elige la vecina', 'velocidadocupacion',
