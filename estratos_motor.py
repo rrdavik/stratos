@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v7'
+MOTOR_VERSION = 'motor v8'
 
 import math
 
@@ -48,11 +48,11 @@ DEFAULT_CFG = dict(
     nivel=3,
     core_radius=6.0,
     # fase 3
-    shell_thick=0.5, height_factor=3.0, seed_frac=0.25, grow_frac=0.30,
-    gate_mode=1, vel_umbral=64, steps_per_beat=4,
+    shell_thick=0.5, height_factor=3.75, seed_frac=0.20, grow_frac=0.20,
+    gate_mode=1, vel_umbral=64, steps_per_beat=4, cost_max=5,
     # fase 4
-    th_branch=4, th_fusion=6, th_crown=8, sat_size=0.6, sat_limit=0.6,
-    neigh_mode=1,
+    th_branch=5, th_fusion=7, th_crown=9, th_cumbre=11, cumbre_tramos=4,
+    sat_size=0.6, sat_limit=0.6, neigh_mode=1,
     # fase 6
     reps=8, cycle_mode=0, long_manual=16, long_min=4, long_fija=0,
     steps_per_bar=16, turn_auto=1,
@@ -322,7 +322,9 @@ def _new_det():
 def new_world():
     return dict(
         v=1,
-        occ=[0] * N,        # ocupacion
+        occ=[0] * N,        # ocupacion (triggers de construccion)
+        carga=[0] * N,      # notas acumuladas hacia el siguiente trigger
+        lat=[-99.0] * N,    # instante de la ultima nota (latido)
         h=[0.0] * N,        # altura objetivo
         vh=[0.0] * N,       # altura visible (se acerca a h suavemente)
         sp=[0] * N,         # especie visible: 0, geo, arq, hib
@@ -380,12 +382,32 @@ def height_for(cfg, occ):
     return min(lim, cfg['seed_frac'] * lim + (occ - 1) * cfg['grow_frac'] * lim)
 
 
+def cost(cfg, occ):
+    """Notas que hacen falta para el siguiente trigger de construccion.
+    Sube con la altura nominal de la formacion: 1 abajo, Costemax en el
+    limite y desde ahi (ramificacion, fusion, coronacion, cumbre)."""
+    cm = max(1, int(cfg['cost_max']))
+    lim = limit(cfg)
+    f = height_for(cfg, max(1, occ)) / lim if lim > 0 else 1.0
+    return max(1, min(cm, 1 + int(math.floor((cm - 1) * f + 1e-6))))
+
+
+def cumbre_tramos(cfg, occ):
+    if occ < cfg['th_cumbre']:
+        return 0
+    return min(int(cfg['cumbre_tramos']), occ - cfg['th_cumbre'] + 1)
+
+
 def state_name(cfg, occ, lvl=10):
     if occ <= 0:
         return 'vacia'
     if occ == 1:
         return 'semilla'
     if occ < cfg['th_branch']:
+        if occ == 2:
+            return 'brote'
+        if occ == cfg['th_branch'] - 1:
+            return 'madurez'
         return 'crecimiento'
     if lvl < 4:
         return 'limite'
@@ -393,7 +415,9 @@ def state_name(cfg, occ, lvl=10):
         return 'ramificacion'
     if occ < cfg['th_crown']:
         return 'fusion'
-    return 'coronacion'
+    if occ < cfg['th_cumbre']:
+        return 'coronacion'
+    return 'cumbre'
 
 
 def n_shells(W):
@@ -414,6 +438,7 @@ def occupied(W):
 
 def _clear_cell(W, i):
     W['occ'][i] = 0
+    W['carga'][i] = 0
     W['h'][i] = 0.0
     W['par'][i] = -1
 
@@ -426,12 +451,48 @@ def _bit(s):
 # 1. NUCLEO - crecimiento (fases 3, 4, 5)
 # -----------------------------------------------------------------------------
 
+def _mark(W, i, s):
+    b = _bit(s)
+    if not (W['traza'][i] & b):
+        W['traza'][i] |= b
+        if W['own'][i] != s:
+            W['sp'][i] = HIB                # colonizacion
+
+
+def _charge(W, cfg, i, now):
+    """Una nota (o una presion) llega a una formacion que ya existe.
+    Suma 1 a su carga y la hace subir un trozo de escalon: Growstep /
+    coste, asi que cada nota sube menos conforme la formacion se acerca
+    al limite (la frenada). Cuando la carga llega al coste se dispara el
+    trigger: la ocupacion sube 1. Devuelve (trigger, incremento)."""
+    lim = limit(cfg)
+    o = W['occ'][i]
+    k = cost(cfg, o)
+    W['lat'][i] = now
+    inc = 0.0
+    sat = W['par'][i] >= 0
+    if o < cfg['th_branch']:
+        cap = cfg['sat_limit'] * lim if sat else lim
+        inc = cfg['grow_frac'] * lim / k
+        W['h'][i] = min(cap, W['h'][i] + inc)
+    W['carga'][i] += 1
+    if W['carga'][i] < k:
+        return False, inc
+    W['carga'][i] = 0
+    W['occ'][i] = o + 1
+    if o + 1 >= cfg['th_branch'] and not sat:
+        W['h'][i] = lim
+    return True, inc
+
+
 def grow(W, cfg, i, s, vel, now):
     lvl = cfg['nivel']
     lim = limit(cfg)
     o = W['occ'][i]
     if o == 0:
         W['occ'][i] = 1
+        W['carga'][i] = 0
+        W['lat'][i] = now
         W['own'][i] = s
         W['sp'][i] = s
         W['traza'][i] = _bit(s)
@@ -439,26 +500,16 @@ def grow(W, cfg, i, s, vel, now):
         W['par'][i] = -1
         W['h'][i] = cfg['seed_frac'] * lim
         W['huella'][i] = 0.0
-        return dict(estado='semilla', inc=0.0, celda=i)
+        return dict(estado='semilla', inc=0.0, celda=i, trigger=True)
 
     if W['par'][i] >= 0:                    # un satelite que recibe senal
         W['par'][i] = -1                    # directa se independiza
-    b = _bit(s)
-    if not (W['traza'][i] & b):
-        W['traza'][i] |= b
-        if W['own'][i] != s:
-            W['sp'][i] = HIB                # colonizacion
-    o += 1
-    W['occ'][i] = o
-    inc = 0.0
-    out = dict(celda=i)
-    if o < cfg['th_branch']:
-        inc = cfg['grow_frac'] * lim
-        W['h'][i] = min(lim, W['h'][i] + inc)
-    else:
-        W['h'][i] = lim
-        if lvl >= 4:
-            out['desborde'] = overflow(W, cfg, i, s, vel, now)
+    _mark(W, i, s)
+    trig, inc = _charge(W, cfg, i, now)
+    out = dict(celda=i, trigger=trig)
+    o = W['occ'][i]
+    if trig and o >= cfg['th_branch'] and lvl >= 4:
+        out['desborde'] = overflow(W, cfg, i, s, vel, now)
     out['estado'] = state_name(cfg, o, lvl)
     out['inc'] = inc
     return out
@@ -473,6 +524,8 @@ def overflow(W, cfg, i, s, vel, now):
     o = W['occ'][j]
     if o == 0:
         W['occ'][j] = 1
+        W['carga'][j] = 0
+        W['lat'][j] = now
         W['par'][j] = i
         W['own'][j] = W['own'][i]
         W['sp'][j] = W['own'][i]
@@ -483,20 +536,13 @@ def overflow(W, cfg, i, s, vel, now):
         kind = 'satelite nuevo'
     elif W['par'][j] == i:
         W['occ'][j] = o + 1
+        W['lat'][j] = now
         W['h'][j] = min(cfg['sat_limit'] * lim, W['h'][j] + grow_h)
         kind = 'satelite crece'
     else:
-        # presion sobre una formacion ajena: suma ocupacion, sin cascada
-        W['occ'][j] = o + 1
-        b = _bit(s)
-        if not (W['traza'][j] & b):
-            W['traza'][j] |= b
-            if W['own'][j] != s:
-                W['sp'][j] = HIB
-        if W['par'][j] >= 0:
-            W['h'][j] = min(cfg['sat_limit'] * lim, W['h'][j] + grow_h)
-        else:
-            W['h'][j] = lim if o + 1 >= cfg['th_branch'] else min(lim, W['h'][j] + grow_h)
+        # presion sobre una formacion ajena: suma a su carga, sin cascada
+        _mark(W, j, s)
+        _charge(W, cfg, j, now)
         kind = 'presion'
     W['ev']['desborde'] = dict(de=i, a=j, tipo=kind, t=now)
     return j
@@ -535,7 +581,8 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
     res = grow(W, cfg, i, s, vel, now)
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
-    W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now)
+    W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now,
+                             carga=W['carga'][i], coste=cost(cfg, W['occ'][i]))
     return res
 
 
@@ -844,8 +891,15 @@ def pick_target(W, cfg, pad, vel):
 
 def degrade(W, cfg, i, k):
     """Quita k unidades de ocupacion en orden inverso a la promocion:
-    primero satelites, luego altura, al final la huella."""
+    primero satelites, luego altura, al final la huella. Antes de nada
+    vacia la carga de la formacion (lo que llevaba acumulado se pierde)."""
     removed = 0
+    if W['carga'][i] > 0 and W['occ'][i] > 0:
+        W['carga'][i] = 0
+        cap = height_for(cfg, W['occ'][i])
+        if W['par'][i] >= 0:
+            cap *= cfg['sat_limit']
+        W['h'][i] = min(W['h'][i], cap)
     for _ in range(int(k)):
         sats = satellites_of(W, i)
         if sats:
@@ -972,6 +1026,7 @@ def end_cycle(W, cfg, now):
     W['gen'] += 1
     her = cfg['herencia']
     for i in range(N):
+        W['carga'][i] = 0
         x = W['occ'][i] * her + W['resto'][i]
         n = int(math.floor(x + 1e-9))
         W['resto'][i] = x - n
@@ -1075,6 +1130,15 @@ COL_HUELLA = (0.13, 0.09, 0.06)
 COL_CROWN = (1.00, 0.70, 0.30)
 COL_SCAR = (0.10, 0.90, 1.00)
 
+LATIDO_AMP, LATIDO_DUR = 0.05, 0.18     # cada nota hincha la formacion un 5 %
+
+
+def _latido(W, i, now):
+    dt = now - W['lat'][i]
+    if dt < 0 or dt > 4 * LATIDO_DUR:
+        return 0.0
+    return math.exp(-dt / LATIDO_DUR)
+
 
 def _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None):
     e, t = tangents(n)
@@ -1138,6 +1202,10 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         scale = cfg['sat_size'] if sat else 1.0
         base_col = COL_GEO if own == GEO else COL_ARQ
         col = _tint(base_col, 1.15 if pulido else 0.9)
+        lt = _latido(W, i, now)
+        if lt > 0:                  # la nota ha llegado aunque no construya
+            vh *= 1.0 + LATIDO_AMP * lt
+            col = _tint(col, 1.0 + 0.35 * lt)
         if sat:
             col = _tint(col, 0.85)
         if own == GEO:
@@ -1167,10 +1235,15 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                 kk = 0.80 if not sat else 0.70
                 lst.append(_row(p0, n, kk * cw, 0.30 * lim, kk * cl, _tint(base_col, 0.7)))
             if not sat and o >= cfg['th_crown']:
+                # cumbre: cada trigger alarga la corona un 25 %, hasta Tramoscumbre
+                tr = cumbre_tramos(cfg, o)
+                kl, kw = 1.0 + 0.25 * tr, 1.0 + 0.15 * tr
                 if own == GEO:
-                    out['coronas'].append(_row(top, d, 0.06 * cl, 0.70 * lim, 0.06 * cl, COL_CROWN))
+                    out['coronas'].append(_row(top, d, 0.06 * kw * cl, 0.70 * kl * lim,
+                                               0.06 * kw * cl, COL_CROWN))
                 else:
-                    out['coronas'].append(_row(top, n, 0.03 * cl, 0.90 * lim, 0.03 * cl, COL_CROWN))
+                    out['coronas'].append(_row(top, n, 0.03 * kw * cl, 0.90 * kl * lim,
+                                               0.03 * kw * cl, COL_CROWN))
                     out['coronas'].append(_row(top, n, 0.20 * cl, 0.05 * lim, 0.20 * cl, COL_CROWN))
     if lvl >= 5 and not hide_beacons:
         b = beacon(W, cfg, 2, now)
@@ -1314,11 +1387,14 @@ def cfg():
         height_factor=_p('Alturafactor', c['height_factor']),
         seed_frac=_p('Semillafrac', c['seed_frac']),
         grow_frac=_p('Growstep', c['grow_frac']),
+        cost_max=_p('Costemax', c['cost_max']),
         gate_mode=int(_p('Gatemode', True)),
         vel_umbral=_p('Umbralvel', c['vel_umbral']),
         th_branch=_p('Umbralram', c['th_branch']),
         th_fusion=_p('Umbralfusion', c['th_fusion']),
         th_crown=_p('Umbralcorona', c['th_crown']),
+        th_cumbre=_p('Umbralcumbre', c['th_cumbre']),
+        cumbre_tramos=_p('Tramoscumbre', c['cumbre_tramos']),
         sat_size=_p('Tamsatelite', c['sat_size']),
         sat_limit=_p('Limsatelite', c['sat_limit']),
         neigh_mode=_menu('Vecina', ['velocidad', 'velocidadocupacion'], 1),
@@ -1571,13 +1647,17 @@ def on_pulse(name):
         note = _p('Nota', 60)
         _seq1_beacon(note)
         r = note_on(W, c, GEO, note, _p('Velprueba', 100), now, tempo())
-        print('SEMBRAR  %s -> celda %d  ocupacion %d  (%s)'
-              % (note_name(note), r['celda'], W['occ'][r['celda']], r['estado']))
+        ci = r['celda']
+        print('SEMBRAR  %s -> celda %d  ocupacion %d  carga %d/%d  (%s)'
+              % (note_name(note), ci, W['occ'][ci] if ci >= 0 else 0, W['carga'][ci] if ci >= 0 else 0,
+                 cost(c, W['occ'][ci]) if ci >= 0 else 0, r['estado']))
     elif name == 'Sembrar2':
         note = _p('Nota2', 60)
         r = note_on(W, c, ARQ, note, _p('Velprueba', 100), now, tempo())
-        print('SEMBRAR2 %s -> celda %d  ocupacion %d  (%s)'
-              % (note_name(note), r['celda'], W['occ'][r['celda']], r['estado']))
+        ci = r['celda']
+        print('SEMBRAR2 %s -> celda %d  ocupacion %d  carga %d/%d  (%s)'
+              % (note_name(note), ci, W['occ'][ci] if ci >= 0 else 0, W['carga'][ci] if ci >= 0 else 0,
+                 cost(c, W['occ'][ci]) if ci >= 0 else 0, r['estado']))
     elif name == 'Erosionar':
         ev = erosion(W, c, _p('Padprueba', 1) - 1, _p('Velprueba', 100), now)
         print('EROSION  pad %d -> celda %d, radio %d, quitado %d'
@@ -1711,16 +1791,18 @@ def _legend():
                     N, FUERA_MODES[GRID['mode']]))
     u = W['ev'].get('ultima')
     if u:
-        lines.append('  ULTIMA   %s celda %d   ocupacion %d   %s'
-                     % (SPECIES_NAME.get(u['s'], '?'), u['celda'], u['occ'], u['estado']))
+        ctxt = '   carga %d/%d' % (u['carga'], u['coste']) if 'coste' in u else ''
+        lines.append('  ULTIMA   %s celda %d   ocupacion %d   %s%s'
+                     % (SPECIES_NAME.get(u['s'], '?'), u['celda'], u['occ'], u['estado'], ctxt))
     if lvl >= 4:
         sats = sum(1 for i in range(N) if W['par'][i] >= 0 and W['occ'][i] > 0)
         fus = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= c['th_fusion'])
         cor = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= c['th_crown'])
+        cum = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= c['th_cumbre'])
         d = W['ev'].get('desborde')
         dtxt = '%d -> %d' % (d['de'], d['a']) if d else '-'
-        lines.append('  DESBORDE %-9s satelites %d   fusiones %d   coronas %d'
-                     % (dtxt, sats, fus, cor))
+        lines.append('  DESBORDE %-9s satelites %d   fusiones %d   coronas %d   cumbres %d'
+                     % (dtxt, sats, fus, cor, cum))
     if lvl >= 5:
         hib = sum(1 for i in range(N) if W['sp'][i] == HIB)
         lines.append('  SEQ2     canal %d   notas %d   hibridas %d'

@@ -6,13 +6,19 @@ Se apoya en fase12_base.py (fases 1 y 2). No la rehace: le anade piezas.
 
 QUE HACE
 --------
-Cada nota del SEQ1 suma 1 a la OCUPACION de su celda, y en la celda crece
-una formacion geologica:
+Cada nota del SEQ1 suma 1 a la CARGA de su celda. Cuando la carga llega
+al COSTE se dispara un trigger de construccion y la OCUPACION sube 1. El
+coste crece con la altura: 1 nota abajo, Costemax (5) en el limite. Cada
+nota sube la formacion Growstep / coste: cuanto mas alta, mas despacio
+(la frenada). Cada nota hace latir la formacion aunque no construya.
 
-    ocupacion 1     semilla (altura minima)
-    ocupacion 2-3   crece en altura (lo que dure el gate decide cuanto)
-    ocupacion 4+    se queda en el LIMITE DE ALTURA = 3 x grosor de concha
+    ocupacion 1     semilla (20 % del limite)                    1 nota
+    ocupacion 2     brote (40 %)                                 2 notas
+    ocupacion 3     crecimiento (60 %)                           4 notas
+    ocupacion 4     madurez (80 %)                               7 notas
+    ocupacion 5+    LIMITE DE ALTURA = 3,75 x grosor de concha  11 notas
                     (el desbordamiento llega en la fase 4)
+El gate decide cuanto sube cada nota.
 
 El MATERIAL lo fija la velocidad de la primera nota y no vuelve a cambiar:
 velocidad alta = pulido, casi metalico; baja = poroso y mate.
@@ -57,7 +63,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v5  (ocupacion, semilla, crecimiento, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v6  (carga y frenada, semilla, crecimiento, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -69,15 +75,19 @@ motor = install_core(base, CARPETA, 3)
 
 page = get_page(base, 'Fase3')
 add_par(base, page, 'float', 'Shellthick', 'Grosor de concha', 0.5, 0.05, 2.0)
-add_par(base, page, 'float', 'Alturafactor', 'Limite de altura (x grosor)', 3.0, 1.0, 8.0)
-add_par(base, page, 'float', 'Semillafrac', 'Altura de la semilla (x limite)', 0.25, 0.05, 1.0)
-add_par(base, page, 'float', 'Growstep', 'Crecimiento por senal (x limite)', 0.30, 0.05, 1.0)
+add_par(base, page, 'float', 'Alturafactor', 'Limite de altura (x grosor)', 3.75, 1.0, 8.0)
+add_par(base, page, 'float', 'Semillafrac', 'Altura de la semilla (x limite)', 0.20, 0.05, 1.0)
+add_par(base, page, 'float', 'Growstep', 'Crecimiento por trigger (x limite)', 0.20, 0.05, 1.0)
+add_par(base, page, 'int', 'Costemax', 'Notas por trigger en el limite', 5, 1, 12, clamp=True)
+renew_default(base, 'Alturafactor', 3.0, 3.75)
+renew_default(base, 'Semillafrac', 0.25, 0.20)
+renew_default(base, 'Growstep', 0.30, 0.20)
 add_par(base, page, 'toggle', 'Gatemode', 'El gate decide el crecimiento', True)
 add_par(base, page, 'int', 'Umbralvel', 'Velocidad: pulido a partir de', 64, 1, 127, clamp=True)
 add_par(base, page, 'int', 'Velprueba', 'Velocidad de prueba', 100, 1, 127, clamp=True)
 add_par(base, page, 'pulse', 'Sembrar', 'Sembrar en Nota (prueba)')
 add_par(base, page, 'pulse', 'Resetmundo', 'Vaciar el mundo')
-ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Growstep, Gatemode, '
+ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Growstep, Costemax, Gatemode, '
    'Umbralvel, Velprueba, Sembrar, Resetmundo, Rotextra, Balanceo, Balanceoper')
 
 # -----------------------------------------------------------------------------
@@ -93,8 +103,11 @@ make_instanced(base, 'formas_pulidas', 520, 380, 'mat_pulido')
 set_render(base)
 
 leeme(base, 3, """FASE 3 - LA SEMILLA
-  Cada nota del SEQ1 suma ocupacion a su celda:
-    1 semilla, 2-3 crece, 4+ limite de altura (3 x Shellthick).
+  Cada nota del SEQ1 suma carga a su celda; al llegar al coste se
+  dispara un trigger y la ocupacion sube 1. El coste sube con la altura,
+  de 1 a Costemax (5) en el limite, y cada nota sube menos (frenada):
+    1 semilla, 2 brote, 3 crecimiento, 4 madurez, 5+ limite (3,75 x Shellthick).
+    Notas: 1, 2, 4, 7 y 11. Costemax 1 = una nota por trigger.
   El gate largo crece mas que el corto (Gatemode). El material lo fija la
   velocidad de la primera nota (Umbralvel): pulido o poroso.
   Prueba sin BeatStep: elige Nota (pagina Fase2) y pulsa Sembrar.
@@ -119,17 +132,29 @@ def prueba(t):
     W = m.world()
     t.check('1 nota  -> semilla', W['occ'][i] == 1 and abs(W['h'][i] - c['seed_frac'] * lim) < 1e-6,
             'ocupacion %d' % W['occ'][i])
+    hs = [W['h'][i]]
+    for k in range(3):
+        t.midi(0x9C, 0x40, 0x64)
+        hs.append(W['h'][i])
+    t.check('4 notas -> crecimiento (ocupacion 3)', W['occ'][i] == 3 and hs[-1] > hs[0],
+            'ocupacion %d, altura %.2f' % (W['occ'][i], W['h'][i]))
+    t.check('frenada: la nota 3 sube menos que la 2', hs[2] - hs[1] < hs[1] - hs[0] - 1e-6,
+            '%.3f < %.3f' % (hs[2] - hs[1], hs[1] - hs[0]))
+    t.check('carga: la nota 3 no dispara trigger', m.cost(c, 2) == 2)
+    for k in range(6):
+        t.midi(0x9C, 0x40, 0x64)
+    t.check('10 notas -> madurez, aun bajo el limite',
+            W['occ'][i] == c['th_branch'] - 1 and W['h'][i] < lim,
+            'ocupacion %d, altura %.2f de %.2f' % (W['occ'][i], W['h'][i], lim))
     t.midi(0x9C, 0x40, 0x64)
-    t.midi(0x9C, 0x40, 0x64)
-    t.check('3 notas -> crece', W['h'][i] > c['seed_frac'] * lim, 'altura %.2f' % W['h'][i])
-    t.midi(0x9C, 0x40, 0x64)
-    t.midi(0x9C, 0x40, 0x64)
-    t.midi(0x9C, 0x40, 0x64)
-    t.check('6 notas -> limite de altura, sin desbordar',
-            abs(W['h'][i] - lim) < 1e-6 and m.occupied(W) == 1,
+    o11 = W['occ'][i]
+    t.check('11 notas -> limite de altura, sin desbordar',
+            abs(W['h'][i] - lim) < 1e-6 and o11 == c['th_branch'] and m.occupied(W) == 1,
             'altura %.2f de %.2f, celdas %d' % (W['h'][i], lim, m.occupied(W)))
+    t.check('en el limite cada trigger cuesta Costemax notas',
+            m.cost(c, o11) == int(c['cost_max']), '%d' % m.cost(c, o11))
     t.midi(0x90, 0x40, 0x64)                         # canal 1: se ignora
-    t.check('nota en el canal 1 ignorada', W['occ'][i] == 6)
+    t.check('nota en el canal 1 ignorada', W['occ'][i] == o11 and W['carga'][i] == 0)
     t.midi(0x9C, 0x30, 0x14)                         # do3, vel 20: porosa
     j = m.note_cell(48)
     t.check('velocidad 20 -> material poroso', W['vel'][j] == 20 and W['vel'][i] == 100)
@@ -169,7 +194,8 @@ def prueba(t):
 
 run_test(base, prueba)
 print('  Ahora: PLAY en el BeatStep con el SEQ1 sonando.')
-print('  Cada nota deja una formacion; las repetidas crecen hasta el limite.')
+print('  Cada nota deja una formacion; las repetidas crecen hasta el limite,')
+print('  cada vez mas despacio (11 notas hasta el limite con Costemax 5).')
 print('  Sin BeatStep: Nota (pagina Fase2) + Sembrar (pagina Fase3).')
 print('  Para empezar de cero: Resetmundo.')
 print('=' * 66)

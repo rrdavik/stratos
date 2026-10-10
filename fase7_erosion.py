@@ -44,7 +44,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v1  (8 pads de erosion, huellas, presupuesto de densidad)'
+VERSION = 'fase7 v2  (8 pads de erosion, huellas, presupuesto de densidad)'
 banner(VERSION)
 
 base = require_base(7)
@@ -93,7 +93,7 @@ def prueba(t):
     m = t.m
     m.reset_world()
     c = m.cfg()
-    for k in range(7):
+    for k in range(16):                           # limite + 2 desbordes
         t.midi(0x9C, 0x40, 0x64)
     W = m.world()
     i = m.note_cell(64)
