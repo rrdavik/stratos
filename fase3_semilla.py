@@ -18,7 +18,9 @@ nota sube la formacion Growstep / coste: cuanto mas alta, mas despacio
     ocupacion 4     madurez (80 %)                               7 notas
     ocupacion 5+    LIMITE DE ALTURA = 3,75 x grosor de concha  11 notas
                     (el desbordamiento llega en la fase 4)
-El gate decide cuanto sube cada nota.
+El gate decide cuanto sube cada nota: corto, hasta 1/4; ligado, como
+mucho Gatemax veces (1,25). Nunca adelanta la altura al escalon que se
+esta construyendo.
 
 El MATERIAL lo fija la velocidad de la primera nota y no vuelve a cambiar:
 velocidad alta = pulido, casi metalico; baja = poroso y mate.
@@ -63,7 +65,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v6  (carga y frenada, semilla, crecimiento, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v7  (carga y frenada, semilla, crecimiento, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -83,11 +85,12 @@ renew_default(base, 'Alturafactor', 3.0, 3.75)
 renew_default(base, 'Semillafrac', 0.25, 0.20)
 renew_default(base, 'Growstep', 0.30, 0.20)
 add_par(base, page, 'toggle', 'Gatemode', 'El gate decide el crecimiento', True)
+add_par(base, page, 'float', 'Gatemax', 'Gate ligado: crecimiento max. (x)', 1.25, 1.0, 2.0)
 add_par(base, page, 'int', 'Umbralvel', 'Velocidad: pulido a partir de', 64, 1, 127, clamp=True)
 add_par(base, page, 'int', 'Velprueba', 'Velocidad de prueba', 100, 1, 127, clamp=True)
 add_par(base, page, 'pulse', 'Sembrar', 'Sembrar en Nota (prueba)')
 add_par(base, page, 'pulse', 'Resetmundo', 'Vaciar el mundo')
-ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Growstep, Costemax, Gatemode, '
+ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Growstep, Costemax, Gatemode, Gatemax, '
    'Umbralvel, Velprueba, Sembrar, Resetmundo, Rotextra, Balanceo, Balanceoper')
 
 # -----------------------------------------------------------------------------
@@ -108,6 +111,7 @@ leeme(base, 3, """FASE 3 - LA SEMILLA
   de 1 a Costemax (5) en el limite, y cada nota sube menos (frenada):
     1 semilla, 2 brote, 3 crecimiento, 4 madurez, 5+ limite (3,75 x Shellthick).
     Notas: 1, 2, 4, 7 y 11. Costemax 1 = una nota por trigger.
+  Gate ligado: como mucho Gatemax (1,25) veces; nunca pasa del escalon.
   El gate largo crece mas que el corto (Gatemode). El material lo fija la
   velocidad de la primera nota (Umbralvel): pulido o poroso.
   Prueba sin BeatStep: elige Nota (pagina Fase2) y pulsa Sembrar.
@@ -141,6 +145,15 @@ def prueba(t):
     t.check('frenada: la nota 3 sube menos que la 2', hs[2] - hs[1] < hs[1] - hs[0] - 1e-6,
             '%.3f < %.3f' % (hs[2] - hs[1], hs[1] - hs[0]))
     t.check('carga: la nota 3 no dispara trigger', m.cost(c, 2) == 2)
+    W2 = m.new_world()
+    for k in range(3):
+        m.note_on(W2, c, m.GEO, 64, 100, float(k))
+    h3 = W2['h'][i]
+    m.note_off(W2, c, m.GEO, 64, 2.0 + 10.0, 120.0)   # gate larguisimo
+    t.check('gate ligado: como mucho Gatemax y sin pasar del escalon',
+            W2['h'][i] <= m.height_for(c, W2['occ'][i] + 1) + 1e-9
+            and W2['h'][i] - h3 <= (c['gate_max'] - 1.0) * c['grow_frac'] * lim / 2 + 1e-9,
+            '%.3f -> %.3f' % (h3, W2['h'][i]))
     for k in range(6):
         t.midi(0x9C, 0x40, 0x64)
     t.check('10 notas -> madurez, aun bajo el limite',

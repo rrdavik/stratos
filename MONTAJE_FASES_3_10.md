@@ -18,10 +18,10 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v8` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v9` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v6` |
-| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v6` |
-| `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v4` |
+| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v7` |
+| `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v5` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
 | `fase6_ciclo.py` | Longitud de pattern, biblioteca, ciclo, vuelta por ciclo | `fase6 v1` |
 | `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v2` |
@@ -111,12 +111,13 @@ Cada nota del SEQ1 suma 1 a la **carga** de su celda. Cuando la carga llega al *
 
 Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es un 25 % más alto (1,875 en vez de 1,5). Con una nota por pattern (16 pasos a 120 BPM) son ~20 s en vez de 6.
 
-- **El gate decide cuánto crece** (`Gatemode`). Al llegar el note off se mide cuánto duró la nota respecto a un paso: un gate al 50 % da el crecimiento normal, un gate corto la mitad o menos (hasta ¼) y uno ligado hasta el doble. Sin note off, crecimiento normal. Se aplica al trozo de escalón de cada nota; no cambia la carga.
+- **El gate decide cuánto crece** (`Gatemode`). Al llegar el note off se mide cuánto duró la nota respecto a un paso: un gate al 50 % da el crecimiento normal, un gate corto la mitad o menos (hasta ¼) y uno ligado como mucho `Gatemax` veces (1,25; antes era el doble). Sin note off, crecimiento normal. Se aplica al trozo de escalón de cada nota y no cambia la carga.
+- **Techo del escalón** (motor v9): la altura nunca pasa del escalón que se está construyendo. Ni un gate ligado ni la presión de una vecina adelantan la altura a los triggers. Antes, con gates largos, una formación podía tocar el límite con la mitad de las notas.
 - **Material**: la velocidad de la primera nota decide (`Umbralvel`, 64). Por encima, `mat_pulido`: brillo alto, casi metálico. Por debajo, `mat_poroso`: mate. No vuelve a cambiar.
 - **Animación**: la altura visible se acerca a la real en ~0,1 s; las formaciones brotan, no aparecen de golpe.
 - **Balanceo del eje** (v2): además del giro al tempo, el eje se balancea hacia la cámara y en contra, `Balanceo` grados (60) cada `Balanceoper` segundos (90), para ver los dos polos. Va aparte del reloj del secuenciador y se congela con `Pausa`. `Rotextra` lo enciende y lo apaga; entra y sale en 3 s, sin saltos. Lo llevan todas las geometrías que giran con el planeta (núcleo, retícula, balizas, formas, coronas, estratos) y la luz de destello. Orden de rotación: `Ry Rx Rz` (giro, balanceo, inclinación).
 
-**Página Fase3:** `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
+**Página Fase3:** `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Gatemax` 1,25 · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
 
 Los tres últimos los crea ya `fase12_base.py` en esta página; si venían de la página Fase1 (versión anterior), la fase 3 los mueve aquí conservando su valor.
 

@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v8'
+MOTOR_VERSION = 'motor v9'
 
 import math
 
@@ -49,7 +49,7 @@ DEFAULT_CFG = dict(
     core_radius=6.0,
     # fase 3
     shell_thick=0.5, height_factor=3.75, seed_frac=0.20, grow_frac=0.20,
-    gate_mode=1, vel_umbral=64, steps_per_beat=4, cost_max=5,
+    gate_mode=1, gate_max=1.25, vel_umbral=64, steps_per_beat=4, cost_max=5,
     # fase 4
     th_branch=5, th_fusion=7, th_crown=9, th_cumbre=11, cumbre_tramos=4,
     sat_size=0.6, sat_limit=0.6, neigh_mode=1,
@@ -459,6 +459,17 @@ def _mark(W, i, s):
             W['sp'][i] = HIB                # colonizacion
 
 
+def _ceiling(W, cfg, i):
+    """Techo de altura de una formacion: el escalon que esta construyendo.
+    Con carga a medias puede llegar hasta el siguiente escalon, nunca mas
+    alla: ni el gate ni la presion adelantan la altura a los triggers."""
+    o = W['occ'][i]
+    top = height_for(cfg, o + 1 if W['carga'][i] > 0 else o)
+    if W['par'][i] >= 0:
+        top *= cfg['sat_limit']
+    return min(limit(cfg), top)
+
+
 def _charge(W, cfg, i, now):
     """Una nota (o una presion) llega a una formacion que ya existe.
     Suma 1 a su carga y la hace subir un trozo de escalon: Growstep /
@@ -471,11 +482,10 @@ def _charge(W, cfg, i, now):
     W['lat'][i] = now
     inc = 0.0
     sat = W['par'][i] >= 0
-    if o < cfg['th_branch']:
-        cap = cfg['sat_limit'] * lim if sat else lim
-        inc = cfg['grow_frac'] * lim / k
-        W['h'][i] = min(cap, W['h'][i] + inc)
     W['carga'][i] += 1
+    if o < cfg['th_branch']:
+        inc = cfg['grow_frac'] * lim / k
+        W['h'][i] = min(_ceiling(W, cfg, i), W['h'][i] + inc)
     if W['carga'][i] < k:
         return False, inc
     W['carga'][i] = 0
@@ -561,10 +571,11 @@ def note_off(W, cfg, s, note, now, tempo):
         return None
     step = step_dur(cfg, tempo)
     factor = max(0.0, now - t_on) / step
-    m = max(0.25, min(2.0, 2.0 * factor))     # gate al 50 % = incremento normal
+    # gate al 50 % = incremento normal; ligado como mucho Gatemax veces
+    m = max(0.25, min(max(1.0, cfg['gate_max']), 2.0 * factor))
     lim = limit(cfg)
     lo = cfg['seed_frac'] * lim
-    W['h'][i] = max(lo, min(lim, W['h'][i] + inc * (m - 1.0)))
+    W['h'][i] = max(lo, min(_ceiling(W, cfg, i), W['h'][i] + inc * (m - 1.0)))
     return m
 
 
@@ -1389,6 +1400,7 @@ def cfg():
         grow_frac=_p('Growstep', c['grow_frac']),
         cost_max=_p('Costemax', c['cost_max']),
         gate_mode=int(_p('Gatemode', True)),
+        gate_max=_p('Gatemax', c['gate_max']),
         vel_umbral=_p('Umbralvel', c['vel_umbral']),
         th_branch=_p('Umbralram', c['th_branch']),
         th_fusion=_p('Umbralfusion', c['th_fusion']),
