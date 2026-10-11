@@ -47,6 +47,20 @@ Los pads de bateria no tienen altura, asi que no dicen celda. Objetivo:
 En los tres primeros, la velocidad desplaza el golpe un meridiano a un
 lado o al otro: decide el aparato, no el software.
 
+BALIZAS DE LA BATERIA (v3)
+--------------------------
+Una baliza por pad, mas pequena que la del SEQ2 y cada una de su color
+(tabla colores_drum, editable), en la celda que recibe el golpe. Cada pad
+tiene su hueco en un anillo alrededor del centro de la celda (pad n a
+(n-1) x 45 grados), asi bombo y charles en la misma celda se ven los dos.
+Se enciende con cada golpe, crece con la velocidad y se apaga en
+Vidabalizadrum segundos: los pads frecuentes casi siempre estan
+encendidos; los raros destellan.
+    Balizasdrum       encendidas / apagadas
+    Tambalizadrum     tamano (x la baliza del SEQ2), 0,5
+    Anillobalizadrum  distancia al centro (x ancho de la celda), 0,35
+    Vidabalizadrum    segundos hasta apagarse, 0,6
+
 EL CANAL DE LA BATERIA
 ----------------------
 Canal 16 (confirmado con el aparato), pads desde la nota 36 (do2, por
@@ -79,8 +93,13 @@ add_par(base, page, 'float', 'Umbraldensidad', 'Presupuesto de densidad', 0.60, 
 add_par(base, page, 'float', 'Multradio', 'Multiplicador de radio', 2.0, 1.0, 4.0)
 add_par(base, page, 'int', 'Padprueba', 'Pad de prueba', 1, 1, 8, clamp=True)
 add_par(base, page, 'pulse', 'Erosionar', 'Erosionar con el pad de prueba')
+add_par(base, page, 'toggle', 'Balizasdrum', 'Balizas de la bateria', True)
+add_par(base, page, 'float', 'Tambalizadrum', 'Tamano de baliza (x SEQ2)', 0.5, 0.05, 2.0)
+add_par(base, page, 'float', 'Anillobalizadrum', 'Hueco de cada pad (x celda)', 0.35, 0.0, 1.0)
+add_par(base, page, 'float', 'Vidabalizadrum', 'Vida de la baliza (s)', 0.6, 0.05, 5.0)
 ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
-   'Multradio, Padprueba, Erosionar')
+   'Multradio, Padprueba, Erosionar, Balizasdrum, Tambalizadrum, Anillobalizadrum, '
+   'Vidabalizadrum')
 
 COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'tipo', 'rol']
 
@@ -143,11 +162,28 @@ else:
         info('perfiles_erosion editada a mano: se conserva; los nuevos valores por '
              'defecto estan en el montaje')
 
+colores = base.op('colores_drum')
+if colores is None:
+    colores = mk(base, 'tableDAT', 'colores_drum', -660, 200)
+    colores.clear()
+    colores.appendRow(['pad', 'r', 'g', 'b', 'rol'])
+    for k, (r, g, b) in enumerate(motor.module.COLORES_DRUM):
+        colores.appendRow([k + 1, '%.3f' % r, '%.3f' % g, '%.3f' % b, motor.module.ROLES_DEFECTO[k]])
+    ok('colores_drum: un color por pad (rojos y violetas los cortes, frios los aranazos)')
+else:
+    info('colores_drum ya existia: se conserva como esta')
+
+make_constant(base, 'mat_balizas_drum', 780, 700, (1.0, 1.0, 1.0))
+make_instanced(base, 'balizas_drum', 520, 700, 'mat_balizas_drum', sop='sphere')
+set_render(base)
+
 leeme(base, 7, """FASE 7 - EROSION
   8 pads de bateria (Canaldrum 16, desde Notabase) = 8 perfiles editables
   en perfiles_erosion: reduccion, radio, profundidad, tipo (rol: solo nota).
   Cuanto mas frecuente el golpe, mas superficial: 1 bombo tiembla (radio 2),
   2 caja corta, 3 tom corte profundo, 4-8 aranazos.
+  Balizas de la bateria: una por pad, de su color (colores_drum), en su
+  hueco de la celda golpeada; se apagan en Vidabalizadrum s.
   Orden de caida: satelites, altura, huella.
   Presupuesto: por encima de Umbraldensidad, radios x Multradio.
   Prueba: Padprueba + Erosionar.""")
@@ -210,12 +246,51 @@ def prueba(t):
     ed = [COLS[:5]] + [[k + 1, 2, 2, 0, 'aranazo'] for k in range(8)]
     t.check('tabla con los valores v1 -> se sustituye; editada -> se conserva',
             clasificar_perfiles(v1, m) == 'v1' and clasificar_perfiles(ed, m) == 'editada')
+    # balizas de la bateria: un golpe de cada pad en la misma celda
+    cb = dict(m.cfg())
+    cb['perfiles'], cb['tipos'] = [(1, 0, 0)] * 8, ['aranazo'] * 8
+    cb['target_mode'], cb['balizas_drum'] = 0, 1
+    W4 = m.new_world()
+    m.note_on(W4, cb, 1, 60, 100, 0.0)
+    for pad in range(8):
+        m.erosion(W4, cb, pad, 1, 5.0)
+    celda = m.note_cell(60)
+    filas = m.drum_beacons(W4, cb, 5.0)
+    n = m.normal_i(celda)
+    huecos = set()
+    bien = len(filas) == 8
+    for pad, f in enumerate(filas):
+        col = tuple(round(x, 3) for x in f[9:12])
+        bien = bien and col == tuple(round(x, 3) for x in cb['colores_drum'][pad])
+        d = (f[0] * n[0] + f[1] * n[1] + f[2] * n[2])
+        lat = [f[k] - d * n[k] for k in range(3)]
+        huecos.add(tuple(round(x, 4) for x in lat))
+        bien = bien and W4['drum'][pad]['cell'] == celda
+    t.check('8 pads en la misma celda: 8 balizas, cada una en su hueco y con su color',
+            bien and len(huecos) == 8, '%d balizas' % len(filas))
+    t.check('se apagan en Vidabalizadrum',
+            not m.drum_beacons(W4, cb, 5.0 + cb['vida_baliza_drum'] + 1e-3))
+    cian, ambar, blanco = (0.10, 0.90, 1.00), (1.0, 0.7, 0.3), (0.95, 0.95, 0.92)
+    t.check('ninguna es cian, ambar ni blanca',
+            all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
+                for col in cb['colores_drum'] for ref in (cian, ambar, blanco)))
+    m.reset_world()
+    t.midi(0x9C, 0x3C, 0x64)
+    m.on_pulse('Erosionar')
+    W = m.world()
+    k = int(base.par.Padprueba) - 1
+    t.check('Padprueba + Erosionar encienden su baliza', k in W['drum'])
+    geo = base.op('balizas_drum')
+    t.check('balizas_drum gira y se balancea con el planeta',
+            geo is not None and 'rotation(' in (geo.par.ry.expr or '')
+            and 'wobble(' in (geo.par.rx.expr or ''))
     t.check('leyenda EROSION', 'EROSION' in m.legend())
 
 
 run_test(base, prueba)
 print('  Ahora: anade la bateria del BeatStep (canal 16). El bombo hace temblar')
 print('  el paisaje; caja y tom abriran cortes en la fase 9.')
+print('  Cada pad enciende su baliza de color donde cae el golpe.')
 print('  Si los golpes salen como "pad fuera de 1-8", ajusta Notabase.')
 print('  Ajusta el equilibrio crecimiento / erosion antes de pasar a la fase 8.')
 print('=' * 66)

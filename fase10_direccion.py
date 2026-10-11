@@ -30,7 +30,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v1  (paleta, luz cenital, camara de superficie, modos)'
+VERSION = 'fase10 v2  (paleta, luz cenital, camara de superficie, modos)'
 banner(VERSION)
 
 base = require_base(10)
@@ -120,9 +120,12 @@ def prueba(t):
     m.on_value('Modoactuacion', True)
     m.reset_world()
     t.midi(0x9C, 0x40, 0x64)
-    inst = m.build_instances(m.world(), m.cfg(), 0.0, hide_beacons=m.performance())
-    t.check('modo actuacion: sin baliza del SEQ2 ni reticula',
-            not inst['baliza2'] and not int(base.par.Showgrid))
+    m.erosion(m.world(), m.cfg(), 0, 100, 0.0)            # enciende la baliza del pad 1
+    inst = m.build_instances(m.world(), m.cfg(), 0.1, hide_beacons=m.performance())
+    vis = m.build_instances(m.world(), m.cfg(), 0.1, hide_beacons=False)
+    t.check('modo actuacion: sin balizas (SEQ2 y bateria) ni reticula',
+            not inst['baliza2'] and not inst['balizas_drum'] and vis['balizas_drum']
+            and not int(base.par.Showgrid))
     base.par.Modoactuacion = before
     m.on_value('Modoactuacion', before)
     t.check('al quitarlo vuelve la reticula', bool(int(base.par.Showgrid)) == (not before))
