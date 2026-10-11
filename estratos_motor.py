@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v9'
+MOTOR_VERSION = 'motor v10'
 
 import math
 
@@ -1141,6 +1141,17 @@ COL_HUELLA = (0.13, 0.09, 0.06)
 COL_CROWN = (1.00, 0.70, 0.30)
 COL_SCAR = (0.10, 0.90, 1.00)
 
+COL_POROSO = (0.30, 0.25, 0.20)       # tierra: lo poroso se apaga hacia aqui
+COL_BRILLO = (0.92, 0.95, 1.00)       # lo pulido se aclara hacia aqui
+
+
+def _material_col(base_col, pulido):
+    """Pulido: claro, frio y limpio. Poroso: oscuro, terroso, apagado."""
+    if pulido:
+        return _tint(_mix(base_col, COL_BRILLO, 0.30), 1.25)
+    return _tint(_mix(base_col, COL_POROSO, 0.45), 0.72)
+
+
 LATIDO_AMP, LATIDO_DUR = 0.05, 0.18     # cada nota hincha la formacion un 5 %
 
 
@@ -1151,7 +1162,27 @@ def _latido(W, i, now):
     return math.exp(-dt / LATIDO_DUR)
 
 
-def _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None):
+def _porous_column(p, d, w, hh, wz, col, out, seed):
+    """Una pieza porosa: tramos apilados de ancho irregular, con grietas
+    entre ellos y algun grumo pegado. Se lee rugosa con cualquier luz."""
+    nseg = 3 if hh > 0.25 else 2
+    seg = hh / nseg
+    e, t = tangents(d)
+    for j in range(nseg):
+        a, b, c = (_hash01(seed, j, q) for q in (5, 6, 7))
+        kw = 0.72 + 0.45 * a
+        q = _add(_add(_add(p, d, j * seg), e, (b - 0.5) * 0.18 * w), t, (c - 0.5) * 0.18 * wz)
+        out.append(_row(q, d, w * kw, seg * 0.84, wz * (0.72 + 0.45 * c),
+                        _tint(col, 0.78 + 0.30 * b)))
+    for j in range(2):                      # grumos
+        a, b = _hash01(seed, j, 8), _hash01(seed, j, 9)
+        side = 1.0 if j == 0 else -1.0
+        q = _add(_add(p, d, hh * (0.25 + 0.45 * a)), e, side * 0.55 * w)
+        g = 0.32 * w * (0.7 + 0.6 * b)
+        out.append(_row(q, d, g, g, g, _tint(col, 0.7)))
+
+
+def _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True):
     e, t = tangents(n)
     cx = min(cl, cw) if cw else cl      # ancho este-oeste real de la celda
     kx = cx / cl
@@ -1170,22 +1201,34 @@ def _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None):
         p = _add(_add(p0, e, off[0]), t, off[1])
         w = wk[k] * cl * scale * (0.8 + 0.4 * u2)
         hh = vh * hk[k]
-        out.append(_row(p, d, w * kx, hh, w * (0.7 + 0.5 * u3), _tint(col, 0.9 + 0.2 * u4)))
+        if pulido:                          # prisma limpio, algo mas esbelto
+            out.append(_row(p, d, 0.85 * w * kx, hh, 0.85 * w * (0.7 + 0.5 * u3),
+                            _tint(col, 0.95 + 0.1 * u4)))
+        else:
+            _porous_column(p, d, w * kx, hh, w * (0.7 + 0.5 * u3), col, out, i * 7 + k)
         if k == 0:
             main_dir, main_top = d, _add(p, d, hh)
     return main_dir, main_top
 
 
-def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None):
+def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True):
     lim = limit(cfg)
     floor_h = 0.25 * lim
     w = 0.48 * cl * scale
     wx = 0.48 * (min(cl, cw) if cw else cl) * scale
+    e, t = tangents(n)
     k = 0
     while k * floor_h < vh - 1e-4 and k < 32:
-        hh = min(floor_h, vh - k * floor_h) * 0.86
         p = _add(p0, n, k * floor_h)
-        out.append(_row(p, n, wx, hh, w, _tint(col, 0.95 + 0.08 * (k % 2))))
+        if pulido:                          # torre de cristal: plantas casi pegadas
+            hh = min(floor_h, vh - k * floor_h) * 0.97
+            out.append(_row(p, n, wx, hh, w, _tint(col, 0.97 + 0.06 * (k % 2))))
+        else:                               # hormigon: plantas desiguales y descolgadas
+            a, b = _hash01(i, k, 11), _hash01(i, k, 12)
+            hh = min(floor_h, vh - k * floor_h) * 0.72
+            p = _add(_add(p, e, (a - 0.5) * 0.12 * wx), t, (b - 0.5) * 0.12 * w)
+            kw = 0.80 + 0.30 * a
+            out.append(_row(p, n, wx * kw, hh, w * (0.80 + 0.30 * b), _tint(col, 0.75 + 0.3 * b)))
         k += 1
     return n, _add(p0, n, vh)
 
@@ -1212,7 +1255,7 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         sat = W['par'][i] >= 0
         scale = cfg['sat_size'] if sat else 1.0
         base_col = COL_GEO if own == GEO else COL_ARQ
-        col = _tint(base_col, 1.15 if pulido else 0.9)
+        col = _material_col(base_col, pulido)
         lt = _latido(W, i, now)
         if lt > 0:                  # la nota ha llegado aunque no construya
             vh *= 1.0 + LATIDO_AMP * lt
@@ -1220,9 +1263,9 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         if sat:
             col = _tint(col, 0.85)
         if own == GEO:
-            d, top = _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst, cw)
+            d, top = _geo_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst, cw, pulido)
         else:
-            d, top = _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst, cw)
+            d, top = _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, lst, cw, pulido)
         e, t = tangents(n)
         # hibridos: la otra especie deja su rastro
         if W['sp'][i] == HIB:

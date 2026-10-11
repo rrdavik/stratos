@@ -65,7 +65,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v7  (carga y frenada, semilla, crecimiento, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v8  (carga y frenada, semilla, crecimiento, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -97,9 +97,8 @@ ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Growstep, Costemax, Gat
 # MATERIALES Y GEOMETRIA
 # -----------------------------------------------------------------------------
 
-make_phong(base, 'mat_pulido', 780, 380, spec=1.0, shin=70, diff=1.0)
-make_phong(base, 'mat_poroso', 780, 300, spec=0.03, shin=4, diff=0.9)
-ok('materiales: mat_pulido (brillo alto) y mat_poroso (mate)')
+materiales_formas(base)
+ok('materiales: mat_pulido (reflejo ancho) y mat_poroso (mate, sin reflejo)')
 
 make_instanced(base, 'formas_porosas', 520, 300, 'mat_poroso')
 make_instanced(base, 'formas_pulidas', 520, 380, 'mat_pulido')

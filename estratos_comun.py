@@ -17,7 +17,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v6'
+VERSION_COMUN = 'comun v7'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -663,13 +663,25 @@ def set_legend(base):
 # GEOMETRIA INSTANCIADA
 # -----------------------------------------------------------------------------
 
-def make_phong(base, name, x, y, spec=0.3, shin=20, diff=1.0):
+def make_phong(base, name, x, y, spec=0.3, shin=20, diff=1.0, amb=None, emit=None):
     m = get_or_make(base, 'phongMAT', name, x, y)
     for ch in 'rgb':
-        setp(m, 'diffuse' + ch, diff)
+        setp_any(m, ['diff' + ch, 'diffuse' + ch], diff)
         setp_any(m, ['spec' + ch, 'specular' + ch], spec)
+        if amb is not None:
+            setp_any(m, ['amb' + ch, 'ambient' + ch], amb)
+        if emit is not None:
+            setp_any(m, ['emit' + ch, 'emission' + ch], emit)
     setp_any(m, ['shininess', 'specularexp'], shin)
     return m
+
+
+def materiales_formas(base):
+    """Pulido: reflejo blanco ancho y fuerte, que se ve en cajas pequenas.
+    Poroso: sin reflejo, difuso apagado. El motor ademas les da color y
+    forma distintos (lo poroso, rugoso y en tramos)."""
+    make_phong(base, 'mat_pulido', 780, 380, spec=1.0, shin=14, diff=1.0, amb=0.25, emit=0.04)
+    make_phong(base, 'mat_poroso', 780, 300, spec=0.0, shin=1, diff=0.80, amb=0.10, emit=0.0)
 
 
 def make_constant(base, name, x, y, rgb):
