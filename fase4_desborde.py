@@ -46,7 +46,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase4 v5  (desborde con carga, satelites, fusion, coronacion, cumbre)'
+VERSION = 'fase4 v6  (desborde con carga, satelites, fusion, coronacion, cumbre)'
 banner(VERSION)
 
 base = require_base(4)
@@ -79,6 +79,7 @@ add_par(base, page, 'menu', 'Vecina', 'Quien elige la vecina', 'velocidadocupaci
 ok('pagina Fase4: Umbralram, Umbralfusion, Umbralcorona, Umbralcumbre, Tramoscumbre, Tamsatelite, '
    'Limsatelite, Vecina')
 
+materiales_formas(base)
 make_constant(base, 'mat_corona', 780, 460, (1.0, 0.70, 0.30))
 make_instanced(base, 'coronas', 520, 460, 'mat_corona')
 set_render(base)
