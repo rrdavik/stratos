@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v10'
+MOTOR_VERSION = 'motor v13'
 
 import math
 
@@ -53,14 +53,14 @@ DEFAULT_CFG = dict(
     # fase 4
     th_branch=5, th_fusion=7, th_crown=9, th_cumbre=11, cumbre_tramos=4,
     sat_size=0.6, sat_limit=0.6, neigh_mode=1,
-    # fase 6
-    reps=8, cycle_mode=0, long_manual=16, long_min=4, long_fija=0,
-    steps_per_bar=16, turn_auto=1,
+    # fase 6: el ciclo lo cierra el mundo
+    beats_per_bar=4, umbral_madurez=0.6, umbral_novedad=0.05, compases_quietos=4,
+    ciclo_min=8, ciclo_max=64, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
     # fase 7
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
     perfiles=PERFILES_DEFECTO,
     # fase 8
-    herencia=0.25, max_shells=24,
+    herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0,
     # fase 9
     scar_time=4.0, flash=3.0,
 )
@@ -314,11 +314,6 @@ def _hash01(*vals):
 # 1. NUCLEO - estado del mundo
 # -----------------------------------------------------------------------------
 
-def _new_det():
-    return dict(hist={}, L=None, fp=None, phase=0, src='', score=0.0,
-                miss=[], since=0)
-
-
 def new_world():
     return dict(
         v=1,
@@ -343,12 +338,20 @@ def new_world():
         pend={},
         hits={1: 0, 2: 0, 3: 0},
         hit_t={1: -1.0, 2: -1.0},
-        det={1: _new_det(), 2: _new_det()},
-        lib={1: [], 2: []},
-        clock=dict(t_ref=None, step_ref=0, phase_ref=0, last_note_t=-99.0,
-                   stop_t=-99.0, start_t=-99.0),
-        cycle=dict(idx=None, count=0, steps=0, anchor=0, pos=0.0, last_t=-99.0),
+        clock=dict(last_note_t=-99.0, stop_t=-99.0, start_t=-99.0),
         burst=dict(times=[], pending=None),
+        # ciclo (fase 6): lo cierra el mundo
+        ciclo_n=1,              # ciclo en curso
+        compases_ciclo=0,       # compases que lleva el mundo actual
+        quietos=0,              # compases seguidos maduros y quietos
+        foto_anterior=None,     # forma de cada celda en el compas anterior
+        cambio_pendiente=False, # rafaga de All Notes Off por aplicar
+        madurez=0.0,
+        novedad=0.0,
+        giro_factor=1.0,
+        beats=0.0,              # negras acumuladas hacia el siguiente compas
+        ciclo_t0=None,          # instante en que empezo el mundo actual
+        marcha=False,           # el reloj del ciclo avanza
         aviso='',
         ev={},
         t=None,
@@ -357,15 +360,23 @@ def new_world():
 
 
 def ensure(W):
+    if 'cycle' in W:                # mundo del motor v7-v10: migrar
+        try:
+            W.setdefault('ciclo_n', int(W['cycle'].get('count', 0)) + 1)
+        except Exception:
+            pass
+    for k in ('det', 'lib', 'cycle'):   # deteccion de longitud y biblioteca
+        W.pop(k, None)
+    ck = W.get('clock')
+    if isinstance(ck, dict):
+        for k in ('t_ref', 'step_ref', 'phase_ref'):
+            ck.pop(k, None)
     base = new_world()
     for k, v in base.items():
         if k not in W:
             W[k] = v
-    for s in (1, 2):
-        if s not in W['det']:
-            W['det'][s] = _new_det()
-        if s not in W['lib']:
-            W['lib'][s] = []
+    for k, v in base['clock'].items():
+        W['clock'].setdefault(k, v)
     return W
 
 
@@ -424,12 +435,32 @@ def n_shells(W):
     return len(W['shells'])
 
 
+def shell_th(sh, cfg):
+    """Grosor de una concha. Las del motor v7-v10 no lo guardan: Shellthick."""
+    g = sh.get('grosor')
+    return float(g) if g else cfg['shell_thick']
+
+
+def shell_radii(W, cfg):
+    """[(radio interior, radio exterior)] de cada concha, de dentro afuera."""
+    r = cfg['core_radius']
+    out = []
+    for sh in W['shells']:
+        g = shell_th(sh, cfg)
+        out.append((r, r + g))
+        r += g
+    return out
+
+
 def top_radius(W, cfg):
-    return cfg['core_radius'] + n_shells(W) * cfg['shell_thick']
+    return cfg['core_radius'] + sum(shell_th(sh, cfg) for sh in W['shells'])
 
 
 def base_radius(W, cfg, i):
-    return top_radius(W, cfg) - W['hueco'][i] * cfg['shell_thick']
+    k = W['hueco'][i]
+    if k <= 0:
+        return top_radius(W, cfg)
+    return top_radius(W, cfg) - sum(shell_th(sh, cfg) for sh in W['shells'][-k:])
 
 
 def occupied(W):
@@ -583,9 +614,7 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['hits'][s] = W['hits'].get(s, 0) + 1
     W['hit_t'][s] = now
     i = note_cell(note)
-    if cfg['nivel'] >= 6:
-        st = clock_note(W, cfg, now, tempo)
-        det_note(W, cfg, s, int(note), st)
+    W['clock']['last_note_t'] = now
     if i is None:                       # fuera del rango, modo ignorar
         W['ev']['ultima'] = dict(s=s, celda=-1, occ=0, estado='fuera de rango', t=now)
         return dict(estado='fuera de rango', inc=0.0, celda=-1)
@@ -598,207 +627,38 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
 
 
 # -----------------------------------------------------------------------------
-# 1. NUCLEO - reloj, patterns y ciclo (fase 6)
+# 1. NUCLEO - reloj de compases y ciclo (fase 6)
 # -----------------------------------------------------------------------------
+# El ciclo lo cierra el propio mundo (ciclo adaptativo de Holling: crecer,
+# madurar, liberar, reorganizar). El mundo se entierra cuando esta maduro y
+# deja de cambiar, o cuando alcanza su edad maxima. No se detecta la
+# longitud de los patterns: con probabilidad y acumulacion el mundo no se
+# repite aunque el secuenciador si.
 
 def step_dur(cfg, tempo):
+    """Duracion de un paso (semicorchea). Solo la usa el gate."""
     if tempo and tempo > 0:
         return 60.0 / tempo / max(1, cfg['steps_per_beat'])
     return 0.125
 
 
-def step_at(W, cfg, now, tempo):
-    ck = W['clock']
-    if ck['t_ref'] is None:
-        return None
-    return ck['step_ref'] + (now - ck['t_ref']) / step_dur(cfg, tempo)
+def bar_dur(cfg, tempo):
+    if tempo and tempo > 0:
+        return 60.0 / tempo * max(1, int(cfg['beats_per_bar']))
+    return 2.0
 
 
-def clock_note(W, cfg, now, tempo):
-    """Paso del secuenciador en el que cae una nota. Se reancla en cada
-    nota: el error no se acumula mientras el jitter sea < medio paso."""
-    ck = W['clock']
-    if ck['t_ref'] is None:
-        st = 0
-        ck['phase_ref'] = 0
-    else:
-        st = int(round(step_at(W, cfg, now, tempo)))
-    ck['t_ref'] = now
-    ck['step_ref'] = st
-    ck['last_note_t'] = now
-    return st
+def cycle_bounds(cfg):
+    cmin = max(1, int(cfg['ciclo_min']))
+    return cmin, max(cmin, int(cfg['ciclo_max']))
 
 
-def clock_start(W, cfg, now):
-    ck = W['clock']
-    ck['t_ref'] = now
-    ck['step_ref'] = 0
-    ck['phase_ref'] = 0
-    ck['start_t'] = now
-    for s in (1, 2):
-        d = W['det'][s]
-        d['hist'] = {}
-        d['phase'] = 0
-        d['miss'] = []
-    W['cycle']['idx'] = None
-    W['aviso'] = 'START: patterns en el paso 1'
+def clock_start(W, now):
+    W['clock']['start_t'] = now
 
 
 def clock_stop(W, now):
     W['clock']['stop_t'] = now
-
-
-def _pair_score(hist, steps, L):
-    agree = tot = 0
-    for st in steps:
-        o = hist.get(st + L)
-        if o is not None:
-            tot += 1
-            if o == hist[st]:
-                agree += 1
-    return agree, tot
-
-
-def estimate_period(hist, lmin=4, lmax=64, min_pairs=8, thr=0.9):
-    """Periodo mas corto con el que se repiten las notas. Solo compara
-    pasos que han sonado (tolera la probabilidad). Antes de dar por buena
-    una longitud L espera a poder comprobar 2L: asi un pattern de 16 cuyas
-    mitades se parecen no se confunde con uno de 8."""
-    if len(hist) < min_pairs + 2:
-        return None
-    steps = sorted(hist)
-    res = {}
-    for L in range(max(1, lmin), lmax + 1):
-        a, t = _pair_score(hist, steps, L)
-        if t >= max(min_pairs, L // 4):
-            res[L] = (a / float(t), t)
-    if not res:
-        return None
-    best = max(v[0] for v in res.values())
-    if best < thr:
-        return None
-    for L in sorted(res):
-        sc, t = res[L]
-        if sc >= thr and sc >= best - 0.02:
-            if 2 * L <= lmax and 2 * L not in res:
-                return None                      # falta ver dos vueltas
-            return L, sc, t
-    return None
-
-
-def _fingerprint(hist, L, phase):
-    fp = [None] * L
-    for st in sorted(hist):
-        fp[(st - phase) % L] = hist[st]
-    return fp
-
-
-def _lib_add(W, s, L, fp):
-    lib = W['lib'][s]
-    for e in lib:
-        if e['L'] == L and _fp_equiv(e['fp'], fp):
-            e['fp'] = [b if b is not None else a for a, b in zip(e['fp'], fp)]
-            return
-    lib.append(dict(L=L, fp=list(fp)))
-    del lib[:-16]
-
-
-def _fp_equiv(a, b):
-    L = len(a)
-    for rot in range(L):
-        ok = True
-        both = 0
-        for k in range(L):
-            x, y = a[k], b[(k + rot) % L]
-            if x is not None and y is not None:
-                both += 1
-                if x != y:
-                    ok = False
-                    break
-        if ok and both >= max(3, L // 3):
-            return True
-    return False
-
-
-def lib_match(W, s, recent):
-    """recent: [(paso, nota)] de las ultimas notas. Devuelve (L, fp, fase)
-    si exactamente un pattern de la biblioteca encaja."""
-    if len(recent) < 3:
-        return None
-    found = []
-    for e in W['lib'][s]:
-        L, fp = e['L'], e['fp']
-        for rot in range(L):
-            if all(fp[(st + rot) % L] == nt for st, nt in recent):
-                found.append((L, fp, (-rot) % L))
-                break
-    if len(found) == 1:
-        return found[0]
-    return None
-
-
-def det_note(W, cfg, s, note, st):
-    d = W['det'][s]
-    d['hist'][st] = note
-    for k in [k for k in d['hist'] if k < st - 256]:
-        del d['hist'][k]
-    d['since'] += 1
-    if cfg['long_fija']:
-        d['L'], d['src'] = int(cfg['long_manual']), 'manual'
-        if not d['fp'] or len(d['fp']) != d['L']:
-            d['fp'] = [None] * d['L']
-            d['phase'] = W['clock']['phase_ref']
-    if d['L']:
-        L = d['L']
-        pos = (st - d['phase']) % L
-        exp = d['fp'][pos]
-        if exp is not None:
-            d['miss'].append(1 if exp != note else 0)
-            d['miss'] = d['miss'][-8:]
-        d['fp'][pos] = note
-        if cfg['long_fija']:
-            return
-        if len(d['miss']) >= 6 and sum(d['miss']) >= 4:
-            pattern_change(W, cfg, s, st, 'las notas ya no encajan')
-            return
-        if d['since'] % 16 == 0:                 # revision periodica
-            est = estimate_period(d['hist'], lmin=int(cfg['long_min']))
-            if est and est[0] != L and est[1] >= 0.95:
-                d['L'] = est[0]
-                d['fp'] = _fingerprint(d['hist'], est[0], d['phase'])
-                d['src'], d['score'], d['miss'] = 'escucha', est[1], []
-                _lib_add(W, s, est[0], d['fp'])
-                W['aviso'] = 'SEQ%d: corregido a %d pasos' % (s, est[0])
-        return
-    recent = sorted(d['hist'].items())[-3:]
-    if d['since'] >= 3:
-        m = lib_match(W, s, recent)
-        if m:
-            d['L'], d['fp'], d['phase'] = m[0], list(m[1]), m[2]
-            d['src'], d['score'], d['miss'] = 'biblioteca', 1.0, []
-            W['aviso'] = 'SEQ%d: pattern reconocido (%d pasos)' % (s, m[0])
-            return
-    est = estimate_period(d['hist'], lmin=int(cfg['long_min']))
-    if est:
-        L, score, tot = est
-        phase = W['clock']['phase_ref'] if d['phase'] is None else d['phase']
-        d['L'], d['phase'] = L, phase
-        d['fp'] = _fingerprint(d['hist'], L, phase)
-        d['src'], d['score'], d['miss'] = 'escucha', score, []
-        _lib_add(W, s, L, d['fp'])
-        W['aviso'] = 'SEQ%d: pattern de %d pasos (%d%%)' % (s, L, int(score * 100))
-
-
-def pattern_change(W, cfg, s, st, reason):
-    d = W['det'][s]
-    keep = sorted(d['hist'].items())[-3:] if st is not None else []
-    d['hist'] = dict(keep)
-    d['L'], d['fp'], d['src'], d['miss'], d['since'] = None, None, '', [], len(keep)
-    bar = max(1, int(cfg['steps_per_bar']))
-    ref = st if st is not None else W['clock']['step_ref']
-    d['phase'] = (int(ref) // bar) * bar
-    W['aviso'] = 'SEQ%d: cambio de pattern (%s)' % (s, reason)
-    W['cycle']['idx'] = None
 
 
 def on_cc(W, cfg, ch, num, val, now):
@@ -821,64 +681,148 @@ def _resolve_burst(W, cfg, now, playing):
     if stop:
         W['aviso'] = 'All Notes Off junto a un STOP'
         return 'stop'
-    for s in (1, 2):
-        pattern_change(W, cfg, s, None, 'All Notes Off')
-    W['aviso'] = 'All Notes Off sin STOP: cambio de pattern'
+    if cfg['cambio_entierra']:
+        W['cambio_pendiente'] = True
+        W['aviso'] = 'All Notes Off sin STOP: cambio de pattern, el mundo se enterrara'
+    else:
+        W['aviso'] = 'All Notes Off sin STOP: cambio de pattern'
     return 'cambio'
 
 
-def _gcd(a, b):
-    while b:
-        a, b = b, a % b
-    return a
-
-
-def cycle_lengths(W, cfg):
-    L1 = W['det'][1]['L']
-    L2 = W['det'][2]['L'] if cfg['nivel'] >= 5 else None
-    known = [L for L in (L1, L2) if L]
-    if not known:
-        known = [int(cfg['long_manual'])]
-    longest = max(known)
-    if cfg['cycle_mode'] == 1 and L1 and L2:
-        steps = L1 * L2 // _gcd(L1, L2)
-    else:
-        steps = int(cfg['reps']) * longest
-    steps = max(1, min(4096, steps))
-    s_long = 1 if (L1 or 0) >= (L2 or 0) else 2
-    anchor = W['det'][s_long]['phase'] if W['det'][s_long]['L'] else W['clock']['phase_ref']
-    return steps, int(anchor or 0)
-
-
 def clock_running(W, cfg, now, tempo, playing):
+    """El reloj del ciclo avanza con la linea de tiempo en play, sin STOP
+    despues de la ultima nota y con alguna nota en los ultimos 4 compases."""
     ck = W['clock']
-    if not playing or ck['t_ref'] is None:
+    if not playing or not tempo or tempo <= 0:
         return False
-    if ck['stop_t'] > ck['last_note_t']:
+    if ck['last_note_t'] < -1.0 or ck['stop_t'] > ck['last_note_t']:
         return False
-    # sin notas durante 4 compases: el secuenciador esta parado
-    return now - ck['last_note_t'] < 4 * cfg['steps_per_bar'] * step_dur(cfg, tempo)
+    return now - ck['last_note_t'] < 4 * bar_dur(cfg, tempo)
 
 
-def cycle_tick(W, cfg, now, tempo, playing):
-    """Devuelve True si acaba de terminar un ciclo de ecosistema."""
-    cy = W['cycle']
-    steps, anchor = cycle_lengths(W, cfg)
-    if steps != cy['steps'] or anchor != cy['anchor']:
-        cy['steps'], cy['anchor'] = steps, anchor
-        cy['idx'] = None
-    if not clock_running(W, cfg, now, tempo, playing):
-        return False
-    st = step_at(W, cfg, now, tempo)
-    k = int(math.floor((st - anchor) / float(steps)))
-    cy['pos'] = ((st - anchor) % steps)
-    if cy['idx'] is None:
-        cy['idx'] = k
-        return False
-    if k > cy['idx']:
-        cy['idx'] = k
-        return True
-    return False
+def form_cap(cfg, sat):
+    """Ocupacion a partir de la cual cuenta como la misma forma: la corona
+    (Umbralcorona). Una celda coronada sigue sumando ocupacion, y la cumbre
+    sigue alargando la corona, pero el mundo ya se da por hecho. Un
+    satelite deja de cambiar antes, al llegar a Limsatelite."""
+    if sat:
+        g = max(1e-6, cfg['grow_frac'])
+        return max(1, 1 + int(math.ceil((cfg['sat_limit'] - cfg['seed_frac']) / g - 1e-9)))
+    return cfg['th_crown']
+
+
+def snapshot(W, cfg):
+    """Forma de cada celda: especie, ocupacion recortada donde la forma deja
+    de cambiar, hibrida, satelite y huella (desde el nivel 7)."""
+    hu_on = cfg['nivel'] >= 7
+    out = []
+    for i in range(N):
+        o = W['occ'][i]
+        hu = 1 if hu_on and W['huella'][i] > 0 else 0
+        if o <= 0:
+            out.append([0, 0, 0, 0, hu])
+            continue
+        sat = W['par'][i] >= 0
+        out.append([W['own'][i], min(o, form_cap(cfg, sat)),
+                    1 if W['sp'][i] == HIB else 0, 1 if sat else 0, hu])
+    return out
+
+
+def _alive(f):
+    return f[1] > 0 or f[4] > 0
+
+
+def measure(W, cfg, foto):
+    """(novedad, madurez). Novedad: celdas vivas cuya forma ha cambiado.
+    Madurez: formaciones (sin contar satelites) que han llegado al limite."""
+    prev = W.get('foto_anterior')
+    if not prev or len(prev) != N:
+        prev = None
+    alive = changed = 0
+    for i in range(N):
+        a = foto[i]
+        b = list(prev[i]) if prev else [0, 0, 0, 0, 0]
+        if _alive(a) or _alive(b):
+            alive += 1
+            if a != b:
+                changed += 1
+    forms = [i for i in range(N) if W['occ'][i] > 0 and W['par'][i] < 0]
+    mature = sum(1 for i in forms if W['occ'][i] >= cfg['th_branch'])
+    return changed / float(max(1, alive)), mature / float(max(1, len(forms)))
+
+
+def bar_tick(W, cfg):
+    """Un compas del reloj del ciclo. Devuelve el motivo de cierre o None."""
+    foto = snapshot(W, cfg)
+    nov, mat = measure(W, cfg, foto)
+    W['foto_anterior'] = foto
+    W['novedad'], W['madurez'] = nov, mat
+    W['compases_ciclo'] += 1
+    if mat >= cfg['umbral_madurez'] and nov <= cfg['umbral_novedad']:
+        W['quietos'] += 1
+    else:
+        W['quietos'] = 0
+    cmin, cmax = cycle_bounds(cfg)
+    n = W['compases_ciclo']
+    if W['cambio_pendiente'] and n >= cmin:
+        return 'cambio de pattern'
+    if n >= cmin and W['quietos'] >= int(cfg['compases_quietos']):
+        return 'estancado'
+    if n >= cmax:
+        return 'edad maxima'
+    return None
+
+
+def close_cycle(W, cfg, now, motivo):
+    """Cierra el mundo: emite fin_de_ciclo y, desde el nivel 8, lo entierra."""
+    bars = W['compases_ciclo']
+    t0 = W.get('ciclo_t0')
+    ev = dict(ciclo=W['ciclo_n'], compases=bars,
+              segundos=max(0.0, now - t0) if t0 is not None else 0.0,
+              motivo=motivo, madurez=W['madurez'], novedad=W['novedad'], t=now)
+    if end_cycle(W, cfg, now, bars):
+        ev['grosor'] = shell_th(W['shells'][-1], cfg)
+        W['foto_anterior'] = snapshot(W, cfg)
+    W['aviso'] = 'fin de ciclo %d: %s a los %d compases' % (ev['ciclo'], motivo, bars)
+    W['compases_ciclo'] = 0
+    W['quietos'] = 0
+    W['cambio_pendiente'] = False
+    W['ciclo_n'] += 1
+    W['ciclo_t0'] = now
+    W['ev']['fin_de_ciclo'] = ev
+    return ev
+
+
+def giro_step(W, cfg, dt, tempo):
+    """Giro vivo: el planeta se frena cuando el mundo deja de cambiar."""
+    if not cfg['giro_vivo'] or cfg['nivel'] < 6:
+        W['giro_factor'] = 1.0
+        return 1.0
+    gmin = max(0.0, min(1.0, cfg['giro_min']))
+    un = max(1e-6, cfg['umbral_novedad'])
+    obj = max(gmin, min(1.0, W['novedad'] / (4.0 * un)))
+    f = W['giro_factor'] + (obj - W['giro_factor']) * min(1.0, dt / bar_dur(cfg, tempo))
+    W['giro_factor'] = max(gmin, min(1.0, f))
+    return W['giro_factor']
+
+
+def cycle_tick(W, cfg, now, dt, tempo, playing):
+    """Avanza el reloj de compases. Devuelve el fin_de_ciclo o None."""
+    run = clock_running(W, cfg, now, tempo, playing)
+    W['marcha'] = run
+    if not run:
+        return None
+    if W.get('ciclo_t0') is None:
+        W['ciclo_t0'] = now
+    W['beats'] += dt * tempo / 60.0
+    bpb = max(1, int(cfg['beats_per_bar']))
+    while W['beats'] >= bpb:
+        W['beats'] -= bpb
+        motivo = bar_tick(W, cfg)
+        if motivo:
+            W['beats'] = min(W['beats'], bpb - 1e-6)
+            return close_cycle(W, cfg, now, motivo)
+    return None
 
 
 # -----------------------------------------------------------------------------
@@ -1026,14 +970,30 @@ def shell_color(gen):
     return MINERAL[int(gen) % len(MINERAL)]
 
 
-def end_cycle(W, cfg, now):
-    W['cycle']['count'] += 1
-    W['cycle']['last_t'] = now
+def shell_grosor(cfg, bars=None):
+    """Grosor de la concha nueva. Con Grosortiempo, proporcional a lo que
+    duro su mundo: Shellthick por cada Ciclomin compases, entre 0,25x y
+    Ciclomax / Ciclomin, y nunca mas de Grosormax."""
+    th = cfg['shell_thick']
+    if bars is None or not cfg['grosor_tiempo']:
+        return th
+    cmin, cmax = cycle_bounds(cfg)
+    g = th * max(0.25, min(cmax / float(cmin), bars / float(cmin)))
+    gmax = cfg['grosor_max']
+    return min(g, gmax) if gmax > 0 else g
+
+
+def end_cycle(W, cfg, now, bars=None):
+    """Entierra el mundo (desde el nivel 8). bars: compases que duro; sin
+    ellos, la concha tiene Shellthick."""
+    W['ev']['ciclo'] = dict(t=now, n=W.get('ciclo_n', 1))
     if cfg['nivel'] < 8:
-        W['ev']['ciclo'] = dict(t=now, n=W['cycle']['count'])
         return False
+    r_in = top_radius(W, cfg)
+    g = shell_grosor(cfg, bars)
     W['shells'].append(dict(gen=W['gen'], col=list(shell_color(W['gen'])),
-                            occ=list(W['occ']), sp=list(W['sp']), rm=[0] * N))
+                            occ=list(W['occ']), sp=list(W['sp']), rm=[0] * N,
+                            grosor=g, r_in=r_in, r_out=r_in + g))
     W['gen'] += 1
     her = cfg['herencia']
     for i in range(N):
@@ -1055,7 +1015,6 @@ def end_cycle(W, cfg, now):
         W['hueco'][i] = 0
     W['pend'] = {}
     W['dirty'] = True
-    W['ev']['ciclo'] = dict(t=now, n=W['cycle']['count'])
     return True
 
 
@@ -1098,7 +1057,7 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
             W['vh'][i] = 0.0
             if W['sp'][i]:
                 W['sp'][i] = W['own'][i] = W['traza'][i] = 0
-    out = dict(ciclo=False, burst=None)
+    out = dict(ciclo=None, burst=None)
     if cfg['nivel'] >= 9 and W['scars']:
         st = cfg['scar_time']
         for k in [k for k, t0 in W['scars'].items() if now - t0 > st]:
@@ -1106,9 +1065,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         W['dirty'] = True
     if cfg['nivel'] >= 6:
         out['burst'] = _resolve_burst(W, cfg, now, playing)
-        if cycle_tick(W, cfg, now, tempo, playing):
-            end_cycle(W, cfg, now)
-            out['ciclo'] = True
+        out['ciclo'] = cycle_tick(W, cfg, now, dt, tempo, playing)
+    giro_step(W, cfg, dt, tempo)
     return out
 
 
@@ -1311,13 +1269,15 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
 
 def build_tiles(W, cfg, now):
     rows = []
-    th = cfg['shell_thick']
     ns = n_shells(W)
     first = max(0, ns - int(cfg['max_shells']))
     st = cfg['scar_time']
+    radii = shell_radii(W, cfg)
     for s in range(first, ns):
         sh = W['shells'][s]
-        r_mid = cfg['core_radius'] + (s + 0.5) * th
+        r_in, r_out = radii[s]
+        th = r_out - r_in
+        r_mid = 0.5 * (r_in + r_out)
         base_col = sh['col']
         for c in range(N):
             if sh['rm'][c]:
@@ -1453,19 +1413,22 @@ def cfg():
         sat_size=_p('Tamsatelite', c['sat_size']),
         sat_limit=_p('Limsatelite', c['sat_limit']),
         neigh_mode=_menu('Vecina', ['velocidad', 'velocidadocupacion'], 1),
-        reps=_p('Repsporciclo', c['reps']),
-        cycle_mode=_menu('Modociclo', ['repeticiones', 'hiperperiodo'], 0),
-        long_manual=_p('Longmanual', c['long_manual']),
-        long_min=_p('Longmin', c['long_min']),
-        long_fija=int(_p('Longfija', False)),
-        steps_per_bar=_p('Pasosporcompas', c['steps_per_bar']),
-        steps_per_beat=_p('Pasospornegra', c['steps_per_beat']),
-        turn_auto=int(_p('Turnauto', True)),
+        beats_per_bar=_p('Negrasporcompas', c['beats_per_bar']),
+        umbral_madurez=_p('Umbralmadurez', c['umbral_madurez']),
+        umbral_novedad=_p('Umbralnovedad', c['umbral_novedad']),
+        compases_quietos=_p('Compasesquietos', c['compases_quietos']),
+        ciclo_min=_p('Ciclomin', c['ciclo_min']),
+        ciclo_max=_p('Ciclomax', c['ciclo_max']),
+        cambio_entierra=int(_p('Cambioentierra', False)),
+        giro_vivo=int(_p('Girovivo', True)),
+        giro_min=_p('Giromin', c['giro_min']),
         dens_umbral=_p('Umbraldensidad', c['dens_umbral']),
         rad_mult=_p('Multradio', c['rad_mult']),
         target_mode=_menu('Objetivo', TARGET_MODES, 2),
         herencia=_p('Herencia', c['herencia']),
         max_shells=_p('Maxconchas', c['max_shells']),
+        grosor_tiempo=int(_p('Grosortiempo', True)),
+        grosor_max=_p('Grosormax', c['grosor_max']),
         scar_time=max(0.1, _p('Cicatriz', c['scar_time'])),
         flash=_p('Destello', c['flash']),
     )
@@ -1533,7 +1496,15 @@ def surface_radius(frame=None):
 def nucleo_radius(frame=None):
     W, c = world(), cfg()
     hidden = max(0, n_shells(W) - int(c['max_shells']))
-    return c['core_radius'] + hidden * c['shell_thick']
+    return c['core_radius'] + sum(shell_th(sh, c) for sh in W['shells'][:hidden])
+
+
+def giro_factor(frame=None):
+    """Multiplica el giro del planeta (lo lee 'ritmo'). 1 sin Girovivo."""
+    try:
+        return float(world().get('giro_factor', 1.0))
+    except Exception:
+        return 1.0
 
 
 def surface_point(note, lift, radius):
@@ -1626,9 +1597,7 @@ def midi_cc(ch, num, val):
 
 
 def midi_start():
-    if cfg()['nivel'] >= 6:
-        clock_start(world(), cfg(), absTime.seconds)
-        print('MIDI  START: patterns en el paso 1')
+    clock_start(world(), absTime.seconds)
 
 
 def midi_stop():
@@ -1644,6 +1613,30 @@ def midi_sysex(b):
             midi_start()
 
 
+# --- fin de ciclo ------------------------------------------------------------
+
+CICLOS_COLS = ['ciclo', 'compases', 'segundos', 'motivo', 'madurez', 'novedad', 'grosor']
+CICLOS_MAX = 200
+
+
+def registrar_ciclo(W, c, ev):
+    """AVISO en el Textport y una fila en la tabla 'ciclos'."""
+    print('AVISO  %s%s' % (W['aviso'], '  -> concha %d' % n_shells(W) if 'grosor' in ev else ''))
+    t = parent().op('ciclos')
+    if t is None:
+        return
+    try:
+        if t.numRows == 0:
+            t.appendRow(CICLOS_COLS)
+        t.appendRow([ev['ciclo'], ev['compases'], '%.1f' % ev['segundos'], ev['motivo'],
+                     '%.2f' % ev['madurez'], '%.2f' % ev['novedad'],
+                     '%.3f' % ev['grosor'] if 'grosor' in ev else ''])
+        while t.numRows > CICLOS_MAX + 1:
+            t.deleteRow(1)
+    except Exception as e:
+        print('AVISO  tabla ciclos: %s' % e)
+
+
 # --- fotograma ---------------------------------------------------------------
 
 def frame_tick():
@@ -1653,15 +1646,7 @@ def frame_tick():
     if res.get('burst'):
         print('AVISO  %s' % W['aviso'])
     if res.get('ciclo'):
-        print('CICLO  %d terminado%s' % (W['cycle']['count'],
-                                         ' -> concha %d' % n_shells(W) if c['nivel'] >= 8 else ''))
-    if c['nivel'] >= 6 and c['turn_auto']:
-        bars = W['cycle']['steps'] / float(max(1, c['steps_per_bar']))
-        try:
-            if bars > 0 and abs(float(parent().par.Barsperturn) - bars) > 1e-6:
-                parent().par.Barsperturn = bars
-        except Exception:
-            pass
+        registrar_ciclo(W, c, res['ciclo'])
     dirty = W.get('dirty', True) or _CACHE.get('tiles') is None
     inst = build_instances(W, c, now, hide_beacons=performance(), tiles=dirty)
     if dirty:
@@ -1718,18 +1703,10 @@ def on_pulse(name):
         print('EROSION  pad %d -> celda %d, radio %d, quitado %d'
               % (ev['pad'] + 1, ev['celda'], ev['rad'], ev['quitado']))
     elif name == 'Forzarciclo':
-        end_cycle(W, c, now)
-        print('CICLO  forzado: %d%s' % (W['cycle']['count'],
-                                       '  conchas %d' % n_shells(W) if c['nivel'] >= 8 else ''))
+        registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
         reset_world()
         print('MUNDO  vaciado')
-    elif name == 'Resetpatterns':
-        for s in (1, 2):
-            W['det'][s] = _new_det()
-            W['lib'][s] = []
-        W['cycle']['idx'] = None
-        print('PATTERNS  olvidados')
     W['dirty'] = True
 
 
@@ -1863,13 +1840,16 @@ def _legend():
         lines.append('  SEQ2     canal %d   notas %d   hibridas %d'
                      % (_p('Canal2', 14), W['hits'].get(2, 0), hib))
     if lvl >= 6:
-        d1, d2 = W['det'][1], W['det'][2]
-        def ltxt(d):
-            return '%d pasos (%s)' % (d['L'], d['src']) if d['L'] else 'escuchando'
-        cy = W['cycle']
-        lines.append('  CICLO    SEQ1 %s   SEQ2 %s' % (ltxt(d1), ltxt(d2)))
-        lines.append('           ciclo %d   paso %d/%d'
-                     % (cy['count'], int(cy['pos']), cy['steps']))
+        cmin, cmax = cycle_bounds(c)
+        pos = 'compas %d (%d-%d)' % (W['compases_ciclo'], cmin, cmax) if W.get('marcha') \
+            else 'parado'
+        giro = '   giro x%.2f' % W['giro_factor'] if c['giro_vivo'] else ''
+        lines.append('  CICLO    %d   %s   madurez %d%%   novedad %d%%   quieto %d/%d%s'
+                     % (W['ciclo_n'], pos, int(round(W['madurez'] * 100)),
+                        int(round(W['novedad'] * 100)), W['quietos'],
+                        int(c['compases_quietos']), giro))
+        if W['cambio_pendiente']:
+            lines.append('           cambio de pattern: se enterrara al llegar a %d compases' % cmin)
         if W.get('aviso'):
             lines.append('  AVISO    %s' % W['aviso'])
     if lvl >= 7:
@@ -1882,8 +1862,10 @@ def _legend():
         else:
             lines.append('  EROSION  -   densidad %d%%%s' % (int(dens * 100), flag))
     if lvl >= 8:
-        lines.append('  CONCHAS  %d   radio %.2f   herencia %d%%   continentes %d'
-                     % (n_shells(W), top_radius(W, c), int(c['herencia'] * 100), continents(W)))
+        ult = '%.2f' % shell_th(W['shells'][-1], c) if W['shells'] else '-'
+        lines.append('  CONCHAS  %d   radio %.2f   ultima %s   herencia %d%%   continentes %d'
+                     % (n_shells(W), top_radius(W, c), ult, int(c['herencia'] * 100),
+                        continents(W)))
     if lvl >= 9:
         k = W['ev'].get('corte')
         if k:

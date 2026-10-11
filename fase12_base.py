@@ -302,6 +302,16 @@ def seconds_per_turn():
     return bars * beats_per_bar() * 60.0 / bpm
 
 
+def giro_factor():
+    # Giro vivo (fase 6): el motor frena el planeta cuando el mundo deja de
+    # cambiar. Sin motor, o antes de la fase 6, vale 1.
+    try:
+        m = op('motor')
+        return float(m.module.giro_factor()) if m is not None else 1.0
+    except Exception:
+        return 1.0
+
+
 def rotation(frame=None):
     # 'frame' solo esta para que la expresion se evalue en cada fotograma.
     # Varias geometrias llaman a esto en el mismo fotograma: se calcula una
@@ -320,7 +330,7 @@ def rotation(frame=None):
     except Exception:
         paused = 0
     if spt > 0 and playing() and not paused:
-        angle = (angle + dt * 360.0 / spt) % 360.0
+        angle = (angle + dt * 360.0 / spt * giro_factor()) % 360.0
     d.store('angle', angle)
     d.store('t', now)
     d.store('frame', f)

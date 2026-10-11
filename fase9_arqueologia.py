@@ -21,6 +21,9 @@ color de su generacion: bandas que son la historia cromatica de la sesion.
              SEQ1 pasa a blanco.
 
 Las formaciones de una celda cortada se apoyan en el fondo del corte.
+La profundidad se mide en conchas: como cada concha tiene el grosor de su
+ciclo (fase 8), un corte de 3 conchas es mas o menos hondo segun lo que
+duraron esos mundos. Las paredes usan los radios de cada concha.
 
 COMO USARLO
 -----------
@@ -31,7 +34,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v1  (cortes, estratigrafia, cicatriz cian, destello)'
+VERSION = 'fase9 v2  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
 banner(VERSION)
 
 base = require_base(9)
@@ -91,6 +94,23 @@ def prueba(t):
     t.check('la cicatriz se integra con el tiempo', len(cian2) == 0)
     t.check('la formacion se apoya en el fondo',
             abs(m.base_radius(W, c, i) - (m.top_radius(W, c) - 3 * c['shell_thick'])) < 1e-6)
+    # conchas de grosores distintos
+    cg = dict(c)
+    cg['grosor_tiempo'] = 1
+    cmin, cmax = m.cycle_bounds(cg)
+    W3 = m.new_world()
+    for bars in (cmin, 2 * cmin, cmin // 2 or 1, cmax, cmin):
+        m.end_cycle(W3, cg, 0.0, bars)
+    gs = [m.shell_th(sh, cg) for sh in W3['shells']]
+    m.cut(W3, cg, i, 3, 0, 100.0)
+    t.check('corte con grosores distintos: el fondo baja la suma de 3 conchas',
+            abs(m.base_radius(W3, cg, i) - (m.top_radius(W3, cg) - sum(gs[-3:]))) < 1e-6,
+            'grosores %s' % ' '.join('%.2f' % g for g in gs))
+    radii = m.shell_radii(W3, cg)
+    rr = [((x[0] ** 2 + x[1] ** 2 + x[2] ** 2) ** 0.5, x[7]) for x in m.build_tiles(W3, cg, 100.0)]
+    rad_ok = all(any(abs(a - r_in) < 1e-6 and abs(b - 0.98 * (r_out - r_in)) < 1e-6 for a, b in rr)
+                 for r_in, r_out in radii)
+    t.check('las paredes usan el radio y el grosor de cada concha', rad_ok)
     # pad profundo por el camino real
     m.reset_world()
     Wr = m.world()
