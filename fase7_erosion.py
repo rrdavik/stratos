@@ -53,13 +53,17 @@ Una baliza por pad, mas pequena que la del SEQ2 y cada una de su color
 (tabla colores_drum, editable), en la celda que recibe el golpe. Cada pad
 tiene su hueco en un anillo alrededor del centro de la celda (pad n a
 (n-1) x 45 grados), asi bombo y charles en la misma celda se ven los dos.
-Se enciende con cada golpe, crece con la velocidad y se apaga en
-Vidabalizadrum segundos: los pads frecuentes casi siempre estan
-encendidos; los raros destellan.
+El anillo nunca es tan pequeno que las 8 se toquen, y se abre lo justo
+para que ninguna quede dentro o detras de la baliza del SEQ1 o del SEQ2
+(los golpes suelen caer en su celda): con el pulso de la nota se abre y
+al apagarse se cierra.
+Se enciende con cada golpe, crece con la velocidad, se mantiene casi
+entera y se apaga del todo en Vidabalizadrum segundos: los pads
+frecuentes casi siempre estan encendidos; los raros destellan.
     Balizasdrum       encendidas / apagadas
-    Tambalizadrum     tamano (x la baliza del SEQ2), 0,5
-    Anillobalizadrum  distancia al centro (x ancho de la celda), 0,35
-    Vidabalizadrum    segundos hasta apagarse, 0,6
+    Tambalizadrum     tamano (x la baliza del SEQ2 en reposo), 0,6
+    Anillobalizadrum  anillo minimo (x ancho de la celda), 0,35
+    Vidabalizadrum    segundos hasta apagarse, 1,0
 
 EL CANAL DE LA BATERIA
 ----------------------
@@ -75,7 +79,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v3  (canal 16; bombo tiembla, caja y tom cortan; huellas, presupuesto)'
+VERSION = 'fase7 v4  (canal 16; bombo tiembla, caja y tom cortan; huellas, presupuesto)'
 banner(VERSION)
 
 base = require_base(7)
@@ -94,9 +98,11 @@ add_par(base, page, 'float', 'Multradio', 'Multiplicador de radio', 2.0, 1.0, 4.
 add_par(base, page, 'int', 'Padprueba', 'Pad de prueba', 1, 1, 8, clamp=True)
 add_par(base, page, 'pulse', 'Erosionar', 'Erosionar con el pad de prueba')
 add_par(base, page, 'toggle', 'Balizasdrum', 'Balizas de la bateria', True)
-add_par(base, page, 'float', 'Tambalizadrum', 'Tamano de baliza (x SEQ2)', 0.5, 0.05, 2.0)
-add_par(base, page, 'float', 'Anillobalizadrum', 'Hueco de cada pad (x celda)', 0.35, 0.0, 1.0)
-add_par(base, page, 'float', 'Vidabalizadrum', 'Vida de la baliza (s)', 0.6, 0.05, 5.0)
+add_par(base, page, 'float', 'Tambalizadrum', 'Tamano de baliza (x SEQ2)', 0.6, 0.05, 2.0)
+add_par(base, page, 'float', 'Anillobalizadrum', 'Anillo minimo de los pads (x celda)', 0.35, 0.0, 1.0)
+add_par(base, page, 'float', 'Vidabalizadrum', 'Vida de la baliza (s)', 1.0, 0.05, 5.0)
+renew_default(base, 'Tambalizadrum', 0.5, 0.6)
+renew_default(base, 'Vidabalizadrum', 0.6, 1.0)
 ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
    'Multradio, Padprueba, Erosionar, Balizasdrum, Tambalizadrum, Anillobalizadrum, '
    'Vidabalizadrum')
@@ -192,6 +198,7 @@ print_report()
 
 
 def prueba(t):
+    import math
     m = t.m
     m.reset_world()
     c = m.cfg()
@@ -280,6 +287,41 @@ def prueba(t):
     W = m.world()
     k = int(base.par.Padprueba) - 1
     t.check('Padprueba + Erosionar encienden su baliza', k in W['drum'])
+    # las balizas de la bateria no quedan tapadas por las de los secuenciadores
+    def holguras(Wb, cb_, celda, now):
+        filas_ = m.drum_beacons(Wb, cb_, now)
+        nn = m.normal_i(celda)
+        seq = m.seq_beacons(Wb, cb_, now)
+        def lat(v):
+            k = v[0] * nn[0] + v[1] * nn[1] + v[2] * nn[2]
+            return math.sqrt(sum((v[q] - k * nn[q]) ** 2 for q in range(3)))
+        h_seq = min([lat([f[q] - cc[q] for q in range(3)]) - R - f[6]
+                     for f in filas_ for cc, R in seq] or [9.0])
+        h_ent = min([lat([filas_[a][q] - filas_[b][q] for q in range(3)]) - filas_[a][6] - filas_[b][6]
+                     for a in range(len(filas_)) for b in range(a + 1, len(filas_))] or [9.0])
+        return len(filas_), h_seq, h_ent
+    ecuador = min(range(m.N), key=lambda x: abs(m.normal_i(x)[1]))
+    casos = [('ecuador', ecuador), ('junto al polo', m.RINGS[0][0]), ('polo', m.POLE_S)]
+    cs = dict(cb)
+    cs['nivel'] = max(5, cs['nivel'])
+    peor = []
+    for nombre, celda in casos:
+        for s_, sn in ((m.GEO, 'SEQ1'), (m.ARQ, 'SEQ2')):
+            for fase_, dt_ in (('reposo', 1.0), ('pulso', 0.0)):
+                Wb = m.new_world()
+                for k in range(6):
+                    m.note_on(Wb, cs, s_, m.cell_note(celda), 100, 10.0)
+                Wb['vh'] = list(Wb['h'])
+                for pad in range(8):
+                    Wb['drum'][pad] = dict(t=10.0 + dt_ - 0.01, cell=celda, vel=127)
+                nb_, hs, he = holguras(Wb, cs, celda, 10.0 + dt_)
+                if nb_ != 8 or hs <= 0 or he <= 0:
+                    peor.append('%s %s %s (%d, %.2f, %.2f)' % (nombre, sn, fase_, nb_, hs, he))
+    t.check('8 balizas fuera de la silueta del SEQ1 y del SEQ2 (reposo y pulso, '
+            'ecuador, junto al polo y polo) y sin pisarse', not peor, '; '.join(peor[:3]))
+    rmax, rmin = m.drum_radius(cb, 127), m.drum_radius(cb, 1)
+    t.check('tamano: perceptible (>= 0,15) y menor que el SEQ2 en reposo',
+            rmin >= 0.15 and rmax < m.BALIZA2_RADIO, '%.2f a %.2f' % (rmin, rmax))
     geo = base.op('balizas_drum')
     t.check('balizas_drum gira y se balancea con el planeta',
             geo is not None and 'rotation(' in (geo.par.ry.expr or '')
