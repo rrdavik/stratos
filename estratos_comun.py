@@ -17,11 +17,11 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v8'
+VERSION_COMUN = 'comun v9'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'baliza', 'baliza2']
+                'coronas', 'baliza', 'baliza2', 'balizas_drum']
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
 
@@ -423,7 +423,8 @@ def onValueChange(par, prev):
 '''
 
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
-# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_baliza2).
+# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_baliza2,
+# i_balizas_drum).
 
 CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b']
 DUMMY = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]

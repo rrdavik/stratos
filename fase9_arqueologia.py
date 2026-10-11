@@ -6,7 +6,7 @@ Requiere la fase 8.
 
 QUE HACE
 --------
-Los pads con profundidad > 0 (por defecto 6, 7 y 8) abren un CORTE: quitan
+Los pads con profundidad > 0 (por defecto el 2, caja, y el 3, tom) abren un CORTE: quitan
 las losetas de las conchas superiores en la celda golpeada, en forma de
 anfiteatro (profundidad completa en el centro, un escalon menos por
 anillo). Las paredes del corte son las capas enterradas, cada una con el
@@ -34,7 +34,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v2  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
+VERSION = 'fase9 v3  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
 banner(VERSION)
 
 base = require_base(9)
@@ -121,14 +121,18 @@ def prueba(t):
     t.midi(0x9C, 0x40, 0x64)
     chd = int(base.par.Canaldrum)
     nb = int(base.par.Notabase)
-    t.midi(0x90 + chd - 1, nb + 7, 0x64)              # pad 8
+    cortes = m.pads_corte(cr)                            # por defecto, caja y tom
+    hondo = max(cortes, key=lambda k: cr['perfiles'][k][2]) if cortes else 0
+    t.midi(0x90 + chd - 1, nb + hondo, 0x64)
     ev = Wr['ev'].get('erosion', {})
-    t.check('pad 8 por MIDI abre un corte', ev.get('corte', 0) >= 1, str(ev.get('corte')))
+    t.check('pad %d por MIDI abre un corte' % (hondo + 1), ev.get('corte', 0) >= 1,
+            str(ev.get('corte')))
     t.check('destello encendido', Wr['flash'] is not None)
     t.check('leyenda CORTE', 'CORTE' in m.legend())
 
 
 run_test(base, prueba)
-print('  Ahora: con varias conchas ya enterradas, golpea los pads 6, 7 y 8.')
+print('  Ahora: con varias conchas ya enterradas, golpea la caja (pad 2) y el')
+print('  tom (pad 3).')
 print('  El corte deja ver las capas; el cian se apaga en Cicatriz segundos.')
 print('=' * 66)

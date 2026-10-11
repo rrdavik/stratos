@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v13'
+MOTOR_VERSION = 'motor v15'
 
 import math
 
@@ -38,11 +38,47 @@ INST_CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b
 DUMMY_ROW = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
 
 # Perfiles de erosion por defecto: (reduccion 1-3, radio 0-2, profundidad 0-4)
-# Pads 1-5: aranazos. 6-8: cortes que atraviesan conchas.
+# Cuanto mas frecuente el golpe, mas superficial: el bombo (pad 1) tiembla,
+# la caja (2) corta y el tom (3), raro, abre el corte profundo. 4-8 aranazos.
 PERFILES_DEFECTO = [
+    (1, 2, 0), (3, 1, 3), (3, 2, 4), (2, 1, 0),
+    (2, 0, 0), (1, 1, 0), (1, 0, 0), (1, 0, 0),
+]
+TIPOS_DEFECTO = ['temblor', 'corte', 'corte profundo', 'aranazo',
+                 'aranazo', 'aranazo', 'aranazo', 'aranazo']
+ROLES_DEFECTO = ['bombo', 'caja', 'tom', 'palmas, aro', '-', '-', '-', 'charles']
+# Los de la fase 7 v1 (para reconocer una tabla sin editar al relanzar)
+PERFILES_V1 = [
     (1, 0, 0), (1, 0, 0), (1, 1, 0), (2, 0, 0),
     (2, 1, 0), (2, 1, 2), (3, 1, 3), (3, 2, 4),
 ]
+TIPOS_V1 = ['aranazo'] * 5 + ['corte', 'corte', 'corte profundo']
+
+
+def _hex(h):
+    return tuple(int(h[k:k + 2], 16) / 255.0 for k in (1, 3, 5))
+
+
+# Balizas de la bateria: un color por pad. Cortes en rojos y violetas,
+# aranazos frios y claros. Fuera a proposito: cian (cicatrices), ambar
+# (SEQ2, coronas), blanco (SEQ1 desde la fase 9) y los minerales.
+COLORES_DRUM = [_hex(h) for h in ('#D7263D', '#E83E8C', '#7C3AED', '#3B5BDB',
+                                  '#12B76A', '#A3E635', '#F9A8D4', '#C4B5FD')]
+BALIZA2_RADIO = 0.9 * 0.55       # baliza del SEQ2 en reposo (ver beacon)
+
+
+def tipo_perfil(red, rad, depth):
+    """Tipo de un perfil sin etiqueta. El temblor se porta como un aranazo."""
+    if depth >= 4:
+        return 'corte profundo'
+    if depth > 0:
+        return 'corte'
+    return 'aranazo'
+
+
+def pads_corte(cfg):
+    """Pads (0-7) cuyo perfil abre corte (profundidad > 0)."""
+    return [k for k, p in enumerate(cfg['perfiles']) if p[2] > 0]
 
 DEFAULT_CFG = dict(
     nivel=3,
@@ -58,11 +94,14 @@ DEFAULT_CFG = dict(
     ciclo_min=8, ciclo_max=64, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
     # fase 7
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
-    perfiles=PERFILES_DEFECTO,
+    perfiles=PERFILES_DEFECTO, tipos=TIPOS_DEFECTO,
     # fase 8
     herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0,
     # fase 9
     scar_time=4.0, flash=3.0,
+    # fase 7: balizas de la bateria
+    balizas_drum=1, tam_baliza_drum=0.5, anillo_baliza_drum=0.35, vida_baliza_drum=0.6,
+    colores_drum=COLORES_DRUM,
 )
 
 
@@ -340,6 +379,7 @@ def new_world():
         hit_t={1: -1.0, 2: -1.0},
         clock=dict(last_note_t=-99.0, stop_t=-99.0, start_t=-99.0),
         burst=dict(times=[], pending=None),
+        drum={},                # pad -> ultimo golpe {t, cell, vel} (balizas)
         # ciclo (fase 6): lo cierra el mundo
         ciclo_n=1,              # ciclo en curso
         compases_ciclo=0,       # compases que lleva el mundo actual
@@ -895,8 +935,11 @@ def erosion(W, cfg, pad, vel, now):
     for c, _ in rings(target, rad_eff):
         removed += degrade(W, cfg, c, red)
     W['hits'][3] = W['hits'].get(3, 0) + 1
+    W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
+    tipos = cfg.get('tipos') or []
+    tipo = tipos[pad] if pad < len(tipos) and tipos[pad] else tipo_perfil(red, rad, depth)
     ev = dict(pad=pad, red=red, rad=rad_eff, prof=depth, celda=target, dens=dens,
-              doble=over, quitado=removed, t=now)
+              doble=over, quitado=removed, t=now, tipo=tipo)
     W['ev']['erosion'] = ev
     if cfg['nivel'] >= 9:
         if depth > 0:
@@ -1194,7 +1237,8 @@ def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True)
 def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     lvl = cfg['nivel']
     lim = limit(cfg)
-    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], baliza2=[])
+    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], baliza2=[],
+               balizas_drum=[])
     R = top_radius(W, cfg)
     for i in range(N):
         vh = W['vh'][i]
@@ -1262,6 +1306,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         if b:
             p, rad = b
             out['baliza2'].append([p[0], p[1], p[2], 0, 0, 0, rad, rad, rad, 1, 0.7, 0.3])
+    if lvl >= 7 and not hide_beacons and cfg['balizas_drum']:
+        out['balizas_drum'] = drum_beacons(W, cfg, now)
     if lvl >= 8 and tiles:
         out['estratos'] = build_tiles(W, cfg, now)
     return out
@@ -1291,6 +1337,37 @@ def build_tiles(W, cfg, now):
             if is_pole(c):
                 cw, cl = cw * 1.25, cl * 1.25
             rows.append(_row(_mul(n, r_mid - th * 0.5), n, cw * 1.04, th * 0.98, cl * 1.04, col))
+    return rows
+
+
+def drum_beacons(W, cfg, now, lift=0.3):
+    """Una baliza por pad en la celda que recibio el golpe. Cada pad tiene
+    su hueco en un anillo alrededor del centro de la celda (pad n a
+    (n-1) x 45 grados), asi bombo y charles en la misma celda se ven los
+    dos. Tamano: Tambalizadrum x la baliza del SEQ2, crece con la
+    velocidad y se apaga del todo en Vidabalizadrum segundos."""
+    rows = []
+    vida = max(0.05, cfg['vida_baliza_drum'])
+    cols = cfg.get('colores_drum') or COLORES_DRUM
+    for pad, h in sorted(W.get('drum', {}).items()):
+        dt = now - h['t']
+        if dt < 0 or dt >= vida:
+            continue
+        env = (1.0 - dt / vida) ** 2
+        i = h['cell']
+        rad = cfg['tam_baliza_drum'] * BALIZA2_RADIO * (0.6 + 0.4 * h['vel'] / 127.0) * env
+        if rad <= 1e-4:
+            continue
+        n = normal_i(i)
+        e, t = tangents(n)
+        base = base_radius(W, cfg, i)
+        cw, cl = _cell_sizes(base, i)
+        a = math.radians(int(pad) * 45.0)
+        d = cfg['anillo_baliza_drum'] * min(cw, cl)
+        p = _mul(n, base + W['vh'][i] + lift + rad)
+        p = _add(_add(p, e, d * math.cos(a)), t, d * math.sin(a))
+        col = cols[int(pad) % len(cols)]
+        rows.append([p[0], p[1], p[2], 0, 0, 0, rad, rad, rad, col[0], col[1], col[2]])
     return rows
 
 
@@ -1343,7 +1420,7 @@ def wobble_step(st, dt, on, paused, amp, period, fade=3.0):
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
-              'i_estratos', 'i_baliza2']
+              'i_estratos', 'i_baliza2', 'i_balizas_drum']
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 
@@ -1378,18 +1455,43 @@ def _menu(name, options, default):
 
 
 def _perfiles():
+    """(perfiles, tipos) de la tabla perfiles_erosion, leidos por nombre de
+    columna (la columna rol es solo para leer)."""
     t = parent().op('perfiles_erosion')
     if t is None or t.numRows < 2:
-        return PERFILES_DEFECTO
-    out = []
+        return list(PERFILES_DEFECTO), list(TIPOS_DEFECTO)
+    out, tipos = [], []
     for r in range(1, min(t.numRows, 9)):
         try:
-            out.append((int(float(t[r, 'reduccion'].val)), int(float(t[r, 'radio'].val)),
-                         int(float(t[r, 'profundidad'].val))))
+            p = (int(float(t[r, 'reduccion'].val)), int(float(t[r, 'radio'].val)),
+                 int(float(t[r, 'profundidad'].val)))
         except Exception:
-            out.append(PERFILES_DEFECTO[r - 1])
+            p = PERFILES_DEFECTO[r - 1]
+        out.append(p)
+        try:
+            tp = t[r, 'tipo'].val.strip()
+        except Exception:
+            tp = ''
+        tipos.append(tp or tipo_perfil(*p))
     while len(out) < 8:
         out.append(PERFILES_DEFECTO[len(out)])
+        tipos.append(TIPOS_DEFECTO[len(tipos)])
+    return out, tipos
+
+
+def _colores_drum():
+    """Colores de las balizas de la bateria (tabla colores_drum: pad r g b)."""
+    t = parent().op('colores_drum')
+    out = list(COLORES_DRUM)
+    if t is None or t.numRows < 2:
+        return out
+    for r in range(1, t.numRows):
+        try:
+            k = int(float(t[r, 'pad'].val)) - 1
+            if 0 <= k < 8:
+                out[k] = tuple(max(0.0, min(1.0, float(t[r, ch].val))) for ch in ('r', 'g', 'b'))
+        except Exception:
+            pass
     return out
 
 
@@ -1433,7 +1535,12 @@ def cfg():
         flash=_p('Destello', c['flash']),
     )
     if c['nivel'] >= 7:
-        c['perfiles'] = _perfiles()
+        c['perfiles'], c['tipos'] = _perfiles()
+        c['colores_drum'] = _colores_drum()
+        c.update(balizas_drum=int(_p('Balizasdrum', True)),
+                 tam_baliza_drum=_p('Tambalizadrum', c['tam_baliza_drum']),
+                 anillo_baliza_drum=_p('Anillobalizadrum', c['anillo_baliza_drum']),
+                 vida_baliza_drum=_p('Vidabalizadrum', c['vida_baliza_drum']))
     return c
 
 
@@ -1564,11 +1671,11 @@ def midi_note_on(ch, note, vel):
     elif lvl >= 5 and ch == _p('Canal2', 14):
         r = note_on(W, c, ARQ, note, vel, now, tempo())
         res = 'SEQ2 %s' % r['estado']
-    elif lvl >= 7 and ch == _p('Canaldrum', 10):
+    elif lvl >= 7 and ch == _p('Canaldrum', 16):
         pad = int(note) - _p('Notabase', 36)
         if 0 <= pad < 8:
             ev = erosion(W, c, pad, vel, now)
-            res = 'EROSION pad %d celda %d' % (pad + 1, ev['celda'])
+            res = 'EROSION pad %d %s celda %d' % (pad + 1, ev['tipo'], ev['celda'])
         else:
             res = 'ignorado: pad fuera de 1-8'
     else:
@@ -1700,8 +1807,8 @@ def on_pulse(name):
                  cost(c, W['occ'][ci]) if ci >= 0 else 0, r['estado']))
     elif name == 'Erosionar':
         ev = erosion(W, c, _p('Padprueba', 1) - 1, _p('Velprueba', 100), now)
-        print('EROSION  pad %d -> celda %d, radio %d, quitado %d'
-              % (ev['pad'] + 1, ev['celda'], ev['rad'], ev['quitado']))
+        print('EROSION  pad %d (%s) -> celda %d, radio %d, quitado %d'
+              % (ev['pad'] + 1, ev['tipo'], ev['celda'], ev['rad'], ev['quitado']))
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
@@ -1857,8 +1964,9 @@ def _legend():
         dens = occupied(W) / float(N)
         flag = '  x%g' % c['rad_mult'] if dens > c['dens_umbral'] else ''
         if e:
-            lines.append('  EROSION  pad %d   -%d   radio %d   celda %d   densidad %d%%%s'
-                         % (e['pad'] + 1, e['red'], e['rad'], e['celda'], int(dens * 100), flag))
+            lines.append('  EROSION  pad %d   %s   -%d   radio %d   celda %d   densidad %d%%%s'
+                         % (e['pad'] + 1, e.get('tipo', '-'), e['red'], e['rad'], e['celda'],
+                            int(dens * 100), flag))
         else:
             lines.append('  EROSION  -   densidad %d%%%s' % (int(dens * 100), flag))
     if lvl >= 8:
