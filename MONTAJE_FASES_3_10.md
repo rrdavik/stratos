@@ -18,14 +18,14 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v12` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v13` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v8` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v8` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
 | `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v2` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v3` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
 | `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v2` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v1` |
 
@@ -310,10 +310,10 @@ En cada fin de ciclo:
 2. **El planeta engorda el grosor de la concha.** Con `Grosortiempo` (encendido por defecto), el grosor es proporcional a lo que duró su mundo:
 
    ```
-   grosor = Shellthick × clamp(compases / Ciclomin, 0,25, Ciclomax / Ciclomin)
+   grosor = min(Grosormax, Shellthick × clamp(compases / Ciclomin, 0,25, Ciclomax / Ciclomin))
    ```
 
-   Con los valores por defecto va de 0,5 (ciclo mínimo) a 4,0 (edad máxima, 64 compases), y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
+   Con los valores por defecto va de 0,5 (ciclo mínimo, 8 compases) a 2,0 (32 compases o más: `Grosormax`). Sin ese tope, una concha de edad máxima (64 compases) mediría 4,0, más del doble que una formación en su límite (1,875). `Grosormax` 0 quita el tope. y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
 3. **Herencia:** el 25 % de la ocupación de cada celda pasa a la capa nueva. La fracción que no llega a 1 se acumula para el ciclo siguiente: una celda con ocupación 2 en ciclos seguidos acaba heredando. Lo heredado vuelve a brotar desde la nueva superficie.
 
 **Radio acumulado.** Cada concha guarda su `grosor`, `r_in` y `r_out`. El radio del planeta es el del núcleo más la suma de los grosores, y de él dependen las losetas (cada una con la altura de su concha), la retícula, las balizas, las formaciones, la cámara y la esfera del núcleo que tapa las conchas más allá de `Maxconchas`. Las conchas de un motor anterior se leen con `Shellthick`.
@@ -332,11 +332,11 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 
 **Cámara:** en esta fase solo se aleja con el radio para no quedar dentro del planeta. La definitiva llega en la fase 10.
 
-**Página Fase8:** `Herencia` 0,25 · `Maxconchas` 24 · `Grosortiempo` (encendido). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
+**Página Fase8:** `Herencia` 0,25 · `Maxconchas` 24 · `Grosortiempo` (encendido) · `Grosormax` 2,0. Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
 
 **Leyenda:** `CONCHAS 11 radio 11.50 ultima 0.75 herencia 25% continentes 3`
 
-**Ritmo de engorde:** de media, `Shellthick` por cada `Ciclomin` compases: 0,5 cada 16 s a 120 BPM, unas 37 unidades en 20 minutos sobre un núcleo de 6. El radio vuelve a ser exactamente el tiempo transcurrido. Para frenar el engorde, sube `Ciclomin` o baja `Shellthick`.
+**Ritmo de engorde:** de media, `Shellthick` por cada `Ciclomin` compases: 0,5 cada 16 s a 120 BPM, unas 37 unidades en 20 minutos sobre un núcleo de 6. El radio es el tiempo transcurrido, salvo en los ciclos de más de 32 compases, que el tope de `Grosormax` recorta. Para frenar el engorde, sube `Ciclomin` o baja `Shellthick`.
 
 ---
 
@@ -429,7 +429,7 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
-| 8 | Grosor de concha | Proporcional a la duración del ciclo (`Grosortiempo`), entre 0,25× y `Ciclomax`/`Ciclomin` × `Shellthick` (0,5; límite de altura 1,875) |
+| 8 | Grosor de concha | Proporcional a la duración del ciclo (`Grosortiempo`), entre 0,25× y `Ciclomax`/`Ciclomin` × `Shellthick` (0,5; límite de altura 1,875), con un tope de `Grosormax` (2,0) |
 | 3–4 | ¿Cuántas notas por trigger? | De 1 a `Costemax` (5) según la altura, con frenada; 5 desde el límite. La presión suma carga |
 | 3 | ¿Cómo se reparten las notas? | `Notapolosur` y `Notapolonorte` (entre do1 y do8) son los polos; en medio, un anillo por octava; el rango decide el número de celdas; `Fuerarango` para las de fuera |
 

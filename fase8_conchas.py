@@ -15,10 +15,10 @@ Al terminar cada ciclo de ecosistema (fase 6: lo cierra el mundo):
   2. El planeta engorda el GROSOR de la concha. Con Grosortiempo es
      proporcional a lo que duro su mundo:
          grosor = Shellthick x compases / Ciclomin
-     entre 0,25x y Ciclomax / Ciclomin (0,5 a 4,0 con los valores por
-     defecto). El ritmo medio de engorde es Shellthick por cada Ciclomin
-     compases, y el grosor de cada estrato registra cuanto tardo su
-     mundo en agotarse. Sin Grosortiempo, siempre Shellthick.
+     entre 0,25x y Ciclomax / Ciclomin, y nunca mas de Grosormax (2,0):
+     con los valores por defecto, de 0,5 (8 compases) a 2,0 (32 o mas).
+     El grosor de cada estrato registra cuanto tardo su mundo en
+     agotarse. Sin Grosortiempo, siempre Shellthick.
   3. El 25 % de la ocupacion de cada celda pasa a la capa nueva (la
      fraccion que no llega a 1 se acumula para el ciclo siguiente). Lo
      heredado vuelve a brotar desde la nueva superficie.
@@ -50,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v3  (conchas con grosor del ciclo, herencia, radio acumulado)'
+VERSION = 'fase8 v4  (conchas con grosor del ciclo, herencia, radio acumulado)'
 banner(VERSION)
 
 base = require_base(8)
@@ -60,7 +60,8 @@ page = get_page(base, 'Fase8')
 add_par(base, page, 'float', 'Herencia', 'Herencia entre conchas', 0.25, 0.0, 1.0)
 add_par(base, page, 'int', 'Maxconchas', 'Conchas visibles', 24, 1, 96, clamp=True)
 add_par(base, page, 'toggle', 'Grosortiempo', 'Grosor proporcional al ciclo', True)
-ok('pagina Fase8: Herencia (25 %), Maxconchas (24), Grosortiempo')
+add_par(base, page, 'float', 'Grosormax', 'Grosor maximo de concha (0: sin limite)', 2.0, 0.0, 8.0)
+ok('pagina Fase8: Herencia (25 %), Maxconchas (24), Grosortiempo, Grosormax (2)')
 
 make_phong(base, 'mat_estratos', 780, 620, spec=0.12, shin=8, diff=1.0)
 make_instanced(base, 'estratos', 520, 620, 'mat_estratos')
@@ -81,7 +82,7 @@ if setexpr(cam, 'tz', "parent().op('motor').module.surface_radius(absTime.frame)
 leeme(base, 8, """FASE 8 - CONCHAS
   En cada fin de ciclo la capa se entierra como losetas con el color de
   su generacion. Grosor: Shellthick x compases / Ciclomin (Grosortiempo),
-  entre 0,25x y Ciclomax/Ciclomin. Radio = nucleo + suma de grosores.
+  entre 0,25x y Ciclomax/Ciclomin, como mucho Grosormax (2). Radio = nucleo + suma de grosores.
   Herencia (25 %) pasa a la capa nueva. Maxconchas visibles; las demas,
   dentro del nucleo.
   Prueba sin esperar: Forzarciclo (pagina Fase6).""")
@@ -113,7 +114,9 @@ def prueba(t):
     for bars in (1, cmin, 2 * cmin, 10 * cmax):
         m.end_cycle(W2, cg, 0.0, bars)
     gs = [m.shell_th(sh, cg) for sh in W2['shells']]
-    want = [th * max(0.25, 1.0 / cmin), th, th * min(2.0, cmax / float(cmin)), th * cmax / float(cmin)]
+    gmax = cg['grosor_max'] if cg['grosor_max'] > 0 else 1e9
+    want = [min(gmax, x) for x in (th * max(0.25, 1.0 / cmin), th,
+                                   th * min(2.0, cmax / float(cmin)), th * cmax / float(cmin))]
     t.check('grosor = Shellthick x compases / Ciclomin, con sus limites',
             all(abs(a - b) < 1e-6 for a, b in zip(gs, want)),
             ' '.join('%.3f' % g for g in gs))
@@ -123,6 +126,7 @@ def prueba(t):
     tiles = m.build_tiles(W2, cg, 0.0)
     alturas = [tiles[k * m.N][7] / 0.98 for k in range(len(gs))]
     t.check('cada concha dibuja su grosor', all(abs(a - b) < 1e-6 for a, b in zip(alturas, gs)))
+    t.check('ningun grosor pasa de Grosormax', max(gs) <= gmax + 1e-9, '%.3f' % max(gs))
     cg['grosor_tiempo'] = 0
     m.end_cycle(W2, cg, 0.0, 10 * cmax)
     t.check('sin Grosortiempo: Shellthick', abs(m.shell_th(W2['shells'][-1], cg) - th) < 1e-6)

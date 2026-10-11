@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v12'
+MOTOR_VERSION = 'motor v13'
 
 import math
 
@@ -60,7 +60,7 @@ DEFAULT_CFG = dict(
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
     perfiles=PERFILES_DEFECTO,
     # fase 8
-    herencia=0.25, max_shells=24, grosor_tiempo=1,
+    herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0,
     # fase 9
     scar_time=4.0, flash=3.0,
 )
@@ -973,12 +973,14 @@ def shell_color(gen):
 def shell_grosor(cfg, bars=None):
     """Grosor de la concha nueva. Con Grosortiempo, proporcional a lo que
     duro su mundo: Shellthick por cada Ciclomin compases, entre 0,25x y
-    Ciclomax / Ciclomin."""
+    Ciclomax / Ciclomin, y nunca mas de Grosormax."""
     th = cfg['shell_thick']
     if bars is None or not cfg['grosor_tiempo']:
         return th
     cmin, cmax = cycle_bounds(cfg)
-    return th * max(0.25, min(cmax / float(cmin), bars / float(cmin)))
+    g = th * max(0.25, min(cmax / float(cmin), bars / float(cmin)))
+    gmax = cfg['grosor_max']
+    return min(g, gmax) if gmax > 0 else g
 
 
 def end_cycle(W, cfg, now, bars=None):
@@ -1426,6 +1428,7 @@ def cfg():
         herencia=_p('Herencia', c['herencia']),
         max_shells=_p('Maxconchas', c['max_shells']),
         grosor_tiempo=int(_p('Grosortiempo', True)),
+        grosor_max=_p('Grosormax', c['grosor_max']),
         scar_time=max(0.1, _p('Cicatriz', c['scar_time'])),
         flash=_p('Destello', c['flash']),
     )
