@@ -18,12 +18,12 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v11` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v12` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v8` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v8` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
-| `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v2` |
+| `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
 | `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v2` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v3` |
 | `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v2` |
@@ -246,20 +246,20 @@ El planeta se frena a medida que el mundo deja de cambiar (justo antes de enterr
 
 **Tabla `ciclos`.** Una fila por ciclo cerrado: `ciclo`, `compases`, `segundos`, `motivo`, `madurez`, `novedad` y, desde la fase 8, `grosor`. Guarda las últimas 200. Sirve para afinar los umbrales con el aparato.
 
-**Página Fase6:** `Umbralmadurez` 0,6 · `Umbralnovedad` 0,05 · `Compasesquietos` 4 · `Ciclomin` 8 · `Ciclomax` 32 · `Negrasporcompas` 4 · `Cambioentierra` (apagado) · `Girovivo` (encendido) · `Giromin` 0,25 · `Forzarciclo`
+**Página Fase6:** `Umbralmadurez` 0,6 · `Umbralnovedad` 0,05 · `Compasesquietos` 4 · `Ciclomin` 8 · `Ciclomax` 64 · `Negrasporcompas` 4 · `Cambioentierra` (apagado) · `Girovivo` (encendido) · `Giromin` 0,25 · `Forzarciclo`
 
 La fase 6 v2 quita los parámetros obsoletos: `Repsporciclo`, `Modociclo`, `Turnauto`, `Longmanual`, `Longfija`, `Longmin`, `Pasosporcompas`, `Pasospornegra` y `Resetpatterns`.
 
 **Leyenda:**
 
 ```
-CICLO    5   compas 23 (8-32)   madurez 64%   novedad 3%   quieto 2/4   giro x0.40
+CICLO    5   compas 23 (8-64)   madurez 64%   novedad 3%   quieto 2/4   giro x0.40
 AVISO    fin de ciclo 4: estancado a los 19 compases
 ```
 
 Con el secuenciador parado, en lugar del compás pone `parado`.
 
-**Ojo con el ritmo de crecimiento.** Con la carga por celda de las fases 3 y 4, una formación necesita 31 notas para coronarse. En simulación, un SEQ1 de 16 pasos sin batería madura y se queda quieto hacia el compás 30-40, cerca de `Ciclomax` (32). Por eso muchos ciclos cierran por `edad maxima`. Si quieres que el mundo llegue a estancarse más a menudo, sube `Ciclomax` (48-64) o baja `Costemax`, y mira la tabla `ciclos`.
+**Ojo con el ritmo de crecimiento.** Con la carga por celda de las fases 3 y 4, una formación necesita 31 notas para coronarse. En simulación, un SEQ1 de 16 pasos sin batería madura y se queda quieto hacia el compás 30-40. Por eso `Ciclomax` es 64 (fase 6 v3; con 32 casi todos los ciclos cerraban por `edad maxima`). Al relanzar la fase 6, `Ciclomax` pasa de 32 a 64 solo si seguía en 32.
 
 **Relanzar.** `fase6 v2` puede ejecutarse sobre un proyecto en nivel 6 o superior: no baja `Nivel` ni borra el mundo. Un mundo guardado por un motor anterior se migra solo: se borran las claves de la detección de longitud y de la biblioteca, el número de ciclo sigue donde iba y las conchas antiguas, que no guardan grosor, se leen con `Shellthick`. Para un proyecto en nivel 8 o superior: `fase6_ciclo.py`, después `fase8_conchas.py` y, por último, la última fase aplicada (por ejemplo `fase9_arqueologia.py` y `fase10_direccion.py`).
 
@@ -313,7 +313,7 @@ En cada fin de ciclo:
    grosor = Shellthick × clamp(compases / Ciclomin, 0,25, Ciclomax / Ciclomin)
    ```
 
-   Con los valores por defecto va de 0,5 (ciclo mínimo) a 2,0 (edad máxima), y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
+   Con los valores por defecto va de 0,5 (ciclo mínimo) a 4,0 (edad máxima, 64 compases), y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
 3. **Herencia:** el 25 % de la ocupación de cada celda pasa a la capa nueva. La fracción que no llega a 1 se acumula para el ciclo siguiente: una celda con ocupación 2 en ciclos seguidos acaba heredando. Lo heredado vuelve a brotar desde la nueva superficie.
 
 **Radio acumulado.** Cada concha guarda su `grosor`, `r_in` y `r_out`. El radio del planeta es el del núcleo más la suma de los grosores, y de él dependen las losetas (cada una con la altura de su concha), la retícula, las balizas, las formaciones, la cámara y la esfera del núcleo que tapa las conchas más allá de `Maxconchas`. Las conchas de un motor anterior se leen con `Shellthick`.

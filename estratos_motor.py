@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v11'
+MOTOR_VERSION = 'motor v12'
 
 import math
 
@@ -55,7 +55,7 @@ DEFAULT_CFG = dict(
     sat_size=0.6, sat_limit=0.6, neigh_mode=1,
     # fase 6: el ciclo lo cierra el mundo
     beats_per_bar=4, umbral_madurez=0.6, umbral_novedad=0.05, compases_quietos=4,
-    ciclo_min=8, ciclo_max=32, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
+    ciclo_min=8, ciclo_max=64, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
     # fase 7
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
     perfiles=PERFILES_DEFECTO,

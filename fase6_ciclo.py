@@ -48,7 +48,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase6 v2  (el ciclo lo cierra el mundo: madurez, novedad, giro vivo)'
+VERSION = 'fase6 v3  (el ciclo lo cierra el mundo: madurez, novedad, giro vivo)'
 banner(VERSION)
 
 base = require_base(6)
@@ -65,7 +65,8 @@ add_par(base, page, 'float', 'Umbralmadurez', 'Madurez minima para enterrar', 0.
 add_par(base, page, 'float', 'Umbralnovedad', 'Novedad maxima de un compas quieto', 0.05, 0.0, 1.0)
 add_par(base, page, 'int', 'Compasesquietos', 'Compases quietos para enterrar', 4, 1, 64, clamp=True)
 add_par(base, page, 'int', 'Ciclomin', 'Duracion minima (compases)', 8, 1, 256, clamp=True)
-add_par(base, page, 'int', 'Ciclomax', 'Edad maxima (compases)', 32, 1, 1024, clamp=True)
+add_par(base, page, 'int', 'Ciclomax', 'Edad maxima (compases)', 64, 1, 1024, clamp=True)
+renew_default(base, 'Ciclomax', 32, 64)
 add_par(base, page, 'int', 'Negrasporcompas', 'Negras por compas', 4, 1, 16, clamp=True)
 add_par(base, page, 'toggle', 'Cambioentierra', 'Cambio de pattern entierra el mundo', False)
 add_par(base, page, 'toggle', 'Girovivo', 'El giro se frena sin novedad', True)

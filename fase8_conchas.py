@@ -15,7 +15,7 @@ Al terminar cada ciclo de ecosistema (fase 6: lo cierra el mundo):
   2. El planeta engorda el GROSOR de la concha. Con Grosortiempo es
      proporcional a lo que duro su mundo:
          grosor = Shellthick x compases / Ciclomin
-     entre 0,25x y Ciclomax / Ciclomin (0,5 a 2,0 con los valores por
+     entre 0,25x y Ciclomax / Ciclomin (0,5 a 4,0 con los valores por
      defecto). El ritmo medio de engorde es Shellthick por cada Ciclomin
      compases, y el grosor de cada estrato registra cuanto tardo su
      mundo en agotarse. Sin Grosortiempo, siempre Shellthick.
