@@ -17,11 +17,11 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v9'
+VERSION_COMUN = 'comun v10'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'baliza', 'baliza2', 'balizas_drum']
+                'coronas', 'baliza', 'baliza2', 'luz_drum']
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
 
@@ -424,7 +424,7 @@ def onValueChange(par, prev):
 
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
 # (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_baliza2,
-# i_balizas_drum).
+# i_luz_drum).
 
 CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b']
 DUMMY = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
@@ -829,6 +829,69 @@ def apply_wobble(base):
         info('%s: no pude fijar Rotate Order = Ry Rx Rz; ponlo a mano' % n)
 
 
+# El color por instancia se llama instancer/g/b en el Geometry COMP (pagina
+# Instance 2). Las versiones anteriores de este archivo usaban
+# instancecolorr/g/b, que no existe: las instancias no cogian su color.
+INST_COLOR_PARS = (('r', ['instancer', 'instancecolorr']),
+                   ('g', ['instanceg', 'instancecolorg']),
+                   ('b', ['instanceb', 'instancecolorb']))
+INST_COLOR_MODE = ['instancecolormode', 'instcolormode', 'colormode']
+
+
+def set_instance_color(geo, name=''):
+    """Que la geometria pinte cada instancia con sus canales r g b
+    (Color Mode = Replace). Devuelve True si quedo configurada."""
+    good = True
+    for ch, names in INST_COLOR_PARS:
+        if not setp_any(geo, names, ch):
+            info('%s: no encontre el color de instancia (%s)' % (name or geo.name, names[0]))
+            good = False
+    if not setmenu(geo, INST_COLOR_MODE, ['replace'], None):
+        info('%s: no pude fijar Instance Color Mode = Replace; ponlo a mano' % (name or geo.name))
+    return good
+
+
+def instance_color_ok(geo):
+    """(True/False, detalle): la geometria lee r g b por instancia."""
+    if geo is None:
+        return False, 'no existe'
+    for ch, names in INST_COLOR_PARS:
+        val = None
+        for n in names:
+            try:
+                p = getattr(geo.par, n, None)
+            except Exception:
+                p = None
+            if p is not None:
+                val = str(p.eval())
+                break
+        if val != ch:
+            return False, '%s = %r' % (names[0], val)
+    for n in INST_COLOR_MODE:
+        try:
+            p = getattr(geo.par, n, None)
+        except Exception:
+            p = None
+        if p is not None:
+            v = str(p.eval()).lower()
+            if 'replace' not in v:
+                return False, '%s = %s' % (n, v)
+            break
+    return True, ''
+
+
+def set_additive(mat):
+    """Material que suma su color a lo que hay detras (luz): nunca oscurece."""
+    a = setp_any(mat, ['blending', 'blend'], True)
+    b = setmenu(mat, ['srcblend', 'srcblendcolor'], ['one'], None)
+    d = setmenu(mat, ['destblend', 'dstblend', 'destblendcolor'], ['one'], None)
+    setp_any(mat, ['depthwrite', 'writedepth'], False)
+    if not (a and b and d):
+        info('%s: no pude fijar la mezcla aditiva (Blending, Src/Dest = One); '
+             'ponla a mano' % mat.name)
+    return bool(a and b and d)
+
+
 def make_instanced(base, name, x, y, mat, sop='box'):
     """Geometry COMP 'name' + Script CHOP 'i_name' que pide al motor sus
     instancias. Una caja de 1x1x1 con la base en y=0 (o una esfera de radio
@@ -863,13 +926,11 @@ def make_instanced(base, name, x, y, mat, sop='box'):
     setp_any(geo, ['instancing', 'instance'], True)
     for par_name, ch in [('instancetx', 'tx'), ('instancety', 'ty'), ('instancetz', 'tz'),
                          ('instancerx', 'rx'), ('instancery', 'ry'), ('instancerz', 'rz'),
-                         ('instancesx', 'sx'), ('instancesy', 'sy'), ('instancesz', 'sz'),
-                         ('instancecolorr', 'r'), ('instancecolorg', 'g'),
-                         ('instancecolorb', 'b')]:
+                         ('instancesx', 'sx'), ('instancesy', 'sy'), ('instancesz', 'sz')]:
         if not setp(geo, par_name, ch):
             info('%s: no encontre %s' % (name, par_name))
     setmenu(geo, ['instancerord'], ['xyz'], 0)
-    setmenu(geo, ['instancecolormode', 'instcolormode'], ['replace'], 0)
+    set_instance_color(geo, name)
     set_spin(geo)
     setp(geo, 'material', mat)
     try:

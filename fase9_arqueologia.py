@@ -16,7 +16,7 @@ color de su generacion: bandas que son la historia cromatica de la sesion.
              al mineral en Cicatriz segundos. El hueco es permanente: solo
              lo tapa la concha siguiente.
   DESTELLO   cada destruccion dispara un golpe de luz sobre la celda;
-             los cortes, mas fuerte.
+             los cortes, mas fuerte. Del color del pad (aclarado).
   BALIZAS    el cian queda reservado a lo recien expuesto: la baliza del
              SEQ1 pasa a blanco.
 
@@ -34,7 +34,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v3  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
+VERSION = 'fase9 v4  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
 banner(VERSION)
 
 base = require_base(9)
@@ -50,10 +50,10 @@ setmenu(luz, ['lighttype'], ['point'], 0)
 for k, ax in enumerate(('tx', 'ty', 'tz')):
     setexpr(luz, ax, "parent().op('motor').module.flash_value(%d, absTime.frame)" % k)
 setexpr(luz, 'dimmer', "parent().op('motor').module.flash_value(3, absTime.frame)")
-setp(luz, 'lightcolorr', 0.80)
-setp(luz, 'lightcolorg', 0.95)
-setp(luz, 'lightcolorb', 1.00)
-ok('luz_destello: golpe de luz sobre cada destruccion, sigue el giro')
+for k, ch in enumerate(('lightcolorr', 'lightcolorg', 'lightcolorb')):
+    if not setexpr(luz, ch, "parent().op('motor').module.flash_value(%d, absTime.frame)" % (4 + k)):
+        setp(luz, ch, (0.80, 0.95, 1.00)[k])
+ok('luz_destello: golpe de luz sobre cada destruccion, del color de su pad, sigue el giro')
 
 mb = base.op('mat_baliza')
 if mb is not None:
