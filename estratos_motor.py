@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v13'
+MOTOR_VERSION = 'motor v14'
 
 import math
 
@@ -38,11 +38,35 @@ INST_CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b
 DUMMY_ROW = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
 
 # Perfiles de erosion por defecto: (reduccion 1-3, radio 0-2, profundidad 0-4)
-# Pads 1-5: aranazos. 6-8: cortes que atraviesan conchas.
+# Cuanto mas frecuente el golpe, mas superficial: el bombo (pad 1) tiembla,
+# la caja (2) corta y el tom (3), raro, abre el corte profundo. 4-8 aranazos.
 PERFILES_DEFECTO = [
+    (1, 2, 0), (3, 1, 3), (3, 2, 4), (2, 1, 0),
+    (2, 0, 0), (1, 1, 0), (1, 0, 0), (1, 0, 0),
+]
+TIPOS_DEFECTO = ['temblor', 'corte', 'corte profundo', 'aranazo',
+                 'aranazo', 'aranazo', 'aranazo', 'aranazo']
+ROLES_DEFECTO = ['bombo', 'caja', 'tom', 'palmas, aro', '-', '-', '-', 'charles']
+# Los de la fase 7 v1 (para reconocer una tabla sin editar al relanzar)
+PERFILES_V1 = [
     (1, 0, 0), (1, 0, 0), (1, 1, 0), (2, 0, 0),
     (2, 1, 0), (2, 1, 2), (3, 1, 3), (3, 2, 4),
 ]
+TIPOS_V1 = ['aranazo'] * 5 + ['corte', 'corte', 'corte profundo']
+
+
+def tipo_perfil(red, rad, depth):
+    """Tipo de un perfil sin etiqueta. El temblor se porta como un aranazo."""
+    if depth >= 4:
+        return 'corte profundo'
+    if depth > 0:
+        return 'corte'
+    return 'aranazo'
+
+
+def pads_corte(cfg):
+    """Pads (0-7) cuyo perfil abre corte (profundidad > 0)."""
+    return [k for k, p in enumerate(cfg['perfiles']) if p[2] > 0]
 
 DEFAULT_CFG = dict(
     nivel=3,
@@ -58,7 +82,7 @@ DEFAULT_CFG = dict(
     ciclo_min=8, ciclo_max=64, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
     # fase 7
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
-    perfiles=PERFILES_DEFECTO,
+    perfiles=PERFILES_DEFECTO, tipos=TIPOS_DEFECTO,
     # fase 8
     herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0,
     # fase 9
@@ -895,8 +919,10 @@ def erosion(W, cfg, pad, vel, now):
     for c, _ in rings(target, rad_eff):
         removed += degrade(W, cfg, c, red)
     W['hits'][3] = W['hits'].get(3, 0) + 1
+    tipos = cfg.get('tipos') or []
+    tipo = tipos[pad] if pad < len(tipos) and tipos[pad] else tipo_perfil(red, rad, depth)
     ev = dict(pad=pad, red=red, rad=rad_eff, prof=depth, celda=target, dens=dens,
-              doble=over, quitado=removed, t=now)
+              doble=over, quitado=removed, t=now, tipo=tipo)
     W['ev']['erosion'] = ev
     if cfg['nivel'] >= 9:
         if depth > 0:
@@ -1378,19 +1404,28 @@ def _menu(name, options, default):
 
 
 def _perfiles():
+    """(perfiles, tipos) de la tabla perfiles_erosion, leidos por nombre de
+    columna (la columna rol es solo para leer)."""
     t = parent().op('perfiles_erosion')
     if t is None or t.numRows < 2:
-        return PERFILES_DEFECTO
-    out = []
+        return list(PERFILES_DEFECTO), list(TIPOS_DEFECTO)
+    out, tipos = [], []
     for r in range(1, min(t.numRows, 9)):
         try:
-            out.append((int(float(t[r, 'reduccion'].val)), int(float(t[r, 'radio'].val)),
-                         int(float(t[r, 'profundidad'].val))))
+            p = (int(float(t[r, 'reduccion'].val)), int(float(t[r, 'radio'].val)),
+                 int(float(t[r, 'profundidad'].val)))
         except Exception:
-            out.append(PERFILES_DEFECTO[r - 1])
+            p = PERFILES_DEFECTO[r - 1]
+        out.append(p)
+        try:
+            tp = t[r, 'tipo'].val.strip()
+        except Exception:
+            tp = ''
+        tipos.append(tp or tipo_perfil(*p))
     while len(out) < 8:
         out.append(PERFILES_DEFECTO[len(out)])
-    return out
+        tipos.append(TIPOS_DEFECTO[len(tipos)])
+    return out, tipos
 
 
 def cfg():
@@ -1433,7 +1468,7 @@ def cfg():
         flash=_p('Destello', c['flash']),
     )
     if c['nivel'] >= 7:
-        c['perfiles'] = _perfiles()
+        c['perfiles'], c['tipos'] = _perfiles()
     return c
 
 
@@ -1564,11 +1599,11 @@ def midi_note_on(ch, note, vel):
     elif lvl >= 5 and ch == _p('Canal2', 14):
         r = note_on(W, c, ARQ, note, vel, now, tempo())
         res = 'SEQ2 %s' % r['estado']
-    elif lvl >= 7 and ch == _p('Canaldrum', 10):
+    elif lvl >= 7 and ch == _p('Canaldrum', 16):
         pad = int(note) - _p('Notabase', 36)
         if 0 <= pad < 8:
             ev = erosion(W, c, pad, vel, now)
-            res = 'EROSION pad %d celda %d' % (pad + 1, ev['celda'])
+            res = 'EROSION pad %d %s celda %d' % (pad + 1, ev['tipo'], ev['celda'])
         else:
             res = 'ignorado: pad fuera de 1-8'
     else:
@@ -1700,8 +1735,8 @@ def on_pulse(name):
                  cost(c, W['occ'][ci]) if ci >= 0 else 0, r['estado']))
     elif name == 'Erosionar':
         ev = erosion(W, c, _p('Padprueba', 1) - 1, _p('Velprueba', 100), now)
-        print('EROSION  pad %d -> celda %d, radio %d, quitado %d'
-              % (ev['pad'] + 1, ev['celda'], ev['rad'], ev['quitado']))
+        print('EROSION  pad %d (%s) -> celda %d, radio %d, quitado %d'
+              % (ev['pad'] + 1, ev['tipo'], ev['celda'], ev['rad'], ev['quitado']))
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
@@ -1857,8 +1892,9 @@ def _legend():
         dens = occupied(W) / float(N)
         flag = '  x%g' % c['rad_mult'] if dens > c['dens_umbral'] else ''
         if e:
-            lines.append('  EROSION  pad %d   -%d   radio %d   celda %d   densidad %d%%%s'
-                         % (e['pad'] + 1, e['red'], e['rad'], e['celda'], int(dens * 100), flag))
+            lines.append('  EROSION  pad %d   %s   -%d   radio %d   celda %d   densidad %d%%%s'
+                         % (e['pad'] + 1, e.get('tipo', '-'), e['red'], e['rad'], e['celda'],
+                            int(dens * 100), flag))
         else:
             lines.append('  EROSION  -   densidad %d%%%s' % (int(dens * 100), flag))
     if lvl >= 8:

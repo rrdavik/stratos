@@ -13,6 +13,23 @@ Cada pad tiene un PERFIL (tabla perfiles_erosion, editable):
     radio         0-2  anillos de vecinas afectadas
     profundidad   0-4  conchas que atraviesa (se activa en la fase 9)
 
+CUANTO MAS FRECUENTE EL GOLPE, MAS SUPERFICIAL (v3)
+---------------------------------------------------
+    pad 1  bombo        temblor          -1  radio 2
+    pad 2  caja         corte            -3  radio 1  profundidad 3
+    pad 3  tom          corte profundo   -3  radio 2  profundidad 4
+    pad 4  palmas, aro  aranazo          -2  radio 1
+    pad 5               aranazo          -2
+    pad 6               aranazo          -1  radio 1
+    pad 7               aranazo          -1
+    pad 8  charles      aranazo          -1
+El bombo, la pista mas densa, sacude una zona ancha sin vaciarla; la caja
+fractura; los toms, que suelen ir en los redobles, abren las heridas. El
+temblor se porta como un aranazo (sin corte, destello suave).
+Mientras suena el bombo el mundo no deja de cambiar, y los ciclos (fase 6)
+acaban por edad maxima; al quitarlo, el mundo se asienta y se entierra por
+estancamiento: el breakdown entierra el mundo.
+
 La erosion degrada en ORDEN INVERSO al crecimiento: primero caen los
 satelites, luego la altura, y al final queda la HUELLA (una mancha oscura
 que dura hasta que la celda se vuelve a sembrar o se entierra).
@@ -32,8 +49,8 @@ lado o al otro: decide el aparato, no el software.
 
 EL CANAL DE LA BATERIA
 ----------------------
-Por defecto 10, pads desde la nota 36 (do2). Si salen como "ignorado:
-canal X" o "pad fuera de 1-8", ajusta Canaldrum y Notabase.
+Canal 16 (confirmado con el aparato), pads desde la nota 36 (do2, por
+confirmar). Si salen como "pad fuera de 1-8", ajusta Notabase.
 
 COMO USARLO
 -----------
@@ -44,14 +61,15 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v2  (8 pads de erosion, huellas, presupuesto de densidad)'
+VERSION = 'fase7 v3  (canal 16; bombo tiembla, caja y tom cortan; huellas, presupuesto)'
 banner(VERSION)
 
 base = require_base(7)
 motor = install_core(base, CARPETA, 7)
 
 page = get_page(base, 'Fase7')
-add_par(base, page, 'int', 'Canaldrum', 'Canal MIDI de la bateria', 10, 1, 16, clamp=True)
+add_par(base, page, 'int', 'Canaldrum', 'Canal MIDI de la bateria', 16, 1, 16, clamp=True)
+renew_default(base, 'Canaldrum', 10, 16)
 add_par(base, page, 'int', 'Notabase', 'Nota del pad 1', 36, 0, 120, clamp=True)
 add_par(base, page, 'menu', 'Objetivo', 'Donde cae la erosion', 'alterna',
         menu=['seq1', 'seq2', 'alterna', 'velocidad'],
@@ -61,27 +79,75 @@ add_par(base, page, 'float', 'Umbraldensidad', 'Presupuesto de densidad', 0.60, 
 add_par(base, page, 'float', 'Multradio', 'Multiplicador de radio', 2.0, 1.0, 4.0)
 add_par(base, page, 'int', 'Padprueba', 'Pad de prueba', 1, 1, 8, clamp=True)
 add_par(base, page, 'pulse', 'Erosionar', 'Erosionar con el pad de prueba')
-ok('pagina Fase7: Canaldrum (10), Notabase (36), Objetivo, Umbraldensidad, '
+ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
    'Multradio, Padprueba, Erosionar')
+
+COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'tipo', 'rol']
+
+
+def filas_tabla(t):
+    return [[t[r, c].val if t[r, c] is not None else '' for c in range(t.numCols)]
+            for r in range(t.numRows)]
+
+
+def clasificar_perfiles(filas, mm):
+    """'v1' si la tabla sigue con los valores de la fase 7 v1, 'nueva' si ya
+    tiene los de la v3 y 'editada' si alguien la ha cambiado a mano."""
+    if not filas:
+        return 'v1'
+    cab = [str(x).strip() for x in filas[0]]
+    try:
+        ix = [cab.index(n) for n in ('reduccion', 'radio', 'profundidad')]
+    except ValueError:
+        return 'editada'
+    it = cab.index('tipo') if 'tipo' in cab else None
+    if len(filas) != 9:
+        return 'editada'
+    perf, tipos = [], []
+    try:
+        for f in filas[1:9]:
+            perf.append(tuple(int(float(f[k])) for k in ix))
+            tipos.append(str(f[it]).strip() if it is not None else '')
+    except Exception:
+        return 'editada'
+    if perf == list(mm.PERFILES_V1) and tipos == list(mm.TIPOS_V1):
+        return 'v1'
+    if perf == list(mm.PERFILES_DEFECTO) and tipos == list(mm.TIPOS_DEFECTO):
+        return 'nueva'
+    return 'editada'
+
+
+def escribir_perfiles(t, mm):
+    t.clear()
+    t.appendRow(COLS)
+    for k in range(8):
+        red, rad, prof = mm.PERFILES_DEFECTO[k]
+        t.appendRow([k + 1, red, rad, prof, mm.TIPOS_DEFECTO[k], mm.ROLES_DEFECTO[k]])
+
 
 tabla = base.op('perfiles_erosion')
 if tabla is None:
     tabla = mk(base, 'tableDAT', 'perfiles_erosion', -660, 80)
-    tabla.clear()
-    tabla.appendRow(['pad', 'reduccion', 'radio', 'profundidad', 'tipo'])
-    tipos = ['aranazo', 'aranazo', 'aranazo', 'aranazo', 'aranazo',
-             'corte', 'corte', 'corte profundo']
-    perf = motor.module.PERFILES_DEFECTO
-    for k in range(8):
-        red, rad, prof = perf[k]
-        tabla.appendRow([k + 1, red, rad, prof, tipos[k]])
-    ok('perfiles_erosion: 8 pads (5 aranazos, 3 cortes). Editala a mano')
+    escribir_perfiles(tabla, motor.module)
+    ok('perfiles_erosion: bombo tiembla, caja y tom cortan, 4-8 aranazos. Editala a mano')
 else:
-    info('perfiles_erosion ya existia: se conserva como esta')
+    estado = clasificar_perfiles(filas_tabla(tabla), motor.module)
+    if estado == 'v1':
+        escribir_perfiles(tabla, motor.module)
+        ok('perfiles_erosion: tenia los valores de la v1, sustituidos por los nuevos')
+    elif estado == 'nueva':
+        if 'rol' not in [x.strip() for x in filas_tabla(tabla)[0]]:
+            escribir_perfiles(tabla, motor.module)
+        ok('perfiles_erosion: ya tiene los valores nuevos')
+    else:
+        info('perfiles_erosion editada a mano: se conserva; los nuevos valores por '
+             'defecto estan en el montaje')
 
 leeme(base, 7, """FASE 7 - EROSION
-  8 pads de bateria (Canaldrum, desde Notabase) = 8 perfiles editables en
-  perfiles_erosion: reduccion, radio, profundidad.
+  8 pads de bateria (Canaldrum 16, desde Notabase) = 8 perfiles editables
+  en perfiles_erosion: reduccion, radio, profundidad, tipo (rol: solo nota).
+  Cuanto mas frecuente el golpe, mas superficial: 1 bombo tiembla (radio 2),
+  2 caja corta, 3 tom corte profundo, 4-8 aranazos.
   Orden de caida: satelites, altura, huella.
   Presupuesto: por encima de Umbraldensidad, radios x Multradio.
   Prueba: Padprueba + Erosionar.""")
@@ -122,12 +188,34 @@ def prueba(t):
     t.midi(0x90 + chd - 1, nb, 0x64)
     W = m.world()
     t.check('pad 1 por MIDI -> erosion', W['hits'].get(3, 0) == 1 and 'erosion' in W['ev'])
-    t.check('perfiles leidos de la tabla', len(m.cfg()['perfiles']) == 8)
+    t.check('perfiles leidos de la tabla', len(m.cfg()['perfiles']) == 8
+            and len(m.cfg()['tipos']) == 8)
+    # perfiles por defecto: el bombo tiembla, solo caja y tom cortan
+    cd = dict(m.cfg())
+    cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
+    cd['target_mode'] = 0
+    W3 = m.new_world()
+    for n in range(40, 80):
+        for k in range(3):
+            m.note_on(W3, cd, 1, n, 100, 0.0)
+    m.note_on(W3, cd, 1, 60, 100, 0.0)
+    occ0 = list(W3['occ'])
+    ev = m.erosion(W3, cd, 0, 1, 1.0)
+    tocadas = sum(1 for a, b in zip(occ0, W3['occ']) if b < a)
+    t.check('pad 1 (bombo): temblor, -1 en radio 2, sin corte',
+            ev['tipo'] == 'temblor' and ev['red'] == 1 and ev['prof'] == 0
+            and 'corte' not in ev and tocadas >= 7, '%d celdas' % tocadas)
+    t.check('solo los pads 2 y 3 cortan', m.pads_corte(cd) == [1, 2])
+    v1 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V1[k]) + [m.TIPOS_V1[k]] for k in range(8)]
+    ed = [COLS[:5]] + [[k + 1, 2, 2, 0, 'aranazo'] for k in range(8)]
+    t.check('tabla con los valores v1 -> se sustituye; editada -> se conserva',
+            clasificar_perfiles(v1, m) == 'v1' and clasificar_perfiles(ed, m) == 'editada')
     t.check('leyenda EROSION', 'EROSION' in m.legend())
 
 
 run_test(base, prueba)
-print('  Ahora: anade la bateria del BeatStep. Cada golpe aligera el paisaje.')
-print('  Si los golpes salen como "ignorado", ajusta Canaldrum y Notabase.')
+print('  Ahora: anade la bateria del BeatStep (canal 16). El bombo hace temblar')
+print('  el paisaje; caja y tom abriran cortes en la fase 9.')
+print('  Si los golpes salen como "pad fuera de 1-8", ajusta Notabase.')
 print('  Ajusta el equilibrio crecimiento / erosion antes de pasar a la fase 8.')
 print('=' * 66)

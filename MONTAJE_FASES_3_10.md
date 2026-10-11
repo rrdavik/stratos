@@ -18,15 +18,15 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v13` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v14` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v8` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v8` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
-| `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v2` |
+| `fase7_erosion.py` | Canal 16; bombo tiembla, caja y tom cortan; huellas, presupuesto de densidad | `fase7 v3` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
-| `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v2` |
+| `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v3` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v1` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
@@ -205,6 +205,32 @@ El material lo sigue decidiendo la nota fundadora.
 
 **Regla:** el mundo se entierra cuando está **maduro y deja de cambiar**, o cuando alcanza su **edad máxima**. Se inspira en el ciclo adaptativo de Holling: crecer (fases 3 a 5), madurar y estancarse, liberar (erosión, fase 7) y reorganizar (enterramiento con herencia, fase 8). Hasta ahora la reorganización la disparaba el reloj; ahora la dispara el estado del mundo. Ya no se detecta la longitud de los patterns.
 
+**Señales.** La v2 no añade ninguna entrada MIDI; de hecho escucha menos. Lo nuevo es que escucha al propio mundo: el estado de las celdas pasa a ser una entrada del ciclo.
+
+| Escucha | Origen | Para qué |
+|---|---|---|
+| Pulso de tempo | Tempo del proyecto (`ritmo.tempo()`), que fija el BeatStep vía midicontrolx, el mismo desde la fase 1 | Contar compases (`Negrasporcompas`) y suavizar `giro_factor` en un compás |
+| Transporte | Play o pausa de la línea de tiempo | El reloj del ciclo solo avanza en play |
+| STOP | Mensaje de transporte MIDI | Para el reloj si llega después de la última nota; distingue la ráfaga de All Notes Off que acompaña a un STOP |
+| START / MMC Play | `FA` o MMC Play | Solo reanuda la marcha; ya no pone ningún paso a 0 |
+| Última nota | Note on | Condición de marcha: alguna nota en los últimos 4 compases |
+| All Notes Off | CC 123 en 8 canales o más en 0,12 s, sin STOP | AVISO de cambio de pattern; con `Cambioentierra`, entierra el mundo (respetando `Ciclomin`) |
+| Estado del mundo | Especie, ocupación, híbrida, satélite y huella de cada celda | La foto de cada compás, de la que salen madurez y novedad |
+| `Forzarciclo` | Pulso de la página Fase6 | Cierra el ciclo al instante (control de prueba, no señal) |
+
+| Produce | Qué es | Quién la usa |
+|---|---|---|
+| Compás del ciclo | Compases desde el último cierre | Regla de cierre, leyenda, grosor de la concha (fase 8) |
+| Madurez | 0–1: formaciones que han llegado al límite | Regla de cierre, leyenda, tabla `ciclos` |
+| Novedad | 0–1: celdas vivas cuya forma ha cambiado desde el compás anterior | Regla de cierre, `giro_factor`, leyenda, tabla `ciclos` |
+| Compases quietos | Compases seguidos maduros y sin novedad | Regla de cierre, leyenda |
+| `giro_factor` | Entre `Giromin` y 1 | Velocidad de rotación del núcleo |
+| `fin_de_ciclo` | Ciclo, compases, segundos, motivo, madurez y novedad | Fase 8 (enterramiento y grosor), tabla `ciclos`, AVISO |
+
+Deja de escuchar, respecto a la v1: el intervalo entre notas como medida del paso, la secuencia de tonos como huella de pattern (biblioteca y cambio por notas) y START/MMC Play como paso 0.
+
+**El bombo y el ciclo.** Cada temblor del bombo (fase 7) cambia la forma de muchas celdas a la vez, las que están por debajo de la corona. Mientras suena, la novedad no baja del umbral y los ciclos se cierran por edad máxima. Al quitarlo, el mundo se asienta y se entierra por estancamiento. Dicho en términos de directo: **el breakdown entierra el mundo**. En simulación, el mundo tarda unos 30 compases en asentarse después de 16 compases de bombo a negras, porque antes vuelve a crecer lo erosionado. Con `Umbralnovedad` 0,10, unos 20.
+
 **Reloj de compases.** Cuenta compases con el tempo del proyecto, el mismo que hace girar el núcleo (`ritmo.tempo()`). Un compás son `Negrasporcompas` negras (4). Solo avanza con el secuenciador en marcha: línea de tiempo en play, ningún STOP posterior a la última nota y alguna nota en los últimos 4 compases. START y MMC Play se siguen recibiendo, pero ya no ponen ningún paso a 0.
 
 **Las dos medidas.** En cada compás que avanza el reloj, el motor toma una foto de la forma de cada celda:
@@ -269,18 +295,25 @@ Con el secuenciador parado, en lugar del compás pone `parado`.
 
 ## FASE 7 · Erosión superficial
 
-Las 8 pistas de batería son las 8 señales de destrucción. Cada una tiene su perfil en la tabla `perfiles_erosion`, editable a mano:
+Las 8 pistas de batería son las 8 señales de destrucción. Cada una tiene su perfil en la tabla `perfiles_erosion`, editable a mano.
 
-| Pad | Reducción | Radio | Profundidad | Tipo |
-|---|---|---|---|---|
-| 1 | 1 | 0 | 0 | arañazo |
-| 2 | 1 | 0 | 0 | arañazo |
-| 3 | 1 | 1 | 0 | arañazo |
-| 4 | 2 | 0 | 0 | arañazo |
-| 5 | 2 | 1 | 0 | arañazo |
-| 6 | 2 | 1 | 2 | corte |
-| 7 | 3 | 1 | 3 | corte |
-| 8 | 3 | 2 | 4 | corte profundo |
+**Cuanto más frecuente el golpe, más superficial** (fase 7 v3). En el BeatStep, los pads 1 a 3 suelen ser bombo, caja y toms. En la v1 los cortes estaban en los pads 6 a 8, que casi no se tocan, pero pasarlos tal cual a los pads 1 a 3 pondría el corte más profundo en el bombo, la pista más densa. Con un bombo a negras a 120 BPM serían dos cortes profundos por segundo, restando 3 en unas 19 celdas cada uno, y la erosión ganaría siempre al crecimiento. Por eso la profundidad va ligada a la rareza del golpe: el bombo tiembla, la caja fractura y los toms, que suelen ir en los redobles, abren las heridas profundas.
+
+| Pad | Rol típico | Reducción | Radio | Profundidad | Tipo |
+|---|---|---|---|---|---|
+| 1 | Bombo | 1 | 2 | 0 | temblor |
+| 2 | Caja | 3 | 1 | 3 | corte |
+| 3 | Tom | 3 | 2 | 4 | corte profundo |
+| 4 | Palmas, aro… | 2 | 1 | 0 | arañazo |
+| 5 | — | 2 | 0 | 0 | arañazo |
+| 6 | — | 1 | 1 | 0 | arañazo |
+| 7 | — | 1 | 0 | 0 | arañazo |
+| 8 | Charles | 1 | 0 | 0 | arañazo |
+
+- **El temblor se porta como un arañazo:** profundidad 0 y destello suave. Lo que decide el comportamiento es la profundidad; el tipo es una etiqueta que sale en la leyenda.
+- **La tabla tiene las columnas `pad`, `reduccion`, `radio`, `profundidad`, `tipo` y `rol`.** El motor las lee por nombre; `rol` es solo para leer.
+- **Al relanzar la fase 7:** si la tabla sigue con los valores de la v1, se sustituye. Si alguien la ha editado, se conserva y el informe avisa: `.. perfiles_erosion editada a mano: se conserva; los nuevos valores por defecto estan en el montaje`.
+- **Presupuesto de densidad, sin cambios:** por encima del 60 %, el bombo pasa a radio 4 (unas 61 celdas, −1 en cada una). Es intencionado: ayuda a aligerar sin vaciar.
 
 **Orden de caída** (inverso al crecimiento): el golpe vacía antes la carga acumulada (sin gastar reducción); después caen los satélites, luego la altura, y al final la **huella**, una mancha oscura que dura hasta que la celda se vuelve a sembrar o se entierra.
 
@@ -294,11 +327,13 @@ Las 8 pistas de batería son las 8 señales de destrucción. Cada una tiene su p
 
 En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al otro o a ninguno. La destrucción persigue a la construcción.
 
-**Página Fase7:** `Canaldrum` 10 · `Notabase` 36 · `Objetivo` · `Umbraldensidad` 0,6 · `Multradio` 2 · `Padprueba` · `Erosionar`
+**Página Fase7:** `Canaldrum` 16 (confirmado con el aparato) · `Notabase` 36 · `Objetivo` · `Umbraldensidad` 0,6 · `Multradio` 2 · `Padprueba` · `Erosionar`. Al relanzar la fase 7, `Canaldrum` pasa a 16 solo si seguía en 10.
 
-**Por confirmar:** el canal de la batería y la nota del primer pad. Si los golpes salen como `ignorado: canal X` o `pad fuera de 1-8`, ajusta `Canaldrum` y `Notabase`.
+**Por confirmar:** la nota del primer pad. Si los golpes salen como `pad fuera de 1-8`, ajusta `Notabase`.
 
-**Leyenda:** `EROSION pad 3 -1 radio 1 celda 52 densidad 64% x2`
+**Leyenda:** `EROSION pad 1 temblor -1 radio 2 celda 52 densidad 64% x2`
+
+**Relación con la fase 6:** mientras suena el bombo, cada temblor cambia la forma de muchas celdas y los ciclos se cierran por edad máxima. Al quitarlo, el mundo se asienta y se entierra por estancamiento: el breakdown entierra el mundo.
 
 ---
 
@@ -342,7 +377,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 
 ## FASE 9 · Arqueología
 
-**Cortes.** Los pads con profundidad mayor que 0 (por defecto el 6, el 7 y el 8) quitan las losetas de las conchas superiores en forma de **anfiteatro**: profundidad completa en la celda golpeada, un escalón menos en cada anillo. Las paredes son las capas enterradas, cada una con su color. El hueco es permanente; solo lo cubre la concha siguiente.
+**Cortes.** Los pads con profundidad mayor que 0 (por defecto el 2, la caja, y el 3, el tom) quitan las losetas de las conchas superiores en forma de **anfiteatro**: profundidad completa en la celda golpeada, un escalón menos en cada anillo. Las paredes son las capas enterradas, cada una con su color. El hueco es permanente; solo lo cubre la concha siguiente.
 
 - **Las formaciones de una celda cortada** se apoyan en el fondo del corte.
 - **Grosores distintos** (fase 9 v2): la profundidad se sigue midiendo en conchas. Como cada concha tiene el grosor de su ciclo, un corte de 3 conchas es más o menos hondo según lo que duraron esos mundos. El fondo baja la suma de los grosores quitados y las paredes usan el radio de cada concha.
@@ -376,7 +411,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 4. **Con batería constante,** los ciclos llegan a `edad maxima`. Al parar la batería, el mundo se asienta y se entierra.
 5. **Añade la batería.** Los arañazos rebajan el paisaje y la densidad se mantiene por debajo del 60 %.
 6. **Fin de ciclo.** El mundo se entierra, el planeta engorda y lo heredado vuelve a brotar.
-7. **Pads 6 a 8 con varias conchas.** Se abre un corte con las capas a la vista, primero en cian.
+7. **Pads 2 y 3 con varias conchas.** Se abre un corte con las capas a la vista, primero en cian.
 8. **`Modoactuacion`, y al final `Planofinal`.**
 
 ---
@@ -396,6 +431,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | Pulidas y porosas iguales | Los parámetros de brillo del Phong no se pudieron fijar | Sube Specular y Shininess en `mat_pulido` a mano |
 | SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
+| El mundo nunca se entierra por estancamiento | El bombo está sonando: cada temblor genera novedad | Es lo esperado; quita el bombo para que el mundo se asiente |
 | Los ciclos siempre acaban por edad máxima | Batería constante, umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Con batería es lo esperado. Si no, baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
 | Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota (la leyenda pone `parado`) |
@@ -425,7 +461,8 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 6 | ¿Cómo se cuenta el tiempo? | En compases del tempo del proyecto (`ritmo.tempo()`); ya no se deduce el paso de cada nota |
 | 6 | ¿Una vuelta por ciclo? | No: `Barsperturn` manual y `Girovivo` |
 | 6 | ¿Los satélites cuentan para la madurez? | No: madurez = formaciones propias en el límite. Su forma se recorta al llegar a `Limsatelite` |
-| 7 | Canal y pads de la batería | Canal 10, pads desde 36 (`Canaldrum`, `Notabase`), por confirmar |
+| 7 | Canal y pads de la batería | Canal 16 (confirmado), pads desde 36 (`Notabase`), por confirmar |
+| 7 | ¿Qué pads cortan? | Cuanto más frecuente el golpe, más superficial: bombo (1) temblor, caja (2) corte, tom (3) corte profundo, 4 a 8 arañazos |
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
@@ -448,6 +485,10 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
   - Grosor proporcional con sus dos límites; radio = núcleo + suma de grosores; fondo y paredes de los cortes con grosores distintos.
   - `Girovivo` acotado entre `Giromin` y 1.
   - Un mundo del motor v7-v10 carga y sigue funcionando.
+- **Fase 7 v3:**
+  - Perfiles nuevos: el pad 1 resta 1 en radio 2 sin abrir corte; los pads 2 y 3 abren cortes desde el nivel 9; ningún otro pad corta.
+  - Relanzar sustituye una tabla con los valores de la v1, conserva una editada a mano y no pisa un `Canaldrum` cambiado a mano.
+  - Bombo a negras durante 16 compases sobre un mundo maduro: ningún cierre por `estancado`. Al quitarlo, cierre por `estancado` unos 30 compases después (20 con `Umbralnovedad` 0,10).
 - **Sesión simulada de 192 compases** a 120 BPM: SEQ1 de 16 pasos al 90 %, SEQ2 de 13 y batería a tramos de 48 compases. Cierra por `estancado` en los tramos sin batería y por `edad maxima` en los tramos con batería.
 - **Los scripts:** las fases 1 y 2 reales y las 3 a 10, ejecutadas en orden contra un TouchDesigner simulado, todas con `AUTOPRUEBA OK`. También se comprueba que no se puede saltar una fase y que relanzar una no borra el mundo.
 - **Una sesión simulada:** 24 compases a 120 BPM con SEQ1 (16 pasos), SEQ2 (13) y batería, fotograma a fotograma. Detecta las dos longitudes, entierra conchas, y todas las expresiones de los nodos se evalúan sin error.
@@ -458,8 +499,9 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 
 1. **All Notes Off:** cambiar de pattern dos veces y pulsar STOP, y copiar las líneas AVISO.
 2. **RANDOMNESS:** comprobar si cambia la velocidad (columna `vel` de `midi_log`).
-3. **Canales del SEQ2 y de la batería,** y la nota del pad 1.
+3. **Canal del SEQ2 y nota del pad 1.**
 4. **Ciclos reales:** SEQ1 al 100 % sin batería; SEQ1 al 60 % con SEQ2 de 13 pasos; con batería constante. Copiar la tabla `ciclos` de cada caso para afinar `Umbralmadurez`, `Umbralnovedad`, `Compasesquietos` y `Ciclomax`.
+5. **Quitar el bombo:** con un mundo maduro y el bombo sonando, quitarlo y comprobar en cuántos compases se cierra el ciclo por `estancado` (en simulación, unos 30).
 
 ---
 
