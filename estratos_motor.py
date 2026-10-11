@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v15'
+MOTOR_VERSION = 'motor v16'
 
 import math
 
@@ -100,7 +100,7 @@ DEFAULT_CFG = dict(
     # fase 9
     scar_time=4.0, flash=3.0,
     # fase 7: balizas de la bateria
-    balizas_drum=1, tam_baliza_drum=0.5, anillo_baliza_drum=0.35, vida_baliza_drum=0.6,
+    balizas_drum=1, tam_baliza_drum=0.6, anillo_baliza_drum=0.35, vida_baliza_drum=1.0,
     colores_drum=COLORES_DRUM,
 )
 
@@ -1340,32 +1340,82 @@ def build_tiles(W, cfg, now):
     return rows
 
 
+DRUM_HOLGURA = 0.06      # aire entre balizas
+SEQ1_RETRASO = 0.05      # baliza_callbacks ve la nota hasta un par de fotogramas tarde
+
+
+def seq_beacons(W, cfg, now):
+    """[(centro, radio)] de las balizas de los secuenciadores, como las
+    dibujan baliza_callbacks (SEQ1) y beacon() (SEQ2). Al SEQ1 se le da un
+    poco de retraso: su pulso se ve como mucho asi de grande."""
+    out = []
+    b = beacon(W, cfg, 1, now - SEQ1_RETRASO)
+    if b:
+        out.append(b)
+    if cfg['nivel'] >= 5:
+        b = beacon(W, cfg, 2, now)
+        if b:
+            out.append(b)
+    return out
+
+
+def _lateral(v, n):
+    k = v[0] * n[0] + v[1] * n[1] + v[2] * n[2]
+    return (v[0] - k * n[0], v[1] - k * n[1], v[2] - k * n[2])
+
+
+def _len(v):
+    return math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+
+
+def drum_radius(cfg, vel, env=1.0):
+    return cfg['tam_baliza_drum'] * BALIZA2_RADIO * (0.6 + 0.4 * vel / 127.0) * env
+
+
 def drum_beacons(W, cfg, now, lift=0.3):
-    """Una baliza por pad en la celda que recibio el golpe. Cada pad tiene
-    su hueco en un anillo alrededor del centro de la celda (pad n a
-    (n-1) x 45 grados), asi bombo y charles en la misma celda se ven los
-    dos. Tamano: Tambalizadrum x la baliza del SEQ2, crece con la
-    velocidad y se apaga del todo en Vidabalizadrum segundos."""
-    rows = []
+    """Una baliza por pad en la celda que recibio el golpe.
+
+    - Cada pad tiene su hueco en un anillo alrededor del centro de la celda
+      (pad n a (n-1) x 45 grados). El anillo mide Anillobalizadrum x la
+      celda, y nunca menos de lo que hace falta para que las 8 quepan sin
+      tocarse.
+    - Ninguna queda dentro ni detras de una baliza de secuenciador vista a
+      lo largo de la normal: si cae bajo su silueta, se aleja por la
+      direccion de su hueco hasta quedar fuera (el anillo se abre con el
+      pulso del SEQ y se cierra al apagarse). Como cada una se aleja por su
+      direccion, las 8 de una celda siguen sin tocarse.
+    - Tamano: Tambalizadrum x la baliza del SEQ2 en reposo, crece con la
+      velocidad. Se mantiene casi entera y se apaga del todo en
+      Vidabalizadrum segundos (1 - x^2)."""
     vida = max(0.05, cfg['vida_baliza_drum'])
     cols = cfg.get('colores_drum') or COLORES_DRUM
+    rcap = drum_radius(cfg, 127)
+    d_min = (rcap + DRUM_HOLGURA / 2.0) / math.sin(math.pi / 8.0)
+    seqs = seq_beacons(W, cfg, now)
+    rows = []
     for pad, h in sorted(W.get('drum', {}).items()):
         dt = now - h['t']
         if dt < 0 or dt >= vida:
             continue
-        env = (1.0 - dt / vida) ** 2
-        i = h['cell']
-        rad = cfg['tam_baliza_drum'] * BALIZA2_RADIO * (0.6 + 0.4 * h['vel'] / 127.0) * env
+        x = dt / vida
+        rad = drum_radius(cfg, h['vel'], 1.0 - x * x)
         if rad <= 1e-4:
             continue
+        i = h['cell']
         n = normal_i(i)
         e, t = tangents(n)
         base = base_radius(W, cfg, i)
         cw, cl = _cell_sizes(base, i)
         a = math.radians(int(pad) * 45.0)
-        d = cfg['anillo_baliza_drum'] * min(cw, cl)
-        p = _mul(n, base + W['vh'][i] + lift + rad)
-        p = _add(_add(p, e, d * math.cos(a)), t, d * math.sin(a))
+        u = _add(_mul(e, math.cos(a)), t, math.sin(a))     # direccion de su hueco
+        d = max(cfg['anillo_baliza_drum'] * min(cw, cl), d_min)
+        c0 = _mul(n, base + W['vh'][i] + lift + rcap)
+        for _ in range(400):
+            p = _add(c0, u, d)
+            if all(_len(_lateral(_add(p, c, -1.0), n)) >= R + rad + DRUM_HOLGURA
+                   for c, R in seqs):
+                break
+            d += 0.02
         col = cols[int(pad) % len(cols)]
         rows.append([p[0], p[1], p[2], 0, 0, 0, rad, rad, rad, col[0], col[1], col[2]])
     return rows

@@ -18,13 +18,13 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v15` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v16` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v9` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v8` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
-| `fase7_erosion.py` | Canal 16; bombo tiembla, caja y tom cortan; balizas de la batería; huellas, presupuesto de densidad | `fase7 v3` |
+| `fase7_erosion.py` | Canal 16; bombo tiembla, caja y tom cortan; balizas de la batería; huellas, presupuesto de densidad | `fase7 v4` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
 | `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v3` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v2` |
@@ -335,9 +335,15 @@ En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al o
 
 **Balizas de la batería.** Una baliza por pad, más pequeña que la del SEQ2 y cada una de su color, para ver qué pad cae dónde.
 
-- **Tamaño:** `Tambalizadrum` × la baliza del SEQ2 en reposo (0,5), multiplicado por 0,6 + 0,4 × vel/127.
-- **Dónde:** en la celda que recibe el golpe, después de `Objetivo` y del desplazamiento por velocidad. Cada pad tiene un hueco fijo en un anillo alrededor del centro de la celda: el pad n a (n − 1) × 45°, a `Anillobalizadrum` (0,35) del ancho de la celda. Así, bombo y charles en la misma celda se ven los dos. Como las demás balizas, se posa encima de la formación y sigue a la superficie.
-- **Cuándo:** se enciende en cada golpe y se apaga del todo en `Vidabalizadrum` segundos (0,6). Los pads frecuentes casi siempre están encendidos; los raros destellan.
+- **Tamaño:** `Tambalizadrum` (0,6) × la baliza del SEQ2 en reposo (0,495), multiplicado por 0,6 + 0,4 × vel/127: de 0,18 (velocidad 1) a 0,30 (velocidad 127) de radio. Siempre más pequeñas que la del SEQ2 en reposo.
+- **Dónde:** en la celda que recibe el golpe, después de `Objetivo` y del desplazamiento por velocidad. Cada pad tiene un hueco fijo en un anillo alrededor del centro de la celda: el pad n a (n − 1) × 45°. Como las demás balizas, se posa encima de la formación y sigue a la superficie.
+- **El anillo** (fase 7 v4) mide `Anillobalizadrum` (0,35) × el ancho de la celda, pero nunca menos de lo que hace falta para que las 8 quepan sin tocarse (0,85 con el tamaño por defecto).
+- **Fuera de la baliza del secuenciador** (fase 7 v4). Los golpes suelen caer en la misma celda que la baliza del SEQ1 (pads impares) o del SEQ2 (pads pares): con velocidad fija, el desplazamiento por velocidad es siempre el mismo, y con 100 no desplaza nada. Antes quedaban dentro de esa esfera o detrás de su silueta y no se veían. Ahora, si una baliza de la batería cae bajo la silueta de la del SEQ1 o del SEQ2 vista a lo largo de la normal, se aleja por la dirección de su hueco hasta quedar fuera, con un poco de aire.
+  - Con el SEQ1 en la misma celda, el anillo pasa de 1,26 en reposo a 3,06 en el pulso de la nota, y se cierra en unas décimas al apagarse: las balizas de la batería laten alrededor de la del secuenciador.
+  - Con el SEQ2, de 0,88 a 1,86.
+  - Cada una se aleja por su dirección, así que las 8 siguen sin tocarse.
+- **Cuándo:** se enciende en cada golpe, se mantiene casi entera (1 − x²) y se apaga del todo en `Vidabalizadrum` segundos (1,0). Antes se reducía a la mitad en 0,18 s. Con un bombo a negras a 120 BPM siempre está encendida; los pads raros destellan durante un segundo.
+- **Al relanzar la fase 7,** `Tambalizadrum` (0,5 → 0,6) y `Vidabalizadrum` (0,6 → 1,0) solo cambian si seguían en el valor anterior.
 - **Colores:** tabla `colores_drum` (columnas `pad`, `r`, `g`, `b`, de 0 a 1, más `rol` para leer), editable a mano. Relanzar la fase no la pisa.
 
 | Pad | Rol típico | Color | Hex |
@@ -356,7 +362,7 @@ Los cortes van en rojos y violetas, y los arañazos en tonos fríos y claros. Qu
 - **Nodos:** Script CHOP `i_balizas_drum` y Geometry COMP `balizas_drum` (una esfera instanciada, material `mat_balizas_drum`), junto a `baliza2`. Color Mode = Replace, orden de rotación de instancias X → Y, y la cadena de giro y balanceo de las demás (Rotate Order `Ry Rx Rz`).
 - **Con las fases siguientes:** la fase 8 las sube con el radio, como al resto de balizas; la fase 9 no las pasa a blanco y conservan su color; `Modoactuacion` (fase 10) las oculta junto con las demás.
 
-**Página Fase7, balizas:** `Balizasdrum` (encendido) · `Tambalizadrum` 0,5 · `Anillobalizadrum` 0,35 · `Vidabalizadrum` 0,6
+**Página Fase7, balizas:** `Balizasdrum` (encendido) · `Tambalizadrum` 0,6 · `Anillobalizadrum` 0,35 (anillo mínimo) · `Vidabalizadrum` 1,0
 
 **Relación con la fase 6:** mientras suena el bombo, cada temblor cambia la forma de muchas celdas y los ciclos se cierran por edad máxima. Al quitarlo, el mundo se asienta y se entierra por estancamiento: el breakdown entierra el mundo.
 
@@ -456,6 +462,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | Pulidas y porosas iguales | Los parámetros de brillo del Phong no se pudieron fijar | Sube Specular y Shininess en `mat_pulido` a mano |
 | SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
+| No se ven las balizas de la batería | `Balizasdrum` apagado, `Modoactuacion` encendido o la batería no llega (mira la línea `EROSION`) | Revisa esos tres; para localizarlas, sube un momento `Tambalizadrum` y `Vidabalizadrum` |
 | El mundo nunca se entierra por estancamiento | El bombo está sonando: cada temblor genera novedad | Es lo esperado; quita el bombo para que el mundo se asiente |
 | Los ciclos siempre acaban por edad máxima | Batería constante, umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Con batería es lo esperado. Si no, baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
@@ -513,6 +520,7 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
 - **Fase 7 v3:**
   - Perfiles nuevos: el pad 1 resta 1 en radio 2 sin abrir corte; los pads 2 y 3 abren cortes desde el nivel 9; ningún otro pad corta.
   - Relanzar sustituye una tabla con los valores de la v1, conserva una editada a mano y no pisa un `Canaldrum` cambiado a mano.
+  - Balizas de la batería fuera de la silueta del SEQ1 y del SEQ2 (en reposo y en el pulso), en el ecuador, junto al polo y en el polo, y con el SEQ2 en la celda vecina; las 8 de una celda sin tocarse; tamaño entre 0,18 y 0,30, por encima del mínimo perceptible (0,15) y por debajo del SEQ2 en reposo (0,495).
   - Balizas de la batería: los 8 pads en la misma celda encienden 8 balizas, cada una en su hueco y con su color; se apagan en `Vidabalizadrum`; ninguna es cian, ámbar ni blanca; giran y se balancean con el planeta; `Padprueba` + `Erosionar` también las encienden; `Modoactuacion` las oculta.
   - Bombo a negras durante 16 compases sobre un mundo maduro: ningún cierre por `estancado`. Al quitarlo, cierre por `estancado` unos 30 compases después (20 con `Umbralnovedad` 0,10).
 - **Sesión simulada de 192 compases** a 120 BPM: SEQ1 de 16 pasos al 90 %, SEQ2 de 13 y batería a tramos de 48 compases. Cierra por `estancado` en los tramos sin batería y por `edad maxima` en los tramos con batería.
