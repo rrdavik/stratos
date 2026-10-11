@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v16'
+MOTOR_VERSION = 'motor v17'
 
 import math
 
@@ -37,13 +37,22 @@ SPECIES_NAME = {0: '-', 1: 'geo', 2: 'arq', 3: 'hib'}
 INST_CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b']
 DUMMY_ROW = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
 
-# Perfiles de erosion por defecto: (reduccion 1-3, radio 0-2, profundidad 0-4)
+# Perfiles de erosion por defecto: (reduccion, radio, profundidad)
+#   reduccion    notas de construccion que deshace en la celda objetivo
+#   radio        anillos de vecinas afectadas (cada anillo, la mitad)
+#   profundidad  conchas que atraviesa el corte (fase 9)
 # Cuanto mas frecuente el golpe, mas superficial: el bombo (pad 1) tiembla,
 # la caja (2) corta y el tom (3), raro, abre el corte profundo. 4-8 aranazos.
 PERFILES_DEFECTO = [
+    (2, 2, 0), (8, 1, 3), (12, 2, 4), (4, 1, 0),
+    (3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 0, 0),
+]
+# Los de la fase 7 v3 (reduccion en escalones), para reconocerlos al relanzar
+PERFILES_V3 = [
     (1, 2, 0), (3, 1, 3), (3, 2, 4), (2, 1, 0),
     (2, 0, 0), (1, 1, 0), (1, 0, 0), (1, 0, 0),
 ]
+ATENUACION = 0.5      # cada anillo de vecinas recibe esta fraccion del anterior
 TIPOS_DEFECTO = ['temblor', 'corte', 'corte profundo', 'aranazo',
                  'aranazo', 'aranazo', 'aranazo', 'aranazo']
 ROLES_DEFECTO = ['bombo', 'caja', 'tom', 'palmas, aro', '-', '-', '-', 'charles']
@@ -64,7 +73,6 @@ def _hex(h):
 # (SEQ2, coronas), blanco (SEQ1 desde la fase 9) y los minerales.
 COLORES_DRUM = [_hex(h) for h in ('#D7263D', '#E83E8C', '#7C3AED', '#3B5BDB',
                                   '#12B76A', '#A3E635', '#F9A8D4', '#C4B5FD')]
-BALIZA2_RADIO = 0.9 * 0.55       # baliza del SEQ2 en reposo (ver beacon)
 
 
 def tipo_perfil(red, rad, depth):
@@ -99,8 +107,8 @@ DEFAULT_CFG = dict(
     herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0,
     # fase 9
     scar_time=4.0, flash=3.0,
-    # fase 7: balizas de la bateria
-    balizas_drum=1, tam_baliza_drum=0.6, anillo_baliza_drum=0.35, vida_baliza_drum=1.0,
+    # fase 7: luz de la bateria en las celdas que golpea
+    balizas_drum=1, luz_drum=1.0, vida_baliza_drum=0.8,
     colores_drum=COLORES_DRUM,
 )
 
@@ -379,7 +387,9 @@ def new_world():
         hit_t={1: -1.0, 2: -1.0},
         clock=dict(last_note_t=-99.0, stop_t=-99.0, start_t=-99.0),
         burst=dict(times=[], pending=None),
-        drum={},                # pad -> ultimo golpe {t, cell, vel} (balizas)
+        drum={},                # pad -> ultimo golpe {t, cell, vel}
+        luz={},                 # celda -> [t, pad, peso]: luz de la bateria
+        ero_resto=[0.0] * N,    # fraccion de nota de erosion pendiente
         # ciclo (fase 6): lo cierra el mundo
         ciclo_n=1,              # ciclo en curso
         compases_ciclo=0,       # compases que lleva el mundo actual
@@ -884,41 +894,53 @@ def pick_target(W, cfg, pad, vel):
     return max(0, min(N - 1, i + int(vel) % 3 - 1))     # un semitono a un lado
 
 
-def degrade(W, cfg, i, k):
-    """Quita k unidades de ocupacion en orden inverso a la promocion:
-    primero satelites, luego altura, al final la huella. Antes de nada
-    vacia la carga de la formacion (lo que llevaba acumulado se pierde)."""
-    removed = 0
-    if W['carga'][i] > 0 and W['occ'][i] > 0:
+def _undo_note(W, cfg, i):
+    """Deshace una nota de construccion en la celda i: la misma moneda que
+    _charge, al reves. Baja la carga y la altura lo que subio esa nota
+    (Growstep / coste del escalon); al agotarse la carga baja un escalon y
+    la carga queda llena menos una. Una semilla sola se borra y deja huella."""
+    o = W['occ'][i]
+    if o <= 0:
+        return False
+    sat = W['par'][i] >= 0
+    lim = limit(cfg)
+    if sat:                             # los satelites crecen por desbordes
+        W['occ'][i] = o - 1
         W['carga'][i] = 0
-        cap = height_for(cfg, W['occ'][i])
-        if W['par'][i] >= 0:
-            cap *= cfg['sat_limit']
-        W['h'][i] = min(W['h'][i], cap)
+        W['h'][i] = min(W['h'][i], height_for(cfg, o - 1) * cfg['sat_limit'])
+        if W['occ'][i] <= 0:
+            _clear_cell(W, i)
+        return True
+    if o == 1 and W['carga'][i] == 0:
+        _clear_cell(W, i)
+        W['huella'][i] = max(W['t'] or 0.0, 1e-3)
+        return True
+    if W['carga'][i] == 0:              # baja un escalon
+        o -= 1
+        W['occ'][i] = o
+        W['carga'][i] = cost(cfg, o)
+    W['carga'][i] -= 1
+    if o < cfg['th_branch']:
+        step = cfg['grow_frac'] * lim / cost(cfg, o)
+        W['h'][i] = min(W['h'][i], height_for(cfg, o) + W['carga'][i] * step)
+        W['h'][i] = max(height_for(cfg, o), W['h'][i])
+    return True
+
+
+def degrade(W, cfg, i, k):
+    """Deshace k notas en orden inverso a la promocion: primero los
+    satelites, luego la altura de la celda, al final la huella."""
+    removed = 0
     for _ in range(int(k)):
         sats = satellites_of(W, i)
         if sats:
             j = max(sats, key=lambda x: W['occ'][x])
-            W['occ'][j] -= 1
-            W['h'][j] = min(W['h'][j], height_for(cfg, W['occ'][j]) * cfg['sat_limit'])
-            if W['occ'][j] <= 0:
-                _clear_cell(W, j)
-            removed += 1
-        elif W['occ'][i] > 1:
-            W['occ'][i] -= 1
-            cap = height_for(cfg, W['occ'][i])
-            if W['par'][i] >= 0:
-                cap *= cfg['sat_limit']
-            W['h'][i] = min(W['h'][i], cap)
-            removed += 1
-        elif W['occ'][i] == 1:
-            was_sat = W['par'][i] >= 0
-            _clear_cell(W, i)
-            if not was_sat:
-                W['huella'][i] = max(W['t'] or 0.0, 1e-3)
-            removed += 1
+            ok_ = _undo_note(W, cfg, j)
         else:
+            ok_ = _undo_note(W, cfg, i)
+        if not ok_:
             break
+        removed += 1
     return removed
 
 
@@ -932,8 +954,14 @@ def erosion(W, cfg, pad, vel, now):
     rad_eff = max(1, int(round(rad * cfg['rad_mult']))) if over else int(rad)
     removed = 0
     W['t'] = W['t'] if W['t'] is not None else now
-    for c, _ in rings(target, rad_eff):
-        removed += degrade(W, cfg, c, red)
+    resto = W['ero_resto']
+    for c, d in rings(target, rad_eff):
+        w = ATENUACION ** d             # 1 en la celda, 1/2 el primer anillo, 1/4...
+        x = red * w + resto[c]
+        k = int(math.floor(x + 1e-9))
+        resto[c] = x - k
+        removed += degrade(W, cfg, c, k)
+        light_cell(W, cfg, c, pad, w, now)
     W['hits'][3] = W['hits'].get(3, 0) + 1
     W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
     tipos = cfg.get('tipos') or []
@@ -944,7 +972,7 @@ def erosion(W, cfg, pad, vel, now):
     if cfg['nivel'] >= 9:
         if depth > 0:
             ev['corte'] = cut(W, cfg, target, depth, rad, now)
-        W['flash'] = dict(t=now, cell=target, k=1.0 if depth > 0 else 0.35)
+        W['flash'] = dict(t=now, cell=target, k=1.0 if depth > 0 else 0.35, pad=pad)
     return ev
 
 
@@ -1238,7 +1266,7 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     lvl = cfg['nivel']
     lim = limit(cfg)
     out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], baliza2=[],
-               balizas_drum=[])
+               luz_drum=[])
     R = top_radius(W, cfg)
     for i in range(N):
         vh = W['vh'][i]
@@ -1306,8 +1334,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         if b:
             p, rad = b
             out['baliza2'].append([p[0], p[1], p[2], 0, 0, 0, rad, rad, rad, 1, 0.7, 0.3])
-    if lvl >= 7 and not hide_beacons and cfg['balizas_drum']:
-        out['balizas_drum'] = drum_beacons(W, cfg, now)
+    if lvl >= 7 and cfg['balizas_drum']:     # parte del mundo: tambien en actuacion
+        out['luz_drum'] = cell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
         out['estratos'] = build_tiles(W, cfg, now)
     return out
@@ -1340,84 +1368,49 @@ def build_tiles(W, cfg, now):
     return rows
 
 
-DRUM_HOLGURA = 0.06      # aire entre balizas
-SEQ1_RETRASO = 0.05      # baliza_callbacks ve la nota hasta un par de fotogramas tarde
-
-
-def seq_beacons(W, cfg, now):
-    """[(centro, radio)] de las balizas de los secuenciadores, como las
-    dibujan baliza_callbacks (SEQ1) y beacon() (SEQ2). Al SEQ1 se le da un
-    poco de retraso: su pulso se ve como mucho asi de grande."""
-    out = []
-    b = beacon(W, cfg, 1, now - SEQ1_RETRASO)
-    if b:
-        out.append(b)
-    if cfg['nivel'] >= 5:
-        b = beacon(W, cfg, 2, now)
-        if b:
-            out.append(b)
-    return out
-
-
-def _lateral(v, n):
-    k = v[0] * n[0] + v[1] * n[1] + v[2] * n[2]
-    return (v[0] - k * n[0], v[1] - k * n[1], v[2] - k * n[2])
-
-
-def _len(v):
-    return math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
-
-
-def drum_radius(cfg, vel, env=1.0):
-    return cfg['tam_baliza_drum'] * BALIZA2_RADIO * (0.6 + 0.4 * vel / 127.0) * env
-
-
-def drum_beacons(W, cfg, now, lift=0.3):
-    """Una baliza por pad en la celda que recibio el golpe.
-
-    - Cada pad tiene su hueco en un anillo alrededor del centro de la celda
-      (pad n a (n-1) x 45 grados). El anillo mide Anillobalizadrum x la
-      celda, y nunca menos de lo que hace falta para que las 8 quepan sin
-      tocarse.
-    - Ninguna queda dentro ni detras de una baliza de secuenciador vista a
-      lo largo de la normal: si cae bajo su silueta, se aleja por la
-      direccion de su hueco hasta quedar fuera (el anillo se abre con el
-      pulso del SEQ y se cierra al apagarse). Como cada una se aleja por su
-      direccion, las 8 de una celda siguen sin tocarse.
-    - Tamano: Tambalizadrum x la baliza del SEQ2 en reposo, crece con la
-      velocidad. Se mantiene casi entera y se apaga del todo en
-      Vidabalizadrum segundos (1 - x^2)."""
+def light_level(cfg, h, now):
+    """Intensidad 0-1 de una luz de la bateria [t, pad, peso] en este instante."""
     vida = max(0.05, cfg['vida_baliza_drum'])
+    dt = now - h[0]
+    if dt < 0 or dt >= vida:
+        return 0.0
+    x = dt / vida
+    return h[2] * (1.0 - x) * (1.0 - x * 0.5)
+
+
+def light_cell(W, cfg, c, pad, w, now):
+    """El golpe ilumina la celda c con el color de su pad. Manda la luz mas
+    intensa en este instante; a igualdad, la ultima. Asi, si dos pads
+    alternan sobre la misma celda, cada golpe la pinta de su color."""
+    luz = W.setdefault('luz', {})
+    old = luz.get(c)
+    if old is not None and light_level(cfg, old, now) > w + 1e-9:
+        return
+    luz[c] = [now, int(pad), float(w)]
+
+
+def cell_lights(W, cfg, now):
+    """Losetas de luz de la bateria: una por celda iluminada, a ras de la
+    superficie y un poco mas ancha que la base de las formaciones, con el
+    color del pad por la intensidad (se suma a lo que hay: no oscurece)."""
+    luz = W.get('luz', {})
     cols = cfg.get('colores_drum') or COLORES_DRUM
-    rcap = drum_radius(cfg, 127)
-    d_min = (rcap + DRUM_HOLGURA / 2.0) / math.sin(math.pi / 8.0)
-    seqs = seq_beacons(W, cfg, now)
+    k = max(0.0, cfg['luz_drum'])
     rows = []
-    for pad, h in sorted(W.get('drum', {}).items()):
-        dt = now - h['t']
-        if dt < 0 or dt >= vida:
+    for c in [c for c in luz if light_level(cfg, luz[c], now) <= 0.0]:
+        del luz[c]
+    for c, h in sorted(luz.items()):
+        I = light_level(cfg, h, now) * k
+        if I <= 0.003 or c >= N:
             continue
-        x = dt / vida
-        rad = drum_radius(cfg, h['vel'], 1.0 - x * x)
-        if rad <= 1e-4:
-            continue
-        i = h['cell']
-        n = normal_i(i)
-        e, t = tangents(n)
-        base = base_radius(W, cfg, i)
-        cw, cl = _cell_sizes(base, i)
-        a = math.radians(int(pad) * 45.0)
-        u = _add(_mul(e, math.cos(a)), t, math.sin(a))     # direccion de su hueco
-        d = max(cfg['anillo_baliza_drum'] * min(cw, cl), d_min)
-        c0 = _mul(n, base + W['vh'][i] + lift + rcap)
-        for _ in range(400):
-            p = _add(c0, u, d)
-            if all(_len(_lateral(_add(p, c, -1.0), n)) >= R + rad + DRUM_HOLGURA
-                   for c, R in seqs):
-                break
-            d += 0.02
-        col = cols[int(pad) % len(cols)]
-        rows.append([p[0], p[1], p[2], 0, 0, 0, rad, rad, rad, col[0], col[1], col[2]])
+        n = normal_i(c)
+        base = base_radius(W, cfg, c)
+        cw, cl = _cell_sizes(base, c)
+        if is_pole(c):
+            cw, cl = cw * 1.25, cl * 1.25
+        col = cols[int(h[1]) % len(cols)]
+        rows.append(_row(_mul(n, base + 0.02), n, cw * 0.96, 0.04 + 0.10 * I, cl * 0.96,
+                         (min(1.0, col[0] * I), min(1.0, col[1] * I), min(1.0, col[2] * I))))
     return rows
 
 
@@ -1470,7 +1463,7 @@ def wobble_step(st, dt, on, paused, amp, period, fade=3.0):
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
-              'i_estratos', 'i_baliza2', 'i_balizas_drum']
+              'i_estratos', 'i_baliza2', 'i_luz_drum']
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 
@@ -1588,8 +1581,7 @@ def cfg():
         c['perfiles'], c['tipos'] = _perfiles()
         c['colores_drum'] = _colores_drum()
         c.update(balizas_drum=int(_p('Balizasdrum', True)),
-                 tam_baliza_drum=_p('Tambalizadrum', c['tam_baliza_drum']),
-                 anillo_baliza_drum=_p('Anillobalizadrum', c['anillo_baliza_drum']),
+                 luz_drum=_p('Luzdrum', c['luz_drum']),
                  vida_baliza_drum=_p('Vidabalizadrum', c['vida_baliza_drum']))
     return c
 
@@ -1857,7 +1849,7 @@ def on_pulse(name):
                  cost(c, W['occ'][ci]) if ci >= 0 else 0, r['estado']))
     elif name == 'Erosionar':
         ev = erosion(W, c, _p('Padprueba', 1) - 1, _p('Velprueba', 100), now)
-        print('EROSION  pad %d (%s) -> celda %d, radio %d, quitado %d'
+        print('EROSION  pad %d (%s) -> celda %d, radio %d, notas deshechas %d'
               % (ev['pad'] + 1, ev['tipo'], ev['celda'], ev['rad'], ev['quitado']))
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
@@ -1903,12 +1895,26 @@ def _wobble():
 
 # --- luz de destello y camara (fases 9 y 10) ---------------------------------
 
+FLASH_COL = (0.80, 0.95, 1.00)
+
+
+def flash_color(W, c):
+    """Color del destello: el del pad que golpea, aclarado para que siga
+    siendo un golpe de luz (lo mezcla un 35 % con blanco)."""
+    f = W.get('flash') or {}
+    if 'pad' not in f:
+        return FLASH_COL
+    cols = c.get('colores_drum') or COLORES_DRUM
+    col = cols[int(f['pad']) % len(cols)]
+    return _mix(col, (1.0, 1.0, 1.0), 0.35)
+
+
 def flash_light():
-    """(x, y, z, dimmer) de la luz de destello."""
+    """(x, y, z, dimmer, r, g, b) de la luz de destello."""
     W, c = world(), cfg()
     f = W.get('flash')
     if not f or c['nivel'] < 9:
-        return (0.0, 0.0, 0.0, 0.0)
+        return (0.0, 0.0, 0.0, 0.0) + FLASH_COL
     env = math.exp(-max(0.0, absTime.seconds - f['t']) / 0.25) * f['k']
     try:
         ang = _ritmo().rotation(absTime.frame)
@@ -1917,7 +1923,7 @@ def flash_light():
         ang, tilt = 0.0, 0.0
     v = world_dir(normal_i(f['cell']), ang, tilt, wobble())
     d = top_radius(W, c) + 4.0
-    return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env)
+    return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env) + tuple(flash_color(W, c))
 
 
 def flash_value(k, frame=None):
@@ -2014,7 +2020,7 @@ def _legend():
         dens = occupied(W) / float(N)
         flag = '  x%g' % c['rad_mult'] if dens > c['dens_umbral'] else ''
         if e:
-            lines.append('  EROSION  pad %d   %s   -%d   radio %d   celda %d   densidad %d%%%s'
+            lines.append('  EROSION  pad %d   %s   -%d notas   radio %d   celda %d   densidad %d%%%s'
                          % (e['pad'] + 1, e.get('tipo', '-'), e['red'], e['rad'], e['celda'],
                             int(dens * 100), flag))
         else:

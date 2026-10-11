@@ -7,32 +7,60 @@ Requiere la fase 6.
 QUE HACE
 --------
 Las 8 pistas de bateria del BeatStep son las 8 senales de destruccion.
-Cada pad tiene un PERFIL (tabla perfiles_erosion, editable):
+Cada pad tiene un PERFIL de tres numeros (tabla perfiles_erosion,
+editable):
 
-    reduccion     1-3  unidades de ocupacion que quita
-    radio         0-2  anillos de vecinas afectadas
-    profundidad   0-4  conchas que atraviesa (se activa en la fase 9)
+    reduccion    cuantas NOTAS de construccion deshace en la celda que
+                 golpea (v5: antes eran escalones). Un golpe de 1 deshace
+                 lo que construyo una nota del SEQ.
+    radio        cuantos anillos de vecinas alcanza: 0 solo la celda, 1 la
+                 celda y sus vecinas, 2 un anillo mas. Cada anillo recibe
+                 la mitad que el anterior.
+    profundidad  cuantas conchas atraviesa el corte (desde la fase 9); 0 no
+                 corta.
 
-CUANTO MAS FRECUENTE EL GOLPE, MAS SUPERFICIAL (v3)
----------------------------------------------------
-    pad 1  bombo        temblor          -1  radio 2
-    pad 2  caja         corte            -3  radio 1  profundidad 3
-    pad 3  tom          corte profundo   -3  radio 2  profundidad 4
-    pad 4  palmas, aro  aranazo          -2  radio 1
-    pad 5               aranazo          -2
-    pad 6               aranazo          -1  radio 1
-    pad 7               aranazo          -1
-    pad 8  charles      aranazo          -1
+LA MISMA MONEDA QUE LA CONSTRUCCION (v5)
+----------------------------------------
+Cada nota del SEQ sube la formacion Growstep / coste y suma 1 a la carga
+(fase 3). Cada nota de erosion hace lo contrario: baja la carga y la
+altura lo mismo; al agotarse la carga baja un escalon y la carga queda
+llena menos una. Lo que costo mas notas cuesta mas golpes deshacerlo,
+tambien cerca del limite (la frenada). La carga ya no se vacia de golpe.
+Orden: primero los satelites, luego la altura de la celda, al final la
+HUELLA (una mancha oscura hasta que la celda se vuelve a sembrar).
+En las vecinas, las fracciones de nota se acumulan: con radio 1 y
+reduccion 1, cada vecina pierde una nota cada dos golpes.
+
+CUANTO MAS FRECUENTE EL GOLPE, MAS SUPERFICIAL
+---------------------------------------------
+    pad 1  bombo        temblor          -2 notas   radio 2
+    pad 2  caja         corte            -8 notas   radio 1  profundidad 3
+    pad 3  tom          corte profundo  -12 notas   radio 2  profundidad 4
+    pad 4  palmas, aro  aranazo          -4 notas   radio 1
+    pad 5               aranazo          -3 notas
+    pad 6               aranazo          -2 notas   radio 1
+    pad 7               aranazo          -1 nota
+    pad 8  charles      aranazo          -1 nota
 El bombo, la pista mas densa, sacude una zona ancha sin vaciarla; la caja
-fractura; los toms, que suelen ir en los redobles, abren las heridas. El
-temblor se porta como un aranazo (sin corte, destello suave).
+fractura; los toms, que suelen ir en los redobles, abren las heridas.
 Mientras suena el bombo el mundo no deja de cambiar, y los ciclos (fase 6)
 acaban por edad maxima; al quitarlo, el mundo se asienta y se entierra por
 estancamiento: el breakdown entierra el mundo.
 
-La erosion degrada en ORDEN INVERSO al crecimiento: primero caen los
-satelites, luego la altura, y al final queda la HUELLA (una mancha oscura
-que dura hasta que la celda se vuelve a sembrar o se entierra).
+EL GOLPE ILUMINA LA CELDA (v5)
+------------------------------
+Cada golpe ilumina las celdas que erosiona con el color de su pad (tabla
+colores_drum): la celda a plena luz, el primer anillo a la mitad y el
+segundo a un cuarto, asi la luz dibuja la huella del golpe. Es una loseta
+de luz a ras de la superficie, que suma su color a lo que hay (no
+oscurece): se ve con formacion, vacia o con huella, y tambien en modo
+actuacion. Si dos pads caen en la misma celda manda el mas brillante en
+ese instante, y a igualdad el ultimo: al alternar, cada golpe la pinta de
+su color. Se apaga en Vidabalizadrum segundos.
+    Balizasdrum     luz de la bateria encendida / apagada
+    Luzdrum         intensidad de la luz (1)
+    Vidabalizadrum  segundos hasta apagarse (0,8)
+Las esferas de la v3 (balizas_drum) desaparecen al relanzar.
 
 PRESUPUESTO DE DENSIDAD: si mas del 60 % de las celdas esta ocupado, el
 radio de todos los eventos se duplica (un radio 0 pasa a 1) hasta volver
@@ -46,24 +74,6 @@ Los pads de bateria no tienen altura, asi que no dicen celda. Objetivo:
   velocidad la velocidad del golpe elige una de las 96 celdas
 En los tres primeros, la velocidad desplaza el golpe un meridiano a un
 lado o al otro: decide el aparato, no el software.
-
-BALIZAS DE LA BATERIA (v3)
---------------------------
-Una baliza por pad, mas pequena que la del SEQ2 y cada una de su color
-(tabla colores_drum, editable), en la celda que recibe el golpe. Cada pad
-tiene su hueco en un anillo alrededor del centro de la celda (pad n a
-(n-1) x 45 grados), asi bombo y charles en la misma celda se ven los dos.
-El anillo nunca es tan pequeno que las 8 se toquen, y se abre lo justo
-para que ninguna quede dentro o detras de la baliza del SEQ1 o del SEQ2
-(los golpes suelen caer en su celda): con el pulso de la nota se abre y
-al apagarse se cierra.
-Se enciende con cada golpe, crece con la velocidad, se mantiene casi
-entera y se apaga del todo en Vidabalizadrum segundos: los pads
-frecuentes casi siempre estan encendidos; los raros destellan.
-    Balizasdrum       encendidas / apagadas
-    Tambalizadrum     tamano (x la baliza del SEQ2 en reposo), 0,6
-    Anillobalizadrum  anillo minimo (x ancho de la celda), 0,35
-    Vidabalizadrum    segundos hasta apagarse, 1,0
 
 EL CANAL DE LA BATERIA
 ----------------------
@@ -79,11 +89,24 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v4  (canal 16; bombo tiembla, caja y tom cortan; huellas, presupuesto)'
+VERSION = 'fase7 v5  (erosion en notas, el golpe ilumina la celda; canal 16)'
 banner(VERSION)
 
 base = require_base(7)
 motor = install_core(base, CARPETA, 7)
+
+# las esferas de la v3 y v4 desaparecen
+for nm in ('balizas_drum', 'i_balizas_drum', 'mat_balizas_drum'):
+    o = base.op(nm)
+    if o is not None:
+        try:
+            o.destroy()
+            ok('%s retirado (la luz de la celda lo sustituye)' % nm)
+        except Exception as e:
+            info('no pude borrar %s: %s; apagalo a mano' % (nm, e))
+for nm in ('Tambalizadrum', 'Anillobalizadrum'):
+    if remove_par(base, nm):
+        ok('parametro %s retirado' % nm)
 
 page = get_page(base, 'Fase7')
 add_par(base, page, 'int', 'Canaldrum', 'Canal MIDI de la bateria', 16, 1, 16, clamp=True)
@@ -97,15 +120,13 @@ add_par(base, page, 'float', 'Umbraldensidad', 'Presupuesto de densidad', 0.60, 
 add_par(base, page, 'float', 'Multradio', 'Multiplicador de radio', 2.0, 1.0, 4.0)
 add_par(base, page, 'int', 'Padprueba', 'Pad de prueba', 1, 1, 8, clamp=True)
 add_par(base, page, 'pulse', 'Erosionar', 'Erosionar con el pad de prueba')
-add_par(base, page, 'toggle', 'Balizasdrum', 'Balizas de la bateria', True)
-add_par(base, page, 'float', 'Tambalizadrum', 'Tamano de baliza (x SEQ2)', 0.6, 0.05, 2.0)
-add_par(base, page, 'float', 'Anillobalizadrum', 'Anillo minimo de los pads (x celda)', 0.35, 0.0, 1.0)
-add_par(base, page, 'float', 'Vidabalizadrum', 'Vida de la baliza (s)', 1.0, 0.05, 5.0)
-renew_default(base, 'Tambalizadrum', 0.5, 0.6)
-renew_default(base, 'Vidabalizadrum', 0.6, 1.0)
+add_par(base, page, 'toggle', 'Balizasdrum', 'Luz de la bateria en las celdas', True)
+add_par(base, page, 'float', 'Luzdrum', 'Intensidad de la luz de la bateria', 1.0, 0.0, 2.0)
+add_par(base, page, 'float', 'Vidabalizadrum', 'Vida de la luz (s)', 0.8, 0.05, 5.0)
+renew_default(base, 'Vidabalizadrum', 0.6, 0.8)
+renew_default(base, 'Vidabalizadrum', 1.0, 0.8)
 ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
-   'Multradio, Padprueba, Erosionar, Balizasdrum, Tambalizadrum, Anillobalizadrum, '
-   'Vidabalizadrum')
+   'Multradio, Padprueba, Erosionar, Balizasdrum, Luzdrum, Vidabalizadrum')
 
 COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'tipo', 'rol']
 
@@ -116,8 +137,9 @@ def filas_tabla(t):
 
 
 def clasificar_perfiles(filas, mm):
-    """'v1' si la tabla sigue con los valores de la fase 7 v1, 'nueva' si ya
-    tiene los de la v3 y 'editada' si alguien la ha cambiado a mano."""
+    """'v1' / 'v3' si la tabla sigue con los valores de esas versiones (sin
+    editar), 'nueva' si ya tiene los de la v5 (reduccion en notas) y
+    'editada' si alguien la ha cambiado a mano."""
     if not filas:
         return 'v1'
     cab = [str(x).strip() for x in filas[0]]
@@ -137,6 +159,8 @@ def clasificar_perfiles(filas, mm):
         return 'editada'
     if perf == list(mm.PERFILES_V1) and tipos == list(mm.TIPOS_V1):
         return 'v1'
+    if perf == list(mm.PERFILES_V3) and tipos == list(mm.TIPOS_DEFECTO):
+        return 'v3'
     if perf == list(mm.PERFILES_DEFECTO) and tipos == list(mm.TIPOS_DEFECTO):
         return 'nueva'
     return 'editada'
@@ -154,19 +178,18 @@ tabla = base.op('perfiles_erosion')
 if tabla is None:
     tabla = mk(base, 'tableDAT', 'perfiles_erosion', -660, 80)
     escribir_perfiles(tabla, motor.module)
-    ok('perfiles_erosion: bombo tiembla, caja y tom cortan, 4-8 aranazos. Editala a mano')
+    ok('perfiles_erosion: reduccion en notas; bombo tiembla, caja y tom cortan. Editala a mano')
 else:
     estado = clasificar_perfiles(filas_tabla(tabla), motor.module)
-    if estado == 'v1':
+    if estado in ('v1', 'v3'):
         escribir_perfiles(tabla, motor.module)
-        ok('perfiles_erosion: tenia los valores de la v1, sustituidos por los nuevos')
+        ok('perfiles_erosion: tenia los valores de la %s, sustituidos (reduccion en notas)' % estado)
     elif estado == 'nueva':
-        if 'rol' not in [x.strip() for x in filas_tabla(tabla)[0]]:
-            escribir_perfiles(tabla, motor.module)
         ok('perfiles_erosion: ya tiene los valores nuevos')
     else:
-        info('perfiles_erosion editada a mano: se conserva; los nuevos valores por '
-             'defecto estan en el montaje')
+        info('perfiles_erosion editada a mano: se conserva. OJO: la columna reduccion '
+             'ahora cuenta NOTAS, no escalones (un 3 de antes es mucho mas que un 3 de '
+             'ahora); los nuevos valores por defecto estan en el montaje')
 
 colores = base.op('colores_drum')
 if colores is None:
@@ -179,18 +202,30 @@ if colores is None:
 else:
     info('colores_drum ya existia: se conserva como esta')
 
-make_constant(base, 'mat_balizas_drum', 780, 700, (1.0, 1.0, 1.0))
-make_instanced(base, 'balizas_drum', 520, 700, 'mat_balizas_drum', sop='sphere')
+mat_luz = make_constant(base, 'mat_luz_drum', 780, 700, (1.0, 1.0, 1.0))
+set_additive(mat_luz)
+luz = make_instanced(base, 'luz_drum', 520, 700, 'mat_luz_drum')
+bien, det = instance_color_ok(luz)
+if bien:
+    ok('luz_drum: cada celda iluminada con el color de su pad (Color Mode = Replace)')
+else:
+    fail('luz_drum no lee el color por instancia (%s): Instance 2 -> Color R/G/B = r g b, '
+         'Color Mode = Replace' % det)
 set_render(base)
 
 leeme(base, 7, """FASE 7 - EROSION
   8 pads de bateria (Canaldrum 16, desde Notabase) = 8 perfiles editables
-  en perfiles_erosion: reduccion, radio, profundidad, tipo (rol: solo nota).
-  Cuanto mas frecuente el golpe, mas superficial: 1 bombo tiembla (radio 2),
-  2 caja corta, 3 tom corte profundo, 4-8 aranazos.
-  Balizas de la bateria: una por pad, de su color (colores_drum), en su
-  hueco de la celda golpeada; se apagan en Vidabalizadrum s.
-  Orden de caida: satelites, altura, huella.
+  en perfiles_erosion:
+    reduccion    notas de construccion que deshace en la celda
+    radio        anillos de vecinas (cada anillo, la mitad)
+    profundidad  conchas que corta (fase 9)
+  Una nota de erosion deshace lo que hizo una nota del SEQ: baja la carga
+  y la altura; al agotarse la carga, baja un escalon. Orden: satelites,
+  altura, huella.
+  Cuanto mas frecuente el golpe, mas superficial: 1 bombo tiembla (-2,
+  radio 2), 2 caja corta (-8), 3 tom corte profundo (-12), 4-8 aranazos.
+  El golpe ilumina las celdas que erosiona con el color de su pad
+  (colores_drum); se apaga en Vidabalizadrum s. Luzdrum: intensidad.
   Presupuesto: por encima de Umbraldensidad, radios x Multradio.
   Prueba: Padprueba + Erosionar.""")
 
@@ -198,7 +233,6 @@ print_report()
 
 
 def prueba(t):
-    import math
     m = t.m
     m.reset_world()
     c = m.cfg()
@@ -214,7 +248,7 @@ def prueba(t):
     sats1 = sum(W['occ'][j] for j in m.satellites_of(W, i))
     t.check('la erosion quita primero satelites', sats1 == sats0 - 1 and W['occ'][i] == occ0,
             'satelites %d -> %d' % (sats0, sats1))
-    for k in range(20):
+    for k in range(200):
         m.erosion(W, c, 0, 1, 0.0)
     t.check('... y al final deja la huella', W['occ'][i] == 0 and W['huella'][i] > 0)
     W2 = m.new_world()
@@ -233,106 +267,135 @@ def prueba(t):
     t.check('pad 1 por MIDI -> erosion', W['hits'].get(3, 0) == 1 and 'erosion' in W['ev'])
     t.check('perfiles leidos de la tabla', len(m.cfg()['perfiles']) == 8
             and len(m.cfg()['tipos']) == 8)
-    # perfiles por defecto: el bombo tiembla, solo caja y tom cortan
     cd = dict(m.cfg())
     cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
-    cd['target_mode'] = 0
-    W3 = m.new_world()
-    for n in range(40, 80):
-        for k in range(3):
-            m.note_on(W3, cd, 1, n, 100, 0.0)
-    m.note_on(W3, cd, 1, 60, 100, 0.0)
-    occ0 = list(W3['occ'])
-    ev = m.erosion(W3, cd, 0, 1, 1.0)
-    tocadas = sum(1 for a, b in zip(occ0, W3['occ']) if b < a)
-    t.check('pad 1 (bombo): temblor, -1 en radio 2, sin corte',
-            ev['tipo'] == 'temblor' and ev['red'] == 1 and ev['prof'] == 0
-            and 'corte' not in ev and tocadas >= 7, '%d celdas' % tocadas)
+    cd['target_mode'], cd['balizas_drum'], cd['luz_drum'] = 0, 1, 1.0
     t.check('solo los pads 2 y 3 cortan', m.pads_corte(cd) == [1, 2])
     v1 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V1[k]) + [m.TIPOS_V1[k]] for k in range(8)]
+    v3 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V3[k]) + [m.TIPOS_DEFECTO[k]] for k in range(8)]
     ed = [COLS[:5]] + [[k + 1, 2, 2, 0, 'aranazo'] for k in range(8)]
-    t.check('tabla con los valores v1 -> se sustituye; editada -> se conserva',
-            clasificar_perfiles(v1, m) == 'v1' and clasificar_perfiles(ed, m) == 'editada')
-    # balizas de la bateria: un golpe de cada pad en la misma celda
-    cb = dict(m.cfg())
-    cb['perfiles'], cb['tipos'] = [(1, 0, 0)] * 8, ['aranazo'] * 8
-    cb['target_mode'], cb['balizas_drum'] = 0, 1
+    t.check('tabla v1 o v3 sin editar -> se sustituye; editada -> se conserva',
+            clasificar_perfiles(v1, m) == 'v1' and clasificar_perfiles(v3, m) == 'v3'
+            and clasificar_perfiles(ed, m) == 'editada')
+    # 1. un golpe ilumina la celda con el color de su pad, el radio mas tenue
+    W3 = m.new_world()
+    for n in range(40, 90):
+        for k in range(4):
+            m.note_on(W3, cd, 1, n, 100, 0.0)
+    m.note_on(W3, cd, 1, 64, 100, 0.0)
+    ev = m.erosion(W3, cd, 0, 1, 2.0)              # bombo: radio 2
+    luz = {x[0]: x for x in [(c_, m.light_level(cd, h, 2.05)) for c_, h in W3['luz'].items()]}
+    anillos = dict(m.rings(ev['celda'], 2))
+    centro = luz.get(ev['celda'], (0, 0))[1]
+    a1 = [luz[x][1] for x, d in anillos.items() if d == 1 and x in luz]
+    a2 = [luz[x][1] for x, d in anillos.items() if d == 2 and x in luz]
+    filas = m.cell_lights(W3, cd, 2.05)
+    t.check('el golpe ilumina la celda y su radio, mas tenue al alejarse',
+            centro > 0 and a1 and a2 and max(a1) < centro and max(a2) < min(a1)
+            and len(filas) == len(anillos), '%d celdas' % len(filas))
+    col1 = tuple(round(x / max(1e-6, max(filas[0][9:12])), 2) for x in filas[0][9:12])
+    want = tuple(round(x / max(cd['colores_drum'][0]), 2) for x in cd['colores_drum'][0])
+    t.check('con el color de su pad', col1 == want, '%s / %s' % (col1, want))
+    t.check('se apaga en Vidabalizadrum',
+            not m.cell_lights(W3, cd, 2.0 + cd['vida_baliza_drum'] + 1e-3))
+    # 2. dos pads distintos, colores distintos (motor y geometria)
     W4 = m.new_world()
-    m.note_on(W4, cb, 1, 60, 100, 0.0)
-    for pad in range(8):
-        m.erosion(W4, cb, pad, 1, 5.0)
-    celda = m.note_cell(60)
-    filas = m.drum_beacons(W4, cb, 5.0)
-    n = m.normal_i(celda)
-    huecos = set()
-    bien = len(filas) == 8
-    for pad, f in enumerate(filas):
-        col = tuple(round(x, 3) for x in f[9:12])
-        bien = bien and col == tuple(round(x, 3) for x in cb['colores_drum'][pad])
-        d = (f[0] * n[0] + f[1] * n[1] + f[2] * n[2])
-        lat = [f[k] - d * n[k] for k in range(3)]
-        huecos.add(tuple(round(x, 4) for x in lat))
-        bien = bien and W4['drum'][pad]['cell'] == celda
-    t.check('8 pads en la misma celda: 8 balizas, cada una en su hueco y con su color',
-            bien and len(huecos) == 8, '%d balizas' % len(filas))
-    t.check('se apagan en Vidabalizadrum',
-            not m.drum_beacons(W4, cb, 5.0 + cb['vida_baliza_drum'] + 1e-3))
-    cian, ambar, blanco = (0.10, 0.90, 1.00), (1.0, 0.7, 0.3), (0.95, 0.95, 0.92)
-    t.check('ninguna es cian, ambar ni blanca',
-            all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
-                for col in cb['colores_drum'] for ref in (cian, ambar, blanco)))
+    m.note_on(W4, cd, 1, 60, 100, 0.0)
+    m.erosion(W4, cd, 6, 1, 3.0)
+    ca = m.cell_lights(W4, cd, 3.01)[0][9:12]
+    m.erosion(W4, cd, 7, 1, 3.1)
+    cb_ = m.cell_lights(W4, cd, 3.11)[0][9:12]
+    bien, det = instance_color_ok(base.op('luz_drum'))
+    t.check('dos pads, dos colores, y luz_drum pinta el color de cada instancia',
+            sum(abs(a - b) for a, b in zip(ca, cb_)) > 0.1 and bien, det)
+    # 3. se ve en celdas con formacion, vacias y con huella
+    W5 = m.new_world()
+    m.note_on(W5, cd, 1, 60, 100, 0.0)
+    m.note_on(W5, cd, 1, 60, 100, 0.0)            # con formacion
+    m.note_on(W5, cd, 1, 62, 100, 0.0)            # semilla que se borrara: huella
+    hu = m.note_cell(62)
+    m.degrade(W5, cd, hu, 1)
+    vacia = m.note_cell(70)
+    for nota, celda in ((60, m.note_cell(60)), (62, hu), (70, vacia)):
+        W5['last'][1] = dict(note=nota, cell=celda, t=0.0, vel=100)
+        m.erosion(W5, cd, 6, 1, 4.0)
+    lit = set(c_ for c_, h in W5['luz'].items() if m.light_level(cd, h, 4.01) > 0)
+    t.check('la luz se ve con formacion, vacia y con huella',
+            {m.note_cell(60), hu, vacia} <= lit and W5['huella'][hu] > 0)
+    # 4. pad 7 repetido sobre una celda en crecimiento, con el SEQ1 tocando
+    W6 = m.new_world()
+    for k in range(3):
+        m.note_on(W6, cd, 1, 64, 100, 0.0)
+
+    def notas(Wx):      # notas de construccion acumuladas en la celda
+        o = Wx['occ'][i]
+        return (1 + sum(m.cost(cd, x) for x in range(1, o)) + Wx['carga'][i]) if o else 0
+    n_ini, h_ini = notas(W6), W6['h'][i]
+    bajadas, pasos = [], []
+    for r in range(4):
+        m.note_on(W6, cd, 1, 64, 100, 1.0 + r)
+        m.note_on(W6, cd, 1, 64, 100, 1.0 + r)
+        h0, n0 = W6['h'][i], notas(W6)
+        m.erosion(W6, cd, 6, 1, 1.5 + r)
+        bajadas.append(round(h0 - W6['h'][i], 4))
+        pasos.append(n0 - notas(W6))
+    t.check('pad 7: cada golpe deshace una nota (baja un poco, sin vaciar la carga) y, '
+            'con el SEQ1 tocando mas, la celda sigue creciendo',
+            all(b > 0 for b in bajadas) and pasos == [1] * 4
+            and notas(W6) == n_ini + 4 and W6['h'][i] > h_ini,
+            'bajadas %s' % bajadas)
+    # 5. simetria: N notas de construccion y N de erosion
+    malos = []
+    for base_n, extra in ((3, 1), (3, 5), (4, 6), (6, 4)):
+        W7 = m.new_world()
+        for k in range(base_n):
+            m.note_on(W7, cd, 1, 64, 100, 0.0)
+        antes = (W7['occ'][i], W7['carga'][i], round(W7['h'][i], 6))
+        for k in range(extra):
+            m.note_on(W7, cd, 1, 64, 100, 0.0)
+        m.degrade(W7, cd, i, extra)
+        despues = (W7['occ'][i], W7['carga'][i], round(W7['h'][i], 6))
+        if antes != despues or m.satellites_of(W7, i):
+            malos.append('%d+%d: %s -> %s' % (base_n, extra, antes, despues))
+    t.check('simetria: N notas de construccion y N de erosion devuelven la celda',
+            not malos, '; '.join(malos))
+    # 6. atenuacion: la celda objetivo pierde mas que las vecinas
+    W8 = m.new_world()
+    for n in range(40, 90):
+        for k in range(4):
+            m.note_on(W8, cd, 1, n, 100, 0.0)
+    m.note_on(W8, cd, 1, 64, 100, 0.0)
+    h0 = list(W8['h'])
+    ev = m.erosion(W8, cd, 3, 1, 5.0)              # pad 4: -4 notas, radio 1
+    caida = lambda x: h0[x] - W8['h'][x]
+    vec = [x for x, d in m.rings(ev['celda'], 1) if d == 1]
+    t.check('atenuacion: la celda objetivo pierde mas que sus vecinas',
+            caida(ev['celda']) > max(caida(x) for x in vec) >= 0,
+            '%.3f / %.3f' % (caida(ev['celda']), max(caida(x) for x in vec)))
+    # 7. sin las esferas de la v3
+    t.check('las balizas de la v3 ya no estan',
+            base.op('balizas_drum') is None and base.op('i_balizas_drum') is None)
     m.reset_world()
     t.midi(0x9C, 0x3C, 0x64)
     m.on_pulse('Erosionar')
     W = m.world()
     k = int(base.par.Padprueba) - 1
-    t.check('Padprueba + Erosionar encienden su baliza', k in W['drum'])
-    # las balizas de la bateria no quedan tapadas por las de los secuenciadores
-    def holguras(Wb, cb_, celda, now):
-        filas_ = m.drum_beacons(Wb, cb_, now)
-        nn = m.normal_i(celda)
-        seq = m.seq_beacons(Wb, cb_, now)
-        def lat(v):
-            k = v[0] * nn[0] + v[1] * nn[1] + v[2] * nn[2]
-            return math.sqrt(sum((v[q] - k * nn[q]) ** 2 for q in range(3)))
-        h_seq = min([lat([f[q] - cc[q] for q in range(3)]) - R - f[6]
-                     for f in filas_ for cc, R in seq] or [9.0])
-        h_ent = min([lat([filas_[a][q] - filas_[b][q] for q in range(3)]) - filas_[a][6] - filas_[b][6]
-                     for a in range(len(filas_)) for b in range(a + 1, len(filas_))] or [9.0])
-        return len(filas_), h_seq, h_ent
-    ecuador = min(range(m.N), key=lambda x: abs(m.normal_i(x)[1]))
-    casos = [('ecuador', ecuador), ('junto al polo', m.RINGS[0][0]), ('polo', m.POLE_S)]
-    cs = dict(cb)
-    cs['nivel'] = max(5, cs['nivel'])
-    peor = []
-    for nombre, celda in casos:
-        for s_, sn in ((m.GEO, 'SEQ1'), (m.ARQ, 'SEQ2')):
-            for fase_, dt_ in (('reposo', 1.0), ('pulso', 0.0)):
-                Wb = m.new_world()
-                for k in range(6):
-                    m.note_on(Wb, cs, s_, m.cell_note(celda), 100, 10.0)
-                Wb['vh'] = list(Wb['h'])
-                for pad in range(8):
-                    Wb['drum'][pad] = dict(t=10.0 + dt_ - 0.01, cell=celda, vel=127)
-                nb_, hs, he = holguras(Wb, cs, celda, 10.0 + dt_)
-                if nb_ != 8 or hs <= 0 or he <= 0:
-                    peor.append('%s %s %s (%d, %.2f, %.2f)' % (nombre, sn, fase_, nb_, hs, he))
-    t.check('8 balizas fuera de la silueta del SEQ1 y del SEQ2 (reposo y pulso, '
-            'ecuador, junto al polo y polo) y sin pisarse', not peor, '; '.join(peor[:3]))
-    rmax, rmin = m.drum_radius(cb, 127), m.drum_radius(cb, 1)
-    t.check('tamano: perceptible (>= 0,15) y menor que el SEQ2 en reposo',
-            rmin >= 0.15 and rmax < m.BALIZA2_RADIO, '%.2f a %.2f' % (rmin, rmax))
-    geo = base.op('balizas_drum')
-    t.check('balizas_drum gira y se balancea con el planeta',
+    t.check('Padprueba + Erosionar iluminan la celda', k in W['drum'] and W['luz'])
+    cian, ambar, blanco = (0.10, 0.90, 1.00), (1.0, 0.7, 0.3), (0.95, 0.95, 0.92)
+    t.check('ningun color es cian, ambar ni blanco',
+            all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
+                for col in cd['colores_drum'] for ref in (cian, ambar, blanco)))
+    geo = base.op('luz_drum')
+    t.check('luz_drum gira y se balancea con el planeta',
             geo is not None and 'rotation(' in (geo.par.ry.expr or '')
             and 'wobble(' in (geo.par.rx.expr or ''))
     t.check('leyenda EROSION', 'EROSION' in m.legend())
 
 
 run_test(base, prueba)
-print('  Ahora: anade la bateria del BeatStep (canal 16). El bombo hace temblar')
-print('  el paisaje; caja y tom abriran cortes en la fase 9.')
-print('  Cada pad enciende su baliza de color donde cae el golpe.')
+print('  Ahora: anade la bateria del BeatStep (canal 16). Cada golpe ilumina las')
+print('  celdas que erosiona con el color de su pad; el bombo hace temblar el')
+print('  paisaje; caja y tom abriran cortes en la fase 9.')
 print('  Si los golpes salen como "pad fuera de 1-8", ajusta Notabase.')
 print('  Ajusta el equilibrio crecimiento / erosion antes de pasar a la fase 8.')
 print('=' * 66)
