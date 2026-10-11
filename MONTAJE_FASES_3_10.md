@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Cada nota del SEQ1 y del SEQ2 deposita y hace crecer formaciones sobre el planeta. Al toparse con el límite de altura se ramifican, se fusionan y se coronan. La batería las erosiona. Cada ciclo de ecosistema entierra el mundo como una concha nueva, y los cortes profundos dejan ver las capas enterradas.
+Cada nota del SEQ1 y del SEQ2 deposita y hace crecer formaciones sobre el planeta. Al toparse con el límite de altura se ramifican, se fusionan y se coronan. La batería las erosiona. Cuando el mundo madura y deja de cambiar (o llega a su edad máxima) se entierra como una concha nueva, tan gruesa como lo que duró, y los cortes profundos dejan ver las capas enterradas.
 
 ---
 
@@ -17,16 +17,16 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v10` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v7` |
+| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v11` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v8` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v8` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
-| `fase6_ciclo.py` | Longitud de pattern, biblioteca, ciclo, vuelta por ciclo | `fase6 v1` |
+| `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v2` |
 | `fase7_erosion.py` | 8 pads de erosión, huellas, presupuesto de densidad | `fase7 v2` |
-| `fase8_conchas.py` | Conchas, herencia, radio que crece | `fase8 v2` |
-| `fase9_arqueologia.py` | Cortes, estratigrafía, cicatriz cian, destello | `fase9 v1` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v3` |
+| `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v2` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v1` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
@@ -197,47 +197,73 @@ El material lo sigue decidiendo la nota fundadora.
 
 ---
 
-## FASE 6 · El ciclo
+## FASE 6 · El ciclo: lo cierra el mundo
 
-Rehace el trabajo aparcado (`fase2f` a `fase2j`) sobre la base nueva.
+*fase6 v2 (motor v11). Sustituye a la v1, que deducía el ciclo de la longitud de los patterns.*
 
-**El paso de cada nota.** La longitud del pattern no viaja por MIDI, y FASE1 no lee el reloj (eso lo hace midicontrolx). El paso se deduce del tempo del proyecto: cada nota cae N pasos después de la anterior, y el reloj se reancla en cada nota, así el error no se acumula mientras el desfase sea menor de medio paso. START (`FA`) o MMC Play ponen el paso a 0. Si el BeatStep no usa semicorcheas, ajusta `Pasospornegra`.
+**Por qué cambia.** La v1 medía la partitura, no el mundo. Con probabilidad, aleatoriedad y acumulación, el mundo no se repite aunque el secuenciador sí. La detección llegaba tarde (16 pasos al 60 %: hacia el paso 53) y, con patterns repetitivos, no llegaba nunca. Además, el ciclo resultante seguía siendo una constante (`Repsporciclo`) escalada por la longitud: en la práctica, un temporizador.
 
-**Longitud del pattern.** Busca el periodo más corto con el que se repiten las notas, comparando solo pasos que han sonado, así que tolera la probabilidad. No da por buena una longitud L hasta poder comprobar 2L, para no confundir un pattern de 16 cuyas mitades se parecen con uno de 8. Cada 16 notas revisa su conclusión y la corrige si hace falta.
+**Regla:** el mundo se entierra cuando está **maduro y deja de cambiar**, o cuando alcanza su **edad máxima**. Se inspira en el ciclo adaptativo de Holling: crecer (fases 3 a 5), madurar y estancarse, liberar (erosión, fase 7) y reorganizar (enterramiento con herencia, fase 8). Hasta ahora la reorganización la disparaba el reloj; ahora la dispara el estado del mundo. Ya no se detecta la longitud de los patterns.
 
-Probado en simulación con patterns aleatorios de 8, 12, 13, 16, 24 y 32 pasos y probabilidad al 100, 80 y 60 %: acierta en 540 de 540 casos. Con 16 pasos al 60 % la detección llega hacia el paso 53 (unas tres vueltas).
+**Reloj de compases.** Cuenta compases con el tempo del proyecto, el mismo que hace girar el núcleo (`ritmo.tempo()`). Un compás son `Negrasporcompas` negras (4). Solo avanza con el secuenciador en marcha: línea de tiempo en play, ningún STOP posterior a la última nota y alguna nota en los últimos 4 compases. START y MMC Play se siguen recibiendo, pero ya no ponen ningún paso a 0.
 
-**Biblioteca.** Guarda la huella de cada pattern detectado (hasta 16 por secuenciador) y, al volver a uno conocido, lo reconoce en unas tres notas.
+**Las dos medidas.** En cada compás que avanza el reloj, el motor toma una foto de la forma de cada celda:
 
-**Cambio de pattern.** Se detecta de dos maneras:
+```
+forma(celda) = (especie, min(ocupación, Umbralcorona), híbrida, satélite, huella)
+novedad = celdas cuya forma ha cambiado desde el compás anterior / celdas vivas (ahora o en el compás anterior)
+madurez = formaciones con ocupación >= Umbralram / formaciones (sin contar satélites)
+```
 
-- una ráfaga de All Notes Off (CC 123 en 8 canales o más en 0,12 s) que no llega acompañada de un STOP;
-- 4 de las últimas 6 notas no encajan con el pattern conocido.
+- **El recorte a `Umbralcorona` es obligatorio.** Una celda coronada sigue sumando ocupación con cada nota, y la cumbre sigue alargando la corona, pero su forma ya cuenta como hecha. Si se midiera el contador, la novedad no llegaría nunca a 0.
+- **Satélites:** se recortan antes, en la ocupación con la que llegan a `Limsatelite` (3 con los valores por defecto). Después siguen sumando ocupación con cada desborde, pero ya no cambian de forma.
+- **La huella** solo cuenta desde el nivel 7.
+- **Un mundo vacío** tiene madurez 0, así que nunca se cierra por estancamiento.
 
-**Ciclo de ecosistema:**
+**Cierre del ciclo.** Va por orden; nunca antes de `Ciclomin`, salvo con `Forzarciclo`:
 
-- `Modociclo = repeticiones` (defecto): `Repsporciclo` × el pattern más largo. Con 8 × 16 pasos, 8 compases: 16 s a 120 BPM.
-- `Modociclo = hiperperiodo`: mínimo común múltiplo de los dos. Con 16 y 13, 208 pasos.
+| Motivo | Cuándo |
+|---|---|
+| `cambio de pattern` | Hubo una ráfaga de All Notes Off sin STOP con `Cambioentierra` encendido. Se aplica en cuanto se llega a `Ciclomin` |
+| `estancado` | `Compasesquietos` compases seguidos con madurez ≥ `Umbralmadurez` y novedad ≤ `Umbralnovedad` |
+| `edad maxima` | El mundo llega a `Ciclomax` compases |
+| `forzado` | Pulso `Forzarciclo`: cierra al instante |
 
-Nota: tomar al pie de la letra «nueva concha al reinicio del generador más largo» daría una concha cada compás. Con `Repsporciclo = 1` se obtiene exactamente eso.
+Cada cierre emite el evento `fin_de_ciclo` (ciclo, compases, segundos, motivo, madurez, novedad), escribe `AVISO fin de ciclo N: <motivo> a los C compases` en el Textport y añade una fila a la tabla `ciclos`. Desde la fase 8, además entierra el mundo.
 
-**Una vuelta por ciclo.** Con `Turnauto`, `Barsperturn` se calcula sola (pasos del ciclo ÷ `Pasosporcompas`): el día del planeta dura un mundo. El giro sigue acumulándose, así que el cambio de longitud no hace saltar el planeta.
+Con `Nivel` 6 o 7 el evento solo informa: el mundo no se entierra, así que puede seguir maduro y quieto y volver a cerrarse cada `Ciclomin` compases. Es lo esperado. Si `Ciclomax` < `Ciclomin`, el informe avisa con `..` y se usa `Ciclomax` = `Ciclomin`.
 
-**El ciclo solo avanza con el secuenciador en marcha:** línea de tiempo en play, sin STOP posterior a la última nota, y alguna nota en los últimos 4 compases.
+**Cambio de pattern.** Ahora solo se detecta por la ráfaga de All Notes Off (CC 123 en 8 canales o más en 0,12 s) sin STOP. Ya no se detecta por las notas: eso dependía de la biblioteca, que desaparece. Con `Cambioentierra` apagado, la ráfaga solo da el AVISO.
 
-**Página Fase6:** `Repsporciclo` 8 · `Modociclo` · `Turnauto` · `Longmanual` 16 · `Longfija` · `Longmin` 4 · `Pasosporcompas` 16 · `Pasospornegra` 4 · `Forzarciclo` · `Resetpatterns`
+**Giro vivo.** `Barsperturn` vuelve a ser manual para siempre; si tenías `Turnauto`, se queda el valor que tuviera. Con `Girovivo`, el giro del núcleo se multiplica por un factor:
+
+```
+objetivo    = clamp(novedad / (4 × Umbralnovedad), Giromin, 1)
+giro_factor → objetivo, suavizado en un compás
+```
+
+El planeta se frena a medida que el mundo deja de cambiar (justo antes de enterrarse casi se detiene) y vuelve a acelerar con la novedad. El giro sigue acumulándose, así que el cambio de factor no hace saltar el planeta. El factor lo lee `ritmo`; `estratos_comun.py` le añade esa lectura al relanzar cualquier fase, sin perder el ángulo acumulado.
+
+**Tabla `ciclos`.** Una fila por ciclo cerrado: `ciclo`, `compases`, `segundos`, `motivo`, `madurez`, `novedad` y, desde la fase 8, `grosor`. Guarda las últimas 200. Sirve para afinar los umbrales con el aparato.
+
+**Página Fase6:** `Umbralmadurez` 0,6 · `Umbralnovedad` 0,05 · `Compasesquietos` 4 · `Ciclomin` 8 · `Ciclomax` 32 · `Negrasporcompas` 4 · `Cambioentierra` (apagado) · `Girovivo` (encendido) · `Giromin` 0,25 · `Forzarciclo`
+
+La fase 6 v2 quita los parámetros obsoletos: `Repsporciclo`, `Modociclo`, `Turnauto`, `Longmanual`, `Longfija`, `Longmin`, `Pasosporcompas`, `Pasospornegra` y `Resetpatterns`.
 
 **Leyenda:**
 
 ```
-CICLO    SEQ1 16 pasos (escucha)   SEQ2 13 pasos (biblioteca)
-         ciclo 4   paso 87/128
-AVISO    SEQ1: pattern de 16 pasos (100%)
+CICLO    5   compas 23 (8-32)   madurez 64%   novedad 3%   quieto 2/4   giro x0.40
+AVISO    fin de ciclo 4: estancado a los 19 compases
 ```
 
-**Prueba pendiente con el aparato:** cambia de pattern dos veces y pulsa STOP mirando el Textport. Cada ráfaga sale como `AVISO All Notes Off sin STOP: cambio de pattern` o `AVISO All Notes Off junto a un STOP`. Si al cambiar de pattern no sale nada, el BeatStep no la envía en ese caso; el cambio se detectará igualmente por las notas.
+Con el secuenciador parado, en lugar del compás pone `parado`.
 
-**Si un pattern repite mucho la misma nota,** la longitud es ambigua (16 notas iguales también se repiten cada 4). Para esos casos: `Longfija` + `Longmanual`.
+**Ojo con el ritmo de crecimiento.** Con la carga por celda de las fases 3 y 4, una formación necesita 31 notas para coronarse. En simulación, un SEQ1 de 16 pasos sin batería madura y se queda quieto hacia el compás 30-40, cerca de `Ciclomax` (32). Por eso muchos ciclos cierran por `edad maxima`. Si quieres que el mundo llegue a estancarse más a menudo, sube `Ciclomax` (48-64) o baja `Costemax`, y mira la tabla `ciclos`.
+
+**Relanzar.** `fase6 v2` puede ejecutarse sobre un proyecto en nivel 6 o superior: no baja `Nivel` ni borra el mundo. Un mundo guardado por un motor anterior se migra solo: se borran las claves de la detección de longitud y de la biblioteca, el número de ciclo sigue donde iba y las conchas antiguas, que no guardan grosor, se leen con `Shellthick`. Para un proyecto en nivel 8 o superior: `fase6_ciclo.py`, después `fase8_conchas.py` y, por último, la última fase aplicada (por ejemplo `fase9_arqueologia.py` y `fase10_direccion.py`).
+
+**Prueba pendiente con el aparato:** cambia de pattern dos veces y pulsa STOP mirando el Textport. Cada ráfaga sale como `AVISO All Notes Off sin STOP: cambio de pattern` o `AVISO All Notes Off junto a un STOP`. Si al cambiar de pattern no sale nada, el BeatStep no la envía y `Cambioentierra` no hará nada.
 
 ---
 
@@ -281,8 +307,16 @@ En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al o
 En cada fin de ciclo:
 
 1. **La capa se entierra** como una concha de losetas, una por celda, con el color de su generación. Las celdas que estaban ocupadas quedan más claras: los continentes se leen en el color. Sus formaciones se descartan.
-2. **El planeta engorda** `Shellthick`.
+2. **El planeta engorda el grosor de la concha.** Con `Grosortiempo` (encendido por defecto), el grosor es proporcional a lo que duró su mundo:
+
+   ```
+   grosor = Shellthick × clamp(compases / Ciclomin, 0,25, Ciclomax / Ciclomin)
+   ```
+
+   Con los valores por defecto va de 0,5 (ciclo mínimo) a 2,0 (edad máxima), y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
 3. **Herencia:** el 25 % de la ocupación de cada celda pasa a la capa nueva. La fracción que no llega a 1 se acumula para el ciclo siguiente: una celda con ocupación 2 en ciclos seguidos acaba heredando. Lo heredado vuelve a brotar desde la nueva superficie.
+
+**Radio acumulado.** Cada concha guarda su `grosor`, `r_in` y `r_out`. El radio del planeta es el del núcleo más la suma de los grosores, y de él dependen las losetas (cada una con la altura de su concha), la retícula, las balizas, las formaciones, la cámara y la esfera del núcleo que tapa las conchas más allá de `Maxconchas`. Las conchas de un motor anterior se leen con `Shellthick`.
 
 **Paleta de generaciones:** ámbar en la base, después grises minerales y negros que se alternan en claro y oscuro para que las bandas se distingan.
 
@@ -298,11 +332,11 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 
 **Cámara:** en esta fase solo se aleja con el radio para no quedar dentro del planeta. La definitiva llega en la fase 10.
 
-**Página Fase8:** `Herencia` 0,25 · `Maxconchas` 24. Para probar sin esperar a un ciclo: `Forzarciclo` (página Fase6).
+**Página Fase8:** `Herencia` 0,25 · `Maxconchas` 24 · `Grosortiempo` (encendido). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
 
-**Leyenda:** `CONCHAS 11 radio 11.50 herencia 25% continentes 3`
+**Leyenda:** `CONCHAS 11 radio 11.50 ultima 0.75 herencia 25% continentes 3`
 
-**Ritmo de engorde:** con los valores por defecto, 0,5 de radio cada 16 s, es decir 37 unidades en 20 minutos sobre un núcleo de 6. Si es demasiado, sube `Repsporciclo` o baja `Shellthick`; también se puede usar el hiperperiodo.
+**Ritmo de engorde:** de media, `Shellthick` por cada `Ciclomin` compases: 0,5 cada 16 s a 120 BPM, unas 37 unidades en 20 minutos sobre un núcleo de 6. El radio vuelve a ser exactamente el tiempo transcurrido. Para frenar el engorde, sube `Ciclomin` o baja `Shellthick`.
 
 ---
 
@@ -311,6 +345,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 **Cortes.** Los pads con profundidad mayor que 0 (por defecto el 6, el 7 y el 8) quitan las losetas de las conchas superiores en forma de **anfiteatro**: profundidad completa en la celda golpeada, un escalón menos en cada anillo. Las paredes son las capas enterradas, cada una con su color. El hueco es permanente; solo lo cubre la concha siguiente.
 
 - **Las formaciones de una celda cortada** se apoyan en el fondo del corte.
+- **Grosores distintos** (fase 9 v2): la profundidad se sigue midiendo en conchas. Como cada concha tiene el grosor de su ciclo, un corte de 3 conchas es más o menos hondo según lo que duraron esos mundos. El fondo baja la suma de los grosores quitados y las paredes usan el radio de cada concha.
 - **Cicatriz:** el fondo y las paredes recién expuestos se ven en **cian** y se funden con el mineral en `Cicatriz` segundos.
 - **Destello:** `luz_destello`, una luz puntual que sigue el giro del planeta, golpea la celda en cada destrucción: fuerte en los cortes, suave en los arañazos.
 - **Balizas:** la del SEQ1 pasa a blanca, porque el cian queda reservado para lo recién expuesto.
@@ -337,8 +372,8 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 
 1. **PLAY con el SEQ1.** Las celdas que toca se siembran; las que repite crecen hasta el límite y después ramifican.
 2. **Añade el SEQ2.** Aparecen torres; donde los dos se cruzan, híbridos.
-3. **Espera unas tres vueltas.** La línea CICLO pasa de `escuchando` a `16 pasos (escucha)`.
-4. **Cambia de pattern en el BeatStep.** Sale un AVISO de cambio; al volver al pattern anterior, `biblioteca`.
+3. **Deja tocar el SEQ1 sin batería.** La madurez sube, la novedad baja, el planeta frena el giro y el ciclo se cierra por `estancado`.
+4. **Con batería constante,** los ciclos llegan a `edad maxima`. Al parar la batería, el mundo se asienta y se entierra.
 5. **Añade la batería.** Los arañazos rebajan el paisaje y la densidad se mantiene por debajo del 60 %.
 6. **Fin de ciclo.** El mundo se entierra, el planeta engorda y lo heredado vuelve a brotar.
 7. **Pads 6 a 8 con varias conchas.** Se abre un corte con las capas a la vista, primero en cian.
@@ -361,10 +396,12 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | Pulidas y porosas iguales | Los parámetros de brillo del Phong no se pudieron fijar | Sube Specular y Shininess en `mat_pulido` a mano |
 | SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
-| La longitud no se detecta nunca | Pattern muy repetitivo, o no son semicorcheas | `Longfija` + `Longmanual`, o ajusta `Pasospornegra` |
-| La longitud sale la mitad de la real | Las dos mitades del pattern son iguales (en realidad se repite así) | Es correcto; si no lo quieres, `Longfija` |
-| Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota |
-| El planeta engorda demasiado rápido | Ciclos cortos | Sube `Repsporciclo`, baja `Shellthick`, o hiperperiodo |
+| Los ciclos siempre acaban por edad máxima | Batería constante, umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Con batería es lo esperado. Si no, baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
+| Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
+| Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota (la leyenda pone `parado`) |
+| El planeta engorda demasiado rápido | Engorde = `Shellthick` por cada `Ciclomin` compases | Sube `Ciclomin` o baja `Shellthick` |
+| `Cambioentierra` no hace nada | El BeatStep no envía All Notes Off al cambiar de pattern | Prueba pendiente con el aparato |
+| El planeta no frena aunque el mundo esté quieto | `ritmo` sin el giro vivo, o `Girovivo` apagado | Relanza la última fase aplicada (parchea `ritmo`); mira que salga `ritmo: el giro se multiplica…` |
 | La retícula no sube con las conchas | `reticula_chop` no se recocina | Se recocina sola en cada cambio de radio; si no, relanza la fase 8 |
 | La cámara no mira al planeta (fase 10) | No se fijó Look At | En `camara`: Look At = `objetivo` |
 | Rendimiento bajo con muchas conchas | Demasiadas losetas | Baja `Maxconchas` |
@@ -384,13 +421,15 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 4 | ¿Quién elige la vecina? | Velocidad + ocupación (`Vecina`) |
 | 4 | ¿Desborde en los polos? | El polo desborda a cualquiera de las celdas de su anillo |
 | 5 | Canal del SEQ2 | 14 (`Canal2`), por confirmar |
-| 6 | Paso de cada nota sin leer el reloj | Del tempo del proyecto, reanclado en cada nota |
-| 6 | ¿Qué es un ciclo de ecosistema? | 8 repeticiones del pattern más largo (`Repsporciclo`, `Modociclo`) |
+| 6 | ¿Qué es un ciclo de ecosistema? | Lo cierra el mundo: maduro y quieto (`Umbralmadurez`, `Umbralnovedad`, `Compasesquietos`), entre `Ciclomin` y `Ciclomax` |
+| 6 | ¿Cómo se cuenta el tiempo? | En compases del tempo del proyecto (`ritmo.tempo()`); ya no se deduce el paso de cada nota |
+| 6 | ¿Una vuelta por ciclo? | No: `Barsperturn` manual y `Girovivo` |
+| 6 | ¿Los satélites cuentan para la madurez? | No: madurez = formaciones propias en el límite. Su forma se recorta al llegar a `Limsatelite` |
 | 7 | Canal y pads de la batería | Canal 10, pads desde 36 (`Canaldrum`, `Notabase`), por confirmar |
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
-| 8 | Grosor de concha | 0,5 (límite de altura 1,875) |
+| 8 | Grosor de concha | Proporcional a la duración del ciclo (`Grosortiempo`), entre 0,25× y `Ciclomax`/`Ciclomin` × `Shellthick` (0,5; límite de altura 1,875) |
 | 3–4 | ¿Cuántas notas por trigger? | De 1 a `Costemax` (5) según la altura, con frenada; 5 desde el límite. La presión suma carga |
 | 3 | ¿Cómo se reparten las notas? | `Notapolosur` y `Notapolonorte` (entre do1 y do8) son los polos; en medio, un anillo por octava; el rango decide el número de celdas; `Fuerarango` para las de fuera |
 
@@ -398,7 +437,18 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 
 Sin TouchDesigner a mano, todo se ha probado en simulación:
 
-- **El motor:** 18 pruebas. Orientación de las piezas sobre la normal de cada celda, vecindad simétrica, crecimiento y límite, gate, desborde y estados, híbridos, detección de longitud (16 y 13 a la vez, con probabilidad, biblioteca, cambio por notas), ráfagas con y sin STOP, ciclos y conchas, orden de la erosión y presupuesto, cortes y cicatrices, herencia y continentes, y que el mundo se pueda guardar.
+- **El motor:** 18 pruebas. Orientación de las piezas sobre la normal de cada celda, vecindad simétrica, crecimiento y límite, gate, desborde y estados, híbridos, ráfagas con y sin STOP, ciclos y conchas, orden de la erosión y presupuesto, cortes y cicatrices, herencia y continentes, y que el mundo se pueda guardar.
+- **El ciclo de la fase 6 v2** (motor v11):
+  - Mundo vacío: no cierra nunca por `estancado`; cierra por `edad maxima` en `Ciclomax`.
+  - Celdas coronadas que siguen recibiendo notas: novedad 0 y cierre por `estancado` en `max(Ciclomin, 1 + Compasesquietos)`.
+  - Erosión en cada compás: no hay estancamiento y cierra por `edad maxima`.
+  - Secuenciador parado: no hay cierres.
+  - `Forzarciclo` cierra al instante (`forzado`) y escribe en la tabla `ciclos`.
+  - `Cambioentierra`: una ráfaga antes de `Ciclomin` se aplaza hasta `Ciclomin`, una después cierra en el compás siguiente, y con el toggle apagado solo sale el AVISO.
+  - Grosor proporcional con sus dos límites; radio = núcleo + suma de grosores; fondo y paredes de los cortes con grosores distintos.
+  - `Girovivo` acotado entre `Giromin` y 1.
+  - Un mundo del motor v7-v10 carga y sigue funcionando.
+- **Sesión simulada de 192 compases** a 120 BPM: SEQ1 de 16 pasos al 90 %, SEQ2 de 13 y batería a tramos de 48 compases. Cierra por `estancado` en los tramos sin batería y por `edad maxima` en los tramos con batería.
 - **Los scripts:** las fases 1 y 2 reales y las 3 a 10, ejecutadas en orden contra un TouchDesigner simulado, todas con `AUTOPRUEBA OK`. También se comprueba que no se puede saltar una fase y que relanzar una no borra el mundo.
 - **Una sesión simulada:** 24 compases a 120 BPM con SEQ1 (16 pasos), SEQ2 (13) y batería, fotograma a fotograma. Detecta las dos longitudes, entierra conchas, y todas las expresiones de los nodos se evalúan sin error.
 
@@ -409,6 +459,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 1. **All Notes Off:** cambiar de pattern dos veces y pulsar STOP, y copiar las líneas AVISO.
 2. **RANDOMNESS:** comprobar si cambia la velocidad (columna `vel` de `midi_log`).
 3. **Canales del SEQ2 y de la batería,** y la nota del pad 1.
+4. **Ciclos reales:** SEQ1 al 100 % sin batería; SEQ1 al 60 % con SEQ2 de 13 pasos; con batería constante. Copiar la tabla `ciclos` de cada caso para afinar `Umbralmadurez`, `Umbralnovedad`, `Compasesquietos` y `Ciclomax`.
 
 ---
 

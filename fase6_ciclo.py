@@ -1,32 +1,35 @@
 """
 =============================================================================
-ESTRATOS - FASE 6: EL CICLO (PATTERNS Y LONGITUD DE LA VUELTA)
+ESTRATOS - FASE 6: EL CICLO (LO CIERRA EL MUNDO)
 =============================================================================
-Requiere la fase 5. Rehace sobre la base nueva el trabajo aparcado
-(fase2f ... fase2j).
+Requiere la fase 5.
 
 QUE HACE
 --------
-  LONGITUD DEL PATTERN  la deduce escuchando: busca el periodo mas corto
-                        con el que se repiten las notas. Tolera la
-                        probabilidad: solo compara pasos que han sonado.
-  BIBLIOTECA            guarda la huella de cada pattern; al volver a uno
-                        conocido lo reconoce en unas tres notas.
-  CAMBIO DE PATTERN     lo detecta (a) por la rafaga de All Notes Off que
-                        no acompana a un STOP, o (b) porque las notas
-                        dejan de encajar con el pattern conocido.
-  CICLO DE ECOSISTEMA   Repsporciclo repeticiones del pattern mas largo
-                        (o, con Modociclo = hiperperiodo, el minimo comun
-                        multiplo de los dos: 16 y 13 -> 208 pasos).
-  UNA VUELTA POR CICLO  con Turnauto, Barsperturn se calcula sola: el dia
-                        del planeta dura lo que dura un mundo.
+El ciclo de ecosistema ya no sale de la longitud de los patterns: lo cierra
+el propio mundo. Se inspira en el ciclo adaptativo de Holling (crecer,
+madurar, liberar, reorganizar): el mundo se ENTIERRA (fase 8) cuando esta
+maduro y deja de cambiar, o cuando alcanza su edad maxima.
 
-EL PASO DE CADA NOTA
---------------------
-La longitud no viaja por MIDI y FASE1 no lee el reloj (lo hace
-midicontrolx). El paso de cada nota se deduce del tempo del proyecto: se
-reancla en cada nota, asi el error no se acumula. START (o MMC play) pone
-el paso a 0. Si el BeatStep no usa semicorcheas, ajusta Pasospornegra.
+  RELOJ DE COMPASES  cuenta compases con el tempo del proyecto (el mismo
+                     que hace girar el nucleo). Solo avanza con la linea
+                     de tiempo en play, sin STOP despues de la ultima nota
+                     y con alguna nota en los ultimos 4 compases.
+  FOTO DEL MUNDO     en cada compas, la forma de cada celda: especie,
+                     ocupacion (recortada donde la forma deja de cambiar),
+                     hibrida, satelite y huella.
+  NOVEDAD            celdas cuya forma ha cambiado / celdas vivas.
+  MADUREZ            formaciones que han llegado al limite / formaciones.
+  CIERRE             maduro y quieto Compasesquietos compases seguidos
+                     (estancado), Ciclomax compases (edad maxima), una
+                     rafaga de All Notes Off con Cambioentierra (cambio de
+                     pattern) o Forzarciclo. Nunca antes de Ciclomin,
+                     salvo Forzarciclo.
+  GIRO VIVO          el planeta se frena a medida que el mundo deja de
+                     cambiar y vuelve a acelerar con la novedad.
+  TABLA ciclos       una fila por ciclo cerrado: para afinar los umbrales.
+
+Barsperturn vuelve a ser manual.
 
 PRUEBA PENDIENTE CON EL APARATO
 -------------------------------
@@ -34,7 +37,7 @@ Cambia de pattern dos veces y pulsa STOP, mirando el Textport. Cada
 rafaga de All Notes Off sale como
     AVISO  All Notes Off sin STOP: cambio de pattern
     AVISO  All Notes Off junto a un STOP
-Asi sabremos cuando la envia el BeatStep.
+Si el BeatStep no la envia, Cambioentierra no hace nada.
 
 COMO USARLO
 -----------
@@ -45,106 +48,158 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase6 v1  (longitud de pattern, biblioteca, ciclo, vuelta por ciclo)'
+VERSION = 'fase6 v2  (el ciclo lo cierra el mundo: madurez, novedad, giro vivo)'
 banner(VERSION)
 
 base = require_base(6)
 motor = install_core(base, CARPETA, 6)
 
-page = get_page(base, 'Fase6')
-add_par(base, page, 'int', 'Repsporciclo', 'Repeticiones por ciclo', 8, 1, 64, clamp=True)
-add_par(base, page, 'menu', 'Modociclo', 'Ciclo de ecosistema', 'repeticiones',
-        menu=['repeticiones', 'hiperperiodo'],
-        menu_labels=['Repeticiones del mas largo', 'Hiperperiodo (mcm)'])
-add_par(base, page, 'toggle', 'Turnauto', 'Una vuelta por ciclo', True)
-add_par(base, page, 'int', 'Longmanual', 'Longitud si no se detecta', 16, 1, 64, clamp=True)
-add_par(base, page, 'toggle', 'Longfija', 'Usar siempre la longitud manual', False)
-add_par(base, page, 'int', 'Longmin', 'Longitud minima a detectar', 4, 1, 32, clamp=True)
-add_par(base, page, 'int', 'Pasosporcompas', 'Pasos por compas', 16, 1, 64, clamp=True)
-add_par(base, page, 'int', 'Pasospornegra', 'Pasos por negra', 4, 1, 8, clamp=True)
-add_par(base, page, 'pulse', 'Forzarciclo', 'Terminar el ciclo ahora')
-add_par(base, page, 'pulse', 'Resetpatterns', 'Olvidar patterns')
-ok('pagina Fase6: Repsporciclo, Modociclo, Turnauto, Longmanual, Longfija, '
-   'Longmin, Pasosporcompas, Pasospornegra, Forzarciclo, Resetpatterns')
+OBSOLETOS = ['Repsporciclo', 'Modociclo', 'Turnauto', 'Longmanual', 'Longfija', 'Longmin',
+             'Pasosporcompas', 'Pasospornegra', 'Resetpatterns']
+quitados = [n for n in OBSOLETOS if remove_par(base, n)]
+if quitados:
+    ok('quitados de la pagina Fase6: %s (Barsperturn queda como estaba)' % ', '.join(quitados))
 
-leeme(base, 6, """FASE 6 - EL CICLO
-  La longitud de cada pattern se deduce escuchando las notas; la
-  biblioteca reconoce patterns ya vistos en ~3 notas.
-  Cambio de pattern: rafaga All Notes Off sin STOP, o notas que no encajan.
-  Ciclo = Repsporciclo x pattern mas largo (o hiperperiodo).
-  Turnauto: Barsperturn = pasos del ciclo / Pasosporcompas.""")
+page = get_page(base, 'Fase6')
+add_par(base, page, 'float', 'Umbralmadurez', 'Madurez minima para enterrar', 0.6, 0.0, 1.0)
+add_par(base, page, 'float', 'Umbralnovedad', 'Novedad maxima de un compas quieto', 0.05, 0.0, 1.0)
+add_par(base, page, 'int', 'Compasesquietos', 'Compases quietos para enterrar', 4, 1, 64, clamp=True)
+add_par(base, page, 'int', 'Ciclomin', 'Duracion minima (compases)', 8, 1, 256, clamp=True)
+add_par(base, page, 'int', 'Ciclomax', 'Edad maxima (compases)', 32, 1, 1024, clamp=True)
+add_par(base, page, 'int', 'Negrasporcompas', 'Negras por compas', 4, 1, 16, clamp=True)
+add_par(base, page, 'toggle', 'Cambioentierra', 'Cambio de pattern entierra el mundo', False)
+add_par(base, page, 'toggle', 'Girovivo', 'El giro se frena sin novedad', True)
+add_par(base, page, 'float', 'Giromin', 'Factor de giro minimo', 0.25, 0.0, 1.0)
+add_par(base, page, 'pulse', 'Forzarciclo', 'Terminar el ciclo ahora')
+ok('pagina Fase6: Umbralmadurez, Umbralnovedad, Compasesquietos, Ciclomin, Ciclomax, '
+   'Negrasporcompas, Cambioentierra, Girovivo, Giromin, Forzarciclo')
+try:
+    if int(base.par.Ciclomax) < int(base.par.Ciclomin):
+        info('Ciclomax (%d) < Ciclomin (%d): se usa Ciclomax = Ciclomin'
+             % (int(base.par.Ciclomax), int(base.par.Ciclomin)))
+except Exception:
+    pass
+
+ciclos = get_or_make(base, 'tableDAT', 'ciclos', -440, 60)
+if ciclos.numRows == 0 or ciclos[0, 0] is None or ciclos[0, 0].val != 'ciclo':
+    ciclos.clear()
+    ciclos.appendRow(motor.module.CICLOS_COLS)
+ok('tabla ciclos: una fila por ciclo cerrado (ultimas 200)')
+
+leeme(base, 6, """FASE 6 - EL CICLO LO CIERRA EL MUNDO
+  En cada compas el motor mira la forma de cada celda:
+    novedad = celdas que han cambiado / celdas vivas
+    madurez = formaciones en el limite / formaciones
+  El mundo se entierra cuando lleva Compasesquietos compases maduro
+  (Umbralmadurez) y quieto (Umbralnovedad), entre Ciclomin y Ciclomax.
+  Cambioentierra: una rafaga de All Notes Off sin STOP tambien entierra.
+  Girovivo: el planeta se frena cuando el mundo deja de cambiar.
+  Tabla ciclos: compases, motivo, madurez y novedad de cada ciclo.""")
 
 print_report()
 
 
 def prueba(t):
     m = t.m
-    c = m.cfg()
-    c['long_fija'] = 0
+    c = dict(m.cfg())
+    c['nivel'] = 6                     # el ciclo, sin enterrar (eso es la fase 8)
+    cmin, cmax = m.cycle_bounds(c)
+    bar = m.bar_dur(c, 120.0)
+    fps = 30.0
+
+    def tocar(W, nbars, notas_por_compas):
+        """Simula compases a 120 BPM, fotograma a fotograma, por el motor.
+        notas_por_compas(k) -> notas del compas k. Devuelve los cierres."""
+        fins = []
+        tt = W.get('_t', 0.0)
+        fpb = int(round(bar * fps))
+        for k in range(nbars):
+            notas = notas_por_compas(k)
+            cada = fpb // max(1, len(notas))
+            for f in range(fpb):
+                now = tt + f / fps
+                if notas and f % cada == 0 and f // cada < len(notas):
+                    m.note_on(W, c, m.GEO, notas[f // cada], 100, now, 120.0)
+                r = m.tick(W, c, now, 120.0, True)
+                if r['ciclo']:
+                    fins.append(r['ciclo'])
+            tt += bar
+        W['_t'] = tt
+        return fins
+
+    # 1. estancado: una formacion saturada, rodeada de sus satelites saturados
     W = m.new_world()
-    p16 = [60, 62, 63, 67, 60, 70, 65, 64, 60, 62, 72, 67, 61, 70, 65, 66]
-    p13 = [48, 50, 55, 53, 48, 57, 52, 50, 59, 55, 49, 54, 51]
-    sd = 60.0 / 120.0 / 4
-    tt = 0.0
-    ends = 0
-    for k in range(16 * 10):
-        m.note_on(W, c, 1, p16[k % 16], 100, tt, 120.0)
-        m.note_on(W, c, 2, p13[k % 13], 100, tt + 0.002, 120.0)
-        r = m.tick(W, c, tt + 0.06, 120.0, True)
-        ends += r['ciclo']
-        tt += sd
-    t.check('SEQ1: pattern de 16 pasos', W['det'][1]['L'] == 16, str(W['det'][1]['L']))
-    t.check('SEQ2: pattern de 13 pasos', W['det'][2]['L'] == 13, str(W['det'][2]['L']))
-    t.check('ciclo = %d x 16 pasos' % c['reps'], W['cycle']['steps'] == c['reps'] * 16,
-            str(W['cycle']['steps']))
-    c2 = dict(c)
-    c2['cycle_mode'] = 1
-    t.check('hiperperiodo 16 y 13 = 208 pasos', m.cycle_lengths(W, c2)[0] == 208)
-    t.check('ciclos terminados al tocar', ends >= 1, '%d' % ends)
-    # probabilidad al 60 %
-    import random
-    rnd = random.Random(3)
-    W2 = m.new_world()
-    tt = 0.0
-    for k in range(16 * 10):
-        if rnd.random() < 0.6:
-            m.note_on(W2, c, 1, p16[k % 16], 100, tt + rnd.uniform(-0.004, 0.004), 120.0)
-        tt += sd
-    t.check('con probabilidad 60 %: 16 pasos', W2['det'][1]['L'] == 16, str(W2['det'][1]['L']))
-    # biblioteca
-    m.pattern_change(W2, c, 1, None, 'prueba')
-    for k in range(4):
-        m.note_on(W2, c, 1, p16[(k + 5) % 16], 100, tt, 120.0)
-        tt += sd
-    t.check('pattern conocido reconocido por la biblioteca',
-            W2['det'][1]['L'] == 16 and W2['det'][1]['src'] == 'biblioteca')
-    # rafagas
-    W3 = m.new_world()
-    W3['det'][1]['L'] = 16
+    i = m.note_cell(64)
+    for j in [i] + list(m.NEIGH[i]):
+        W['occ'][j], W['own'][j], W['sp'][j] = 30, m.GEO, m.GEO
+        W['h'][j] = m.limit(c)
+        W['par'][j] = -1 if j == i else i
+    fins = tocar(W, cmax, lambda k: [64, 64, 64, 64])
+    esperado = max(cmin, 1 + int(c['compases_quietos']))
+    t.check('coronada que sigue sonando -> novedad 0', W['novedad'] == 0.0 or
+            (fins and fins[0]['novedad'] == 0.0))
+    t.check('cierre por estancado en el compas %d' % esperado,
+            fins and fins[0]['motivo'] == 'estancado' and fins[0]['compases'] == esperado,
+            str([(f['motivo'], f['compases']) for f in fins[:2]]))
+    # 2. edad maxima: una celda nueva en cada compas
+    W = m.new_world()
+    notas = [m.cell_note(x) for x in range(m.N)]
+    fins = tocar(W, cmax + 1, lambda k: [notas[(k * 7) % m.N]])
+    t.check('un cambio en cada compas -> edad maxima en %d' % cmax,
+            fins and fins[0]['motivo'] == 'edad maxima' and fins[0]['compases'] == cmax,
+            str([(f['motivo'], f['compases']) for f in fins[:2]]))
+    # 3. parado: sin notas el reloj no avanza
+    W = m.new_world()
+    fins = tocar(W, cmax + 2, lambda k: [])
+    t.check('sin notas el reloj del ciclo no avanza', not fins and W['compases_ciclo'] == 0)
+    # 4. cambio de pattern con Cambioentierra: se aplaza hasta Ciclomin
+    c['cambio_entierra'] = 1
+    W = m.new_world()
+    tocar(W, 1, lambda k: [notas[k % m.N]])
     for ch in range(1, 17):
-        m.on_cc(W3, c, ch, 123, 0, 10.0)
-    r = m.tick(W3, c, 10.5, 120.0, True)
-    t.check('All Notes Off sin STOP -> cambio de pattern', r['burst'] == 'cambio')
-    W3['det'][1]['L'] = 16
-    m.clock_stop(W3, 20.0)
-    for ch in range(1, 17):
-        m.on_cc(W3, c, ch, 123, 0, 20.02)
-    r = m.tick(W3, c, 20.5, 120.0, True)
-    t.check('All Notes Off con STOP -> no cambia nada',
-            r['burst'] == 'stop' and W3['det'][1]['L'] == 16)
-    # MIDI real: START y CC 123 llegan al motor
+        m.on_cc(W, c, ch, 123, 0, W['_t'])
+    fins = tocar(W, cmax, lambda k: [notas[(k * 7) % m.N]])
+    t.check('rafaga antes de Ciclomin -> cierra en Ciclomin por cambio de pattern',
+            fins and fins[0]['motivo'] == 'cambio de pattern' and fins[0]['compases'] == cmin,
+            str([(f['motivo'], f['compases']) for f in fins[:1]]))
+    c['cambio_entierra'] = 0
+    # 5. giro vivo acotado
+    W = m.new_world()
+    W['novedad'] = 0.0
+    for k in range(400):
+        m.giro_step(W, c, 0.05, 120.0)
+    lo = W['giro_factor']
+    W['novedad'] = 1.0
+    for k in range(400):
+        m.giro_step(W, c, 0.05, 120.0)
+    t.check('giro vivo entre Giromin y 1',
+            abs(lo - c['giro_min']) < 1e-3 and abs(W['giro_factor'] - 1.0) < 1e-3,
+            'x%.2f .. x%.2f' % (lo, W['giro_factor']))
+    t.check('ritmo multiplica el giro por el giro vivo',
+            'giro_factor()' in base.op('ritmo').text)
+    # 6. por el camino real: Forzarciclo, START y CC 123
+    tabla = base.op('ciclos')
+    filas = [[cell.val for cell in tabla.row(r)] for r in range(tabla.numRows)]
     m.reset_world()
+    n0 = m.world()['ciclo_n']
+    m.on_pulse('Forzarciclo')
+    W = m.world()
+    t.check('Forzarciclo cierra al instante (forzado)',
+            W['ciclo_n'] == n0 + 1 and W['ev']['fin_de_ciclo']['motivo'] == 'forzado')
+    t.check('tabla ciclos: fila nueva', tabla.numRows == len(filas) + 1
+            and tabla[tabla.numRows - 1, 'motivo'].val == 'forzado')
     t.midi(0xFA)
-    t.check('START por MIDI -> paso 0', m.world()['clock']['t_ref'] is not None)
+    t.check('START por MIDI llega al motor', m.world()['clock']['start_t'] > -99.0)
     t.midi(0xBC, 0x7B, 0x00)
     t.check('CC 123 por MIDI llega al detector', len(m.world()['burst']['times']) == 1)
-    t.check('leyenda CICLO', 'CICLO' in m.legend())
+    t.check('leyenda CICLO', 'CICLO' in m.legend() and 'madurez' in m.legend())
 
 
 run_test(base, prueba)
-print('  Ahora: PLAY con los dos SEQ. La linea CICLO pasa de "escuchando" a')
-print('  "16 pasos (escucha)" tras unas dos vueltas del pattern.')
-print('  Con Turnauto, el planeta da una vuelta por ciclo.')
+print('  Ahora: PLAY con los dos SEQ. La linea CICLO cuenta compases, madurez')
+print('  y novedad. Sin bateria, el mundo madura, se queda quieto, el planeta')
+print('  frena y el ciclo se cierra por "estancado". Con bateria constante,')
+print('  los ciclos llegan a "edad maxima". Mira la tabla ciclos.')
 print('  PRUEBA PENDIENTE: cambia de pattern dos veces y pulsa STOP; copia')
 print('  las lineas AVISO que salgan aqui.')
 print('=' * 66)

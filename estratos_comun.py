@@ -17,7 +17,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v7'
+VERSION_COMUN = 'comun v8'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -644,8 +644,58 @@ def install_core(base, carpeta, fase):
 
     add_grid_pars(base)
     apply_wobble(base)
+    patch_ritmo(base)
     set_legend(base)
     return motor
+
+
+RITMO_GIRO_OLD = """    if spt > 0 and playing() and not paused:
+        angle = (angle + dt * 360.0 / spt) % 360.0"""
+RITMO_GIRO_NEW = """    if spt > 0 and playing() and not paused:
+        angle = (angle + dt * 360.0 / spt * giro_factor()) % 360.0"""
+RITMO_GIRO_FN = """def giro_factor():
+    # Giro vivo (fase 6): el motor frena el planeta cuando el mundo deja de
+    # cambiar. Sin motor, o antes de la fase 6, vale 1.
+    try:
+        m = op('motor')
+        return float(m.module.giro_factor()) if m is not None else 1.0
+    except Exception:
+        return 1.0
+
+
+def rotation(frame=None):"""
+
+
+def patch_ritmo(base):
+    """Ensena a 'ritmo' a multiplicar el giro por el giro vivo del motor.
+    Solo cambia el texto: el angulo acumulado (storage) se conserva."""
+    r = base.op('ritmo')
+    if r is None:
+        return False
+    t = r.text
+    if 'giro_factor()' in t:
+        return True
+    if RITMO_GIRO_OLD not in t or 'def rotation(frame=None):' not in t:
+        info('ritmo: no reconozco su texto; el giro vivo no se aplica')
+        return False
+    t = t.replace(RITMO_GIRO_OLD, RITMO_GIRO_NEW)
+    t = t.replace('def rotation(frame=None):', RITMO_GIRO_FN, 1)
+    r.text = t
+    ok('ritmo: el giro se multiplica por el giro vivo del motor')
+    return True
+
+
+def remove_par(base, name):
+    """Quita un parametro propio si existe (parametros obsoletos)."""
+    try:
+        p = getattr(base.par, name, None)
+        if p is None:
+            return False
+        p.destroy()
+        return True
+    except Exception as e:
+        info('no pude quitar %s: %s' % (name, e))
+        return False
 
 
 def set_legend(base):
@@ -863,6 +913,13 @@ class Prueba(object):
         self.m = self.motor.module
         self.saved = copy.deepcopy(self.motor.fetch('W', None))
         self.checks = []
+        self.ciclos = None
+        tb = base.op('ciclos')
+        if tb is not None:
+            try:
+                self.ciclos = [[cell.val for cell in tb.row(r)] for r in range(tb.numRows)]
+            except Exception:
+                self.ciclos = None
         try:
             self.nota = int(base.par.Nota)
         except Exception:
@@ -886,6 +943,14 @@ class Prueba(object):
             self.m._CACHE['printed'] = {}
         except Exception:
             pass
+        tb = self.base.op('ciclos')
+        if tb is not None and self.ciclos is not None:
+            try:
+                tb.clear()
+                for fila in self.ciclos:
+                    tb.appendRow(fila)
+            except Exception:
+                pass
         if self.nota is not None:
             try:
                 self.base.par.Nota = self.nota
