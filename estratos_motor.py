@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v22'
+MOTOR_VERSION = 'motor v23'
 
 import math
 
@@ -110,7 +110,7 @@ DEFAULT_CFG = dict(
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
     perfiles=PERFILES_DEFECTO, tipos=TIPOS_DEFECTO,
     # fase 8
-    herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0,
+    herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0, colmatacion=0.0,
     # fase 9
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
@@ -384,10 +384,12 @@ def new_world():
         vel=[0] * N,        # velocidad del evento fundador
         par=[-1] * N,       # satelite de... (-1: formacion propia)
         huella=[0.0] * N,   # instante en que quedo la huella (0: sin huella)
-        hueco=[0] * N,      # conchas retiradas por un corte en esta celda
         resto=[0.0] * N,    # fraccion de herencia acumulada
         gen=0,
-        shells=[],
+        shells=[],          # generaciones enterradas (paleta, grosor nominal, ocupacion)
+        cols=[[] for _ in range(N)],   # columna de cada celda: [[concha, grosor], ...] de abajo arriba
+        quitadas=[0] * N,   # losetas que ha perdido cada celda en el mundo actual
+        nucleo_av=[0] * N,  # la celda ya aviso de que el corte llego al nucleo
         scars={},
         flash=None,
         last={1: None, 2: None},
@@ -437,6 +439,10 @@ def ensure(W):
     luz = W.get('luz')
     if isinstance(luz, dict) and any(isinstance(v, list) for v in luz.values()):
         W['luz'] = {}                   # formato del motor v17 (un pad por celda)
+    cols = W.get('cols')
+    if not isinstance(cols, list) or len(cols) != len(W.get('occ', [])):
+        W['cols'] = columns_from_shells(W)  # mundo del motor v22 o anterior
+    W.pop('hueco', None)
     base = new_world()
     for k, v in base.items():
         if k not in W:
@@ -510,7 +516,8 @@ def shell_th(sh, cfg):
 
 
 def shell_radii(W, cfg):
-    """[(radio interior, radio exterior)] de cada concha, de dentro afuera."""
+    """[(radio interior, radio exterior)] NOMINALES de cada concha (generacion),
+    de dentro afuera: los que tendria sin cortes. Lo dibujado es la columna."""
     r = cfg['core_radius']
     out = []
     for sh in W['shells']:
@@ -521,14 +528,70 @@ def shell_radii(W, cfg):
 
 
 def top_radius(W, cfg):
+    """Radio nominal: nucleo + grosores de todas las conchas = tiempo."""
     return cfg['core_radius'] + sum(shell_th(sh, cfg) for sh in W['shells'])
 
 
+radio_nominal = top_radius
+
+
+# --- columnas (motor v23): cada celda guarda la pila de losetas que le quedan.
+# Una loseta es [concha, grosor]; la concha da su color y su ocupacion. Los
+# radios salen de la posicion en la columna: el exterior de una loseta es el
+# interior de la siguiente.
+
+def columns_from_shells(W):
+    """Columnas de un mundo anterior al motor v23: las losetas que sobreviven
+    (sin 'rm') se apilan por orden de generacion y se cierran los huecos."""
+    n = len(W.get('occ', []))
+    cols = [[] for _ in range(n)]
+    try:
+        th = cfg()['shell_thick']
+    except Exception:
+        th = DEFAULT_CFG['shell_thick']
+    for s, sh in enumerate(W.get('shells', [])):
+        g = sh.get('grosor') or th
+        rm = sh.get('rm') or [0] * n
+        for c in range(n):
+            if c >= len(rm) or not rm[c]:
+                cols[c].append([s, float(g)])
+    return cols
+
+
+def suelo(W, cfg, c):
+    """Radio del suelo de la celda c: nucleo + su columna."""
+    return cfg['core_radius'] + sum(g for _, g in W['cols'][c])
+
+
+def laguna(W, cfg, c):
+    """Tiempo que la destruccion ha borrado en la celda c (siempre >= 0)."""
+    return max(0.0, top_radius(W, cfg) - suelo(W, cfg, c))
+
+
+def column_radii(W, cfg, c):
+    """[(concha, r_in, r_out)] de la columna de c, de abajo arriba."""
+    r = cfg['core_radius']
+    out = []
+    for s, g in W['cols'][c]:
+        out.append((s, r, r + g))
+        r += g
+    return out
+
+
 def base_radius(W, cfg, i):
-    k = W['hueco'][i]
-    if k <= 0:
-        return top_radius(W, cfg)
-    return top_radius(W, cfg) - sum(shell_th(sh, cfg) for sh in W['shells'][-k:])
+    """Donde se apoyan formaciones, luz y reticula de la celda: su suelo."""
+    return suelo(W, cfg, i)
+
+
+def max_laguna(W, cfg):
+    """(laguna maxima, celda)."""
+    R = top_radius(W, cfg)
+    best, cell = 0.0, -1
+    for c in range(N):
+        lg = R - suelo(W, cfg, c)
+        if lg > best + 1e-9:
+            best, cell = lg, c
+    return best, cell
 
 
 def occupied(W):
@@ -1064,49 +1127,58 @@ def erosion(W, cfg, pad, vel, now):
     return ev
 
 
-def _top_removed(W, c):
-    k = 0
-    for sh in reversed(W['shells']):
-        if sh['rm'][c]:
-            k += 1
-        else:
-            break
-    return k
-
-
 def cut(W, cfg, target, depth, rad, now):
-    ns = n_shells(W)
-    if ns == 0:
+    """Corte en anfiteatro medido en la columna de cada celda: quita sus N
+    losetas superiores (N-1 en el primer anillo...). Tope por mundo: un
+    golpe que pide k losetas quita max(0, k - quitadas en este mundo). El
+    nucleo es el fondo. Devuelve las losetas quitadas en la celda golpeada."""
+    if n_shells(W) == 0:
         return 0
-    cells = []
-    deepest = 0
+    hechos = []
+    nucleo = None
     for c, d in rings(target, rad):
-        dd = min(int(depth) - d, ns)
-        if dd <= 0:
+        k = int(depth) - d
+        if k <= 0:
             continue
-        for s in range(ns - dd, ns):
-            W['shells'][s]['rm'][c] = 1
-        W['hueco'][c] = _top_removed(W, c)
+        col = W['cols'][c]
+        antes = suelo(W, cfg, c)
+        pide = max(0, k - W['quitadas'][c])
+        W['quitadas'][c] += pide
+        fuera = 0
+        while fuera < pide and col:
+            s, _ = col.pop()
+            if 0 <= s < len(W['shells']):
+                W['shells'][s]['rm'][c] = 1
+            fuera += 1
+        if not col and not W['nucleo_av'][c] and n_shells(W) > 0:
+            W['nucleo_av'][c] = 1
+            nucleo = c if nucleo is None or c == target else nucleo
         _clear_cell(W, c)
         W['huella'][c] = 0.0
         for j in NEIGH[c]:
             if W['par'][j] == c:
                 W['par'][j] = -1
-        cells.append(c)
-        deepest = max(deepest, W['hueco'][c])
-    # cicatrices: suelo del corte y paredes que han quedado al aire
-    for c in cells:
-        h = W['hueco'][c]
-        floor = ns - 1 - h
-        if floor >= 0:
-            W['scars'][floor * 1000 + c] = now
+        hechos.append((c, fuera, antes, suelo(W, cfg, c)))
+    # cicatrices: el fondo del corte y las paredes que han quedado al aire
+    # (radio exterior por encima del suelo nuevo e interior por debajo del
+    # anterior). Una celda que no ha perdido nada no expone nada.
+    for c, fuera, antes, ahora in hechos:
+        if fuera <= 0:
+            continue
+        if W['cols'][c]:
+            W['scars'][W['cols'][c][-1][0] * 1000 + c] = now
         for j in NEIGH[c]:
-            for s in range(ns - h, ns):
-                if not W['shells'][s]['rm'][j]:
+            for s, r_in, r_out in column_radii(W, cfg, j):
+                if r_out > ahora + 1e-9 and r_in < antes - 1e-9:
                     W['scars'][s * 1000 + j] = now
     W['dirty'] = True
-    W['ev']['corte'] = dict(celda=target, conchas=deepest, celdas=len(cells), t=now)
-    return deepest
+    fuera_t = next((f for c, f, _, _ in hechos if c == target), 0)
+    W['ev']['corte'] = dict(celda=target, conchas=fuera_t, celdas=len(hechos), t=now,
+                            suelo=suelo(W, cfg, target), laguna=laguna(W, cfg, target),
+                            nucleo=nucleo)
+    if nucleo is not None:
+        W['aviso'] = 'celda %d: el corte ha llegado al nucleo' % nucleo
+    return fuera_t
 
 
 # -----------------------------------------------------------------------------
@@ -1150,9 +1222,18 @@ def end_cycle(W, cfg, now, bars=None):
         return False
     r_in = top_radius(W, cfg)
     g = shell_grosor(cfg, bars)
+    # cada celda deposita su loseta sobre lo que le queda debajo: una
+    # hondonada se tapiza y sigue siendo hondonada, salvo lo que rellene
+    # Colmatacion. El radio nominal solo crece g (la colmatacion no es tiempo).
+    colm = cfg.get('colmatacion', 0.0)
+    s_new = len(W['shells'])
+    for c in range(N):
+        lg = max(0.0, r_in - suelo(W, cfg, c))
+        W['cols'][c].append([s_new, g + colm * lg])
     W['shells'].append(dict(gen=W['gen'], col=list(shell_color(W['gen'])),
                             occ=list(W['occ']), sp=list(W['sp']), rm=[0] * N,
                             grosor=g, r_in=r_in, r_out=r_in + g))
+    W['quitadas'] = [0] * N
     W['gen'] += 1
     her = cfg['herencia']
     for i in range(N):
@@ -1171,7 +1252,6 @@ def end_cycle(W, cfg, now, bars=None):
             W['par'][i] = -1
         W['vh'][i] = 0.0           # lo heredado vuelve a brotar de la superficie
         W['huella'][i] = 0.0
-        W['hueco'][i] = 0
     W['pend'] = {}
     W['dirty'] = True
     return True
@@ -1432,30 +1512,40 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     return out
 
 
+COL_ZOCALO = _tint(MINERAL[0], 0.55)   # basamento: ambar de la base, apagado
+
+
 def build_tiles(W, cfg, now):
+    """Losetas de cada columna: las Maxconchas superiores, cada una a su
+    radio, y debajo un zocalo (una sola instancia) hasta el nucleo."""
     rows = []
-    ns = n_shells(W)
-    first = max(0, ns - int(cfg['max_shells']))
+    maxs = max(1, int(cfg['max_shells']))
     st = cfg['scar_time']
-    radii = shell_radii(W, cfg)
-    for s in range(first, ns):
-        sh = W['shells'][s]
-        r_in, r_out = radii[s]
-        th = r_out - r_in
-        r_mid = 0.5 * (r_in + r_out)
-        base_col = sh['col']
-        for c in range(N):
-            if sh['rm'][c]:
-                continue
-            n = normal_i(c)
-            col = _tint(base_col, 0.75 + 0.35 * min(1.0, sh['occ'][c] / 4.0))
+    core = cfg['core_radius']
+    for c in range(N):
+        col = column_radii(W, cfg, c)
+        if not col:
+            continue
+        n = normal_i(c)
+        first = max(0, len(col) - maxs)
+        if first > 0:                       # zocalo: del nucleo a la loseta dibujada mas baja
+            top = col[first][1]
+            cw, cl = _cell_sizes(top, c)
+            if is_pole(c):
+                cw, cl = cw * 1.25, cl * 1.25
+            rows.append(_row(_mul(n, core), n, cw * 1.04, (top - core) * 0.98, cl * 1.04, COL_ZOCALO))
+        for s, r_in, r_out in col[first:]:
+            sh = W['shells'][s]
+            th = r_out - r_in
+            r_mid = 0.5 * (r_in + r_out)
+            colr = _tint(sh['col'], 0.75 + 0.35 * min(1.0, sh['occ'][c] / 4.0))
             t0 = W['scars'].get(s * 1000 + c)
             if t0 is not None:
-                col = _mix(COL_SCAR, col, max(0.0, min(1.0, (now - t0) / st)))
+                colr = _mix(COL_SCAR, colr, max(0.0, min(1.0, (now - t0) / st)))
             cw, cl = _cell_sizes(r_mid, c)
             if is_pole(c):
                 cw, cl = cw * 1.25, cl * 1.25
-            rows.append(_row(_mul(n, r_mid - th * 0.5), n, cw * 1.04, th * 0.98, cl * 1.04, col))
+            rows.append(_row(_mul(n, r_in), n, cw * 1.04, th * 0.98, cl * 1.04, colr))
     return rows
 
 
@@ -1750,6 +1840,7 @@ def cfg():
         max_shells=_p('Maxconchas', c['max_shells']),
         grosor_tiempo=int(_p('Grosortiempo', True)),
         grosor_max=_p('Grosormax', c['grosor_max']),
+        colmatacion=max(0.0, min(1.0, _p('Colmatacion', c['colmatacion']))),
         scar_time=max(0.1, _p('Cicatriz', c['scar_time'])),
         flash=_p('Destello', c['flash']),
     )
@@ -1821,9 +1912,15 @@ def surface_radius(frame=None):
 
 
 def nucleo_radius(frame=None):
-    W, c = world(), cfg()
-    hidden = max(0, n_shells(W) - int(c['max_shells']))
-    return c['core_radius'] + sum(shell_th(sh, c) for sh in W['shells'][:hidden])
+    """La esfera del nucleo ya no crece (motor v23): lo que no se dibuja de
+    cada columna lo cubre su zocalo, y una esfera a cota comun taparia las
+    hondonadas."""
+    return cfg()['core_radius']
+
+
+def floor_radius(i, frame=None):
+    """Suelo de la celda i (lo usa la reticula)."""
+    return suelo(world(), cfg(), i)
 
 
 def giro_factor(frame=None):
@@ -2094,7 +2191,7 @@ def flash_light():
     except Exception:
         ang, tilt = 0.0, 0.0
     v = world_dir(normal_i(f['cell']), ang, tilt, wobble())
-    d = top_radius(W, c) + 4.0
+    d = suelo(W, c, f['cell']) + W['vh'][f['cell']] + 4.0   # sobre su suelo y su formacion
     return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env) + tuple(flash_color(W, c))
 
 
@@ -2227,13 +2324,18 @@ def _legend():
             lines.append('  EROSION  -   densidad %d%%%s' % (int(dens * 100), flag))
     if lvl >= 8:
         ult = '%.2f' % shell_th(W['shells'][-1], c) if W['shells'] else '-'
-        lines.append('  CONCHAS  %d   radio %.2f   ultima %s   herencia %d%%   continentes %d'
-                     % (n_shells(W), top_radius(W, c), ult, int(c['herencia'] * 100),
-                        continents(W)))
+        lg, lc = max_laguna(W, c)
+        lag = '%.2f (celda %d)' % (lg, lc) if lc >= 0 else '0.00'
+        lines.append('  CONCHAS  %d   radio %.2f   ultima %s   laguna max %s   colmatacion %d%%'
+                     '   herencia %d%%   continentes %d'
+                     % (n_shells(W), top_radius(W, c), ult, lag, int(round(c['colmatacion'] * 100)),
+                        int(c['herencia'] * 100), continents(W)))
     if lvl >= 9:
         k = W['ev'].get('corte')
         if k:
             left = max(0.0, c['scar_time'] - (absTime.seconds - k['t']))
-            lines.append('  CORTE    celda %d   %d conchas expuestas   cicatriz %.1f s'
-                         % (k['celda'], k['conchas'], left))
+            lines.append('  CORTE    celda %d   %d losetas   suelo %.2f   laguna %.2f   cicatriz %.1f s'
+                         % (k['celda'], k['conchas'], k.get('suelo', 0.0), k.get('laguna', 0.0), left))
+            if k.get('nucleo') is not None:
+                lines.append('  CORTE    celda %d   nucleo alcanzado' % k['nucleo'])
     return '\n'.join(lines)

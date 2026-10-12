@@ -7,23 +7,33 @@ Requiere la fase 8.
 QUE HACE
 --------
 Los pads con profundidad > 0 (por defecto el 2, caja, y el 3, tom) abren un CORTE: quitan
-las losetas de las conchas superiores en la celda golpeada, en forma de
-anfiteatro (profundidad completa en el centro, un escalon menos por
-anillo). Las paredes del corte son las capas enterradas, cada una con el
+las N losetas superiores de la COLUMNA de la celda golpeada, en forma de
+anfiteatro (N en el centro, un escalon menos por anillo). Sobre relieve,
+el corte sigue la forma del suelo.
+
+  TOPE POR MUNDO  dentro de un mundo los golpes repetidos no taladran: un
+             golpe que pide k losetas quita k - las ya quitadas en este
+             mundo. Entre mundos si se acumula: una celda cortada en cada
+             mundo baja (cuenca de erosion).
+  NUCLEO     es el fondo: ningun corte baja de ahi. La primera vez que
+             una celda se queda sin losetas, la leyenda dice
+             'CORTE celda N nucleo alcanzado'. Las paredes del corte son las capas enterradas, cada una con el
 color de su generacion: bandas que son la historia cromatica de la sesion.
 
   CICATRIZ   lo recien expuesto (fondo y paredes) se ve CIAN y se integra
-             al mineral en Cicatriz segundos. El hueco es permanente: solo
-             lo tapa la concha siguiente.
+             al mineral en Cicatriz segundos. El hueco es permanente: la
+             concha siguiente lo tapiza sin rellenarlo (salvo lo que
+             rellene Colmatacion, fase 8). Enterrar no enciende cicatrices.
   DESTELLO   cada destruccion dispara un golpe de luz sobre la celda;
              los cortes, mas fuerte. Del color del pad (aclarado).
   LUZ SEQ1   el cian queda reservado a lo recien expuesto: la luz del
              SEQ1 en el centro de la celda pasa a blanca.
 
 Las formaciones de una celda cortada se apoyan en el fondo del corte.
-La profundidad se mide en conchas: como cada concha tiene el grosor de su
-ciclo (fase 8), un corte de 3 conchas es mas o menos hondo segun lo que
-duraron esos mundos. Las paredes usan los radios de cada concha.
+La profundidad se mide en losetas: como cada una tiene el grosor de su
+ciclo (fase 8), un corte de 3 es mas o menos hondo segun lo que duraron
+esos mundos. Las paredes son las caras de las losetas vecinas, cada una a
+su radio.
 
 COMO USARLO
 -----------
@@ -34,7 +44,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v5  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
+VERSION = 'fase9 v6  (cortes en la columna de cada celda, tope por mundo, el nucleo es el fondo)'
 banner(VERSION)
 
 base = require_base(9)
@@ -59,8 +69,10 @@ ok('luz del SEQ1: blanca desde esta fase (el cian queda para lo recien expuesto)
 set_render(base)
 
 leeme(base, 9, """FASE 9 - ARQUEOLOGIA
-  Pads con profundidad > 0 abren cortes en anfiteatro: las paredes son
-  las conchas enterradas, cada una con su color.
+  Pads con profundidad > 0 abren cortes en anfiteatro en la columna de
+  cada celda: las paredes son las losetas enterradas, cada una con su
+  color. Un mundo no taladra (tope por mundo); entre mundos, las cuencas
+  bajan. El nucleo es el fondo.
   Lo recien expuesto, cian durante Cicatriz s. Cada destruccion, destello.
   La luz del SEQ1 en el centro de la celda pasa a blanca.""")
 
@@ -76,10 +88,10 @@ def prueba(t):
         m.end_cycle(W, c, g + 0.5)
     i = m.note_cell(64)
     d = m.cut(W, c, i, 3, 1, 100.0)
-    t.check('corte de 3 en 5 conchas', d == 3 and W['hueco'][i] == 3)
+    t.check('corte de 3 en 5 conchas', d == 3 and len(W['cols'][i]) == 2)
     ring = [x for x, dd in m.rings(i, 1) if dd == 1]
     t.check('anfiteatro: el anillo baja un escalon menos',
-            all(W['hueco'][x] == 2 for x in ring))
+            all(len(W['cols'][x]) == 3 for x in ring))
     t.check('cicatrices registradas', len(W['scars']) > 0, '%d losetas' % len(W['scars']))
     tiles = m.build_tiles(W, c, 100.0)
     cian = [r for r in tiles if r[9] < 0.3 and r[11] > 0.8]
@@ -89,6 +101,42 @@ def prueba(t):
     t.check('la cicatriz se integra con el tiempo', len(cian2) == 0)
     t.check('la formacion se apoya en el fondo',
             abs(m.base_radius(W, c, i) - (m.top_radius(W, c) - 3 * c['shell_thick'])) < 1e-6)
+    # tope por mundo: repetir el golpe no quita mas
+    n_antes = len(W['cols'][i])
+    for k in range(4):
+        m.cut(W, c, i, 3, 1, 101.0 + k)
+    t.check('tope por mundo: golpes repetidos no taladran',
+            len(W['cols'][i]) == n_antes and all(len(W['cols'][x]) == 3 for x in ring))
+    # deposito sobre el corte (Colmatacion 0): la loseta nueva empieza en su suelo
+    c0 = dict(c)
+    c0['colmatacion'] = 0.0
+    s0, lg0 = m.suelo(W, c0, i), m.laguna(W, c0, i)
+    sc0 = len(W['scars'])
+    W['scars'] = {}
+    m.end_cycle(W, c0, 102.0)
+    t.check('al enterrar, la loseta nueva se deposita en el fondo del corte; la laguna se conserva',
+            abs(m.column_radii(W, c0, i)[-1][1] - s0) < 1e-6 and abs(m.laguna(W, c0, i) - lg0) < 1e-6,
+            'laguna %.2f -> %.2f' % (lg0, m.laguna(W, c0, i)))
+    t.check('enterrar no enciende cicatrices', not W['scars'] and sc0 > 0)
+    # invariante de las columnas: sin huecos ni solapes
+    inv = all(abs(a[2] - b[1]) < 1e-9 for x in range(m.N)
+              for a, b in zip(m.column_radii(W, c0, x), m.column_radii(W, c0, x)[1:]))
+    t.check('columnas sin huecos ni solapes', inv)
+    # cuenca: corte de 2 en la misma celda durante 10 mundos
+    Wk = m.new_world()
+    for g in range(3):
+        m.end_cycle(Wk, c0, float(g))
+    lens, avisos = [], 0
+    for g in range(10):
+        m.cut(Wk, c0, i, 2, 0, 10.0 + g)
+        if (Wk['ev']['corte'] or {}).get('nucleo') == i:
+            avisos += 1
+        lens.append(len(Wk['cols'][i]))
+        m.end_cycle(Wk, c0, 10.5 + g)
+    t.check('cuenca: baja una loseta por mundo hasta el nucleo, que avisa una sola vez',
+            lens[:2] == [1, 0] and avisos == 1 and abs(m.suelo(Wk, c0, i) - c0['core_radius']
+                                                       - m.shell_th(Wk['shells'][-1], c0)) < 1e-6,
+            'losetas %s, avisos %d' % (lens, avisos))
     # conchas de grosores distintos
     cg = dict(c)
     cg['grosor_tiempo'] = 1
@@ -98,7 +146,7 @@ def prueba(t):
         m.end_cycle(W3, cg, 0.0, bars)
     gs = [m.shell_th(sh, cg) for sh in W3['shells']]
     m.cut(W3, cg, i, 3, 0, 100.0)
-    t.check('corte con grosores distintos: el fondo baja la suma de 3 conchas',
+    t.check('corte con grosores distintos: el fondo baja la suma de 3 losetas',
             abs(m.base_radius(W3, cg, i) - (m.top_radius(W3, cg) - sum(gs[-3:]))) < 1e-6,
             'grosores %s' % ' '.join('%.2f' % g for g in gs))
     radii = m.shell_radii(W3, cg)
