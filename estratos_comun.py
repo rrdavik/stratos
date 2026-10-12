@@ -18,11 +18,11 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v15'
+VERSION_COMUN = 'comun v16'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'luz_celda']
+                'coronas', 'luz_celda', 'luz_conchas']   # la capa aditiva, al final
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
 
@@ -633,7 +633,28 @@ def install_luz_celda(base):
     if not bien:
         fail('luz_celda no lee el color por instancia (%s): Instance 2 -> Color R/G/B = '
              'r g b, Color Mode = Replace' % det)
+    install_luz_conchas(base, page)
     set_render(base)
+    return geo
+
+
+def install_luz_conchas(base, page):
+    """La luz de los secuenciadores en las conchas de la celda (motor v25):
+    una capa aditiva sobre sus losetas superiores. Se ve desde la fase 8."""
+    add_par(base, page, 'toggle', 'Luzconchas', 'Luz de los secuenciadores en las conchas', True)
+    add_par(base, page, 'float', 'Luzconchaspulso', 'Luz en las conchas: pulso de la nota',
+            0.35, 0.0, 1.0)
+    add_par(base, page, 'float', 'Luzconchasreposo', 'Luz en las conchas: reposo (ultima celda)',
+            0.10, 0.0, 1.0)
+    add_par(base, page, 'int', 'Luzconchasalcance', 'Luz en las conchas: losetas que alcanza',
+            4, 1, 24, clamp=True)
+    mat = make_constant(base, 'mat_luz_conchas', 780, 780, (1.0, 1.0, 1.0))
+    set_additive(mat)
+    geo = make_instanced(base, 'luz_conchas', 520, 780, 'mat_luz_conchas')
+    bien, det = instance_color_ok(geo)
+    if not bien:
+        fail('luz_conchas no lee el color por instancia (%s): Instance 2 -> Color R/G/B = '
+             'r g b, Color Mode = Replace' % det)
     return geo
 
 

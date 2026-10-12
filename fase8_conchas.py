@@ -38,6 +38,12 @@ Aqui la concha es una capa de losetas instanciadas: igual de barata
 (una sola geometria), sin shaders, y en la fase 9 permite abrir cortes
 quitando losetas y ver las paredes de cada capa con su color.
 
+LUZ EN LAS CONCHAS (Luzconchas, pagina Fase3): una nota tine tenuemente las
+losetas superiores de su celda (Luzconchasalcance, 4), del color de su
+secuenciador: pulso con la nota (Luzconchaspulso) y reposo que respira
+mientras es su ultima celda (Luzconchasreposo). Es luz aditiva: no tapa el
+color de la generacion, se ve en la sombra y la cicatriz manda.
+
 De cada columna se dibujan sus Maxconchas (24) losetas superiores; bajo
 ellas, un ZOCALO (una sola instancia por celda) baja hasta el nucleo. La
 esfera del nucleo ya no crece: taparia las hondonadas.
@@ -57,7 +63,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v6  (columnas, Colmatacion, zocalo; camara de globo)'
+VERSION = 'fase8 v7  (columnas, Colmatacion, zocalo; camara de globo; luz del secuenciador en las conchas)'
 banner(VERSION)
 
 base = require_base(8)
@@ -184,6 +190,70 @@ def prueba(t):
             len(tz) == m.N * 5 and len(zoc) == m.N and len(tz) <= m.N * (c8['max_shells'] + 1),
             '%d instancias, %d zocalos' % (len(tz), len(zoc)))
     t.check('el nucleo no crece', abs(m.nucleo_radius() - c['core_radius']) < 1e-6)
+    # la luz del secuenciador en las conchas de la celda
+    import math
+    cl = dict(c)
+    cl.update(nivel=max(9, cl['nivel']), luz_conchas=1, luz_seq=1, grosor_tiempo=0,
+              luz_conchas_alcance=4, max_shells=24)
+    Wl = m.new_world()
+    for g in range(10):
+        m.end_cycle(Wl, cl, float(g))
+    a, b = m.note_cell(64), m.note_cell(40)
+    tiles0 = m.build_tiles(Wl, cl, 25.0)
+    m.note_on(Wl, cl, 1, 64, 100, 20.0)
+    m.note_on(Wl, cl, 2, 40, 100, 20.0)
+
+    def de_celda(rows, x):
+        n = m.normal_i(x)
+        out = []
+        for r in rows:
+            d = math.sqrt(r[0] ** 2 + r[1] ** 2 + r[2] ** 2)
+            if d > 0 and (r[0] * n[0] + r[1] * n[1] + r[2] * n[2]) / d > 1 - 1e-6:
+                out.append(r)
+        return out
+    L = m.shell_lights(Wl, cl, 20.05)
+    la, lb = de_celda(L, a), de_celda(L, b)
+    t.check('nota del SEQ1 y del SEQ2: se tinen las 4 losetas superiores de cada celda',
+            len(la) == 4 and len(lb) == 4 and len(L) == 8, '%d + %d de %d' % (len(la), len(lb), len(L)))
+    luma = lambda r: r[9] + r[10] + r[11]
+    t.check('la luz baja hacia el fondo de la columna',
+            all(luma(x) > luma(y) for x, y in zip(la, la[1:])))
+    reposo = m.shell_lights(Wl, cl, 25.0)
+    ra = de_celda(reposo, a)
+    t.check('entre notas, reposo tenue y menor que el pulso',
+            len(ra) == 4 and 0 < luma(ra[0]) < luma(la[0]), '%.3f < %.3f' % (luma(ra[0]) if ra else 0, luma(la[0])))
+    r1 = de_celda(m.shell_lights(Wl, cl, 25.0 + m.RESPIRA_T / 4), a)
+    r2 = de_celda(m.shell_lights(Wl, cl, 25.0 + 3 * m.RESPIRA_T / 4), a)
+    t.check('el reposo respira (una loseta ocupada no)', abs(luma(r1[0]) - luma(r2[0])) > 1e-3)
+    tiles = m.build_tiles(Wl, cl, 25.0)
+    t.check('el color de la generacion no cambia: la luz es una capa aparte',
+            tiles == tiles0)
+    # en el fondo de un corte: la loseta del fondo, hacia abajo; las paredes vecinas no
+    m.cut(Wl, cl, a, 3, 1, 30.0)
+    Wl['scars'] = {}
+    m.note_on(Wl, cl, 1, 64, 100, 40.0)
+    L = m.shell_lights(Wl, cl, 40.05)
+    la = de_celda(L, a)
+    fondo = m.column_radii(Wl, cl, a)[-1]
+    alto_fondo = math.sqrt(sum(x * x for x in la[0][:3])) if la else -1
+    t.check('nota en el fondo de un corte: se tine la loseta del fondo; las vecinas no',
+            la and abs(alto_fondo - fondo[1]) < 1e-6 and len(L) == len(la) + 4,
+            '%d filas, %d de la celda' % (len(L), len(la)))
+    # cicatriz: el cian manda
+    Wl['scars'][fondo[0] * 1000 + a] = 40.0
+    la2 = de_celda(m.shell_lights(Wl, cl, 40.1), a)
+    t.check('una loseta con cicatriz reciente no se tine', len(la2) == len(la) - 1)
+    # bateria: la loseta del pad sigue viendose en el centro de la celda tenida
+    cl7 = dict(cl)
+    cl7['perfiles'] = [(0, 0, 0)] * 8
+    m.erosion(Wl, cl7, 3, 100, 40.2)
+    ev = Wl['ev']['erosion']
+    luz_c = de_celda(m.cell_lights(Wl, cl7, 40.25), ev['celda'])
+    t.check('golpe de bateria sobre una celda tenida: se ve su luz en el centro',
+            len(luz_c) >= 1)
+    # interruptor
+    cl['luz_conchas'] = 0
+    t.check('Luzconchas apagado: ninguna capa de luz', not m.shell_lights(Wl, cl, 40.05))
     # por el camino real
     m.reset_world()
     t.midi(0x9C, 0x40, 0x64)

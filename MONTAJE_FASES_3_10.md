@@ -18,14 +18,14 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v24` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases | `comun v15` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v25` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas | `comun v16` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate | `fase3 v11` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo | `fase6 v4` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto | `fase7 v9` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo | `fase8 v6` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas | `fase8 v7` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian, destello | `fase9 v6` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos | `fase10 v5` |
 
@@ -130,10 +130,20 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
   - **El latido sigue al gate** (v20). Mientras la nota suena, la formación se hincha un 12 % (antes 5 %), se aclara y se tiñe del color de su secuenciador (cian o blanco el SEQ1, ámbar el SEQ2). Al soltarla, vuelve a su color en ~0,25 s. Con la loseta del centro, la construcción que suena se ve de lejos.
   - **En las fases 1 y 2** (`fase12_base.py`) no se escucha el note off: la luz es un pulso de 0,25 s con cada nota, del mismo tamaño y brillo.
 - **La batería se ve igual** (fase 7, motor v21): cada golpe ilumina el centro de la celda y su formación con el color de su pad. Si coinciden en la celda, manda la luz más intensa en ese instante.
-- **Sin transparencias:** cada zona lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo.
-- **Interruptores:** `Luzseq` (página Fase3) para el centro y `Balizasdrum` (página Fase7) para la batería. Las dos luces son parte del mundo y se ven también en modo actuación.
+- **La luz del secuenciador llega a las conchas de la celda** (desde la fase 8; motor v25, comun v16). Con muchas conchas, y más con la cámara de globo, el centro de la celda se pierde entre las bandas de las losetas. Por eso una nota también tiñe tenuemente las losetas de su celda, que la ocupan entera:
+  - **Qué se tiñe:** las losetas dibujadas de la columna de la celda, de arriba abajo: la superior con toda la luz y menos en cada una, hasta apagarse en `Luzconchasalcance` (4). En las paredes de un corte se siguen leyendo los colores de cada estrato. El zócalo no se tiñe. En una celda en el fondo de un corte se tiñe la loseta del fondo hacia abajo; las paredes vecinas son de otras celdas y no se tiñen.
+  - **Pulso y reposo**, como el centro: un pulso con cada nota (`Luzconchaspulso`, 0,35) y, mientras es la última celda de ese secuenciador, un reposo tenue (`Luzconchasreposo`, 0,10). Es un tinte, no un foco.
+  - **Cómo:** es una capa de **luz aditiva** (geometría `luz_conchas`, Script CHOP `i_luz_conchas`, material constante `mat_luz_conchas` con mezcla aditiva) que envuelve las losetas. Suma el color del secuenciador sin tocar el de la generación ni la diferencia entre loseta ocupada y vacía, se ve igual en la cara en sombra y en las paredes de una hondonada, y nunca oscurece ni tapa: el centro de la celda, la luz de la batería y las formaciones siguen encima.
+  - **El reposo respira** (entre el 70 % y el 100 %, cada 2,4 s). Una loseta ocupada es más clara pero quieta: el reposo blanco del SEQ1 no se confunde con ella.
+  - **La cicatriz manda:** una loseta en cian por un corte reciente no se tiñe.
+  - **Los dos secuenciadores en la misma celda:** una loseta tiene un solo color, así que manda el más encendido y, si empatan, el último que ha tocado.
+  - **El SEQ2 sobre la concha base ámbar:** como la luz se suma, el pulso aclara la loseta además de teñirla, y se nota aunque el color sea parecido.
+  - **Rendimiento:** solo se calculan las losetas de las celdas en pulso o en reposo (como mucho 2 × `Luzconchasalcance` filas por fotograma). Las dos mil losetas de las conchas no se recalculan.
+  - Se ve también en modo actuación. `Luzconchas` apagado deja las conchas como antes.
+- **Sin transparencias en la superficie:** cada zona del centro lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo. La única capa aditiva es la luz de las conchas, que se dibuja la última.
+- **Interruptores:** `Luzseq` (página Fase3) para el centro, `Luzconchas` (página Fase3) para las conchas y `Balizasdrum` (página Fase7) para la batería. Las tres luces son parte del mundo y se ven también en modo actuación.
 
-**Página Fase3:** `Luzseq` · `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Gatemax` 1,25 · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
+**Página Fase3:** `Luzseq` · `Luzconchas` · `Luzconchaspulso` 0,35 · `Luzconchasreposo` 0,10 · `Luzconchasalcance` 4 · `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Gatemax` 1,25 · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
 
 Los tres últimos los crea ya `fase12_base.py` en esta página; si venían de la página Fase1 (versión anterior), la fase 3 los mueve aquí conservando su valor.
 
@@ -582,6 +592,7 @@ CAMARA   globo   dist 64.2 -> 66.0   radio encuadre 9.00   fov 45 (horizontal; m
 | SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
 | La luz sale de un solo color | `luz_celda` no lee el color por instancia | Relanza cualquier fase (la recrea). Si persiste, en `luz_celda`: Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace. El informe lo avisa con `FALLO luz_celda no lee el color por instancia` |
+| No se ve dónde caen las notas con muchas conchas | El centro de la celda es pequeño desde la cámara de globo y se pierde entre las bandas de las losetas | Comprueba que `Luzconchas` esté encendido; sube `Luzconchaspulso` (y `Luzconchasreposo` para ver dónde está cada secuenciador entre notas) o `Luzconchasalcance` para que se tiñan más losetas. Si no se ve nada, relanza cualquier fase (crea `luz_conchas` y la mete en el render) y mira que `mat_luz_conchas` tenga la mezcla aditiva |
 | No se ve la luz de una celda | `Luzseq` (secuenciadores) o `Balizasdrum` (batería) apagados, `Luzdrum` a 0, la batería o el secuenciador no llegan (mira las líneas `EROSION` y `NOTA`), o `luz_celda` fuera del render | Revisa esos; relanzar cualquier fase vuelve a meter `luz_celda` en el render |
 | El mundo nunca se entierra por estancamiento | El bombo está sonando: cada temblor genera novedad | Es lo esperado; quita el bombo para que el mundo se asiente |
 | El mundo no se entierra nunca (la leyenda dice `esperando territorio`) | La batería no deja que se llene el territorio: cada golpe lo vacía, y la edad máxima solo entierra un mundo con el territorio ocupado | Quita la batería (el mundo se asienta y se entierra por estancamiento) o baja `Umbralterritorio`. Mira la columna `territorio` de la tabla `ciclos` |
@@ -707,6 +718,16 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
   - Superficie en directo, `Planofinal` y vuelta a globo: transiciones de 20 s sin saltos (como mucho 0,16 por fotograma); la cámara no baja nunca del radio + `Camaltura`; al final, a `Camaltura` de la superficie.
   - Sesión de 26 conchas (37,5 de radio ganado, acelerada): distancia de 54,6 a 233,1 siempre creciente, globo entero en todos los fotogramas, 6 saltos de seguridad al principio (el mayor, 3,7), planos de recorte correctos y todas las expresiones evaluadas sin error.
 
+- **La luz del secuenciador en las conchas** (motor v25, fase 8 v7):
+  - Con 10 conchas, una nota del SEQ1 y otra del SEQ2 tiñen las 4 losetas superiores de su celda, más fuerte arriba.
+  - Entre notas, la última celda de cada uno mantiene un reposo tenue (0,24 frente a 0,97 de brillo en la loseta superior) que respira; el color de las losetas (la generación, ocupada o vacía) no cambia: la luz va en una capa aparte.
+  - Nota en el fondo de un corte: se tiñen la loseta del fondo y las de debajo; las paredes vecinas, no.
+  - Una loseta con cicatriz reciente no se tiñe.
+  - Un golpe de batería sobre una celda teñida sigue encendiendo su centro.
+  - Con `Luzconchas` apagado no hay capa de luz.
+  - Rendimiento con 24 conchas (2.040 losetas) y los dos secuenciadores en semicorcheas: como mucho 8 filas de luz por fotograma; la diferencia queda en el ruido (unas centésimas de milisegundo por fotograma).
+  - La luz de celda no estaba por debajo de las losetas: va sobre el suelo de su celda + 0,02, por encima de la cara superior de la loseta de arriba (que llega a r_in + 0,98 × grosor).
+
 ### Pruebas pendientes con el aparato
 
 1. **All Notes Off:** cambiar de pattern dos veces y pulsar STOP, y copiar las líneas AVISO.
@@ -717,6 +738,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 6. **Batería constante:** comprobar que la leyenda dice `esperando territorio` pasado `Ciclomax` y apuntar la ocupación del territorio, para afinar `Umbralterritorio`.
 7. **Cuencas:** con la batería real, medir cuánto bajan las cuencas en 10 minutos (`laguna max` en la leyenda) y ajustar `Colmatacion`.
 8. **Cámara de globo:** comprobar en el proyector real que el globo queda entero con `Encuadremargen` 1,08 y que el FOV de la cámara se lee bien (la leyenda `CAMARA` dice cuál manda).
+9. **Luz en las conchas:** con la cámara de globo y 10 conchas o más, comprobar que se ve dónde cae cada nota, y ajustar `Luzconchaspulso` y `Luzconchasreposo` con la luz real del proyector.
 
 ---
 
