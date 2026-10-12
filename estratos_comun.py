@@ -18,7 +18,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v12'
+VERSION_COMUN = 'comun v13'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -684,12 +684,34 @@ def remove_par(base, name):
         return False
 
 
+LEYENDA_LETRA = 9                    # 15 hasta comun v12 (un 40 % menos)
+LEYENDA_LETRA_VIEJA = 15
+
+
+def legend_expr(fuentes):
+    """Texto de la leyenda: las fuentes, o nada si Leyenda esta apagado."""
+    return ("(" + " + ".join("parent().op('%s').module.legend(absTime.frame)" % f
+                             for f in fuentes) + ") if parent().par.Leyenda else ''")
+
+
+def set_legend_font(rot):
+    """Letra de la leyenda: baja de 15 a 9; respeta un tamano puesto a mano."""
+    for n in ('fontsizex', 'fontsize', 'fontsizey'):
+        p = getattr(rot.par, n, None) if rot is not None else None
+        if p is not None:
+            try:
+                if abs(float(p.eval()) - LEYENDA_LETRA_VIEJA) < 1e-6:
+                    p.val = LEYENDA_LETRA
+            except Exception:
+                pass
+
+
 def set_legend(base):
+    add_par(base, get_page(base, 'Fase1'), 'toggle', 'Leyenda', 'Mostrar leyenda', True)
     rot = base.op('rotulo')
-    if setexpr(rot, 'text',
-               "parent().op('ritmo').module.legend(absTime.frame) + "
-               "parent().op('motor').module.legend(absTime.frame)"):
-        ok('leyenda: tempo + motor (nota incluida)')
+    set_legend_font(rot)
+    if setexpr(rot, 'text', legend_expr(['ritmo', 'motor'])):
+        ok('leyenda: tempo + motor (nota incluida); Leyenda la oculta')
     else:
         fail('no pude enlazar la leyenda')
 

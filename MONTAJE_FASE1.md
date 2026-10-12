@@ -92,6 +92,7 @@ Todo dentro de `/project1/FASE1`:
 | `Tilt` | Inclinación del eje, en grados | 20 |
 | `Showgrid` | Muestra u oculta la retícula | Activado |
 | `Pausa` | Congela el giro donde está | Desactivado |
+| `Leyenda` | Muestra u oculta la leyenda (letra de 9 puntos; con `fase12_base.py` v5 o al relanzar una fase con comun v13) | Activado |
 
 ### Cómo se calcula la vuelta
 

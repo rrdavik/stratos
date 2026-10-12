@@ -45,7 +45,7 @@ la anterior NO pasa a la nueva.
 import td
 import math
 
-VERSION = 'fase12 v4  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda)'
+VERSION = 'fase12 v5  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda; leyenda mas pequena y ocultable)'
 print('=' * 66)
 print('EJECUTANDO: ' + VERSION)
 print('=' * 66)
@@ -187,7 +187,9 @@ p = page.appendToggle('Showgrid', label='Mostrar reticula')
 p[0].default = p[0].val = True
 p = page.appendToggle('Pausa', label='Pausar rotacion')
 p[0].default = p[0].val = False
-ok('pagina Fase1: Barsperturn, Tilt, Showgrid, Pausa (ya no hay Bpm)')
+p = page.appendToggle('Leyenda', label='Mostrar leyenda')
+p[0].default = p[0].val = True
+ok('pagina Fase1: Barsperturn, Tilt, Showgrid, Pausa, Leyenda (ya no hay Bpm)')
 
 page2 = base.appendCustomPage('Fase2')
 p = page2.appendInt('Canal', label='Canal MIDI del SEQ1')
@@ -680,13 +682,14 @@ setp(rotulo, 'resolutionw', 1280)
 setp(rotulo, 'resolutionh', 720)
 bg = setp_any(rotulo, ['bgalpha', 'backgroundalpha', 'bgcolora'], 0.0)
 setp_any(rotulo, ['font', 'fontfamily'], 'Consolas')
-setp_any(rotulo, ['fontsizex', 'fontsize'], 15)
-setp(rotulo, 'fontsizey', 15)
+setp_any(rotulo, ['fontsizex', 'fontsize'], 9)
+setp(rotulo, 'fontsizey', 9)
 setp_any(rotulo, ['alignx'], 'left')
 setp_any(rotulo, ['aligny'], 'top')
 setexpr(rotulo, 'text',
-        "parent().op('ritmo').module.legend(absTime.frame) + "
-        "parent().op('luz12_callbacks').module.legend(absTime.frame)")
+        "(parent().op('ritmo').module.legend(absTime.frame) + "
+        "parent().op('luz12_callbacks').module.legend(absTime.frame)) "
+        "if parent().par.Leyenda else ''")
 
 salida = mk(base, 'outTOP', 'salida', 960, -140)
 if bg:
