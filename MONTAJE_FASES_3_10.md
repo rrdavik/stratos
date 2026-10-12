@@ -18,13 +18,13 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v4` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v20` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v21` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v12` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate | `fase3 v11` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
-| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el borde de la celda es la batería; erosión con la velocidad; huellas, presupuesto | `fase7 v8` |
+| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto | `fase7 v9` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
 | `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v5` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v4` |
@@ -129,9 +129,9 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
   - **Con formación,** el centro se ensancha hasta asomar alrededor de su base: se enciende el pie de la formación y se lee desde la cámara aunque la formación sea alta. La luz va en la superficie, no en la punta, así que el ámbar del SEQ2 no se confunde con las coronas.
   - **El latido sigue al gate** (v20). Mientras la nota suena, la formación se hincha un 12 % (antes 5 %), se aclara y se tiñe del color de su secuenciador (cian o blanco el SEQ1, ámbar el SEQ2). Al soltarla, vuelve a su color en ~0,25 s. Con la loseta del centro, la construcción que suena se ve de lejos.
   - **En las fases 1 y 2** (`fase12_base.py`) no se escucha el note off: la luz es un pulso de 0,25 s con cada nota, del mismo tamaño y brillo.
-- **El borde dice quién destruye** (fase 7): las 8 losetas de alrededor son los 8 pads de la batería.
+- **La batería se ve igual** (fase 7, motor v21): cada golpe ilumina el centro de la celda y su formación con el color de su pad. Si coinciden en la celda, manda la luz más intensa en ese instante.
 - **Sin transparencias:** cada zona lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo.
-- **Interruptores:** `Luzseq` (página Fase3) para el centro y `Balizasdrum` (página Fase7) para el borde. Las dos luces son parte del mundo y se ven también en modo actuación.
+- **Interruptores:** `Luzseq` (página Fase3) para el centro y `Balizasdrum` (página Fase7) para la batería. Las dos luces son parte del mundo y se ven también en modo actuación.
 
 **Página Fase3:** `Luzseq` · `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Gatemax` 1,25 · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
 
@@ -308,7 +308,7 @@ Con el secuenciador parado, en lugar del compás pone `parado`.
 
 ## FASE 7 · Erosión superficial
 
-*fase 7 v6 (motor v18): erosión en notas, perfiles del usuario y el borde de la celda para la batería.*
+*fase 7 v9 (motor v21): erosión en notas y con la velocidad, perfiles del usuario; el golpe se ve como una nota.*
 
 Las 8 pistas de batería son las 8 señales de destrucción. Cada pad tiene un **perfil de tres números** en la tabla `perfiles_erosion`, editable a mano:
 
@@ -344,15 +344,15 @@ Las 8 pistas de batería son las 8 señales de destrucción. Cada pad tiene un *
 - **Columnas de la tabla:** `pad`, `reduccion`, `radio`, `profundidad`, `tipo` y `rol`. El motor las lee por nombre; `rol` es solo una nota. El pad 7 es el charles y el 8 el platillo: la columna `rol` de `perfiles_erosion` y de `colores_drum` se corrige al relanzar aunque la tabla esté editada, sin tocar el resto.
 - **Al relanzar la fase 7:** si la tabla tiene los valores de la v1, la v3 o la v5 sin editar, se sustituye. Si está editada, se conserva y el informe avisa con `..` de que la columna `reduccion` ahora cuenta notas.
 
-**El borde de la celda dice quién destruye** (v6). Las 8 losetas del borde de la rejilla de 3 × 3 de `luz_celda` son los 8 pads: el pad n a (n − 1) × 45°. El pad 1 queda al este, el 3 al norte, el 5 al oeste y el 7 al sur.
+**El golpe se ve como una nota** (v9, motor v21). Sin balizas ni sectores: cada golpe ilumina, igual que una nota de un secuenciador, el centro de las celdas que erosiona (la loseta de `luz_celda`) y su formación, que se hincha un 12 % y se tiñe un 75 % del color de su pad. Desaparecen los 8 sectores del borde de la v6.
 
-- **Cada golpe enciende el sector de su pad** en las celdas que erosiona, con el color del pad: plena intensidad en la celda objetivo, la mitad en el primer anillo y un cuarto en el segundo. Así la luz dibuja la huella del golpe. La intensidad se ve en el tamaño de la loseta, no en el color, que siempre es opaco y pleno.
-- **Con secuenciador en la celda,** el centro conserva su color y el borde lleva el del pad: se ven los dos a la vez y sin mezclarse. **Sin secuenciador** (el golpe se desplazó a una vecina, o `Objetivo` en `velocidad`), solo se enciende el borde.
-- **Varios pads a la vez en la misma celda:** cada uno en su sector, todos visibles.
-- **Cuándo:** se apaga en `Vidabalizadrum` segundos (0,8). Con un bombo a negras a 120 BPM su sector está casi siempre encendido; los pads raros destellan casi un segundo.
-- **Dónde se ve:** con formación, vacía o con huella, y también en modo actuación. Con formación, el borde queda fuera de la base de la pieza principal. Un macizo de fusión, que ocupa el 80 % de la celda, tapa parte de cada sector, pero el borde exterior asoma.
+- **Intensidad:** plena en la celda del golpe, la mitad en el primer anillo y un cuarto en el segundo. Así la luz dibuja la huella del golpe.
+- **Cuándo:** se apaga en `Vidabalizadrum` segundos (0,8).
+- **Con secuenciador en la celda:** manda la luz más intensa en ese instante. El golpe gana mientras dura; luego vuelve el color del secuenciador (pleno si su nota sigue pulsada, tenue si no). Una nota pulsada y un golpe recién dado empatan, y gana el golpe.
+- **Varios pads en la misma celda:** manda el más intenso, y a igualdad el último. Al alternar, cada golpe pinta la celda de su color.
+- **Dónde se ve:** con formación, vacía o con huella, y también en modo actuación.
 - **Lo que ya tiene significado queda a salvo:**
-  - el latido aclara la formación, no la superficie;
+  - nota y golpe usan el mismo lenguaje (loseta del centro y formación teñida), así que se leen igual; solo cambia el color;
   - el ámbar de las coronas, el cian de las cicatrices y el blanco del SEQ1 no están en la paleta de la batería;
   - el oscuro de la huella no puede confundirse con colores opacos y plenos.
 - **Destello de la fase 9:** `luz_destello` usa también el color del pad, aclarado un 35 % con blanco para que siga siendo un golpe de luz.
@@ -385,7 +385,7 @@ notas = max(min(reduccion, 1), reduccion × velocidad / Velref)
 - **Fracciones:** se acumulan en cada celda como las de las vecinas, así que N golpes iguales deshacen siempre lo mismo.
 - **Solo escala la reducción:** el radio y la profundidad no cambian con la velocidad, y el desplazamiento de celda (`vel % 3`) sigue como estaba.
 - **Con `Erosionvel` apagado,** la reducción es la de la tabla, sin más.
-- **Propuesta, sin implementar:** que el tamaño del sector de luz del pad también crezca con la velocidad.
+- **Propuesta, sin implementar:** que la luz del golpe también crezca con la velocidad.
 
 **Página Fase7, velocidad:** `Erosionvel` (encendido) · `Velref` 100
 
@@ -507,7 +507,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
 | La luz sale de un solo color | `luz_celda` no lee el color por instancia | Relanza cualquier fase (la recrea). Si persiste, en `luz_celda`: Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace. El informe lo avisa con `FALLO luz_celda no lee el color por instancia` |
-| No se ve la luz de una celda | `Luzseq` (centro) o `Balizasdrum` (borde) apagados, `Luzdrum` a 0, la batería o el secuenciador no llegan (mira las líneas `EROSION` y `NOTA`), o `luz_celda` fuera del render | Revisa esos; relanzar cualquier fase vuelve a meter `luz_celda` en el render |
+| No se ve la luz de una celda | `Luzseq` (secuenciadores) o `Balizasdrum` (batería) apagados, `Luzdrum` a 0, la batería o el secuenciador no llegan (mira las líneas `EROSION` y `NOTA`), o `luz_celda` fuera del render | Revisa esos; relanzar cualquier fase vuelve a meter `luz_celda` en el render |
 | El mundo nunca se entierra por estancamiento | El bombo está sonando: cada temblor genera novedad | Es lo esperado; quita el bombo para que el mundo se asiente |
 | Los ciclos siempre acaban por edad máxima | Batería constante, umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Con batería es lo esperado. Si no, baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
@@ -539,7 +539,7 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 6 | ¿Una vuelta por ciclo? | No: `Barsperturn` manual y `Girovivo` |
 | 6 | ¿Los satélites cuentan para la madurez? | No: madurez = formaciones propias en el límite. Su forma se recorta al llegar a `Limsatelite` |
 | 7 | Canal y pads de la batería | Canal 16 (confirmado), pads desde 36 (`Notabase`), por confirmar |
-| 3–7 | ¿Balizas? | Sin balizas: el centro de la celda muestra el secuenciador y el borde, la batería (un sector por pad, colores opacos) |
+| 3–7 | ¿Balizas? | Sin balizas: secuenciadores y batería se ven igual, con la loseta del centro de la celda y la formación del color de quien acaba de tocarla; si coinciden, la luz más intensa |
 | 7 | ¿Qué deshace un golpe? | Notas de construcción, con la misma moneda que la fase 3; la mitad en cada anillo de vecinas |
 | 7 | ¿Qué pads cortan? | Perfiles del usuario: bombo (1), caja (2) y tom (3), con profundidad 2, 3 y 1; 4 a 8 arañazos |
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
@@ -577,9 +577,7 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
   - Luz de celda (motor v18):
     - la nota del SEQ1 enciende el centro de su celda en su color y queda tenue hasta la siguiente; la del SEQ2, en ámbar; con los dos en la misma celda, el centro se parte y se ven los dos;
     - desde la fase 9, el SEQ1 en blanco;
-    - golpe en la celda del SEQ1: el centro conserva su color y el borde muestra el del pad;
-    - 8 pads a la vez: 8 sectores de 8 colores, y `luz_celda` lee el color por instancia;
-    - golpe sin secuenciador: solo el borde;
+    - golpe (motor v21): el centro de la celda y la formación con el color del pad; en la celda del SEQ1 manda el golpe mientras dura y luego vuelve el SEQ1; una sola loseta por celda, sin borde; `luz_celda` lee el color por instancia;
     - la luz se ve con formación, vacía y con huella, gira con el planeta y sube con el radio;
     - no queda ninguna baliza en escena ni en `CHOP_NAMES`;
     - los pads 1, 2 y 3 cortan.

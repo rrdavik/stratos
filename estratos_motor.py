@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v20'
+MOTOR_VERSION = 'motor v21'
 
 import math
 
@@ -1230,11 +1230,11 @@ def _material_col(base_col, pulido):
     return _tint(_mix(base_col, COL_POROSO, 0.45), 0.72)
 
 
-# Latido: la nota hincha la formacion un 12 % y la tine del color de su
-# secuenciador mientras el gate esta abierto (lo que dura la nota, del note
+# Latido: la nota hincha la formacion un 12 % y la tine (75 %) del color de su
+# secuenciador (o el golpe, del de su pad) mientras el gate esta abierto (lo que dura la nota, del note
 # on al note off); al soltarla se apaga en ~0,25 s. Una nota corta da un
 # destello; una ligada, una formacion encendida todo lo que suena.
-LATIDO_AMP, LATIDO_DUR, LATIDO_TINTE = 0.12, 0.25, 0.55
+LATIDO_AMP, LATIDO_DUR, LATIDO_TINTE = 0.12, 0.25, 0.75
 
 
 def _latido(W, i, now):
@@ -1341,10 +1341,13 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         base_col = COL_GEO if own == GEO else COL_ARQ
         col = _material_col(base_col, pulido)
         lt = _latido(W, i, now)
-        if lt > 0:                  # la nota suena: la formacion se enciende
+        sc = seq_color(cfg, W['lat_s'][i] if W['lat_s'][i] in (1, 2) else 1)
+        Id, pd_ = drum_light(W, cfg, i, now)
+        if pd_ is not None and Id >= lt:    # el golpe de bateria, igual que una nota
+            lt, sc = Id, drum_color(cfg, pd_)
+        if lt > 0:                  # la nota o el golpe: la formacion se enciende
             vh *= 1.0 + LATIDO_AMP * lt
-            sc = seq_color(cfg, W['lat_s'][i] if W['lat_s'][i] in (1, 2) else 1)
-            col = _tint(_mix(col, sc, LATIDO_TINTE * lt), 1.0 + 0.6 * lt)
+            col = _tint(_mix(col, sc, LATIDO_TINTE * lt), 1.0 + 0.25 * lt)
         if sat:
             col = _tint(col, 0.85)
         if own == GEO:
@@ -1418,21 +1421,22 @@ def build_tiles(W, cfg, now):
 
 
 # --- luz de celda (sin balizas) -----------------------------------------------
-# Cada celda cuenta con luz lo que le esta pasando, en una rejilla de 3 x 3
-# losetas opacas a ras de su superficie:
-#   - el CENTRO dice quien construye: el color del secuenciador que acaba de
-#     tocarla (pulso con la nota, y tenue hasta su siguiente nota). Si estan
-#     los dos, el centro se parte: SEQ1 al oeste, SEQ2 al este. Con
-#     formacion, el centro se ensancha hasta asomar alrededor de su base.
-#   - el BORDE dice quien destruye: las 8 losetas de alrededor son los 8
-#     pads (el pad n a (n-1) x 45 grados), con el color de su pad.
+# Cada celda cuenta con luz lo que le esta pasando: una loseta opaca en el
+# centro de la celda y la propia formacion (se hincha y se tine) con el
+# color de quien acaba de tocarla.
+#   - una nota de un SEQ: su color mientras suena (gate) y tenue hasta su
+#     siguiente nota. Si estan los dos, el centro se parte: SEQ1 al oeste,
+#     SEQ2 al este.
+#   - un golpe de bateria (motor v21): igual, con el color del pad; plena en
+#     la celda del golpe, mas tenue en su radio; se apaga en Vidabalizadrum.
+#   - si coinciden, manda la luz mas intensa en ese instante.
+# Con formacion, la loseta se ensancha hasta asomar alrededor de su base.
 # Colores opacos, sin transparencia: no se mezclan.
 
 COL_SEQ1 = (0.10, 0.90, 1.00)       # cian hasta la fase 8
 COL_SEQ1_BLANCO = (0.95, 0.95, 0.92)  # blanco desde la fase 9 (cian = cicatriz)
 COL_SEQ2 = (1.00, 0.62, 0.25)       # ambar
 SEQ_DECAY = 0.25                    # el pulso de la nota cae en 1/4 de segundo
-PAD_DIRS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 LUZ_LIFT = 0.02
 
 
@@ -1453,8 +1457,8 @@ def light_level(cfg, h, now):
 
 
 def light_cell(W, cfg, c, pad, w, now):
-    """El golpe enciende el sector de su pad en el borde de la celda c.
-    Cada pad tiene su sector: varios pads a la vez se ven todos. Un golpe
+    """El golpe ilumina la celda c (centro y formacion) con el color de su
+    pad. Se guarda por pad: manda el mas intenso en cada instante. Un golpe
     mas flojo no apaga uno mas fuerte del mismo pad que siga encendido."""
     luz = W.setdefault('luz', {})
     pads = luz.setdefault(c, {})
@@ -1485,15 +1489,37 @@ def seq_lights(W, cfg, now):
     return out
 
 
-def cell_lights(W, cfg, now):
-    """Losetas de luz de todas las celdas: centro (secuenciadores) y borde
-    (bateria)."""
-    rows = []
-    lvl = cfg['nivel']
-    centros = seq_lights(W, cfg, now) if cfg.get('luz_seq', 1) else {}
-    luz = W.get('luz', {}) if (lvl >= 7 and cfg['balizas_drum']) else {}
-    cols = cfg.get('colores_drum') or COLORES_DRUM
+def drum_light(W, cfg, c, now):
+    """(intensidad, pad) de la luz de bateria mas fuerte en la celda c, o
+    (0, None). La celda del golpe a plena luz, su radio mas tenue."""
+    if cfg['nivel'] < 7 or not cfg['balizas_drum']:
+        return 0.0, None
+    pads = W.get('luz', {}).get(c)
+    if not pads:
+        return 0.0, None
     k = max(0.0, cfg['luz_drum'])
+    best, bp = 0.0, None
+    for pd, h in pads.items():
+        I = min(1.0, light_level(cfg, h, now) * k)
+        if I > best or (I == best and bp is not None and h[0] > pads[bp][0]):
+            best, bp = I, pd
+    return (best, bp) if best > 0.02 else (0.0, None)
+
+
+def drum_color(cfg, pad):
+    cols = cfg.get('colores_drum') or COLORES_DRUM
+    return cols[int(pad) % len(cols)]
+
+
+def cell_lights(W, cfg, now):
+    """Losetas de luz del centro de las celdas. Secuenciadores y bateria se
+    ven igual: la loseta del centro (y la formacion, ver build_instances)
+    con el color de quien acaba de tocar la celda. Si coinciden, manda la
+    luz mas intensa en ese instante (un golpe, por ser el ultimo, suele
+    ganar a un secuenciador en reposo)."""
+    rows = []
+    centros = seq_lights(W, cfg, now) if cfg.get('luz_seq', 1) else {}
+    luz = W.get('luz', {})
     for c in list(luz):
         pads = luz[c]
         for pd in [pd for pd in pads if light_level(cfg, pads[pd], now) <= 0.0]:
@@ -1503,40 +1529,34 @@ def cell_lights(W, cfg, now):
     for c in sorted(set(centros) | set(luz)):
         if c >= N:
             continue
+        I, pad = drum_light(W, cfg, c, now)
+        lista = sorted(centros.get(c, []))
+        if pad is not None and I >= max([env for _, env in lista] or [0.0]):
+            fuentes = [(drum_color(cfg, pad), I)]
+        else:
+            fuentes = [(seq_color(cfg, s_), env) for s_, env in lista]
+        if not fuentes:
+            continue
         n = normal_i(c)
         e, t = tangents(n)
         base = base_radius(W, cfg, c)
         cw, cl = _cell_sizes(base, c)
         if is_pole(c):
             cw, cl = cw * 1.25, cl * 1.25
-        # centro: quien construye
-        if c in centros:
-            lado_x, lado_z = 0.34 * cw, 0.34 * cl
-            if W['vh'][c] > 0.005 and W['own'][c]:       # asoma alrededor de la base
-                sc = cfg['sat_size'] if W['par'][c] >= 0 else 1.0
-                m_ = 0.52 * min(cw, cl) * sc
-                lado_x, lado_z = max(lado_x, m_), max(lado_z, m_)
-            lista = sorted(centros[c])
-            partes = len(lista)
-            for q, (s_, env) in enumerate(lista):
-                col = seq_color(cfg, s_)
-                b = 0.7 + 0.3 * env                    # tenue en reposo, plena con el gate
-                col = (col[0] * b, col[1] * b, col[2] * b)
-                g = 0.80 + 0.20 * env
-                sx = lado_x * g / partes
-                dx = 0.0 if partes == 1 else (-0.5 + q) * lado_x * g / 2.0
-                rows.append(_tile(n, e, t, base, dx, 0.0, sx * 0.96, lado_z * g,
-                                  0.06 + 0.22 * env, col))
-        # borde: quien destruye
-        for pd, h in sorted(luz.get(c, {}).items()):
-            I = light_level(cfg, h, now) * k
-            if I <= 0.02:
-                continue
-            ux, uz = PAD_DIRS[int(pd) % 8]
-            f = math.sqrt(min(1.0, I))
-            col = cols[int(pd) % len(cols)]
-            rows.append(_tile(n, e, t, base, ux * 0.38 * cw, uz * 0.38 * cl,
-                              0.22 * cw * f, 0.22 * cl * f, 0.04 + 0.06 * min(1.0, I), col))
+        lado_x, lado_z = 0.34 * cw, 0.34 * cl
+        if W['vh'][c] > 0.005 and W['own'][c]:           # asoma alrededor de la base
+            sc = cfg['sat_size'] if W['par'][c] >= 0 else 1.0
+            m_ = 0.52 * min(cw, cl) * sc
+            lado_x, lado_z = max(lado_x, m_), max(lado_z, m_)
+        partes = len(fuentes)
+        for q, (col, env) in enumerate(fuentes):
+            b = 0.7 + 0.3 * env                    # tenue en reposo, plena con la nota o el golpe
+            col = (col[0] * b, col[1] * b, col[2] * b)
+            g = 0.80 + 0.20 * env
+            sx = lado_x * g / partes
+            dx = 0.0 if partes == 1 else (-0.5 + q) * lado_x * g / 2.0
+            rows.append(_tile(n, e, t, base, dx, 0.0, sx * 0.96, lado_z * g,
+                              0.06 + 0.22 * env, col))
     return rows
 
 
