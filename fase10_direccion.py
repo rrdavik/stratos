@@ -18,7 +18,8 @@ QUE HACE
                insinua, el globo entero no se ve.
   PLANO FINAL  Planofinal aleja la camara en 20 s hasta ver el globo
                entero, una vez, como gesto. Al quitarlo vuelve.
-  ACTUACION    Modoactuacion oculta reticula, balizas y leyenda. Al
+  ACTUACION    Modoactuacion oculta reticula y leyenda (la luz de celda se
+               ve: es parte del mundo). Al
                quitarlo vuelve el modo diagnostico.
 
 COMO USARLO
@@ -30,7 +31,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v3  (paleta, luz cenital, camara de superficie, modos)'
+VERSION = 'fase10 v4  (paleta, luz cenital, camara de superficie, modos)'
 banner(VERSION)
 
 base = require_base(10)
@@ -97,7 +98,7 @@ set_render(base)
 leeme(base, 10, """FASE 10 - DIRECCION VISUAL
   Camara a Camaltura de la superficie, orbita a Camvel grados/s, ajena al
   secuenciador. Planofinal: el globo entero en 20 s.
-  Modoactuacion: sin reticula, balizas ni leyenda.
+  Modoactuacion: sin reticula ni leyenda; la luz de celda se ve.
   Luz cenital fria; nucleo negro; ambar en la base; cian en cicatrices.""")
 
 print_report()
@@ -122,8 +123,8 @@ def prueba(t):
     t.midi(0x9C, 0x40, 0x64)
     m.erosion(m.world(), m.cfg(), 0, 100, 0.0)            # el pad 1 ilumina su celda
     inst = m.build_instances(m.world(), m.cfg(), 0.1, hide_beacons=m.performance())
-    t.check('modo actuacion: sin baliza del SEQ2 ni reticula; la luz de la bateria se ve',
-            not inst['baliza2'] and inst['luz_drum'] and not int(base.par.Showgrid))
+    t.check('modo actuacion: sin reticula; la luz de celda se ve',
+            inst['luz_celda'] and 'baliza2' not in inst and not int(base.par.Showgrid))
     base.par.Modoactuacion = before
     m.on_value('Modoactuacion', before)
     t.check('al quitarlo vuelve la reticula', bool(int(base.par.Showgrid)) == (not before))

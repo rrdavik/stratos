@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v17'
+MOTOR_VERSION = 'motor v18'
 
 import math
 
@@ -41,9 +41,14 @@ DUMMY_ROW = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
 #   reduccion    notas de construccion que deshace en la celda objetivo
 #   radio        anillos de vecinas afectadas (cada anillo, la mitad)
 #   profundidad  conchas que atraviesa el corte (fase 9)
-# Cuanto mas frecuente el golpe, mas superficial: el bombo (pad 1) tiembla,
-# la caja (2) corta y el tom (3), raro, abre el corte profundo. 4-8 aranazos.
+# Valores del usuario: bombo, caja y tom cortan (profundidad 2, 3 y 1);
+# 4-8 aranazos.
 PERFILES_DEFECTO = [
+    (4, 2, 2), (15, 1, 3), (4, 1, 1), (3, 1, 0),
+    (2, 1, 0), (2, 0, 0), (1, 0, 0), (1, 1, 0),
+]
+# Los de la fase 7 v5 (primeros en notas), para reconocerlos al relanzar
+PERFILES_V5 = [
     (2, 2, 0), (8, 1, 3), (12, 2, 4), (4, 1, 0),
     (3, 0, 0), (2, 1, 0), (1, 0, 0), (1, 0, 0),
 ]
@@ -55,7 +60,7 @@ PERFILES_V3 = [
 ATENUACION = 0.5      # cada anillo de vecinas recibe esta fraccion del anterior
 TIPOS_DEFECTO = ['temblor', 'corte', 'corte profundo', 'aranazo',
                  'aranazo', 'aranazo', 'aranazo', 'aranazo']
-ROLES_DEFECTO = ['bombo', 'caja', 'tom', 'palmas, aro', '-', '-', '-', 'charles']
+ROLES_DEFECTO = ['bombo', 'caja', 'tom', 'palmas, aro', '-', '-', 'charles', 'platillo']
 # Los de la fase 7 v1 (para reconocer una tabla sin editar al relanzar)
 PERFILES_V1 = [
     (1, 0, 0), (1, 0, 0), (1, 1, 0), (2, 0, 0),
@@ -108,7 +113,7 @@ DEFAULT_CFG = dict(
     # fase 9
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
-    balizas_drum=1, luz_drum=1.0, vida_baliza_drum=0.8,
+    balizas_drum=1, luz_drum=1.0, vida_baliza_drum=0.8, luz_seq=1,
     colores_drum=COLORES_DRUM,
 )
 
@@ -388,7 +393,7 @@ def new_world():
         clock=dict(last_note_t=-99.0, stop_t=-99.0, start_t=-99.0),
         burst=dict(times=[], pending=None),
         drum={},                # pad -> ultimo golpe {t, cell, vel}
-        luz={},                 # celda -> [t, pad, peso]: luz de la bateria
+        luz={},                 # celda -> {pad: [t, peso]}: luz de la bateria
         ero_resto=[0.0] * N,    # fraccion de nota de erosion pendiente
         # ciclo (fase 6): lo cierra el mundo
         ciclo_n=1,              # ciclo en curso
@@ -421,6 +426,9 @@ def ensure(W):
     if isinstance(ck, dict):
         for k in ('t_ref', 'step_ref', 'phase_ref'):
             ck.pop(k, None)
+    luz = W.get('luz')
+    if isinstance(luz, dict) and any(isinstance(v, list) for v in luz.values()):
+        W['luz'] = {}                   # formato del motor v17 (un pad por celda)
     base = new_world()
     for k, v in base.items():
         if k not in W:
@@ -1265,8 +1273,7 @@ def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True)
 def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     lvl = cfg['nivel']
     lim = limit(cfg)
-    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], baliza2=[],
-               luz_drum=[])
+    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], luz_celda=[])
     R = top_radius(W, cfg)
     for i in range(N):
         vh = W['vh'][i]
@@ -1329,13 +1336,7 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                     out['coronas'].append(_row(top, n, 0.03 * kw * cl, 0.90 * kl * lim,
                                                0.03 * kw * cl, COL_CROWN))
                     out['coronas'].append(_row(top, n, 0.20 * cl, 0.05 * lim, 0.20 * cl, COL_CROWN))
-    if lvl >= 5 and not hide_beacons:
-        b = beacon(W, cfg, 2, now)
-        if b:
-            p, rad = b
-            out['baliza2'].append([p[0], p[1], p[2], 0, 0, 0, rad, rad, rad, 1, 0.7, 0.3])
-    if lvl >= 7 and cfg['balizas_drum']:     # parte del mundo: tambien en actuacion
-        out['luz_drum'] = cell_lights(W, cfg, now)
+    out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     if lvl >= 8 and tiles:
         out['estratos'] = build_tiles(W, cfg, now)
     return out
@@ -1368,62 +1369,123 @@ def build_tiles(W, cfg, now):
     return rows
 
 
+# --- luz de celda (sin balizas) -----------------------------------------------
+# Cada celda cuenta con luz lo que le esta pasando, en una rejilla de 3 x 3
+# losetas opacas a ras de su superficie:
+#   - el CENTRO dice quien construye: el color del secuenciador que acaba de
+#     tocarla (pulso con la nota, y tenue hasta su siguiente nota). Si estan
+#     los dos, el centro se parte: SEQ1 al oeste, SEQ2 al este. Con
+#     formacion, el centro se ensancha hasta asomar alrededor de su base.
+#   - el BORDE dice quien destruye: las 8 losetas de alrededor son los 8
+#     pads (el pad n a (n-1) x 45 grados), con el color de su pad.
+# Colores opacos, sin transparencia: no se mezclan.
+
+COL_SEQ1 = (0.10, 0.90, 1.00)       # cian hasta la fase 8
+COL_SEQ1_BLANCO = (0.95, 0.95, 0.92)  # blanco desde la fase 9 (cian = cicatriz)
+COL_SEQ2 = (1.00, 0.62, 0.25)       # ambar
+SEQ_DECAY = 0.25                    # el pulso de la nota cae en 1/4 de segundo
+PAD_DIRS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
+LUZ_LIFT = 0.02
+
+
+def seq_color(cfg, s):
+    if s == 2:
+        return COL_SEQ2
+    return COL_SEQ1_BLANCO if cfg['nivel'] >= 9 else COL_SEQ1
+
+
 def light_level(cfg, h, now):
-    """Intensidad 0-1 de una luz de la bateria [t, pad, peso] en este instante."""
+    """Intensidad 0-1 de la luz de un pad [t, peso] en este instante."""
     vida = max(0.05, cfg['vida_baliza_drum'])
     dt = now - h[0]
     if dt < 0 or dt >= vida:
         return 0.0
     x = dt / vida
-    return h[2] * (1.0 - x) * (1.0 - x * 0.5)
+    return h[1] * (1.0 - x) * (1.0 - x * 0.5)
 
 
 def light_cell(W, cfg, c, pad, w, now):
-    """El golpe ilumina la celda c con el color de su pad. Manda la luz mas
-    intensa en este instante; a igualdad, la ultima. Asi, si dos pads
-    alternan sobre la misma celda, cada golpe la pinta de su color."""
+    """El golpe enciende el sector de su pad en el borde de la celda c.
+    Cada pad tiene su sector: varios pads a la vez se ven todos. Un golpe
+    mas flojo no apaga uno mas fuerte del mismo pad que siga encendido."""
     luz = W.setdefault('luz', {})
-    old = luz.get(c)
+    pads = luz.setdefault(c, {})
+    old = pads.get(int(pad))
     if old is not None and light_level(cfg, old, now) > w + 1e-9:
         return
-    luz[c] = [now, int(pad), float(w)]
+    pads[int(pad)] = [now, float(w)]
+
+
+def _tile(n, e, t, base, dx, dz, sx, sz, h, col):
+    p = _add(_add(_mul(n, base + LUZ_LIFT), e, dx), t, dz)
+    return _row(p, n, sx, h, sz, col)
+
+
+def seq_lights(W, cfg, now):
+    """{celda: [(s, env), ...]} de los secuenciadores encendidos."""
+    out = {}
+    for s in ((1, 2) if cfg['nivel'] >= 5 else (1,)):
+        last = W['last'].get(s)
+        if not last or last.get('cell') is None or last['cell'] < 0 or last['cell'] >= N:
+            continue
+        env = math.exp(-max(0.0, now - W['hit_t'].get(s, -99.0)) / SEQ_DECAY)
+        out.setdefault(last['cell'], []).append((s, env))
+    return out
 
 
 def cell_lights(W, cfg, now):
-    """Losetas de luz de la bateria: una por celda iluminada, a ras de la
-    superficie y un poco mas ancha que la base de las formaciones, con el
-    color del pad por la intensidad (se suma a lo que hay: no oscurece)."""
-    luz = W.get('luz', {})
+    """Losetas de luz de todas las celdas: centro (secuenciadores) y borde
+    (bateria)."""
+    rows = []
+    lvl = cfg['nivel']
+    centros = seq_lights(W, cfg, now) if cfg.get('luz_seq', 1) else {}
+    luz = W.get('luz', {}) if (lvl >= 7 and cfg['balizas_drum']) else {}
     cols = cfg.get('colores_drum') or COLORES_DRUM
     k = max(0.0, cfg['luz_drum'])
-    rows = []
-    for c in [c for c in luz if light_level(cfg, luz[c], now) <= 0.0]:
-        del luz[c]
-    for c, h in sorted(luz.items()):
-        I = light_level(cfg, h, now) * k
-        if I <= 0.003 or c >= N:
+    for c in list(luz):
+        pads = luz[c]
+        for pd in [pd for pd in pads if light_level(cfg, pads[pd], now) <= 0.0]:
+            del pads[pd]
+        if not pads:
+            del luz[c]
+    for c in sorted(set(centros) | set(luz)):
+        if c >= N:
             continue
         n = normal_i(c)
+        e, t = tangents(n)
         base = base_radius(W, cfg, c)
         cw, cl = _cell_sizes(base, c)
         if is_pole(c):
             cw, cl = cw * 1.25, cl * 1.25
-        col = cols[int(h[1]) % len(cols)]
-        rows.append(_row(_mul(n, base + 0.02), n, cw * 0.96, 0.04 + 0.10 * I, cl * 0.96,
-                         (min(1.0, col[0] * I), min(1.0, col[1] * I), min(1.0, col[2] * I))))
+        # centro: quien construye
+        if c in centros:
+            lado_x, lado_z = 0.26 * cw, 0.26 * cl
+            if W['vh'][c] > 0.005 and W['own'][c]:       # asoma alrededor de la base
+                sc = cfg['sat_size'] if W['par'][c] >= 0 else 1.0
+                m_ = 0.52 * min(cw, cl) * sc
+                lado_x, lado_z = max(lado_x, m_), max(lado_z, m_)
+            lista = sorted(centros[c])
+            partes = len(lista)
+            for q, (s_, env) in enumerate(lista):
+                col = seq_color(cfg, s_)
+                b = 0.6 + 0.4 * env                    # tenue en reposo, plena en el pulso
+                col = (col[0] * b, col[1] * b, col[2] * b)
+                g = 0.75 + 0.25 * env
+                sx = lado_x * g / partes
+                dx = 0.0 if partes == 1 else (-0.5 + q) * lado_x * g / 2.0
+                rows.append(_tile(n, e, t, base, dx, 0.0, sx * 0.96, lado_z * g,
+                                  0.05 + 0.08 * env, col))
+        # borde: quien destruye
+        for pd, h in sorted(luz.get(c, {}).items()):
+            I = light_level(cfg, h, now) * k
+            if I <= 0.02:
+                continue
+            ux, uz = PAD_DIRS[int(pd) % 8]
+            f = math.sqrt(min(1.0, I))
+            col = cols[int(pd) % len(cols)]
+            rows.append(_tile(n, e, t, base, ux * 0.38 * cw, uz * 0.38 * cl,
+                              0.22 * cw * f, 0.22 * cl * f, 0.04 + 0.06 * min(1.0, I), col))
     return rows
-
-
-def beacon(W, cfg, s, now, base_radius_=0.9, peak=1.8, decay=0.12, lift=0.3):
-    last = W['last'].get(s)
-    if not last:
-        return None
-    i = last['cell']
-    env = math.exp(-max(0.0, now - W['hit_t'].get(s, -99.0)) / decay)
-    rad = (base_radius_ + peak * env) * (0.55 if s == 2 else 1.0)
-    n = normal_i(i)
-    d = base_radius(W, cfg, i) + W['vh'][i] + lift + rad
-    return _mul(n, d), rad
 
 
 def world_dir(v, angle_deg, tilt_deg, wobble_deg=0.0):
@@ -1463,7 +1525,7 @@ def wobble_step(st, dt, on, paused, amp, period, fade=3.0):
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
-              'i_estratos', 'i_baliza2', 'i_luz_drum']
+              'i_estratos', 'i_luz_celda']
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 
@@ -1542,6 +1604,7 @@ def cfg():
     c = dict(DEFAULT_CFG)
     c.update(
         nivel=_p('Nivel', 3),
+        luz_seq=int(_p('Luzseq', True)),
         shell_thick=_p('Shellthick', c['shell_thick']),
         height_factor=_p('Alturafactor', c['height_factor']),
         seed_frac=_p('Semillafrac', c['seed_frac']),
@@ -1656,16 +1719,6 @@ def giro_factor(frame=None):
         return 1.0
 
 
-def surface_point(note, lift, radius):
-    """Punto de la baliza del SEQ1 (lo usa baliza_callbacks)."""
-    W, c = world(), cfg()
-    i = note_cell(note)
-    if i is None:
-        return (0.0, -9999.0, 0.0)
-    d = base_radius(W, c, i) + W['vh'][i] + lift + radius
-    return _mul(normal_i(i), d)
-
-
 def performance():
     return bool(_p('Modoactuacion', False))
 
@@ -1689,14 +1742,13 @@ def _say(key, text):
 
 
 def _seq1_beacon(note):
+    """La ultima nota del SEQ1 queda en Nota (pagina Fase2): la usa Sembrar
+    y la leyenda. Ya no hay baliza: la luz del centro de la celda la da el
+    motor (cell_lights)."""
     try:
         parent().par.Nota = int(note)
     except Exception:
         pass
-    b = parent().op('baliza_chop')
-    if b is not None:
-        b.store('hit_t', absTime.seconds)
-        b.store('hits', b.fetch('hits', 0) + 1)
 
 
 def midi_note_on(ch, note, vel):
@@ -1973,10 +2025,35 @@ def legend(frame=None):
         return '\n  MOTOR    fallo en la leyenda: %s' % e
 
 
+def _legend_nota(W, c, now):
+    last = W['last'].get(1)
+    if not last:
+        try:
+            note = int(parent().par.Nota)
+        except Exception:
+            note = 60
+        env = 0.0
+    else:
+        note = int(last['note'])
+        env = math.exp(-max(0.0, now - W['hit_t'].get(1, -99.0)) / SEQ_DECAY)
+    i = note_cell(note)
+    if i is None:
+        donde = 'fuera de rango (ignorada)'
+    else:
+        f = fold_note(note)
+        donde = 'celda %2d de %d   %s' % (i, N, cell_label(i))
+        if f != note:
+            donde += '   (como %s %d)' % (note_name(f), f)
+    k = int(round(max(0.0, min(1.0, env)) * 12))
+    return ['  NOTA     %-5s %3d    %s' % (note_name(note), note, donde),
+            '  PULSO    [%s]' % ('#' * k + '.' * (12 - k)),
+            '  SEQ1     canal %d    notas recibidas: %d' % (_p('Canal', 13), W['hits'].get(1, 0))]
+
+
 def _legend():
     W, c = world(), cfg()
     lvl = c['nivel']
-    lines = ['']
+    lines = [''] + _legend_nota(W, c, absTime.seconds)
     occ = occupied(W)
     mx = max(W['occ'])
     lines.append('  MUNDO    ocupadas %d/%d (%d%%)   max %d   fase %d'

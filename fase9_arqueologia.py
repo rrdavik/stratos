@@ -17,8 +17,8 @@ color de su generacion: bandas que son la historia cromatica de la sesion.
              lo tapa la concha siguiente.
   DESTELLO   cada destruccion dispara un golpe de luz sobre la celda;
              los cortes, mas fuerte. Del color del pad (aclarado).
-  BALIZAS    el cian queda reservado a lo recien expuesto: la baliza del
-             SEQ1 pasa a blanco.
+  LUZ SEQ1   el cian queda reservado a lo recien expuesto: la luz del
+             SEQ1 en el centro de la celda pasa a blanca.
 
 Las formaciones de una celda cortada se apoyan en el fondo del corte.
 La profundidad se mide en conchas: como cada concha tiene el grosor de su
@@ -34,7 +34,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v4  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
+VERSION = 'fase9 v5  (cortes, estratigrafia con grosores, cicatriz cian, destello)'
 banner(VERSION)
 
 base = require_base(9)
@@ -55,19 +55,14 @@ for k, ch in enumerate(('lightcolorr', 'lightcolorg', 'lightcolorb')):
         setp(luz, ch, (0.80, 0.95, 1.00)[k])
 ok('luz_destello: golpe de luz sobre cada destruccion, del color de su pad, sigue el giro')
 
-mb = base.op('mat_baliza')
-if mb is not None:
-    setp(mb, 'colorr', 0.95)
-    setp(mb, 'colorg', 0.95)
-    setp(mb, 'colorb', 0.92)
-    ok('mat_baliza: blanca (el cian queda para lo recien expuesto)')
+ok('luz del SEQ1: blanca desde esta fase (el cian queda para lo recien expuesto)')
 set_render(base)
 
 leeme(base, 9, """FASE 9 - ARQUEOLOGIA
   Pads con profundidad > 0 abren cortes en anfiteatro: las paredes son
   las conchas enterradas, cada una con su color.
   Lo recien expuesto, cian durante Cicatriz s. Cada destruccion, destello.
-  La baliza del SEQ1 pasa a blanca.""")
+  La luz del SEQ1 en el centro de la celda pasa a blanca.""")
 
 print_report()
 
@@ -129,6 +124,14 @@ def prueba(t):
             str(ev.get('corte')))
     t.check('destello encendido', Wr['flash'] is not None)
     t.check('leyenda CORTE', 'CORTE' in m.legend())
+    c9 = dict(m.cfg())
+    c9['nivel'] = max(9, c9['nivel'])
+    W9 = m.new_world()
+    m.note_on(W9, c9, m.GEO, 64, 100, 1.0)
+    f9 = m.cell_lights(W9, c9, 1.0)
+    t.check('la luz del SEQ1 es blanca desde la fase 9',
+            f9 and tuple(round(x, 3) for x in f9[0][9:12])
+            == tuple(round(x, 3) for x in m.COL_SEQ1_BLANCO))
 
 
 run_test(base, prueba)

@@ -6,9 +6,10 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 
   - utilidades para crear nodos y parametros (las mismas de fase12_base.py)
   - install_core(): instala o refresca el 'motor' y los DAT que lo usan
-    (midi_callbacks, latido, baliza_callbacks, reticula_callbacks,
-    formas_callbacks, pulsos). Todas las fases lo llaman: relanzar una
-    fase deja siempre el motor al dia.
+    (midi_callbacks, latido, reticula_callbacks, formas_callbacks, pulsos)
+    y la luz de celda (luz_celda). Todas las fases lo llaman: relanzar una
+    fase deja siempre el motor al dia. Tambien retira las balizas de
+    versiones anteriores (baliza, baliza2, balizas_drum, luz_drum).
   - make_instanced(): un Geometry COMP alimentado por un Script CHOP del motor
   - set_render(), set_legend(), autoprueba
 =============================================================================
@@ -17,11 +18,11 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v10'
+VERSION_COMUN = 'comun v11'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'baliza', 'baliza2', 'luz_drum']
+                'coronas', 'luz_celda']
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
 
@@ -86,9 +87,9 @@ def diagnostico_render(base):
         if e:
             print('  FALLO  %-15s %s' % (nm, e))
     malos = []
-    for nm in ['motor', 'latido', 'ritmo', 'reticula_chop', 'baliza_chop', 'formas_callbacks',
+    for nm in ['motor', 'latido', 'ritmo', 'reticula_chop', 'formas_callbacks',
                'i_formas_pulidas', 'i_formas_porosas', 'i_coronas', 'i_estratos',
-               'i_baliza2', 'camara', 'render', 'rotulo', 'con_rotulo', 'salida']:
+               'i_luz_celda', 'camara', 'render', 'rotulo', 'con_rotulo', 'salida']:
         o = base.op(nm)
         if o is None:
             continue
@@ -290,7 +291,7 @@ def require_base(fase):
     for n in ['ritmo', 'nucleo', 'reticula', 'render', 'rotulo']:
         if base.op(n) is None:
             raise RuntimeError('Falta %s en FASE1: aplica fase12_base.py.' % n)
-    for n in ['baliza', 'baliza_chop', 'midi_in', 'midi_callbacks']:
+    for n in ['midi_in', 'midi_callbacks']:
         if base.op(n) is None:
             raise RuntimeError('Falta %s en FASE1: aplica fase12_base.py.' % n)
     lvl = current_level(base)
@@ -404,9 +405,6 @@ def onFrameStart(frame):
             if not me.fetch('err', False):
                 print('FALLO en el motor: %s' % e)
                 me.store('err', True)
-    c = parent().op('baliza_chop')
-    if c is not None:
-        c.cook(force=True)
     return
 '''
 
@@ -423,8 +421,7 @@ def onValueChange(par, prev):
 '''
 
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
-# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_baliza2,
-# i_luz_drum).
+# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_celda).
 
 CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b']
 DUMMY = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
@@ -496,93 +493,6 @@ def onCook(scriptOp):
     return
 '''
 
-BALIZA_CB = r'''# Baliza del SEQ1: va a la celda de la nota y pulsa en cada nota.
-# (Reescrito por estratos_comun.py: misma logica que la fase 2, pero se
-# coloca encima de la formacion de su celda y sigue a la superficie.)
-
-import math
-
-DECAY = 0.12
-BASE_RADIUS = 0.90
-PEAK_RADIUS = 1.80
-LIFT = 0.30
-
-
-def current_note():
-    try:
-        return int(parent().par.Nota)
-    except Exception:
-        return 60
-
-
-def onSetupParameters(scriptOp):
-    return
-
-
-def onCook(scriptOp):
-    scriptOp.clear()
-    m = op('motor').module
-    now = absTime.seconds
-    note = current_note()
-    trig = False
-    last = scriptOp.fetch('last_note', None)
-    if last is None or int(last) != note:
-        scriptOp.store('last_note', note)
-        trig = True
-    hit_t = scriptOp.fetch('hit_t', -1.0)
-    if hit_t > scriptOp.fetch('hit_seen', -1.0):
-        scriptOp.store('hit_seen', hit_t)
-        trig = True
-    if trig:
-        scriptOp.store('t0', now)
-    t0 = scriptOp.fetch('t0', now - 10.0)
-    env = math.exp(-max(0.0, now - t0) / DECAY)
-    radius = BASE_RADIUS + PEAK_RADIUS * env
-    try:
-        p = m.surface_point(note, LIFT, radius)
-        if m.performance():
-            p = (0.0, -9999.0, 0.0)
-    except Exception:
-        p = (0.0, -9999.0, 0.0)
-    scriptOp.numSamples = 1
-    for name, v in [('tx', p[0]), ('ty', p[1]), ('tz', p[2]),
-                    ('env', env), ('radius', radius), ('note', note)]:
-        scriptOp.appendChan(name)[0] = float(v)
-    return
-
-
-def legend(frame=None):
-    m = op('motor').module
-    b = op('baliza_chop')
-    try:
-        note = int(b['note'][0])
-        env = float(b['env'][0])
-    except Exception:
-        note, env = current_note(), 0.0
-    i = m.note_cell(note)
-    if i is None:
-        donde = 'fuera de rango (ignorada)'
-    else:
-        f = m.fold_note(note)
-        donde = 'celda %2d de %d   %s' % (i, m.N, m.cell_label(i))
-        if f != note:
-            donde += '   (como %s %d)' % (m.note_name(f), f)
-    n = int(round(max(0.0, min(1.0, env)) * 12))
-    try:
-        ch = int(parent().par.Canal)
-    except Exception:
-        ch = 13
-    hits = b.fetch('hits', 0) if b is not None else 0
-    lines = [
-        '',
-        '  NOTA     %-5s %3d    %s' % (m.note_name(note), note, donde),
-        '  PULSO    [%s]' % ('#' * n + '.' * (12 - n)),
-        '  SEQ1     canal %d    notas recibidas: %d' % (ch, hits),
-    ]
-    return '\n'.join(lines)
-'''
-
-
 # -----------------------------------------------------------------------------
 # INSTALAR EL MOTOR
 # -----------------------------------------------------------------------------
@@ -625,9 +535,8 @@ def install_core(base, carpeta, fase):
     setp_any(latido, ['framestart', 'onframestart'], True)
     ok('latido: el motor avanza en cada fotograma')
 
-    base.op('baliza_callbacks').text = BALIZA_CB
     base.op('reticula_callbacks').text = RETICULA_CB
-    ok('baliza y reticula: siguen la superficie que da el motor')
+    ok('reticula: sigue la superficie que da el motor')
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
@@ -644,10 +553,54 @@ def install_core(base, carpeta, fase):
     ok('pulsos: botones de las paginas de fase -> motor')
 
     add_grid_pars(base)
+    set_legend(base)                 # antes de retirar baliza_callbacks
+    retirar_balizas(base)
+    install_luz_celda(base)
     apply_wobble(base)
     patch_ritmo(base)
-    set_legend(base)
     return motor
+
+
+BALIZAS_VIEJAS = ['baliza', 'baliza_chop', 'baliza_callbacks', 'mat_baliza',
+                  'baliza2', 'i_baliza2', 'mat_baliza2',
+                  'balizas_drum', 'i_balizas_drum', 'mat_balizas_drum',
+                  'luz_drum', 'i_luz_drum', 'mat_luz_drum']
+
+
+def retirar_balizas(base):
+    """Sin balizas: la luz de celda las sustituye. Borra los nodos de las
+    versiones anteriores si existen (el mundo vive en el motor: no se toca)."""
+    quitados = []
+    for nm in BALIZAS_VIEJAS:
+        o = base.op(nm)
+        if o is None:
+            continue
+        try:
+            o.destroy()
+            quitados.append(nm)
+        except Exception as e:
+            info('no pude borrar %s: %s; apagalo a mano' % (nm, e))
+    for nm in ('Tambalizadrum', 'Anillobalizadrum'):
+        if remove_par(base, nm):
+            quitados.append(nm)
+    if quitados:
+        ok('balizas retiradas (la luz de celda las sustituye): %s' % ', '.join(quitados))
+    set_render(base)
+
+
+def install_luz_celda(base):
+    """La luz de celda: losetas opacas a ras de la superficie, una
+    geometria para todas (centro: secuenciadores; borde: bateria)."""
+    page = get_page(base, 'Fase3')
+    add_par(base, page, 'toggle', 'Luzseq', 'Luz de los secuenciadores en las celdas', True)
+    make_constant(base, 'mat_luz_celda', 780, 700, (1.0, 1.0, 1.0))
+    geo = make_instanced(base, 'luz_celda', 520, 700, 'mat_luz_celda')
+    bien, det = instance_color_ok(geo)
+    if not bien:
+        fail('luz_celda no lee el color por instancia (%s): Instance 2 -> Color R/G/B = '
+             'r g b, Color Mode = Replace' % det)
+    set_render(base)
+    return geo
 
 
 RITMO_GIRO_OLD = """    if spt > 0 and playing() and not paused:
@@ -703,9 +656,8 @@ def set_legend(base):
     rot = base.op('rotulo')
     if setexpr(rot, 'text',
                "parent().op('ritmo').module.legend(absTime.frame) + "
-               "parent().op('baliza_callbacks').module.legend(absTime.frame) + "
                "parent().op('motor').module.legend(absTime.frame)"):
-        ok('leyenda: tempo + nota + motor')
+        ok('leyenda: tempo + motor (nota incluida)')
     else:
         fail('no pude enlazar la leyenda')
 
@@ -1018,9 +970,6 @@ class Prueba(object):
                 self.base.par.Nota = self.nota
             except Exception:
                 pass
-        b = self.base.op('baliza_chop')
-        if b is not None:
-            b.store('hits', 0)
         log = self.base.op('midi_log')
         if log is not None:
             log.clear()

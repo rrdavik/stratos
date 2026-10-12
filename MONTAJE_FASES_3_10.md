@@ -17,17 +17,17 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza, MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v17` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v10` |
-| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos | `fase3 v8` |
+| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza (la retira la fase 3: la sustituye la luz de celda), MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v18` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v11` |
+| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda | `fase3 v9` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
-| `fase5_especies.py` | SEQ2, arquitectura, híbridos, segunda baliza | `fase5 v1` |
+| `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
-| `fase7_erosion.py` | Canal 16; erosión en notas; el golpe ilumina la celda con el color de su pad; huellas, presupuesto | `fase7 v5` |
+| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el borde de la celda es la batería; huellas, presupuesto | `fase7 v6` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
-| `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v4` |
-| `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v3` |
+| `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v5` |
+| `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v4` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
 
@@ -64,10 +64,10 @@ BeatStep ──MIDI──> midi_in ──> midi_callbacks (router)
                                     │
              latido (cada fotograma): avanza el motor y pide las instancias
                                     │
-     ┌──────────────┬───────────────┼──────────────┬──────────────┬────────────────┐
-i_formas_pulidas  i_formas_porosas  i_coronas     i_estratos     i_baliza2     i_luz_drum      (Script CHOP)
-     │                │               │              │              │               │
-formas_pulidas    formas_porosas    coronas        estratos       baliza2       luz_drum        (Geometry COMP)
+     ┌──────────────┬───────────────┼──────────────┬──────────────┐
+i_formas_pulidas  i_formas_porosas  i_coronas     i_estratos     i_luz_celda     (Script CHOP)
+     │                │               │              │              │
+formas_pulidas    formas_porosas    coronas        estratos       luz_celda       (Geometry COMP)
 ```
 
 - **Un solo motor.** Toda la lógica vive en el Text DAT `motor`, cargado desde `estratos_motor.py`. Las fases no reescriben la lógica de las anteriores: suben el parámetro `Nivel` (página Estratos, solo lectura), y el motor activa lo que corresponde a ese nivel. La fase 3 se comporta como fase 3 aunque el motor ya sepa hacer la 10.
@@ -81,8 +81,8 @@ formas_pulidas    formas_porosas    coronas        estratos       baliza2       
 | DAT | Antes | Ahora |
 |---|---|---|
 | `midi_callbacks` | Solo note on del SEQ1 | Router: note on/off por canal, CC, START/STOP, MMC |
-| `latido` | Recalcula la baliza | Además avanza el motor y redibuja |
-| `baliza_callbacks` | Baliza sobre el radio fijo | Misma lógica de pulso; se posa encima de la formación y sigue a la superficie |
+| `latido` | Recalcula la baliza | Avanza el motor y redibuja |
+| `baliza`, `baliza_chop`, `baliza_callbacks` | Baliza cian del SEQ1 | **Se retiran** (motor v18): la nota del SEQ1 enciende el centro de su celda (`luz_celda`). La leyenda NOTA la da el motor |
 | `reticula_callbacks` | Radio fijo 6 | Marcadores sobre la superficie actual (suben con las conchas) |
 | `rotulo` | Tempo + nota | Tempo + nota + motor |
 
@@ -118,9 +118,20 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
   - **Poroso** (por debajo): color oscuro y terroso. Cada pieza se rompe en 2–3 tramos de ancho irregular, con grietas entre ellos y grumos pegados; en arquitectura, plantas desiguales y descolgadas (hormigón). `mat_poroso` no tiene reflejo.
   - Relanzar la fase 3 o la 4 reajusta los dos materiales.
 - **Animación**: la altura visible se acerca a la real en ~0,1 s; las formaciones brotan, no aparecen de golpe.
-- **Balanceo del eje** (v2): además del giro al tempo, el eje se balancea hacia la cámara y en contra, `Balanceo` grados (60) cada `Balanceoper` segundos (90), para ver los dos polos. Va aparte del reloj del secuenciador y se congela con `Pausa`. `Rotextra` lo enciende y lo apaga; entra y sale en 3 s, sin saltos. Lo llevan todas las geometrías que giran con el planeta (núcleo, retícula, balizas, formas, coronas, estratos) y la luz de destello. Orden de rotación: `Ry Rx Rz` (giro, balanceo, inclinación).
+- **Balanceo del eje** (v2): además del giro al tempo, el eje se balancea hacia la cámara y en contra, `Balanceo` grados (60) cada `Balanceoper` segundos (90), para ver los dos polos. Va aparte del reloj del secuenciador y se congela con `Pausa`. `Rotextra` lo enciende y lo apaga; entra y sale en 3 s, sin saltos. Lo llevan todas las geometrías que giran con el planeta (núcleo, retícula, luz de celda, formas, coronas, estratos) y la luz de destello. Orden de rotación: `Ry Rx Rz` (giro, balanceo, inclinación).
 
-**Página Fase3:** `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Gatemax` 1,25 · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
+**Luz de celda** (fase 3 v9, motor v18). No hay balizas: ni la del SEQ1, ni la del SEQ2, ni las de la batería. Cada celda cuenta con luz lo que le está pasando, en una rejilla de 3 × 3 losetas opacas a ras de su superficie (geometría `luz_celda`, Script CHOP `i_luz_celda`, material `mat_luz_celda`). La crea y la mantiene cualquier fase al relanzarse, que también retira las balizas de las versiones anteriores.
+
+- **El centro dice quién construye:** el color del secuenciador que acaba de tocar la celda. SEQ1 cian (blanco desde la fase 9: el cian queda para las cicatrices) y SEQ2 ámbar (fase 5).
+  - **Pulso y reposo:** con cada nota, un pulso en el que la loseta crece y brilla. Después, la última celda de cada secuenciador queda tenue (60 % del color) hasta su siguiente nota, para que se vea dónde está cada uno.
+  - **Los dos en la misma celda:** el centro se parte en dos mitades, SEQ1 al oeste y SEQ2 al este.
+  - **Con formación,** el centro se ensancha hasta asomar alrededor de su base: se enciende el pie de la formación y se lee desde la cámara aunque la formación sea alta. La luz va en la superficie, no en la punta, así que el ámbar del SEQ2 no se confunde con las coronas.
+  - **Convive con el latido:** la formación se sigue hinchando un 5 % y aclarando con cada nota.
+- **El borde dice quién destruye** (fase 7): las 8 losetas de alrededor son los 8 pads de la batería.
+- **Sin transparencias:** cada zona lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo.
+- **Interruptores:** `Luzseq` (página Fase3) para el centro y `Balizasdrum` (página Fase7) para el borde. Las dos luces son parte del mundo y se ven también en modo actuación.
+
+**Página Fase3:** `Luzseq` · `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Gatemax` 1,25 · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
 
 Los tres últimos los crea ya `fase12_base.py` en esta página; si venían de la página Fase1 (versión anterior), la fase 3 los mueve aquí conservando su valor.
 
@@ -187,7 +198,7 @@ Si el knob RANDOMNESS del SEQ1 varía la velocidad, la decisión pasa a ser del 
 
 El material lo sigue decidiendo la nota fundadora.
 
-**Baliza del SEQ2:** esfera ámbar, más pequeña que la del SEQ1.
+**Luz del SEQ2** (fase 5 v2): cada nota del SEQ2 enciende el centro de su celda en ámbar, con pulso y tenue hasta la siguiente. Ya no hay esfera. Si el SEQ1 está en la misma celda, el centro se parte en dos.
 
 **Página Fase5:** `Canal2` 14 · `Nota2` · `Sembrar2`
 
@@ -295,7 +306,7 @@ Con el secuenciador parado, en lugar del compás pone `parado`.
 
 ## FASE 7 · Erosión superficial
 
-*fase 7 v5 (motor v17): erosión en notas y luz en la celda; sustituye a las balizas de la v3 y v4.*
+*fase 7 v6 (motor v18): erosión en notas, perfiles del usuario y el borde de la celda para la batería.*
 
 Las 8 pistas de batería son las 8 señales de destrucción. Cada pad tiene un **perfil de tres números** en la tabla `perfiles_erosion`, editable a mano:
 
@@ -312,34 +323,36 @@ Las 8 pistas de batería son las 8 señales de destrucción. Cada pad tiene un *
 
 **Atenuación con la distancia:** completa en la celda objetivo, la mitad en el primer anillo y un cuarto en el segundo (`ATENUACION` = 0,5 por anillo). Las fracciones de nota se acumulan en cada celda: con reducción 1 y radio 1, cada vecina pierde una nota cada dos golpes. Con el presupuesto de densidad el radio puede llegar a 4, y cada anillo sigue recibiendo la mitad que el anterior.
 
-**Cuanto más frecuente el golpe, más superficial.** En el BeatStep, los pads 1 a 3 suelen ser bombo, caja y toms. El bombo, la pista más densa, sacude una zona ancha sin vaciarla; la caja fractura; los toms, que suelen ir en los redobles, abren las heridas profundas.
+**Perfiles por defecto** (v6, elegidos por el usuario):
 
-| Pad | Rol típico | Reducción (notas) | Radio | Profundidad | Tipo |
+| Pad | Rol | Reducción (notas) | Radio | Profundidad | Tipo |
 |---|---|---|---|---|---|
-| 1 | Bombo | 2 | 2 | 0 | temblor |
-| 2 | Caja | 8 | 1 | 3 | corte |
-| 3 | Tom | 12 | 2 | 4 | corte profundo |
-| 4 | Palmas, aro… | 4 | 1 | 0 | arañazo |
-| 5 | — | 3 | 0 | 0 | arañazo |
-| 6 | — | 2 | 1 | 0 | arañazo |
-| 7 | — | 1 | 0 | 0 | arañazo |
-| 8 | Charles | 1 | 0 | 0 | arañazo |
+| 1 | Bombo | 4 | 2 | 2 | temblor |
+| 2 | Caja | 15 | 1 | 3 | corte |
+| 3 | Tom | 4 | 1 | 1 | corte profundo |
+| 4 | Palmas, aro… | 3 | 1 | 0 | arañazo |
+| 5 | — | 2 | 1 | 0 | arañazo |
+| 6 | — | 2 | 0 | 0 | arañazo |
+| 7 | Charles | 1 | 0 | 0 | arañazo |
+| 8 | Platillo | 1 | 1 | 0 | arañazo |
 
-- **Los valores son los propuestos en el encargo.** Una escala de referencia: llegar al límite cuesta 11 notas, así que la caja (8) baja una formación en el límite a la mitad y el tom (12) la deja en semilla. El bombo (2, radio 2) se nota en las 19 celdas que toca sin vaciar ninguna.
-- **El temblor se porta como un arañazo:** profundidad 0 y destello suave. Lo que decide el comportamiento es la profundidad; el tipo es una etiqueta que sale en la leyenda.
-- **Columnas de la tabla:** `pad`, `reduccion`, `radio`, `profundidad`, `tipo` y `rol`. El motor las lee por nombre; `rol` es solo para leer.
-- **Al relanzar la fase 7:** si la tabla tiene los valores de la v1 o de la v3 sin editar, se sustituye. Si está editada, se conserva y el informe avisa con `..` de que la columna `reduccion` ahora cuenta notas.
+- **Cortan tres pads** desde la fase 9: bombo (profundidad 2), caja (3) y tom (1). Las etiquetas de tipo son del usuario; el comportamiento lo decide la tripleta.
+- **Escala de referencia:** llegar al límite cuesta 11 notas. La caja (15) deja en semilla una formación en el límite.
+- **El tipo es una etiqueta** que sale en la leyenda: lo que decide el comportamiento es la profundidad.
+- **Columnas de la tabla:** `pad`, `reduccion`, `radio`, `profundidad`, `tipo` y `rol`. El motor las lee por nombre; `rol` es solo una nota. El pad 7 es el charles y el 8 el platillo: la columna `rol` de `perfiles_erosion` y de `colores_drum` se corrige al relanzar aunque la tabla esté editada, sin tocar el resto.
+- **Al relanzar la fase 7:** si la tabla tiene los valores de la v1, la v3 o la v5 sin editar, se sustituye. Si está editada, se conserva y el informe avisa con `..` de que la columna `reduccion` ahora cuenta notas.
 
-**El golpe ilumina la celda** (v5). Cada golpe ilumina las celdas que erosiona con el color de su pad: la celda objetivo a plena luz, el primer anillo a la mitad y el segundo a un cuarto. Así la luz dibuja la huella del golpe: un punto para un arañazo de radio 0 y una mancha ancha para el temblor del bombo.
+**El borde de la celda dice quién destruye** (v6). Las 8 losetas del borde de la rejilla de 3 × 3 de `luz_celda` son los 8 pads: el pad n a (n − 1) × 45°. El pad 1 queda al este, el 3 al norte, el 5 al oeste y el 7 al sur.
 
-- **Cómo se dibuja:** es una loseta de luz por celda, a ras de la superficie y casi del tamaño de la celda, en la geometría `luz_drum` (Script CHOP `i_luz_drum`). Su material, `mat_luz_drum`, suma su color a lo que hay detrás (mezcla aditiva): ilumina y nunca oscurece. Por eso no se confunde con la huella, que es oscura.
-- **Dónde se ve:** con formación (asoma alrededor de su base), en una celda vacía o con huella, y también en modo actuación, porque es parte del mundo. `Balizasdrum` sigue siendo el interruptor.
-- **Cuándo:** se apaga en `Vidabalizadrum` segundos (0,8). Con un bombo a negras a 120 BPM, su zona está casi siempre iluminada; los pads raros destellan casi un segundo.
-- **Varios pads en la misma celda:** manda la luz más intensa en ese instante y, a igualdad, la última. Al alternar dos pads, cada golpe pinta la celda de su color. No se mezclan, porque la suma de colores tiende al blanco y se confundiría con la baliza del SEQ1.
+- **Cada golpe enciende el sector de su pad** en las celdas que erosiona, con el color del pad: plena intensidad en la celda objetivo, la mitad en el primer anillo y un cuarto en el segundo. Así la luz dibuja la huella del golpe. La intensidad se ve en el tamaño de la loseta, no en el color, que siempre es opaco y pleno.
+- **Con secuenciador en la celda,** el centro conserva su color y el borde lleva el del pad: se ven los dos a la vez y sin mezclarse. **Sin secuenciador** (el golpe se desplazó a una vecina, o `Objetivo` en `velocidad`), solo se enciende el borde.
+- **Varios pads a la vez en la misma celda:** cada uno en su sector, todos visibles.
+- **Cuándo:** se apaga en `Vidabalizadrum` segundos (0,8). Con un bombo a negras a 120 BPM su sector está casi siempre encendido; los pads raros destellan casi un segundo.
+- **Dónde se ve:** con formación, vacía o con huella, y también en modo actuación. Con formación, el borde queda fuera de la base de la pieza principal. Un macizo de fusión, que ocupa el 80 % de la celda, tapa parte de cada sector, pero el borde exterior asoma.
 - **Lo que ya tiene significado queda a salvo:**
   - el latido aclara la formación, no la superficie;
-  - el ámbar de las coronas, el cian de las cicatrices y el blanco de la baliza del SEQ1 no están en la paleta;
-  - el oscuro de la huella no puede salir de una luz que solo suma.
+  - el ámbar de las coronas, el cian de las cicatrices y el blanco del SEQ1 no están en la paleta de la batería;
+  - el oscuro de la huella no puede confundirse con colores opacos y plenos.
 - **Destello de la fase 9:** `luz_destello` usa también el color del pad, aclarado un 35 % con blanco para que siga siendo un golpe de luz.
 
 **Colores:** tabla `colores_drum` (columnas `pad`, `r`, `g`, `b`, de 0 a 1, más `rol` para leer), editable a mano. Relanzar la fase no la pisa.
@@ -352,12 +365,12 @@ Las 8 pistas de batería son las 8 señales de destrucción. Cada pad tiene un *
 | 4 | Palmas, aro… | azul ultramar | `#3B5BDB` |
 | 5 | — | verde esmeralda | `#12B76A` |
 | 6 | — | lima | `#A3E635` |
-| 7 | — | rosa claro | `#F9A8D4` |
-| 8 | Charles | lila claro | `#C4B5FD` |
+| 7 | Charles | rosa claro | `#F9A8D4` |
+| 8 | Platillo | lila claro | `#C4B5FD` |
 
-**Por qué las balizas de la v3 salían todas del mismo color.** `make_instanced` enlazaba el color de las instancias a los parámetros `instancecolorr/g/b`. En el Geometry COMP de TouchDesigner se llaman `instancer/g/b` (página Instance 2), así que la geometría nunca leía los canales `r g b` y pintaba todo con el color del material. Ahora `estratos_comun.py` (comun v10) prueba los dos nombres y fija Color Mode = Replace. La autoprueba comprueba en `luz_drum` que el color por instancia está enlazado, y no solo las filas del motor.
+**Por qué las balizas salían todas del mismo color.** `make_instanced` enlazaba el color de las instancias a los parámetros `instancecolorr/g/b`. En el Geometry COMP de TouchDesigner se llaman `instancer/g/b` (página Instance 2), así que la geometría nunca leía los canales `r g b` y pintaba todo con el color del material. Ahora `estratos_comun.py` (comun v10) prueba los dos nombres y fija Color Mode = Replace. La autoprueba comprueba en `luz_celda` que el color por instancia está enlazado, y no solo las filas del motor.
 
-**Ojo:** el mismo fallo afecta a todas las geometrías instanciadas creadas antes de comun v10: formaciones, coronas, estratos y baliza del SEQ2. Probablemente por eso pulidas y porosas se distinguían poco por color. Para que cojan su color hay que relanzar las fases que las crean (3, 4, 5 y 8), o poner a mano en cada una Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace.
+**Ojo:** el mismo fallo afecta a todas las geometrías instanciadas creadas antes de comun v10: formaciones, coronas y estratos. También a la retícula de `fase12_base.py`, que no se relanza. Probablemente por eso pulidas y porosas se distinguían poco por color. Para que cojan su color hay que relanzar las fases que las crean (3, 4, 5 y 8), o poner a mano en cada una Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace.
 
 **Velocidad (propuesta, no implementada):** que la reducción escale con la velocidad del golpe, × (0,5 + vel/127): la mitad a velocidad 0, igual a 64 y 1,5 veces a 127. Con el desplazamiento de celda que ya hace la velocidad, quedaría como la única entrada expresiva de la batería. Pendiente de decidir.
 
@@ -374,7 +387,7 @@ En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al o
 **Página Fase7:** `Canaldrum` 16 (confirmado con el aparato) · `Notabase` 36 · `Objetivo` · `Umbraldensidad` 0,6 · `Multradio` 2 · `Padprueba` · `Erosionar` · `Balizasdrum` (encendido: luz de la batería) · `Luzdrum` 1 (intensidad) · `Vidabalizadrum` 0,8. Al relanzar la fase 7:
 
 - `Canaldrum` pasa a 16 solo si seguía en 10, y `Vidabalizadrum` a 0,8 solo si seguía en 0,6 o 1,0;
-- se retiran `Tambalizadrum` y `Anillobalizadrum`, y los nodos `balizas_drum`, `i_balizas_drum` y `mat_balizas_drum`.
+- se retiran `Tambalizadrum` y `Anillobalizadrum`. Las balizas (`balizas_drum`, `luz_drum` de la v5…) las retira cualquier fase al relanzarse.
 
 **Por confirmar:** la nota del primer pad. Si los golpes salen como `pad fuera de 1-8`, ajusta `Notabase`.
 
@@ -398,7 +411,7 @@ En cada fin de ciclo:
    Con los valores por defecto va de 0,5 (ciclo mínimo, 8 compases) a 2,0 (32 compases o más: `Grosormax`). Sin ese tope, una concha de edad máxima (64 compases) mediría 4,0, más del doble que una formación en su límite (1,875). `Grosormax` 0 quita el tope. y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
 3. **Herencia:** el 25 % de la ocupación de cada celda pasa a la capa nueva. La fracción que no llega a 1 se acumula para el ciclo siguiente: una celda con ocupación 2 en ciclos seguidos acaba heredando. Lo heredado vuelve a brotar desde la nueva superficie.
 
-**Radio acumulado.** Cada concha guarda su `grosor`, `r_in` y `r_out`. El radio del planeta es el del núcleo más la suma de los grosores, y de él dependen las losetas (cada una con la altura de su concha), la retícula, las balizas, las formaciones, la cámara y la esfera del núcleo que tapa las conchas más allá de `Maxconchas`. Las conchas de un motor anterior se leen con `Shellthick`.
+**Radio acumulado.** Cada concha guarda su `grosor`, `r_in` y `r_out`. El radio del planeta es el del núcleo más la suma de los grosores, y de él dependen las losetas (cada una con la altura de su concha), la retícula, la luz de celda, las formaciones, la cámara y la esfera del núcleo que tapa las conchas más allá de `Maxconchas`. Las conchas de un motor anterior se leen con `Shellthick`.
 
 **Paleta de generaciones:** ámbar en la base, después grises minerales y negros que se alternan en claro y oscuro para que las bandas se distingan.
 
@@ -430,7 +443,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 - **Grosores distintos** (fase 9 v2): la profundidad se sigue midiendo en conchas. Como cada concha tiene el grosor de su ciclo, un corte de 3 conchas es más o menos hondo según lo que duraron esos mundos. El fondo baja la suma de los grosores quitados y las paredes usan el radio de cada concha.
 - **Cicatriz:** el fondo y las paredes recién expuestos se ven en **cian** y se funden con el mineral en `Cicatriz` segundos.
 - **Destello:** `luz_destello`, una luz puntual que sigue el giro del planeta, golpea la celda en cada destrucción: fuerte en los cortes, suave en los arañazos.
-- **Balizas:** la del SEQ1 pasa a blanca, porque el cian queda reservado para lo recién expuesto. El destello toma el color del pad que golpea, aclarado.
+- **Luz del SEQ1:** el centro de su celda pasa a blanco, porque el cian queda reservado para lo recién expuesto. El destello toma el color del pad que golpea, aclarado.
 
 **Página Fase9:** `Cicatriz` 4 s · `Destello` 3
 
@@ -444,7 +457,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 - **Plano final.** `Planofinal` aleja la cámara en 20 s, con curva suave, hasta ver el globo entero. Al quitarlo vuelve.
 - **Luz.** Cenital fría que sube con el planeta, y un relleno azulado muy tenue. El eje sigue inclinado `Tilt` (20°).
 - **Núcleo:** negro profundo.
-- **Modo actuación.** `Modoactuacion` oculta la retícula, las balizas y la leyenda (la luz de la batería se sigue viendo: es parte del mundo): el switch `modo` pasa la salida al render limpio. Al quitarlo vuelve el modo diagnóstico.
+- **Modo actuación.** `Modoactuacion` oculta la retícula y la leyenda (la luz de celda se sigue viendo: es parte del mundo): el switch `modo` pasa la salida al render limpio. Al quitarlo vuelve el modo diagnóstico.
 
 **Página Fase10:** `Modoactuacion` · `Planofinal` · `Camaltura` 4 · `Camvel` 0,6
 
@@ -478,8 +491,8 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | Pulidas y porosas iguales | Los parámetros de brillo del Phong no se pudieron fijar | Sube Specular y Shininess en `mat_pulido` a mano |
 | SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
-| La luz de la batería sale de un solo color | `luz_drum` no lee el color por instancia (geometría creada antes de comun v10) | Relanza la fase 7; si persiste, en `luz_drum`: Instance 2 → Color R/G/B = `r` `g` `b`, Color Mode = Replace |
-| No se ve la luz de la batería | `Balizasdrum` apagado, `Luzdrum` a 0, la batería no llega (mira la línea `EROSION`) o `mat_luz_drum` sin mezcla aditiva | Revisa esos; en `mat_luz_drum`: Blending encendido, Source y Destination = One |
+| La luz sale de un solo color | `luz_celda` no lee el color por instancia | Relanza cualquier fase (la recrea). Si persiste, en `luz_celda`: Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace. El informe lo avisa con `FALLO luz_celda no lee el color por instancia` |
+| No se ve la luz de una celda | `Luzseq` (centro) o `Balizasdrum` (borde) apagados, `Luzdrum` a 0, la batería o el secuenciador no llegan (mira las líneas `EROSION` y `NOTA`), o `luz_celda` fuera del render | Revisa esos; relanzar cualquier fase vuelve a meter `luz_celda` en el render |
 | El mundo nunca se entierra por estancamiento | El bombo está sonando: cada temblor genera novedad | Es lo esperado; quita el bombo para que el mundo se asiente |
 | Los ciclos siempre acaban por edad máxima | Batería constante, umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Con batería es lo esperado. Si no, baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
@@ -511,9 +524,9 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 6 | ¿Una vuelta por ciclo? | No: `Barsperturn` manual y `Girovivo` |
 | 6 | ¿Los satélites cuentan para la madurez? | No: madurez = formaciones propias en el límite. Su forma se recorta al llegar a `Limsatelite` |
 | 7 | Canal y pads de la batería | Canal 16 (confirmado), pads desde 36 (`Notabase`), por confirmar |
-| 7 | ¿Cómo se ve el golpe? | El golpe ilumina las celdas que afecta, con el color de su pad (las balizas de la v3 se retiran) |
+| 3–7 | ¿Balizas? | Sin balizas: el centro de la celda muestra el secuenciador y el borde, la batería (un sector por pad, colores opacos) |
 | 7 | ¿Qué deshace un golpe? | Notas de construcción, con la misma moneda que la fase 3; la mitad en cada anillo de vecinas |
-| 7 | ¿Qué pads cortan? | Cuanto más frecuente el golpe, más superficial: bombo (1) temblor, caja (2) corte, tom (3) corte profundo, 4 a 8 arañazos |
+| 7 | ¿Qué pads cortan? | Perfiles del usuario: bombo (1), caja (2) y tom (3), con profundidad 2, 3 y 1; 4 a 8 arañazos |
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
@@ -539,6 +552,15 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
 - **Fase 7 v3:**
   - Perfiles nuevos: el pad 1 resta 1 en radio 2 sin abrir corte; los pads 2 y 3 abren cortes desde el nivel 9; ningún otro pad corta.
   - Relanzar sustituye una tabla con los valores de la v1, conserva una editada a mano y no pisa un `Canaldrum` cambiado a mano.
+  - Luz de celda (motor v18):
+    - la nota del SEQ1 enciende el centro de su celda en su color y queda tenue hasta la siguiente; la del SEQ2, en ámbar; con los dos en la misma celda, el centro se parte y se ven los dos;
+    - desde la fase 9, el SEQ1 en blanco;
+    - golpe en la celda del SEQ1: el centro conserva su color y el borde muestra el del pad;
+    - 8 pads a la vez: 8 sectores de 8 colores, y `luz_celda` lee el color por instancia;
+    - golpe sin secuenciador: solo el borde;
+    - la luz se ve con formación, vacía y con huella, gira con el planeta y sube con el radio;
+    - no queda ninguna baliza en escena ni en `CHOP_NAMES`;
+    - los pads 1, 2 y 3 cortan.
   - Fase 7 v5: el golpe ilumina la celda con el color de su pad y su radio más tenue, y se apaga a tiempo; dos pads dan dos colores y `luz_drum` lee el color por instancia; la luz se ve con formación, vacía y con huella; el pad 7 repetido con el SEQ1 tocando deshace una nota por golpe y la celda sigue creciendo; N notas de construcción y N de erosión devuelven la celda; la celda objetivo pierde más que sus vecinas; las balizas de la v3 desaparecen.
   - Balizas de la batería (v4, retiradas en la v5) fuera de la silueta del SEQ1 y del SEQ2 (en reposo y en el pulso), en el ecuador, junto al polo y en el polo, y con el SEQ2 en la celda vecina; las 8 de una celda sin tocarse; tamaño entre 0,18 y 0,30, por encima del mínimo perceptible (0,15) y por debajo del SEQ2 en reposo (0,495).
   - Balizas de la batería: los 8 pads en la misma celda encienden 8 balizas, cada una en su hueco y con su color; se apagan en `Vidabalizadrum`; ninguna es cian, ámbar ni blanca; giran y se balancean con el planeta; `Padprueba` + `Erosionar` también las encienden; `Modoactuacion` las oculta.

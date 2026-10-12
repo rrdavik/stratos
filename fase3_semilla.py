@@ -48,8 +48,14 @@ QUE INSTALA
   formas_porosas    formaciones con material poroso  (+ i_formas_porosas)
   formas_callbacks  el Script CHOP que pide al motor las instancias
   pulsos            los botones de la pagina Fase3
-Y reescribe midi_callbacks, latido, baliza_callbacks y reticula_callbacks
-para que pasen por el motor (la baliza se posa encima de la formacion).
+Y reescribe midi_callbacks, latido y reticula_callbacks para que pasen por
+el motor.
+
+LUZ DE CELDA (v9): sin balizas. La baliza cian de las fases 1 y 2 se
+retira; cada nota del SEQ1 enciende el CENTRO de su celda en cian (blanco
+desde la fase 9): un pulso con la nota y tenue hasta la siguiente, para
+que se vea donde esta. Con formacion, el centro se ensancha hasta asomar
+alrededor de su base. Interruptor: Luzseq (pagina Fase3).
 
 COMO USARLO
 -----------
@@ -65,7 +71,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v8  (carga y frenada, semilla, crecimiento, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v9  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -183,10 +189,23 @@ def prueba(t):
             '%d piezas' % chop2.numSamples)
     leg = m.legend()
     t.check('leyenda MUNDO', 'MUNDO' in leg and ('ocupadas 2/%d' % m.N) in leg)
-    sin_bal = [n for n in ('nucleo', 'reticula', 'baliza', 'formas_pulidas', 'formas_porosas')
+    sin_bal = [n for n in ('nucleo', 'reticula', 'luz_celda', 'formas_pulidas', 'formas_porosas')
                if 'wobble(' not in (base.op(n).par.rx.expr or '')]
     t.check('balanceo del eje en el planeta', not sin_bal,
             'sin balanceo: %s' % ', '.join(sin_bal) if sin_bal else '')
+    # luz de celda: la nota del SEQ1 enciende el centro de su celda
+    Wl = m.new_world()
+    cl_ = dict(c)
+    m.note_on(Wl, cl_, m.GEO, 64, 100, 1.0)
+    pulso = [r for r in m.cell_lights(Wl, cl_, 1.0)]
+    reposo = [r for r in m.cell_lights(Wl, cl_, 5.0)]
+    col = m.seq_color(cl_, 1)
+    t.check('nota del SEQ1: el centro de su celda en su color, y tenue hasta la siguiente',
+            len(pulso) == 1 and len(reposo) == 1
+            and abs(pulso[0][9] - col[0]) < 1e-6 and reposo[0][10] < pulso[0][10]
+            and abs(reposo[0][10] / col[1] - 0.6) < 0.01,
+            '%d / %d losetas' % (len(pulso), len(reposo)))
+    t.check('sin baliza del SEQ1', base.op('baliza') is None and base.op('baliza_chop') is None)
     st = {'ph': 0.0, 'env': 1.0}
     m.wobble_step(st, 0.25, True, False, 60.0, 4.0)      # periodo minimo 5 s
     w = m.wobble_step(st, 1.0 / 60, True, False, 60.0, 5.0)
