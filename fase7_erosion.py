@@ -59,19 +59,16 @@ Mientras suena el bombo el mundo no deja de cambiar, y los ciclos (fase 6)
 acaban por edad maxima; al quitarlo, el mundo se asienta y se entierra por
 estancamiento: el breakdown entierra el mundo.
 
-EL BORDE DE LA CELDA DICE QUIEN DESTRUYE (v6)
----------------------------------------------
-Sin balizas: cada celda cuenta con luz lo que le pasa, en una rejilla de
-3 x 3 losetas opacas a ras de su superficie (geometria luz_celda, la crea
-cualquier fase). El centro es el secuenciador que la toca (fase 3); las 8
-losetas del borde son los 8 pads: el pad n a (n-1) x 45 grados (pad 1 al
-este, pad 3 al norte...), con el color de su pad (tabla colores_drum).
-Cada golpe enciende su sector en las celdas que erosiona: plena luz en la
-celda, la mitad en el primer anillo, un cuarto en el segundo. Varios pads
-a la vez, cada uno en su sector. Con secuenciador en la celda el centro
-conserva su color; sin el, solo se enciende el borde. Colores opacos, sin
-mezclas. Se apaga en Vidabalizadrum segundos; tambien se ve en modo
-actuacion.
+EL GOLPE SE VE COMO UNA NOTA (v9)
+---------------------------------
+Sin balizas ni sectores: cada golpe ilumina, igual que una nota de un
+secuenciador, el centro de las celdas que erosiona (loseta luz_celda) y su
+formacion, que se hincha y se tine, con el color de su pad (tabla
+colores_drum): plena en la celda del golpe, la mitad en el primer anillo y
+un cuarto en el segundo. Se apaga en Vidabalizadrum segundos. Si en la
+celda hay un secuenciador, manda la luz mas intensa en ese instante (el
+golpe, mientras dura); al apagarse vuelve la del secuenciador. Se ve con
+formacion, vacia o con huella, y en modo actuacion.
     Balizasdrum     luz de la bateria encendida / apagada
     Luzdrum         intensidad de la luz (1)
     Vidabalizadrum  segundos hasta apagarse (0,8)
@@ -103,7 +100,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v8  (erosion en notas y con la velocidad, perfiles del usuario, borde de la celda)'
+VERSION = 'fase7 v9  (erosion en notas y con la velocidad, perfiles del usuario, el golpe se ve como una nota)'
 banner(VERSION)
 
 base = require_base(7)
@@ -244,9 +241,9 @@ leeme(base, 7, """FASE 7 - EROSION
   altura, huella.
   Perfiles del usuario: 1 bombo (-4, radio 2, corta 2), 2 caja (-15,
   radio 1, corta 3), 3 tom (-4, radio 1, corta 1), 4-8 aranazos.
-  El borde de la celda dice quien destruye: el golpe enciende el sector
-  de su pad (8 sectores alrededor del centro, colores_drum) en las celdas
-  que erosiona; se apaga en Vidabalizadrum s. Luzdrum: intensidad.
+  El golpe se ve como una nota: el centro de la celda y la formacion con
+  el color de su pad (colores_drum), en las celdas que erosiona; se apaga
+  en Vidabalizadrum s. Luzdrum: intensidad.
   Presupuesto: por encima de Umbraldensidad, radios x Multradio.
   Prueba: Padprueba + Erosionar.""")
 
@@ -300,69 +297,76 @@ def prueba(t):
     t.check('tabla v1, v3 o v5 sin editar -> se sustituye; editada -> se conserva',
             clasificar_perfiles(v1, m) == 'v1' and clasificar_perfiles(v3, m) == 'v3'
             and clasificar_perfiles(v5, m) == 'v5' and clasificar_perfiles(ed, m) == 'editada')
-    # luz de celda: que hay dibujado en una celda (centro y sectores del borde)
-    def losetas(Wx, cx, now, celda):
+    # luz de celda: colores dibujados en el centro de una celda
+    def centro_de(Wx, cx, now, celda):
         nn = m.normal_i(celda)
-        e, tt = m.tangents(nn)
-        base_r = m.base_radius(Wx, cx, celda)
-        cw, cl = m._cell_sizes(base_r, celda)
-        if m.is_pole(celda):
-            cw, cl = cw * 1.25, cl * 1.25
-        centro, borde = [], {}
+        out = []
         for f in m.cell_lights(Wx, cx, now):
             p = f[:3]
-            k = sum(p[q] * nn[q] for q in range(3))
-            if k <= 0:
-                continue
-            lat = [p[q] - k * nn[q] for q in range(3)]
-            x = sum(lat[q] * e[q] for q in range(3)) / cw
-            z = sum(lat[q] * tt[q] for q in range(3)) / cl
-            if abs(x) > 0.55 or abs(z) > 0.55:
-                continue
-            col = tuple(round(v, 3) for v in f[9:12])
-            if max(abs(x), abs(z)) < 0.3:
-                centro.append(col)
-            else:
-                d = (1 if x > 0.19 else -1 if x < -0.19 else 0,
-                     1 if z > 0.19 else -1 if z < -0.19 else 0)
-                borde[m.PAD_DIRS.index(d)] = col
-        return centro, borde
+            r = math.sqrt(sum(v * v for v in p))
+            if r > 0 and sum(p[q] / r * nn[q] for q in range(3)) > 0.9999:
+                out.append(tuple(round(v, 3) for v in f[9:12]))
+        return out
     redondo = lambda col: tuple(round(v, 3) for v in col)
-    # 1. los 8 pads a la vez en la celda donde toca el SEQ1
+
+    def tinte_formacion(Wx, cx, now, celda):
+        """Color de la pieza principal de la formacion de la celda."""
+        Wx['vh'] = list(Wx['h'])
+        inst = m.build_instances(Wx, cx, now)
+        nn = m.normal_i(celda)
+        mejor = None
+        for f in inst['formas_pulidas'] + inst['formas_porosas']:
+            p = f[:3]
+            r = math.sqrt(sum(v * v for v in p))
+            if r > 0 and sum(p[q] / r * nn[q] for q in range(3)) > 0.9999:
+                mejor = f[9:12]
+                break
+        return mejor
+    # 1. un golpe ilumina el centro de la celda y la formacion con el color del pad
     W3 = m.new_world()
-    for k in range(3):
-        m.note_on(W3, cd, 1, 64, 100, 2.0)
-    for pad in range(8):
-        m.light_cell(W3, cd, i, pad, 1.0, 2.0)
-    centro, borde = losetas(W3, cd, 2.05, i)
-    t.check('golpe en la celda del SEQ1: el centro conserva su color y el borde el del pad',
-            centro == [redondo(m.seq_color(cd, 1))]                 # nota pulsada: plena
-            and sorted(borde) == list(range(8))
-            and all(borde[pd] == redondo(cd['colores_drum'][pd]) for pd in range(8)),
-            'centro %s, %d sectores' % (centro, len(borde)))
-    t.check('8 pads a la vez: 8 sectores de 8 colores distintos',
-            len(set(borde.values())) == 8)
+    for k in range(4):
+        m.note_on(W3, cd, 1, 64, 100, 0.0)
+    sin_golpe = tinte_formacion(W3, cd, 2.05, i)
+    m.light_cell(W3, cd, i, 1, 1.0, 2.0)            # caja, magenta
+    col_caja = m.drum_color(cd, 1)
+    centro = centro_de(W3, cd, 2.01, i)
+    con_golpe = tinte_formacion(W3, cd, 2.01, i)
+    acerca = lambda c_: sum(abs(c_[q] - col_caja[q]) for q in range(3))
+    t.check('golpe: el centro de la celda con el color del pad, como una nota',
+            len(centro) == 1 and acerca(centro[0]) < 0.05, str(centro))
+    t.check('golpe: la formacion se tine del color del pad, como con una nota',
+            con_golpe is not None and acerca(con_golpe) < acerca(sin_golpe) - 0.2,
+            '%s -> %s' % (sin_golpe and [round(v, 2) for v in sin_golpe],
+                          con_golpe and [round(v, 2) for v in con_golpe]))
     bien, det = instance_color_ok(base.op('luz_celda'))
     t.check('luz_celda pinta el color de cada instancia (lo que se dibuja)', bien, det)
-    # 2. golpe sin secuenciador en la celda: solo el borde
-    vacia = m.note_cell(70)
-    m.light_cell(W3, cd, vacia, 6, 1.0, 2.0)
-    centro, borde = losetas(W3, cd, 2.05, vacia)
-    t.check('golpe sin secuenciador en la celda: solo se enciende el borde',
-            not centro and list(borde) == [6])
+    # 2. en la celda del SEQ1: el golpe manda mientras dura; despues vuelve el SEQ1
+    W3s = m.new_world()
+    m.note_on(W3s, cd, 1, 64, 100, 5.0)
+    m.note_off(W3s, cd, 1, 64, 5.05, 120.0)
+    m.light_cell(W3s, cd, i, 6, 1.0, 6.0)           # charles en reposo del SEQ1
+    durante = centro_de(W3s, cd, 6.01, i)
+    despues = centro_de(W3s, cd, 6.0 + cd['vida_baliza_drum'] + 0.01, i)
+    t.check('golpe en la celda del SEQ1: se ve el pad; al apagarse, vuelve el SEQ1',
+            len(durante) == 1 and len(despues) == 1
+            and sum(abs(durante[0][q] - m.drum_color(cd, 6)[q]) for q in range(3)) < 0.1
+            and sum(abs(despues[0][q] - m.seq_color(cd, 1)[q] * 0.7) for q in range(3)) < 0.1,
+            '%s / %s' % (durante, despues))
+    t.check('sin otras senales de bateria: una sola loseta por celda, sin borde',
+            len(m.cell_lights(W3s, cd, 6.01)) == 1 and not hasattr(m, 'PAD_DIRS'))
     # 3. un golpe: la celda a plena luz, el radio mas tenue, y se apaga
     W3b = m.new_world()
     m.note_on(W3b, cd, 1, 64, 100, 0.0)
     ev = m.erosion(W3b, cd, 0, 1, 2.0)              # bombo: radio 2
-    nivel = {c_: m.light_level(cd, h[0], 2.05) for c_, h in W3b['luz'].items()}
+    nivel = {c_: m.drum_light(W3b, cd, c_, 2.05)[0] for c_ in W3b['luz']}
     anillos = dict(m.rings(ev['celda'], 2))
     a1 = [nivel[x] for x, d in anillos.items() if d == 1 and x in nivel]
     a2 = [nivel[x] for x, d in anillos.items() if d == 2 and x in nivel]
-    t.check('el golpe enciende su sector en la celda y su radio, mas tenue al alejarse',
+    t.check('el golpe ilumina la celda y su radio, mas tenue al alejarse',
             nivel.get(ev['celda'], 0) > max(a1) > max(a2) > 0, '%d celdas' % len(nivel))
     t.check('se apaga en Vidabalizadrum',
-            not W3b['luz'] or not m.cell_lights(dict(W3b, last={1: None, 2: None}), cd,
-                                                2.0 + cd['vida_baliza_drum'] + 1e-3))
+            not m.cell_lights(dict(W3b, last={1: None, 2: None}), cd,
+                              2.0 + cd['vida_baliza_drum'] + 1e-3))
     # 4. se ve con formacion, vacia y con huella
     W5 = m.new_world()
     for k in range(6):
@@ -371,10 +375,12 @@ def prueba(t):
     hu = m.note_cell(62)
     m.degrade(W5, cd, hu, 1)                        # huella
     W5['last'] = {1: None, 2: None}
+    vacia = m.note_cell(70)
     vis = True
     for celda in (m.note_cell(60), hu, vacia):
         m.light_cell(W5, cd, celda, 1, 1.0, 4.0)
-        vis = vis and bool(losetas(W5, cd, 4.01, celda)[1])
+        cc = centro_de(W5, cd, 4.01, celda)
+        vis = vis and len(cc) == 1 and acerca(cc[0]) < 0.1
     t.check('la luz se ve con formacion, vacia y con huella', vis and W5['huella'][hu] > 0)
     t.check('los pads 1, 2 y 3 cortan; ningun otro', m.pads_corte(cd) == [0, 1, 2])
     # 4. pad 7 repetido sobre una celda en crecimiento, con el SEQ1 tocando
@@ -470,7 +476,7 @@ def prueba(t):
     m.on_pulse('Erosionar')
     W = m.world()
     k = int(base.par.Padprueba) - 1
-    t.check('Padprueba + Erosionar encienden su sector', k in W['drum'] and W['luz'])
+    t.check('Padprueba + Erosionar iluminan la celda', k in W['drum'] and W['luz'])
     cian, ambar, blanco = (0.10, 0.90, 1.00), (1.0, 0.7, 0.3), (0.95, 0.95, 0.92)
     t.check('ningun color es cian, ambar ni blanco',
             all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
