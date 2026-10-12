@@ -16,7 +16,10 @@ pasa a HIBRIDA, conservando ambos rastros:
   - geologia colonizada   -> macizo aterrazado (plantas rectas en la ladera)
   - arquitectura colonizada -> torre mineralizada (excrecencias en los flancos)
 
-El SEQ2 tiene su propia baliza, ambar y mas pequena.
+El SEQ2 no tiene baliza (v2): cada nota suya enciende el CENTRO de su
+celda en ambar, con pulso y tenue hasta la siguiente. Si el SEQ1 y el
+SEQ2 estan en la misma celda, el centro se parte en dos mitades: SEQ1 al
+oeste, SEQ2 al este.
 
 EL CANAL DEL SEQ2
 -----------------
@@ -32,7 +35,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase5 v1  (SEQ2 arquitectura, hibridos, segunda baliza)'
+VERSION = 'fase5 v2  (SEQ2 arquitectura, hibridos, luz ambar en el centro de la celda)'
 banner(VERSION)
 
 base = require_base(5)
@@ -44,14 +47,13 @@ add_par(base, page, 'int', 'Nota2', 'Nota de prueba del SEQ2', 60, 0, 127, clamp
 add_par(base, page, 'pulse', 'Sembrar2', 'Sembrar SEQ2 en Nota2 (prueba)')
 ok('pagina Fase5: Canal2 (14), Nota2, Sembrar2')
 
-make_constant(base, 'mat_baliza2', 780, 540, (1.0, 0.62, 0.25))
-make_instanced(base, 'baliza2', 520, 540, 'mat_baliza2', sop='sphere')
 set_render(base)
 
 leeme(base, 5, """FASE 5 - DOS ESPECIES
   SEQ1 (Canal) construye geologia; SEQ2 (Canal2) construye arquitectura.
   Una especie sobre la otra la coloniza: celda hibrida.
-  Baliza ambar = SEQ2. Prueba: Nota2 + Sembrar2.""")
+  Centro de la celda en ambar = SEQ2 (con el SEQ1, partido en dos).
+  Prueba: Nota2 + Sembrar2.""")
 
 print_report()
 
@@ -70,11 +72,21 @@ def prueba(t):
     t.check('SEQ2 sobre geologia -> hibrida', W['sp'][i] == m.HIB and W['own'][i] == m.GEO)
     t.check('el material lo sigue fijando el fundador', W['vel'][i] == 30)
     t.check('SEQ2 en celda vacia -> arquitectura', W['own'][j] == m.ARQ)
-    W['vh'] = list(W['h'])
-    m._CACHE['inst'] = m.build_instances(W, c, 0.0)
-    b2 = base.op('i_baliza2')
-    b2.cook(force=True)
-    t.check('baliza del SEQ2 colocada', b2.numSamples == 1 and float(b2['ty'][0]) > -100)
+    # luz de celda: el SEQ2 en ambar; con el SEQ1 en la misma celda, los dos
+    W2 = m.new_world()
+    c2 = dict(c)
+    c2['nivel'] = max(5, c2['nivel'])
+    m.note_on(W2, c2, m.ARQ, 50, 100, 1.0)
+    filas = m.cell_lights(W2, c2, 1.0)
+    t.check('nota del SEQ2: el centro de su celda en ambar',
+            len(filas) == 1 and tuple(round(x, 3) for x in filas[0][9:12])
+            == tuple(round(x, 3) for x in m.COL_SEQ2))
+    m.note_on(W2, c2, m.GEO, 50, 100, 1.0)
+    filas = m.cell_lights(W2, c2, 1.0)
+    cols = set(tuple(round(x, 3) for x in f[9:12]) for f in filas)
+    t.check('SEQ1 y SEQ2 en la misma celda: se ven los dos (centro partido)',
+            len(filas) == 2 and len(cols) == 2)
+    t.check('sin baliza del SEQ2', base.op('baliza2') is None and base.op('i_baliza2') is None)
     t.check('leyenda SEQ2', 'SEQ2' in m.legend())
 
 
