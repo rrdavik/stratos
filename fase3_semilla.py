@@ -71,7 +71,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v9  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v10  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -166,8 +166,10 @@ def prueba(t):
             'ocupacion %d, altura %.2f de %.2f' % (W['occ'][i], W['h'][i], lim))
     t.midi(0x9C, 0x40, 0x64)
     o11 = W['occ'][i]
-    t.check('11 notas -> limite de altura, sin desbordar',
-            abs(W['h'][i] - lim) < 1e-6 and o11 == c['th_branch'] and m.occupied(W) == 1,
+    desborda = c['nivel'] >= 4            # relanzada sobre un proyecto ya avanzado
+    t.check('11 notas -> limite de altura' + ('' if desborda else ', sin desbordar'),
+            abs(W['h'][i] - lim) < 1e-6 and o11 == c['th_branch']
+            and (desborda or m.occupied(W) == 1),
             'altura %.2f de %.2f, celdas %d' % (W['h'][i], lim, m.occupied(W)))
     t.check('en el limite cada trigger cuesta Costemax notas',
             m.cost(c, o11) == int(c['cost_max']), '%d' % m.cost(c, o11))
@@ -188,7 +190,7 @@ def prueba(t):
     t.check('i_formas_porosas tiene piezas', chop2.numSamples >= 1,
             '%d piezas' % chop2.numSamples)
     leg = m.legend()
-    t.check('leyenda MUNDO', 'MUNDO' in leg and ('ocupadas 2/%d' % m.N) in leg)
+    t.check('leyenda MUNDO', 'MUNDO' in leg and ('ocupadas %d/%d' % (m.occupied(W), m.N)) in leg)
     sin_bal = [n for n in ('nucleo', 'reticula', 'luz_celda', 'formas_pulidas', 'formas_porosas')
                if 'wobble(' not in (base.op(n).par.rx.expr or '')]
     t.check('balanceo del eje en el planeta', not sin_bal,

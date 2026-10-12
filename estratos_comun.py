@@ -18,7 +18,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v11'
+VERSION_COMUN = 'comun v12'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -453,7 +453,7 @@ def onCook(scriptOp):
     return
 '''
 
-RETICULA_CB = r'''# Posicion de las 96 celdas sobre la superficie ACTUAL del planeta.
+RETICULA_CB = r'''# Posicion de las celdas (85 con do1-do8) sobre la superficie ACTUAL del planeta.
 # De polo a polo: los polos son las notas extremas del rango y en medio
 # un anillo por octava; la clase de nota elige el meridiano.
 # (Reescrito por estratos_comun.py: la geometria la da el motor, para que
@@ -556,6 +556,7 @@ def install_core(base, carpeta, fase):
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
     install_luz_celda(base)
+    reparar_color_instancias(base)
     apply_wobble(base)
     patch_ritmo(base)
     return motor
@@ -564,7 +565,8 @@ def install_core(base, carpeta, fase):
 BALIZAS_VIEJAS = ['baliza', 'baliza_chop', 'baliza_callbacks', 'mat_baliza',
                   'baliza2', 'i_baliza2', 'mat_baliza2',
                   'balizas_drum', 'i_balizas_drum', 'mat_balizas_drum',
-                  'luz_drum', 'i_luz_drum', 'mat_luz_drum']
+                  'luz_drum', 'i_luz_drum', 'mat_luz_drum',
+                  'luz12_callbacks']    # la luz de las fases 1 y 2 (fase12 v3)
 
 
 def retirar_balizas(base):
@@ -586,6 +588,36 @@ def retirar_balizas(base):
     if quitados:
         ok('balizas retiradas (la luz de celda las sustituye): %s' % ', '.join(quitados))
     set_render(base)
+
+
+def reparar_color_instancias(base):
+    """Las geometrias instanciadas creadas antes de comun v10 (formaciones,
+    coronas, estratos) y la reticula de fase12_base.py v2 enlazaban su color
+    a instancecolorr/g/b, que no existe: salian del color del material. Se
+    reparan aqui, en cada relanzamiento de cualquier fase, sin tocar nada
+    mas (ni el mundo ni la posicion de las instancias)."""
+    reparadas, malas = [], []
+    for geo in list(base.children):
+        if str(getattr(geo, 'OPType', '')) != 'geometryCOMP':
+            continue
+        try:
+            src = str(geo.par.instanceop.eval() or '')
+        except Exception:
+            src = ''
+        if not src:
+            continue
+        antes, _ = instance_color_ok(geo)
+        if antes:
+            continue
+        set_instance_color(geo, geo.name)
+        ahora, det = instance_color_ok(geo)
+        (reparadas if ahora else malas).append(geo.name if ahora else '%s (%s)' % (geo.name, det))
+    if reparadas:
+        ok('color por instancia reparado en: %s' % ', '.join(reparadas))
+    for g in malas:
+        fail('%s no lee el color por instancia: Instance 2 -> Color R/G/B = r g b, '
+             'Color Mode = Replace' % g)
+    return not malas
 
 
 def install_luz_celda(base):

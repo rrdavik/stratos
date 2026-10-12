@@ -2,6 +2,8 @@
 ## Fases 1 y 2: el núcleo que gira al tempo del BeatStep, y el SEQ1 marcando sus notas
 
 > **Actualización:** las fases 1 y 2 se aplican ahora con un solo script, `fase12_base.py`, que incluye el arreglo del render (`fix_render_fase2.py` ya no hace falta) y la retícula de polo a polo: polos en `Notapolosur` y `Notapolonorte` (entre do1 y do8) y un anillo por octava en medio; `Notapolosur`, `Notapolonorte` y `Fuerarango` están en la página Fase3. Lo que sigue describe el montaje original de 96 celdas; para la retícula actual, mira `MONTAJE_FASES_3_10.md`.
+>
+> **fase12 v3:** ya no hay baliza. Cada nota del SEQ1 enciende en cian el centro de su celda, con un pulso, y la deja tenue hasta la siguiente (geometría `luz_celda`); es la misma luz de celda que da el motor desde la fase 3. La retícula pinta ya el color de cada marca (Instance 2 → Color R/G/B = `r g b`). Donde este documento habla de la baliza, léase la luz de celda.
 
 ---
 

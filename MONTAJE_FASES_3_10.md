@@ -17,14 +17,14 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, baliza (la retira la fase 3: la sustituye la luz de celda), MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v2` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v18` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v11` |
-| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda | `fase3 v9` |
+| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v3` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v19` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v12` |
+| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda | `fase3 v10` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
-| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el borde de la celda es la batería; huellas, presupuesto | `fase7 v6` |
+| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el borde de la celda es la batería; erosión con la velocidad; huellas, presupuesto | `fase7 v7` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
 | `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v5` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v4` |
@@ -82,7 +82,7 @@ formas_pulidas    formas_porosas    coronas        estratos       luz_celda     
 |---|---|---|
 | `midi_callbacks` | Solo note on del SEQ1 | Router: note on/off por canal, CC, START/STOP, MMC |
 | `latido` | Recalcula la baliza | Avanza el motor y redibuja |
-| `baliza`, `baliza_chop`, `baliza_callbacks` | Baliza cian del SEQ1 | **Se retiran** (motor v18): la nota del SEQ1 enciende el centro de su celda (`luz_celda`). La leyenda NOTA la da el motor |
+| `luz12_callbacks`, `i_luz_celda`, `luz_celda` | Luz de celda de las fases 1 y 2 (fase12 v3; en la v2 era la baliza cian) | El motor calcula las losetas: `i_luz_celda` pasa a `formas_callbacks` y `luz12_callbacks` se retira. La leyenda NOTA la da el motor. Un proyecto hecho con la fase12 v2 pierde aquí su `baliza` |
 | `reticula_callbacks` | Radio fijo 6 | Marcadores sobre la superficie actual (suben con las conchas) |
 | `rotulo` | Tempo + nota | Tempo + nota + motor |
 
@@ -372,7 +372,20 @@ Las 8 pistas de batería son las 8 señales de destrucción. Cada pad tiene un *
 
 **Ojo:** el mismo fallo afecta a todas las geometrías instanciadas creadas antes de comun v10: formaciones, coronas y estratos. También a la retícula de `fase12_base.py`, que no se relanza. Probablemente por eso pulidas y porosas se distinguían poco por color. Para que cojan su color hay que relanzar las fases que las crean (3, 4, 5 y 8), o poner a mano en cada una Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace.
 
-**Velocidad (propuesta, no implementada):** que la reducción escale con la velocidad del golpe, × (0,5 + vel/127): la mitad a velocidad 0, igual a 64 y 1,5 veces a 127. Con el desplazamiento de celda que ya hace la velocidad, quedaría como la única entrada expresiva de la batería. Pendiente de decidir.
+**Velocidad** (fase 7 v7). Con `Erosionvel` (encendido por defecto), la reducción escala con la velocidad del golpe:
+
+```
+notas = max(min(reduccion, 1), reduccion × velocidad / Velref)
+```
+
+- **Los números de la tabla** son los de un golpe a velocidad `Velref` (100). A 50 deshace la mitad y a 127, 1,27 veces más.
+- **Mínimo:** un golpe siempre deshace al menos una nota en su celda (o la reducción, si es menor), así que uno flojo nunca queda en nada.
+- **Fracciones:** se acumulan en cada celda como las de las vecinas, así que N golpes iguales deshacen siempre lo mismo.
+- **Solo escala la reducción:** el radio y la profundidad no cambian con la velocidad, y el desplazamiento de celda (`vel % 3`) sigue como estaba.
+- **Con `Erosionvel` apagado,** la reducción es la de la tabla, sin más.
+- **Propuesta, sin implementar:** que el tamaño del sector de luz del pad también crezca con la velocidad.
+
+**Página Fase7, velocidad:** `Erosionvel` (encendido) · `Velref` 100
 
 **Presupuesto de densidad.** Por encima de `Umbraldensidad` (60 % de celdas ocupadas), el radio de todos los eventos se multiplica por `Multradio` (×2), y un radio 0 pasa a 1 para que también los arañazos ayuden a aligerar. La leyenda marca `x2` mientras dura.
 
@@ -487,7 +500,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | No se ve nada en `salida` | Un nodo de la cadena con error | Mira el bloque `DIAGNOSTICO DEL RENDER` del Textport y pégamelo |
 | Formaciones tumbadas o metidas en el planeta | El orden de rotación de instancias no es X → Y | En cada geometría (`formas_*`, `coronas`, `estratos`): Instance → Rotate Order = `Rx Ry Rz` |
 | El planeta da tumbos en vez de balancearse | El Rotate Order de la geometría (pestaña Xform) no es `Ry Rx Rz` | El informe lo avisa con `..`; ponlo a mano en esa geometría |
-| Todas las formaciones del mismo color | Geometría creada antes de comun v10: el color por instancia no está enlazado | Relanza la fase que la crea, o en cada geometría: Instance 2 → Color R/G/B = `r` `g` `b`, Color Mode = Replace |
+| Todas las formaciones, coronas, estratos o marcas de la retícula del mismo color | Geometría creada antes de comun v10, o retícula de `fase12_base.py` v2: el color por instancia se enlazaba a `instancecolorr/g/b`, que no existe | Relanza cualquier fase (comun v12): repara el color de todas las geometrías instanciadas sin tocar el mundo, y el informe dice cuáles. Si persiste: Instance 2 → Color R/G/B = `r` `g` `b`, Color Mode = Replace |
 | Pulidas y porosas iguales | Los parámetros de brillo del Phong no se pudieron fijar | Sube Specular y Shininess en `mat_pulido` a mano |
 | SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
@@ -537,6 +550,13 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 ### Cómo se ha probado
 
 Sin TouchDesigner a mano, todo se ha probado en simulación:
+
+- **Desde cero frente a relanzado** (motor v19). Con un TouchDesigner simulado que ejecuta los scripts tal cual, se comparan dos proyectos:
+  - uno construido desde cero, con `fase12_base.py` y las fases 3 a 10;
+  - otro construido con la versión anterior al PR #7 (con baliza, `baliza2` y `balizas_drum`), con un mundo en marcha, y relanzado con las fases 3, 5, 7, 9 y 10.
+
+  Los dos quedan con los mismos nodos, parámetros y lista del render, sin ninguna baliza, con el color por instancia enlazado en la retícula, las formaciones, las coronas, los estratos y la luz de celda, y con todas las expresiones evaluándose sin error. El mundo relanzado conserva su ocupación y sus conchas. Todas las autopruebas salen OK, incluida la de la fase 3 relanzada a nivel 10, que antes fallaba porque esperaba que no hubiera desborde. En ese TouchDesigner simulado, el Geometry COMP solo acepta los parámetros que tiene en TouchDesigner, para que un nombre equivocado no pase desapercibido.
+- **Velocidad (fase 7 v7):** un golpe fuerte deshace más que uno flojo; el mínimo de una nota se respeta a velocidad 1; sin `Erosionvel` no cambia nada; N golpes iguales deshacen siempre lo mismo.
 
 - **El motor:** 18 pruebas. Orientación de las piezas sobre la normal de cada celda, vecindad simétrica, crecimiento y límite, gate, desborde y estados, híbridos, ráfagas con y sin STOP, ciclos y conchas, orden de la erosión y presupuesto, cortes y cicatrices, herencia y continentes, y que el mundo se pueda guardar.
 - **El ciclo de la fase 6 v2** (motor v11):
