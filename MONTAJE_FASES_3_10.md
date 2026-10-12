@@ -18,15 +18,15 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v5` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v22` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v13` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v23` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v14` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate | `fase3 v11` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo | `fase6 v4` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto | `fase7 v9` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
-| `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v5` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo) | `fase8 v5` |
+| `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian, destello | `fase9 v6` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v4` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
@@ -430,7 +430,14 @@ En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al o
 
 En cada fin de ciclo:
 
-1. **La capa se entierra** como una concha de losetas, una por celda, con el color de su generación. Las celdas que estaban ocupadas quedan más claras: los continentes se leen en el color. Sus formaciones se descartan.
+1. **La capa se entierra depositada sobre la columna de cada celda**, no a una cota común (fase 8 v5, motor v23). Cada celda apila una loseta con el color de su generación sobre lo que le queda debajo: una hondonada que dejó un corte se tapiza y sigue siendo hondonada. Las celdas que estaban ocupadas quedan más claras: los continentes se leen en el color. Sus formaciones se descartan.
+
+   ```
+   grosor de la loseta = grosor de la concha + Colmatacion × laguna(c)
+   r_in = suelo(c)        r_out = suelo(c) + grosor de la loseta
+   ```
+
+   `Colmatacion` (0 por defecto) dice cuánto rellena la capa nueva las hondonadas: con 0 la capa se apoya en el relieve con su grosor; con 1 rellena hasta la cota nominal (el comportamiento anterior, solo para comparar); en medio, las cuencas se colmatan poco a poco.
 2. **El planeta engorda el grosor de la concha.** Con `Grosortiempo` (encendido por defecto), el grosor es proporcional a lo que duró su mundo:
 
    ```
@@ -440,7 +447,19 @@ En cada fin de ciclo:
    Con los valores por defecto va de 0,5 (ciclo mínimo, 8 compases) a 2,0 (32 compases o más: `Grosormax`). Sin ese tope, una concha de edad máxima (64 compases) mediría 4,0, más del doble que una formación en su límite (1,875). `Grosormax` 0 quita el tope. y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
 3. **Herencia:** el 25 % de la ocupación de cada celda pasa a la capa nueva. La fracción que no llega a 1 se acumula para el ciclo siguiente: una celda con ocupación 2 en ciclos seguidos acaba heredando. Lo heredado vuelve a brotar desde la nueva superficie.
 
-**Radio acumulado.** Cada concha guarda su `grosor`, `r_in` y `r_out`. El radio del planeta es el del núcleo más la suma de los grosores, y de él dependen las losetas (cada una con la altura de su concha), la retícula, la luz de celda, las formaciones, la cámara y la esfera del núcleo que tapa las conchas más allá de `Maxconchas`. Las conchas de un motor anterior se leen con `Shellthick`.
+**Columnas y radio nominal** (motor v23). Cada celda guarda su **columna**: la pila de losetas que le quedan, de abajo arriba. Cada loseta lleva su concha (generación: color y ocupación) y su grosor; sus radios salen de su posición en la columna, y el radio exterior de una es el interior de la siguiente, sin huecos ni solapes.
+
+```
+suelo(c)      = núcleo + suma de los grosores de la columna de c
+radio_nominal = núcleo + suma de los grosores de todas las conchas
+laguna(c)     = radio_nominal - suelo(c)          (siempre >= 0)
+```
+
+- **El radio nominal** es lo que antes se llamaba radio del planeta: sigue siendo el tiempo transcurrido. Solo crece el grosor de la concha; la colmatación no cuenta como tiempo.
+- **La laguna** es el tiempo que la destrucción ha borrado en esa celda.
+- **Las conchas siguen existiendo como generaciones** (paleta, grosor nominal, tabla `ciclos`, continentes, herencia), pero ya no tienen una cota única.
+- **Quién usa qué cota:** las formaciones y lo heredado, el límite de altura, la luz de celda, el destello y la retícula van sobre `suelo(c)`; la cámara (fases 8 y 10), la luz principal y `radio` en la leyenda, sobre el radio nominal.
+- **Mundos guardados:** al cargar un mundo de un motor anterior, las columnas se construyen con las losetas que sobreviven de cada concha, apiladas por orden de generación y sin huecos. Las celdas que estaban cortadas aparecen como hondonadas. Las conchas de un motor v7-v10 se leen con `Shellthick`.
 
 **Paleta de generaciones:** ámbar en la base, después grises minerales y negros que se alternan en claro y oscuro para que las bandas se distingan.
 
@@ -450,33 +469,49 @@ En cada fin de ciclo:
 - sin shaders;
 - en la fase 9 permite abrir cortes quitando losetas y ver las paredes de cada capa con su color, que es justo lo que pide la estratigrafía.
 
-Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de la esfera del núcleo, que crece para taparlas.
+**Dibujo.** Cada loseta es una instancia a su radio, con el alto de su grosor y el ancho de su celda a ese radio. `Maxconchas` (24) cuenta por columna: se dibujan las 24 losetas superiores de cada celda y, debajo, un **zócalo** (una sola instancia, ámbar apagado) desde el núcleo hasta la loseta dibujada más baja. La esfera del núcleo ya no crece: se queda en el radio base, porque una esfera a cota común taparía las hondonadas. Como mucho, celdas × (`Maxconchas` + 1) instancias.
 
 **Continentes** (en la leyenda): regiones de celdas vecinas ocupadas en al menos la mitad de las 8 últimas conchas.
 
-**Cámara:** en esta fase solo se aleja con el radio para no quedar dentro del planeta. La definitiva llega en la fase 10.
+**Cámara:** en esta fase solo se aleja con el radio nominal para no quedar dentro del planeta. La definitiva llega en la fase 10.
 
-**Página Fase8:** `Herencia` 0,25 · `Maxconchas` 24 · `Grosortiempo` (encendido) · `Grosormax` 2,0. Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
+**Página Fase8:** `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 2,0 · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
 
-**Leyenda:** `CONCHAS 11 radio 11.50 ultima 0.75 herencia 25% continentes 3`
+**Leyenda:**
+
+```
+CONCHAS  11   radio 11.50   ultima 0.75   laguna max 2.25 (celda 41)   colmatacion 0%   herencia 25%   continentes 3
+```
+
+`radio` es el radio nominal; `laguna max`, la celda más honda.
 
 **Ritmo de engorde:** de media, `Shellthick` por cada `Ciclomin` compases: 0,5 cada 16 s a 120 BPM, unas 37 unidades en 20 minutos sobre un núcleo de 6. El radio es el tiempo transcurrido, salvo en los ciclos de más de 32 compases, que el tope de `Grosormax` recorta. Para frenar el engorde, sube `Ciclomin` o baja `Shellthick`.
+
+**Relanzar** (fase 8 v5 y fase 9 v6). En un proyecto en la fase 10: `fase8_conchas.py`, `fase9_arqueologia.py` y `fase10_direccion.py`. No baja `Nivel` ni borra el mundo: las columnas se construyen solas a partir de las conchas y las celdas cortadas quedan como hondonadas.
 
 ---
 
 ## FASE 9 · Arqueología
 
-**Cortes.** Los pads con profundidad mayor que 0 (por defecto el 2, la caja, y el 3, el tom) quitan las losetas de las conchas superiores en forma de **anfiteatro**: profundidad completa en la celda golpeada, un escalón menos en cada anillo. Las paredes son las capas enterradas, cada una con su color. El hueco es permanente; solo lo cubre la concha siguiente.
+**Cortes.** Los pads con profundidad mayor que 0 (por defecto el 1, el bombo; el 2, la caja; y el 3, el tom, con profundidad 2, 3 y 1) abren un corte en forma de **anfiteatro**. Desde la fase 9 v6 (motor v23) la profundidad se mide en la **columna** de cada celda: un corte de profundidad N quita sus N losetas superiores en la celda golpeada, N − 1 en el primer anillo, N − 2 en el segundo, hasta el radio del pad. En terreno llano da lo mismo que antes; sobre relieve, el corte sigue la forma del suelo. Las paredes son las caras de las losetas vecinas que quedan por encima del suelo nuevo, cada una con su color. El hueco es permanente. La concha siguiente lo tapiza sin rellenarlo: la hondonada se conserva, salvo lo que rellene `Colmatacion` (fase 8).
 
-- **Las formaciones de una celda cortada** se apoyan en el fondo del corte.
-- **Grosores distintos** (fase 9 v2): la profundidad se sigue midiendo en conchas. Como cada concha tiene el grosor de su ciclo, un corte de 3 conchas es más o menos hondo según lo que duraron esos mundos. El fondo baja la suma de los grosores quitados y las paredes usan el radio de cada concha.
-- **Cicatriz:** el fondo y las paredes recién expuestos se ven en **cian** y se funden con el mineral en `Cicatriz` segundos.
+- **Tope por mundo.** Dentro de un mundo, los golpes repetidos no taladran: cada celda cuenta las losetas que ha perdido en el mundo actual, y un golpe que le pide k quita k menos esas, si sale positivo. La cuenta vuelve a 0 al enterrar.
+- **Entre mundos sí se acumula.** Con `Colmatacion` 0, una celda cortada con profundidad N en cada mundo pierde N losetas y recibe 1 por mundo: baja N − 1 por mundo. Es una cuenca de erosión.
+- **El núcleo es el fondo.** Una columna vacía tiene el suelo en el radio del núcleo; ningún corte baja de ahí y las losetas que falten se ignoran. La primera vez que una celda se queda sin losetas, la leyenda lo dice: `CORTE celda 41 nucleo alcanzado`.
+- **Las formaciones de una celda cortada** se apoyan en el fondo del corte, con el límite de altura medido desde ese suelo.
+- **Grosores distintos:** como cada loseta tiene el grosor de su ciclo, un corte de 3 es más o menos hondo según lo que duraron esos mundos.
+- **Cicatriz:** el fondo (la loseta superior que queda en la columna cortada) y las paredes recién expuestas (las losetas vecinas con el radio exterior por encima del suelo nuevo y el interior por debajo del anterior) se ven en **cian** y se funden con el mineral en `Cicatriz` segundos. Un golpe que no quita nada no expone nada, y enterrar (depositar) no enciende cicatrices.
 - **Destello:** `luz_destello`, una luz puntual que sigue el giro del planeta, golpea la celda en cada destrucción: fuerte en los cortes, suave en los arañazos.
 - **Luz del SEQ1:** el centro de su celda pasa a blanco, porque el cian queda reservado para lo recién expuesto. El destello toma el color del pad que golpea, aclarado.
 
 **Página Fase9:** `Cicatriz` 4 s · `Destello` 3
 
-**Leyenda:** `CORTE celda 41 3 conchas expuestas cicatriz 2.1 s`
+**Leyenda:**
+
+```
+CORTE    celda 41   3 losetas   suelo 9.25   laguna 2.25   cicatriz 2.1 s
+CORTE    celda 41   nucleo alcanzado
+```
 
 ---
 
@@ -528,6 +563,7 @@ Solo se dibujan las últimas `Maxconchas` (24). Las anteriores quedan dentro de 
 | Los ciclos siempre acaban por edad máxima | Umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
 | Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota (la leyenda pone `parado`) |
+| Hondonadas que bajan sin parar | Un pad con profundidad cae en cada mundo sobre las mismas celdas: pierde N losetas y recibe 1 | Sube `Colmatacion` (Fase8) o baja su profundidad en `perfiles_erosion` |
 | El planeta engorda demasiado rápido | Engorde = `Shellthick` por cada `Ciclomin` compases | Sube `Ciclomin` o baja `Shellthick` |
 | `Cambioentierra` no hace nada | El BeatStep no envía All Notes Off al cambiar de pattern | Prueba pendiente con el aparato |
 | El planeta no frena aunque el mundo esté quieto | `ritmo` sin el giro vivo, o `Girovivo` apagado | Relanza la última fase aplicada (parchea `ritmo`); mira que salga `ritmo: el giro se multiplica…` |
@@ -561,6 +597,11 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 7 | ¿Qué pads cortan? | Perfiles del usuario: bombo (1), caja (2) y tom (3), con profundidad 2, 3 y 1; 4 a 8 arañazos |
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
+| 8 | ¿Dónde se deposita el mundo enterrado? | Sobre la columna de cada celda: las hondonadas se tapizan. `Colmatacion` 0 (1 reproduce lo anterior) |
+| 9 | Profundidad de corte | N losetas desde el suelo de cada columna, con tope por mundo; el núcleo es el fondo |
+| 8–9 | Límite de altura en una hondonada | Medido desde el suelo de la celda, no desde la cota nominal |
+| 8, 10 | Cámara | Radio nominal, para no meterse en las hondonadas |
+| 8 | Núcleo | Esfera fija en el radio base; un zócalo por celda bajo las losetas visibles |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
 | 8 | Grosor de concha | Proporcional a la duración del ciclo (`Grosortiempo`), entre 0,25× y `Ciclomax`/`Ciclomin` × `Shellthick` (0,5; límite de altura 1,875), con un tope de `Grosormax` (2,0) |
 | 3–4 | ¿Cuántas notas por trigger? | De 1 a `Costemax` (5) según la altura, con frenada; 5 desde el límite. La presión suma carga |
@@ -615,6 +656,18 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
 
 Lo que la simulación no puede comprobar son los nombres exactos de algunos parámetros de TouchDesigner (orden de rotación y modo de color de las instancias, brillo del Phong, Look At). Los scripts los intentan con los nombres habituales y avisan con `..` si no los encuentran. La tabla de problemas dice dónde ponerlos a mano.
 
+- **El mundo enterrado sobre el relieve** (motor v23, fase 8 v5, fase 9 v6):
+  - Corte de 3 y enterrar con `Colmatacion` 0: la loseta nueva empieza en el suelo del corte, la laguna es la misma antes y después, y las celdas intactas suben un grosor.
+  - `Colmatacion` 1: todas las celdas quedan en el radio nominal. Con 0,5, la laguna se reduce a la mitad. El radio nominal es el núcleo más la suma de las conchas con cualquier `Colmatacion`.
+  - Golpes repetidos sobre la misma celda en un mundo no quitan más que su profundidad.
+  - Corte de 2 en la misma celda durante 10 mundos: baja una loseta por mundo, llega al núcleo, avisa una sola vez y no da errores.
+  - Ninguna columna tiene huecos ni solapes.
+  - En la celda más honda, la formación, la luz de celda, la retícula y el destello van sobre su suelo.
+  - Con más losetas que `Maxconchas`: se dibujan `Maxconchas` y el zócalo; la esfera del núcleo no crece.
+  - Un corte enciende el fondo y las paredes recién expuestas; enterrar no enciende nada.
+  - Un mundo del motor v16 con una celda cortada y enterrada y otra cortada en el mundo actual se relanza sin error: las dos quedan como hondonadas con la laguna que les toca.
+  - Sesión de 160 compases a 120 BPM con SEQ1, SEQ2 y batería a tramos (16 compases con, 32 sin): 7 ciclos, 39 celdas con laguna tapizadas por conchas posteriores (130 losetas por debajo de su cota nominal), y todas las expresiones se evalúan sin error. Con los perfiles por defecto el bombo también corta, así que las cuencas bajan deprisa.
+
 ### Pruebas pendientes con el aparato
 
 1. **All Notes Off:** cambiar de pattern dos veces y pulsar STOP, y copiar las líneas AVISO.
@@ -623,6 +676,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 4. **Ciclos reales:** SEQ1 al 100 % sin batería; SEQ1 al 60 % con SEQ2 de 13 pasos; con batería constante. Copiar la tabla `ciclos` de cada caso para afinar `Umbralmadurez`, `Umbralnovedad`, `Compasesquietos` y `Ciclomax`.
 5. **Quitar el bombo:** con un mundo maduro y el bombo sonando, quitarlo y comprobar en cuántos compases se cierra el ciclo por `estancado` (en simulación, unos 24).
 6. **Batería constante:** comprobar que la leyenda dice `esperando territorio` pasado `Ciclomax` y apuntar la ocupación del territorio, para afinar `Umbralterritorio`.
+7. **Cuencas:** con la batería real, medir cuánto bajan las cuencas en 10 minutos (`laguna max` en la leyenda) y ajustar `Colmatacion`.
 
 ---
 

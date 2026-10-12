@@ -18,7 +18,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v13'
+VERSION_COMUN = 'comun v14'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -475,8 +475,9 @@ def onCook(scriptOp):
         show = 1
     rows = []
     if show:
-        R = m.surface_radius() + 0.06
+        W, c = m.world(), m.cfg()
         for i in range(m.N):
+            R = m.suelo(W, c, i) + 0.06      # cada marca sobre el suelo de su celda
             nx, ny, nz = m.normal_i(i)
             t = i / float(max(1, m.N - 1))
             rows.append([nx * R, ny * R, nz * R, nx, ny, nz,
