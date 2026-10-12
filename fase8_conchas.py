@@ -16,6 +16,11 @@ Al terminar cada ciclo de ecosistema (fase 6: lo cierra el mundo):
          laguna = radio nominal - suelo de la celda
      Las celdas que estaban ocupadas quedan mas claras: los continentes
      se leen en el color. Las formaciones de esa capa se descartan.
+     PALETA (motor v26): cada concha de un color. Tono por el angulo
+     aureo desde Paletatono, saltando el cian de la cicatriz y el ambar
+     del SEQ2; claro y oscuro alternos; croma de mineral (Paletacroma).
+     Calculado de la generacion: cambiar la paleta recolorea lo enterrado.
+     Paleta = mineral vuelve a la anterior (ambar y grises).
   2. El planeta engorda el GROSOR de la concha. Con Grosortiempo es
      proporcional a lo que duro su mundo:
          grosor = Shellthick x compases / Ciclomin
@@ -63,7 +68,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v7  (columnas, Colmatacion, zocalo; camara de globo; luz del secuenciador en las conchas)'
+VERSION = 'fase8 v8  (cada concha de un color; columnas, Colmatacion, zocalo; luz en las conchas)'
 banner(VERSION)
 
 base = require_base(8)
@@ -76,12 +81,16 @@ add_par(base, page, 'toggle', 'Grosortiempo', 'Grosor proporcional al ciclo', Tr
 add_par(base, page, 'float', 'Grosormax', 'Grosor maximo de concha (0: sin limite)', 2.0, 0.0, 8.0)
 add_par(base, page, 'float', 'Colmatacion', 'Relleno de las hondonadas al enterrar', 0.0, 0.0, 1.0,
         clamp=True)
+add_par(base, page, 'menu', 'Paleta', 'Paleta de las conchas', 'generaciones',
+        menu=['generaciones', 'mineral'], menu_labels=['Un color por concha', 'Mineral (anterior)'])
+add_par(base, page, 'float', 'Paletatono', 'Tono de la primera concha (grados)', 20.0, 0.0, 360.0)
+add_par(base, page, 'float', 'Paletacroma', 'Saturacion de las conchas', 0.09, 0.0, 0.15, clamp=True)
 try:
     base.par.Maxconchas.label = 'Losetas visibles por columna'
 except Exception:
     pass
 ok('pagina Fase8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Grosormax (2), '
-   'Colmatacion (0)')
+   'Colmatacion (0), Paleta (generaciones), Paletatono (20), Paletacroma (0,09)')
 
 make_phong(base, 'mat_estratos', 780, 620, spec=0.12, shin=8, diff=1.0)
 make_instanced(base, 'estratos', 520, 620, 'mat_estratos')
@@ -98,7 +107,7 @@ else:
 
 leeme(base, 8, """FASE 8 - CONCHAS
   En cada fin de ciclo cada celda deposita una loseta sobre su columna,
-  con el color de su generacion: las hondonadas se tapizan (Colmatacion
+  con el color de su generacion (Paleta: uno distinto por concha): las hondonadas se tapizan (Colmatacion
   las rellena). Grosor: Shellthick x compases / Ciclomin (Grosortiempo),
   entre 0,25x y Ciclomax/Ciclomin, como mucho Grosormax (2).
   Radio nominal = nucleo + suma de grosores; suelo = nucleo + columna.
@@ -110,6 +119,7 @@ print_report()
 
 
 def prueba(t):
+    import math
     m = t.m
     c = m.cfg()
     W = m.new_world()
@@ -185,11 +195,66 @@ def prueba(t):
     for g in range(7):
         m.end_cycle(Wz, c8, float(g))
     tz = m.build_tiles(Wz, c8, 0.0)
-    zoc = [r for r in tz if abs(r[9] - m.COL_ZOCALO[0]) < 1e-6 and abs(r[10] - m.COL_ZOCALO[1]) < 1e-6]
+    zc = m.zocalo_color(c8)
+    zoc = [r for r in tz if abs(r[9] - zc[0]) < 1e-6 and abs(r[10] - zc[1]) < 1e-6]
     t.check('Maxconchas por columna: 4 losetas y un zocalo por celda',
             len(tz) == m.N * 5 and len(zoc) == m.N and len(tz) <= m.N * (c8['max_shells'] + 1),
             '%d instancias, %d zocalos' % (len(tz), len(zoc)))
     t.check('el nucleo no crece', abs(m.nucleo_radius() - c['core_radius']) < 1e-6)
+    # paleta de generaciones
+    cp = dict(c)
+    cp.update(paleta=0, paleta_tono=20.0, paleta_croma=0.09)
+
+    def oklch(n, ocup):
+        L = m.L_VACIA[n % 2] + (m.L_OCUPADA if ocup else 0.0)
+        return L, m.palette_hue(n, cp['paleta_tono'])
+    contraste = all(min(abs(oklch(n, 0)[1] - oklch(n + 1, 0)[1]),
+                        360 - abs(oklch(n, 0)[1] - oklch(n + 1, 0)[1])) >= 60
+                    and abs(oklch(n, 0)[0] - oklch(n + 1, 0)[0]) >= 0.1 - 1e-9 for n in range(200))
+    t.check('paleta: dos conchas seguidas difieren 60 grados de tono y 0,1 de luminosidad', contraste)
+    t.check('paleta: ningun tono en las bandas reservadas (cian 165-235, ambar 55-100)',
+            not any(m._en_banda(m.palette_hue(n, cp['paleta_tono'])) for n in range(200)))
+    gama = all(m.oklch_to_srgb(oklch(n, o)[0], cp['paleta_croma'], oklch(n, o)[1])[1]
+               for n in range(200) for o in (0, 1))
+    t.check('paleta: todos los colores dentro de sRGB sin recortar', gama)
+    ref = ['#904D4E', '#8884C1', '#5A6B2D', '#B37699', '#396695', '#BB7A60', '#72548A', '#699B6A']
+    hx = lambda col: '#%02X%02X%02X' % tuple(int(round(v * 255)) for v in col)
+    t.check('paleta: los colores de referencia', [hx(m.generation_color(cp, n, False)) for n in range(8)] == ref)
+    t.check('paleta: la loseta ocupada, mas clara que la vacia',
+            all(sum(m.generation_color(cp, n, True)) > sum(m.generation_color(cp, n, False)) + 0.1
+                for n in range(200)))
+    Wp = m.new_world()
+    for g in range(3):
+        m.note_on(Wp, cp, 1, 64, 100, float(g))
+        m.end_cycle(Wp, cp, g + 0.5)
+    cm = dict(cp)
+    cm['paleta'] = 1
+    viejo = [m._tint(m.MINERAL[sh['gen'] % 8], 0.75 + 0.35 * min(1.0, sh['occ'][x] / 4.0))
+             for x in range(m.N) for sh in Wp['shells']]
+    nuevo = [r[9:12] for r in m.build_tiles(Wp, cm, 0.0)]
+    t.check('Paleta mineral: los colores de antes, tal cual',
+            all(abs(a[k] - b[k]) < 1e-9 for a, b in zip(viejo, nuevo) for k in range(3)))
+    for sh in Wp['shells']:
+        sh['col'] = [0.5, 0.4, 0.3]                     # color guardado de un mundo anterior: no manda
+    t1 = m.build_tiles(Wp, cp, 0.0)
+    ct = dict(cp)
+    ct['paleta_tono'] = 200.0
+    t2 = m.build_tiles(Wp, ct, 0.0)
+    t.check('mundo guardado: lo enterrado sale con la paleta; cambiar Paletatono lo recolorea',
+            tuple(t1[0][9:12]) == m.generation_color(cp, Wp['shells'][0]['gen'],
+                                                     Wp['shells'][0]['occ'][0] > 0)
+            and all(a[9:12] != b[9:12] for a, b in zip(t1, t2)))
+    cc = dict(cp)
+    cc['nivel'] = max(9, cc['nivel'])
+    m.cut(Wp, cc, i, 1, 0, 50.0)
+    fondo = m.column_radii(Wp, cc, i)[-1]
+    medio = 50.0 + cc['scar_time'] / 2
+    fila = [r for r in m.build_tiles(Wp, cc, medio)
+            if abs(math.sqrt(r[0] ** 2 + r[1] ** 2 + r[2] ** 2) - fondo[1]) < 1e-6
+            and (r[0] * m.normal_i(i)[0] + r[1] * m.normal_i(i)[1] + r[2] * m.normal_i(i)[2]) > 0.999 * fondo[1]]
+    esperado = m._mix(m.COL_SCAR, m.tile_color(cc, Wp['shells'][fondo[0]], Wp['shells'][fondo[0]]['occ'][i]), 0.5)
+    t.check('la cicatriz se funde con el color de la concha de la loseta',
+            fila and all(abs(fila[0][9 + k] - esperado[k]) < 1e-6 for k in range(3)))
     # la luz del secuenciador en las conchas de la celda
     import math
     cl = dict(c)

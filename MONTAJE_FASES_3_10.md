@@ -18,16 +18,16 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v25` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v26` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas | `comun v16` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate | `fase3 v11` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo | `fase6 v4` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto | `fase7 v9` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas | `fase8 v7` |
-| `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian, destello | `fase9 v6` |
-| `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos | `fase10 v5` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`) | `fase8 v8` |
+| `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello | `fase9 v7` |
+| `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos | `fase10 v6` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
 
@@ -137,7 +137,7 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
   - **El reposo respira** (entre el 70 % y el 100 %, cada 2,4 s). Una loseta ocupada es más clara pero quieta: el reposo blanco del SEQ1 no se confunde con ella.
   - **La cicatriz manda:** una loseta en cian por un corte reciente no se tiñe.
   - **Los dos secuenciadores en la misma celda:** una loseta tiene un solo color, así que manda el más encendido y, si empatan, el último que ha tocado.
-  - **El SEQ2 sobre la concha base ámbar:** como la luz se suma, el pulso aclara la loseta además de teñirla, y se nota aunque el color sea parecido.
+  - **El SEQ2 sobre una concha de tono parecido:** como la luz se suma, el pulso aclara la loseta además de teñirla, y se nota aunque el color sea parecido. Con la paleta de generaciones ninguna concha es ámbar (la banda del SEQ2 está reservada); con `Paleta` mineral, la base sí lo es.
   - **Rendimiento:** solo se calculan las losetas de las celdas en pulso o en reposo (como mucho 2 × `Luzconchasalcance` filas por fotograma). Las dos mil losetas de las conchas no se recalculan.
   - Se ve también en modo actuación. `Luzconchas` apagado deja las conchas como antes.
 - **Sin transparencias en la superficie:** cada zona del centro lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo. La única capa aditiva es la luz de las conchas, que se dibuja la última.
@@ -471,7 +471,38 @@ laguna(c)     = radio_nominal - suelo(c)          (siempre >= 0)
 - **Quién usa qué cota:** las formaciones y lo heredado, el límite de altura, la luz de celda, el destello y la retícula van sobre `suelo(c)`; la cámara (fases 8 y 10), la luz principal y `radio` en la leyenda, sobre el radio nominal.
 - **Mundos guardados:** al cargar un mundo de un motor anterior, las columnas se construyen con las losetas que sobreviven de cada concha, apiladas por orden de generación y sin huecos. Las celdas que estaban cortadas aparecen como hondonadas. Las conchas de un motor v7-v10 se leen con `Shellthick`.
 
-**Paleta de generaciones:** ámbar en la base, después grises minerales y negros que se alternan en claro y oscuro para que las bandas se distingan.
+**Paleta de generaciones** (fase 8 v8, motor v26): **cada concha de un color**, y dos seguidas siempre contrastan. El color se calcula en OKLCH (luminosidad perceptual uniforme) y se convierte a sRGB:
+
+```
+n         = generación de la concha (0 = la primera)
+t         = frac(n × 0,6180339887)                    (ángulo áureo)
+tono      = Paletatono + t × 245°, saltando las bandas reservadas
+L_vacía   = 0,50 si n es par, 0,64 si es impar
+L_ocupada = L_vacía + 0,12
+croma     = Paletacroma
+```
+
+- **Bandas reservadas** (tono OKLCH): 165°–235°, el cian de la cicatriz, y 55°–100°, el ámbar del SEQ2. La secuencia se reparte sobre los 245° que quedan, recorriendo el círculo y saltando las bandas; no se recorta al borde.
+- **Croma contenido** (0,09): las conchas son mineral; las luces (secuenciadores, batería, cicatriz) son saturadas y emisivas, y siguen destacando encima.
+- **Sin blancos:** la luminosidad máxima (0,76) queda lejos del blanco del SEQ1. Todos los colores caen dentro de sRGB sin recortar.
+- **Se conserva** la alternancia claro / oscuro entre conchas seguidas y la loseta de una celda ocupada más clara que la vacía (los continentes se leen así). El zócalo (gris casi negro) y el núcleo quedan oscuros y neutros, fuera de la paleta.
+- **Calculado, no guardado:** el color sale de la generación y de los parámetros. Al cargar un mundo y al cambiar la paleta, todo lo enterrado se vuelve a colorear (el color que guardaban las conchas antiguas ya no manda).
+- **`Paleta` = mineral** vuelve a la paleta anterior, tal cual, para comparar: ámbar en la base y después grises minerales y negros alternos; con ella el zócalo vuelve a ser ámbar apagado.
+
+| n | Tono | Vacía | Ocupada |
+|---|---|---|---|
+| 0 | 20° | `#904D4E` | `#B67070` |
+| 1 | 286° | `#8884C1` | `#ACA9E8` |
+| 2 | 123° | `#5A6B2D` | `#7C8F50` |
+| 3 | 344° | `#B37699` | `#DB9ABF` |
+| 4 | 251° | `#396695` | `#5C8ABB` |
+| 5 | 42° | `#BB7A60` | `#E29E84` |
+| 6 | 309° | `#72548A` | `#9677B0` |
+| 7 | 145° | `#699B6A` | `#8DC18E` |
+
+Con `Paletatono` 20 y `Paletacroma` 0,09. Cambiar `Paletatono` entre sesiones da otra secuencia con las mismas propiedades.
+
+**Colores de la batería frente a las conchas.** Los pads 1 a 6 son saturados (croma 0,17–0,25, frente a 0,09 de las conchas). Los pads 7 (`#F9A8D4`, rosa) y 8 (`#C4B5FD`, lila) son apagados (croma 0,10–0,11) y quedan cerca de las conchas rosas y lilas claras ocupadas: se distinguen sobre todo porque la luz de celda no se sombrea. Si se confunden, súbeles el croma en `colores_drum`.
 
 **Decisión: el horneado.** El marco pide hornear cada concha a una textura proyectada sobre una esfera. Aquí cada concha es una capa de losetas instanciadas, todas del mismo tamaño porque las celdas son de área igual:
 
@@ -479,13 +510,13 @@ laguna(c)     = radio_nominal - suelo(c)          (siempre >= 0)
 - sin shaders;
 - en la fase 9 permite abrir cortes quitando losetas y ver las paredes de cada capa con su color, que es justo lo que pide la estratigrafía.
 
-**Dibujo.** Cada loseta es una instancia a su radio, con el alto de su grosor y el ancho de su celda a ese radio. `Maxconchas` (24) cuenta por columna: se dibujan las 24 losetas superiores de cada celda y, debajo, un **zócalo** (una sola instancia, ámbar apagado) desde el núcleo hasta la loseta dibujada más baja. La esfera del núcleo ya no crece: se queda en el radio base, porque una esfera a cota común taparía las hondonadas. Como mucho, celdas × (`Maxconchas` + 1) instancias.
+**Dibujo.** Cada loseta es una instancia a su radio, con el alto de su grosor y el ancho de su celda a ese radio. `Maxconchas` (24) cuenta por columna: se dibujan las 24 losetas superiores de cada celda y, debajo, un **zócalo** (una sola instancia, gris casi negro; ámbar apagado con `Paleta` mineral) desde el núcleo hasta la loseta dibujada más baja. La esfera del núcleo ya no crece: se queda en el radio base, porque una esfera a cota común taparía las hondonadas. Como mucho, celdas × (`Maxconchas` + 1) instancias.
 
 **Continentes** (en la leyenda): regiones de celdas vecinas ocupadas en al menos la mitad de las 8 últimas conchas.
 
 **Cámara:** la de globo (la misma de la fase 10, sin modos): el planeta entero, centrado y tan cerca como permite el cuadro; retrocede a cada enterramiento. Desde comun v15 la pone `estratos_comun.py` en todas las fases que cargan el motor (de la 3 en adelante).
 
-**Página Fase8:** `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 2,0 · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
+**Página Fase8:** `Paleta` generaciones (*Paleta de las conchas*: generaciones o mineral) · `Paletatono` 20 (*Tono de la primera concha*, 0–360) · `Paletacroma` 0,09 (*Saturación de las conchas*, 0–0,15) · `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 2,0 · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
 
 **Leyenda:**
 
@@ -510,7 +541,7 @@ CONCHAS  11   radio 11.50   ultima 0.75   laguna max 2.25 (celda 41)   colmataci
 - **El núcleo es el fondo.** Una columna vacía tiene el suelo en el radio del núcleo; ningún corte baja de ahí y las losetas que falten se ignoran. La primera vez que una celda se queda sin losetas, la leyenda lo dice: `CORTE celda 41 nucleo alcanzado`.
 - **Las formaciones de una celda cortada** se apoyan en el fondo del corte, con el límite de altura medido desde ese suelo.
 - **Grosores distintos:** como cada loseta tiene el grosor de su ciclo, un corte de 3 es más o menos hondo según lo que duraron esos mundos.
-- **Cicatriz:** el fondo (la loseta superior que queda en la columna cortada) y las paredes recién expuestas (las losetas vecinas con el radio exterior por encima del suelo nuevo y el interior por debajo del anterior) se ven en **cian** y se funden con el mineral en `Cicatriz` segundos. Un golpe que no quita nada no expone nada, y enterrar (depositar) no enciende cicatrices.
+- **Cicatriz:** el fondo (la loseta superior que queda en la columna cortada) y las paredes recién expuestas (las losetas vecinas con el radio exterior por encima del suelo nuevo y el interior por debajo del anterior) se ven en **cian** y se funden con el color de la concha de cada loseta en `Cicatriz` segundos. Un golpe que no quita nada no expone nada, y enterrar (depositar) no enciende cicatrices.
 - **Destello:** `luz_destello`, una luz puntual que sigue el giro del planeta, golpea la celda en cada destrucción: fuerte en los cortes, suave en los arañazos.
 - **Luz del SEQ1:** el centro de su celda pasa a blanco, porque el cian queda reservado para lo recién expuesto. El destello toma el color del pad que golpea, aclarado.
 
@@ -642,6 +673,7 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 8 | Núcleo | Esfera fija en el radio base; un zócalo por celda bajo las losetas visibles |
 | 10 | Cámara por defecto | Globo encuadrado (radio nominal + altura máxima, travelling con FOV fijo, cámara fija en +Z, amortiguado crítico con mínimo de seguridad). La de superficie queda como modo (`Modocamara`) |
 | 3–9 | Cámara antes de la fase 10 | La misma de globo, puesta por `estratos_comun.py` en todas las fases con motor; en las fases 1 y 2, `fase12_base.py` encuadra el núcleo con la misma fórmula |
+| 8 | Paleta de las conchas | Un color por concha: ángulo áureo sobre el arco que dejan el cian y el ámbar, croma de mineral, claro y oscuro alternos, calculado de la generación. `Paleta` mineral para la anterior |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
 | 8 | Grosor de concha | Proporcional a la duración del ciclo (`Grosortiempo`), entre 0,25× y `Ciclomax`/`Ciclomin` × `Shellthick` (0,5; límite de altura 1,875), con un tope de `Grosormax` (2,0) |
 | 3–4 | ¿Cuántas notas por trigger? | De 1 a `Costemax` (5) según la altura, con frenada; 5 desde el límite. La presión suma carga |
@@ -728,6 +760,14 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
   - Rendimiento con 24 conchas (2.040 losetas) y los dos secuenciadores en semicorcheas: como mucho 8 filas de luz por fotograma; la diferencia queda en el ruido (unas centésimas de milisegundo por fotograma).
   - La luz de celda no estaba por debajo de las losetas: va sobre el suelo de su celda + 0,02, por encima de la cara superior de la loseta de arriba (que llega a r_in + 0,98 × grosor).
 
+- **Cada concha de un color** (motor v26, fase 8 v8):
+  - Para n de 0 a 200, dos conchas seguidas difieren al menos 60° de tono y 0,1 de luminosidad, y ningún tono cae en 55°–100° ni en 165°–235°.
+  - Todos los colores, vacía y ocupada, caen dentro de sRGB sin recortar; los 8 primeros coinciden con la tabla de referencia; la ocupada es siempre más clara que la vacía.
+  - `Paleta` mineral reproduce exactamente los colores anteriores.
+  - Un mundo con el color guardado en sus conchas sale con la paleta nueva, y cambiar `Paletatono` recolorea todas las losetas (el cambio de paleta rehace las losetas en el fotograma siguiente).
+  - El cian de un corte se funde con el color de la concha de cada loseta.
+  - Desde cero y relanzando, todas las autopruebas salen OK.
+
 ### Pruebas pendientes con el aparato
 
 1. **All Notes Off:** cambiar de pattern dos veces y pulsar STOP, y copiar las líneas AVISO.
@@ -739,6 +779,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 7. **Cuencas:** con la batería real, medir cuánto bajan las cuencas en 10 minutos (`laguna max` en la leyenda) y ajustar `Colmatacion`.
 8. **Cámara de globo:** comprobar en el proyector real que el globo queda entero con `Encuadremargen` 1,08 y que el FOV de la cámara se lee bien (la leyenda `CAMARA` dice cuál manda).
 9. **Luz en las conchas:** con la cámara de globo y 10 conchas o más, comprobar que se ve dónde cae cada nota, y ajustar `Luzconchaspulso` y `Luzconchasreposo` con la luz real del proyector.
+10. **Paleta:** con 10 conchas o más y un corte de 4, comprobar desde la cámara de globo que las bandas se distinguen una a una, y que los pads 7 y 8 no se confunden con las conchas.
 
 ---
 

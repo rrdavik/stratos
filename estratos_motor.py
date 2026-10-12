@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v25'
+MOTOR_VERSION = 'motor v26'
 
 import math
 
@@ -111,6 +111,7 @@ DEFAULT_CFG = dict(
     perfiles=PERFILES_DEFECTO, tipos=TIPOS_DEFECTO,
     # fase 8
     herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0, colmatacion=0.0,
+    paleta=0, paleta_tono=20.0, paleta_croma=0.09,     # 0 generaciones, 1 mineral
     # fase 9
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
@@ -1200,7 +1201,91 @@ MINERAL = [
 
 
 def shell_color(gen):
+    """Color mineral de una generacion (paleta 'mineral', la anterior)."""
     return MINERAL[int(gen) % len(MINERAL)]
+
+
+# --- paleta de generaciones (motor v26): cada concha de un color -------------------
+# Tono por el angulo aureo sobre el arco que dejan libres las bandas
+# reservadas (cian de la cicatriz y ambar del SEQ2), luminosidad que alterna
+# claro y oscuro, croma contenido de mineral. En OKLCH, convertido a sRGB.
+# El color sale de la generacion y de los parametros: no se guarda.
+
+PALETAS = ['generaciones', 'mineral']
+BANDAS_RESERVADAS = ((55.0, 100.0), (165.0, 235.0))   # tono OKLCH: ambar SEQ2, cian cicatriz
+AUREO = 0.6180339887
+L_VACIA = (0.50, 0.64)                                  # generacion par, impar
+L_OCUPADA = 0.12                                        # la celda ocupada, mas clara
+COL_ZOCALO_NEUTRO = (0.12, 0.12, 0.13)                  # zocalo: oscuro y neutro
+
+
+def _en_banda(h):
+    return any(a <= h < b for a, b in BANDAS_RESERVADAS)
+
+
+def palette_hue(n, t0=20.0):
+    """Tono OKLCH (grados) de la generacion n: t0 + frac(n * aureo) * arco
+    libre, recorriendo el circulo y saltando las bandas reservadas."""
+    libre = 360.0 - sum(b - a for a, b in BANDAS_RESERVADAS)
+    x = ((int(n) * AUREO) % 1.0) * libre
+    h = float(t0) % 360.0
+    for a, b in BANDAS_RESERVADAS:          # si el tono base cae en una banda, empieza a su salida
+        if a <= h < b:
+            h = b
+    for _ in range(2 * len(BANDAS_RESERVADAS) + 2):
+        dist, fin = min(((a - h) % 360.0 or 360.0, b) for a, b in BANDAS_RESERVADAS)
+        if x < dist:
+            return (h + x) % 360.0
+        x -= dist
+        h = fin % 360.0
+    return h
+
+
+def oklch_to_srgb(L, C, h):
+    """((r, g, b) sRGB 0-1, dentro_de_gama). Bjorn Ottosson, OKLab."""
+    a, b = C * math.cos(math.radians(h)), C * math.sin(math.radians(h))
+    l_ = L + 0.3963377774 * a + 0.2158037573 * b
+    m_ = L - 0.1055613458 * a - 0.0638541728 * b
+    s_ = L - 0.0894841775 * a - 1.2914855480 * b
+    l, m, s = l_ ** 3, m_ ** 3, s_ ** 3
+    lin = (4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+           -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+           -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+    dentro = all(-1e-6 <= x <= 1.0 + 1e-6 for x in lin)
+    enc = lambda x: 12.92 * x if x <= 0.0031308 else 1.055 * x ** (1 / 2.4) - 0.055
+    return tuple(enc(max(0.0, min(1.0, x))) for x in lin), dentro
+
+
+_PAL = {}
+
+
+def generation_color(cfg, gen, ocupada):
+    """Color de una loseta de la generacion gen (paleta de generaciones)."""
+    key = (round(cfg['paleta_tono'], 6), round(cfg['paleta_croma'], 6), int(gen), bool(ocupada))
+    col = _PAL.get(key)
+    if col is None:
+        L = L_VACIA[int(gen) % 2] + (L_OCUPADA if ocupada else 0.0)
+        col = oklch_to_srgb(L, cfg['paleta_croma'], palette_hue(gen, cfg['paleta_tono']))[0]
+        if len(_PAL) > 4096:
+            _PAL.clear()
+        _PAL[key] = col
+    return col
+
+
+def tile_color(cfg, sh, occ, s=0):
+    """Color de la loseta de una celda con ocupacion occ en la concha sh."""
+    gen = sh.get('gen', s)
+    if cfg.get('paleta', 0) == 1:           # mineral: la paleta anterior, tal cual
+        return _tint(shell_color(gen), 0.75 + 0.35 * min(1.0, occ / 4.0))
+    return generation_color(cfg, gen, occ > 0)
+
+
+def zocalo_color(cfg):
+    return COL_ZOCALO if cfg.get('paleta', 0) == 1 else COL_ZOCALO_NEUTRO
+
+
+def palette_key(cfg):
+    return (cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'))
 
 
 def shell_grosor(cfg, bars=None):
@@ -1537,10 +1622,11 @@ def build_tiles(W, cfg, now):
             cw, cl = _cell_sizes(top, c)
             if is_pole(c):
                 cw, cl = cw * 1.25, cl * 1.25
-            rows.append(_row(_mul(n, core), n, cw * 1.04, (top - core) * 0.98, cl * 1.04, COL_ZOCALO))
+            rows.append(_row(_mul(n, core), n, cw * 1.04, (top - core) * 0.98, cl * 1.04,
+                             zocalo_color(cfg)))
         for s, r_in, r_out in col[first:]:
             sh = W['shells'][s]
-            colr = _tint(sh['col'], 0.75 + 0.35 * min(1.0, sh['occ'][c] / 4.0))
+            colr = tile_color(cfg, sh, sh['occ'][c], s)
             t0 = W['scars'].get(s * 1000 + c)
             if t0 is not None:
                 colr = _mix(COL_SCAR, colr, max(0.0, min(1.0, (now - t0) / st)))
@@ -1901,6 +1987,9 @@ def cfg():
         rad_mult=_p('Multradio', c['rad_mult']),
         target_mode=_menu('Objetivo', TARGET_MODES, 2),
         herencia=_p('Herencia', c['herencia']),
+        paleta=_menu('Paleta', PALETAS, 0),
+        paleta_tono=_p('Paletatono', c['paleta_tono']) % 360.0,
+        paleta_croma=max(0.0, min(0.15, _p('Paletacroma', c['paleta_croma']))),
         max_shells=_p('Maxconchas', c['max_shells']),
         grosor_tiempo=int(_p('Grosortiempo', True)),
         grosor_max=_p('Grosormax', c['grosor_max']),
@@ -2129,7 +2218,9 @@ def frame_tick():
         print('AVISO  %s' % W['aviso'])
     if res.get('ciclo'):
         registrar_ciclo(W, c, res['ciclo'])
-    dirty = W.get('dirty', True) or _CACHE.get('tiles') is None
+    pk = palette_key(c)                 # cambiar la paleta recolorea todo lo enterrado
+    dirty = W.get('dirty', True) or _CACHE.get('tiles') is None or _CACHE.get('pal') != pk
+    _CACHE['pal'] = pk
     inst = build_instances(W, c, now, hide_beacons=performance(), tiles=dirty)
     if dirty:
         _CACHE['tiles'] = inst['estratos']
