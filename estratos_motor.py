@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v21'
+MOTOR_VERSION = 'motor v22'
 
 import math
 
@@ -103,7 +103,8 @@ DEFAULT_CFG = dict(
     th_branch=5, th_fusion=7, th_crown=9, th_cumbre=11, cumbre_tramos=4,
     sat_size=0.6, sat_limit=0.6, neigh_mode=1,
     # fase 6: el ciclo lo cierra el mundo
-    beats_per_bar=4, umbral_madurez=0.6, umbral_novedad=0.05, compases_quietos=4,
+    beats_per_bar=4, umbral_madurez=0.6, umbral_novedad=0.15, compases_quietos=2,
+    umbral_territorio=0.8, compases_territorio=8,
     ciclo_min=8, ciclo_max=64, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
     # fase 7
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
@@ -408,6 +409,10 @@ def new_world():
         novedad=0.0,
         giro_factor=1.0,
         beats=0.0,              # negras acumuladas hacia el siguiente compas
+        bar_n=0,                # compases del reloj del ciclo desde el principio
+        terr={},                # celda -> ultimo compas en que la toco un SEQ
+        territorio=0.0,         # ocupacion del territorio de los patterns
+        esperando=False,        # pasada la edad maxima, sin territorio ocupado
         ciclo_t0=None,          # instante en que empezo el mundo actual
         marcha=False,           # el reloj del ciclo avanza
         aviso='',
@@ -705,6 +710,7 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
         W['ev']['ultima'] = dict(s=s, celda=-1, occ=0, estado='fuera de rango', t=now)
         return dict(estado='fuera de rango', inc=0.0, celda=-1)
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
+    W.setdefault('terr', {})[i] = W.get('bar_n', 0)
     res = grow(W, cfg, i, s, vel, now)
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
     W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now,
@@ -837,12 +843,40 @@ def measure(W, cfg, foto):
     return changed / float(max(1, alive)), mature / float(max(1, len(forms)))
 
 
+def territory_cells(W, cfg):
+    """El territorio de los patterns en uso: las celdas que han tocado las
+    notas del SEQ1 y del SEQ2 en los ultimos Compasesterritorio compases,
+    mas sus vecinas (hasta donde llegan los desbordes)."""
+    ventana = max(1, int(cfg['compases_territorio']))
+    ahora = W.get('bar_n', 0)
+    terr = W.get('terr', {})
+    for c in [c for c, b in terr.items() if ahora - b >= ventana]:
+        del terr[c]
+    cells = set()
+    for c in terr:
+        if 0 <= c < N:
+            cells.add(c)
+            cells.update(NEIGH[c])
+    return cells
+
+
+def territory_occupation(W, cfg):
+    """Celdas del territorio ocupadas (formaciones y satelites) / territorio.
+    Sin territorio (no ha sonado nada en la ventana), 0."""
+    cells = territory_cells(W, cfg)
+    if not cells:
+        return 0.0
+    return sum(1 for c in cells if W['occ'][c] > 0) / float(len(cells))
+
+
 def bar_tick(W, cfg):
     """Un compas del reloj del ciclo. Devuelve el motivo de cierre o None."""
     foto = snapshot(W, cfg)
     nov, mat = measure(W, cfg, foto)
     W['foto_anterior'] = foto
     W['novedad'], W['madurez'] = nov, mat
+    W['bar_n'] = W.get('bar_n', 0) + 1
+    W['territorio'] = territory_occupation(W, cfg)
     W['compases_ciclo'] += 1
     if mat >= cfg['umbral_madurez'] and nov <= cfg['umbral_novedad']:
         W['quietos'] += 1
@@ -854,7 +888,10 @@ def bar_tick(W, cfg):
         return 'cambio de pattern'
     if n >= cmin and W['quietos'] >= int(cfg['compases_quietos']):
         return 'estancado'
-    if n >= cmax:
+    # la edad maxima solo entierra un mundo cuyo territorio esta ocupado; sin
+    # tope de seguridad: si la bateria no deja llenarlo, el mundo sigue vivo
+    W['esperando'] = n >= cmax
+    if n >= cmax and W['territorio'] >= cfg['umbral_territorio']:
         return 'edad maxima'
     return None
 
@@ -865,13 +902,15 @@ def close_cycle(W, cfg, now, motivo):
     t0 = W.get('ciclo_t0')
     ev = dict(ciclo=W['ciclo_n'], compases=bars,
               segundos=max(0.0, now - t0) if t0 is not None else 0.0,
-              motivo=motivo, madurez=W['madurez'], novedad=W['novedad'], t=now)
+              motivo=motivo, madurez=W['madurez'], novedad=W['novedad'],
+              territorio=W.get('territorio', 0.0), t=now)
     if end_cycle(W, cfg, now, bars):
         ev['grosor'] = shell_th(W['shells'][-1], cfg)
         W['foto_anterior'] = snapshot(W, cfg)
     W['aviso'] = 'fin de ciclo %d: %s a los %d compases' % (ev['ciclo'], motivo, bars)
     W['compases_ciclo'] = 0
     W['quietos'] = 0
+    W['esperando'] = False
     W['cambio_pendiente'] = False
     W['ciclo_n'] += 1
     W['ciclo_t0'] = now
@@ -1697,6 +1736,8 @@ def cfg():
         umbral_madurez=_p('Umbralmadurez', c['umbral_madurez']),
         umbral_novedad=_p('Umbralnovedad', c['umbral_novedad']),
         compases_quietos=_p('Compasesquietos', c['compases_quietos']),
+        umbral_territorio=_p('Umbralterritorio', c['umbral_territorio']),
+        compases_territorio=_p('Compasesterritorio', c['compases_territorio']),
         ciclo_min=_p('Ciclomin', c['ciclo_min']),
         ciclo_max=_p('Ciclomax', c['ciclo_max']),
         cambio_entierra=int(_p('Cambioentierra', False)),
@@ -1890,7 +1931,8 @@ def midi_sysex(b):
 
 # --- fin de ciclo ------------------------------------------------------------
 
-CICLOS_COLS = ['ciclo', 'compases', 'segundos', 'motivo', 'madurez', 'novedad', 'grosor']
+CICLOS_COLS = ['ciclo', 'compases', 'segundos', 'motivo', 'madurez', 'novedad', 'grosor',
+               'territorio']
 CICLOS_MAX = 200
 
 
@@ -1903,9 +1945,13 @@ def registrar_ciclo(W, c, ev):
     try:
         if t.numRows == 0:
             t.appendRow(CICLOS_COLS)
-        t.appendRow([ev['ciclo'], ev['compases'], '%.1f' % ev['segundos'], ev['motivo'],
-                     '%.2f' % ev['madurez'], '%.2f' % ev['novedad'],
-                     '%.3f' % ev['grosor'] if 'grosor' in ev else ''])
+        vals = dict(ciclo=ev['ciclo'], compases=ev['compases'], segundos='%.1f' % ev['segundos'],
+                    motivo=ev['motivo'], madurez='%.2f' % ev['madurez'],
+                    novedad='%.2f' % ev['novedad'],
+                    grosor='%.3f' % ev['grosor'] if 'grosor' in ev else '',
+                    territorio='%.2f' % ev.get('territorio', 0.0))
+        cab = [t[0, k].val for k in range(t.numCols)]     # por nombre de columna
+        t.appendRow([vals.get(k, '') for k in cab])
         while t.numRows > CICLOS_MAX + 1:
             t.deleteRow(1)
     except Exception as e:
@@ -2158,10 +2204,13 @@ def _legend():
         pos = 'compas %d (%d-%d)' % (W['compases_ciclo'], cmin, cmax) if W.get('marcha') \
             else 'parado'
         giro = '   giro x%.2f' % W['giro_factor'] if c['giro_vivo'] else ''
-        lines.append('  CICLO    %d   %s   madurez %d%%   novedad %d%%   quieto %d/%d%s'
+        espera = '   esperando territorio' if W.get('esperando') and W.get('marcha') else ''
+        lines.append('  CICLO    %d   %s   madurez %d%%   novedad %d%%   quieto %d/%d   '
+                     'territorio %d%% (%d%%)%s%s'
                      % (W['ciclo_n'], pos, int(round(W['madurez'] * 100)),
                         int(round(W['novedad'] * 100)), W['quietos'],
-                        int(c['compases_quietos']), giro))
+                        int(c['compases_quietos']), int(round(W.get('territorio', 0.0) * 100)),
+                        int(round(c['umbral_territorio'] * 100)), giro, espera))
         if W['cambio_pendiente']:
             lines.append('           cambio de pattern: se enterrara al llegar a %d compases' % cmin)
         if W.get('aviso'):
