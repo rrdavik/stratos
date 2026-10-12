@@ -17,14 +17,14 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v3` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v19` |
+| `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda. Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v4` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo | `motor v20` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo | `comun v12` |
-| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda | `fase3 v10` |
+| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate | `fase3 v11` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre | `fase4 v6` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, tabla `ciclos`, giro vivo | `fase6 v3` |
-| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el borde de la celda es la batería; erosión con la velocidad; huellas, presupuesto | `fase7 v7` |
+| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el borde de la celda es la batería; erosión con la velocidad; huellas, presupuesto | `fase7 v8` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio acumulado | `fase8 v4` |
 | `fase9_arqueologia.py` | Cortes con grosores distintos, estratigrafía, cicatriz cian, destello | `fase9 v5` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de superficie, modos | `fase10 v4` |
@@ -123,10 +123,12 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
 **Luz de celda** (fase 3 v9, motor v18). No hay balizas: ni la del SEQ1, ni la del SEQ2, ni las de la batería. Cada celda cuenta con luz lo que le está pasando, en una rejilla de 3 × 3 losetas opacas a ras de su superficie (geometría `luz_celda`, Script CHOP `i_luz_celda`, material `mat_luz_celda`). La crea y la mantiene cualquier fase al relanzarse, que también retira las balizas de las versiones anteriores.
 
 - **El centro dice quién construye:** el color del secuenciador que acaba de tocar la celda. SEQ1 cian (blanco desde la fase 9: el cian queda para las cicatrices) y SEQ2 ámbar (fase 5).
-  - **Pulso y reposo:** con cada nota, un pulso en el que la loseta crece y brilla. Después, la última celda de cada secuenciador queda tenue (60 % del color) hasta su siguiente nota, para que se vea dónde está cada uno.
+  - **El gate manda** (motor v20). Mientras la nota está pulsada, del note on al note off, la loseta brilla a plena luz y crece en alto. Al soltarla se apaga en un cuarto de segundo hasta el reposo: la última celda de cada secuenciador queda tenue (70 % del color) hasta su siguiente nota, para que se vea dónde está cada uno. Una nota corta da un destello; una ligada, una celda encendida todo lo que suena. Una nota sin note off cuenta como pulsada 2 s como mucho.
+  - **Más evidente** (v20): la loseta mide un 34 % de la celda (antes 26 %) y sube hasta 0,28 de alto con el gate.
   - **Los dos en la misma celda:** el centro se parte en dos mitades, SEQ1 al oeste y SEQ2 al este.
   - **Con formación,** el centro se ensancha hasta asomar alrededor de su base: se enciende el pie de la formación y se lee desde la cámara aunque la formación sea alta. La luz va en la superficie, no en la punta, así que el ámbar del SEQ2 no se confunde con las coronas.
-  - **Convive con el latido:** la formación se sigue hinchando un 5 % y aclarando con cada nota.
+  - **El latido sigue al gate** (v20). Mientras la nota suena, la formación se hincha un 12 % (antes 5 %), se aclara y se tiñe del color de su secuenciador (cian o blanco el SEQ1, ámbar el SEQ2). Al soltarla, vuelve a su color en ~0,25 s. Con la loseta del centro, la construcción que suena se ve de lejos.
+  - **En las fases 1 y 2** (`fase12_base.py`) no se escucha el note off: la luz es un pulso de 0,25 s con cada nota, del mismo tamaño y brillo.
 - **El borde dice quién destruye** (fase 7): las 8 losetas de alrededor son los 8 pads de la batería.
 - **Sin transparencias:** cada zona lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo.
 - **Interruptores:** `Luzseq` (página Fase3) para el centro y `Balizasdrum` (página Fase7) para el borde. Las dos luces son parte del mundo y se ven también en modo actuación.

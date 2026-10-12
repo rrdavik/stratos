@@ -51,6 +51,12 @@ QUE INSTALA
 Y reescribe midi_callbacks, latido y reticula_callbacks para que pasen por
 el motor.
 
+LATIDO Y GATE (v11): mientras la nota esta pulsada (del note on al note
+off) la formacion se hincha un 12 % y se tine del color de su
+secuenciador, y el centro de la celda brilla a plena luz y crece; al
+soltarla, todo se apaga en ~0,25 s hasta el reposo tenue. Una nota corta
+da un destello; una ligada, una formacion encendida todo lo que suena.
+
 LUZ DE CELDA (v9): sin balizas. La baliza cian de las fases 1 y 2 se
 retira; cada nota del SEQ1 enciende el CENTRO de su celda en cian (blanco
 desde la fase 9): un pulso con la nota y tenue hasta la siguiente, para
@@ -71,7 +77,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v10  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v11  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -205,8 +211,19 @@ def prueba(t):
     t.check('nota del SEQ1: el centro de su celda en su color, y tenue hasta la siguiente',
             len(pulso) == 1 and len(reposo) == 1
             and abs(pulso[0][9] - col[0]) < 1e-6 and reposo[0][10] < pulso[0][10]
-            and abs(reposo[0][10] / col[1] - 0.6) < 0.01,
+            and abs(reposo[0][10] / col[1] - 0.7) < 0.01,
             '%d / %d losetas' % (len(pulso), len(reposo)))
+    # el latido y la luz duran lo que dura la nota (gate)
+    Wg = m.new_world()
+    celda = m.note_cell(64)
+    m.note_on(Wg, cl_, m.GEO, 64, 100, 10.0)
+    sostenida = m._latido(Wg, celda, 10.6) == 1.0 and m.cell_lights(Wg, cl_, 10.6)[0][10] > 0.99 * col[1]
+    m.note_off(Wg, cl_, m.GEO, 64, 10.7, 120.0)
+    apagandose = 0.0 < m._latido(Wg, celda, 10.8) < 1.0
+    apagada = m._latido(Wg, celda, 12.0) == 0.0
+    tenue = abs(m.cell_lights(Wg, cl_, 12.0)[0][10] / col[1] - 0.7) < 0.01
+    t.check('latido y luz del SEQ: plenos mientras la nota esta pulsada, se apagan al soltarla',
+            sostenida and apagandose and apagada and tenue)
     t.check('sin baliza del SEQ1', base.op('baliza') is None and base.op('baliza_chop') is None)
     st = {'ph': 0.0, 'env': 1.0}
     m.wobble_step(st, 0.25, True, False, 60.0, 4.0)      # periodo minimo 5 s

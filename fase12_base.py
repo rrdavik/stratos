@@ -45,7 +45,7 @@ la anterior NO pasa a la nueva.
 import td
 import math
 
-VERSION = 'fase12 v3  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda)'
+VERSION = 'fase12 v4  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda)'
 print('=' * 66)
 print('EJECUTANDO: ' + VERSION)
 print('=' * 66)
@@ -883,12 +883,12 @@ def onCook(scriptOp):
         k = f - lo
         n = cell_normal(k)
         cw, cl = cell_size(k)
-        g = 0.75 + 0.25 * env                      # crece en el pulso
-        b = 0.6 + 0.4 * env                        # tenue en reposo
+        g = 0.80 + 0.20 * env                      # crece en el pulso
+        b = 0.7 + 0.3 * env                        # tenue en reposo
         rx, ry = orient(n)
         d = CORE_RADIUS + LIFT
         row = [n[0] * d, n[1] * d, n[2] * d, rx, ry, 0.0,
-               0.26 * cw * g, 0.05 + 0.08 * env, 0.26 * cl * g,
+               0.34 * cw * g, 0.06 + 0.22 * env, 0.34 * cl * g,
                COL_SEQ1[0] * b, COL_SEQ1[1] * b, COL_SEQ1[2] * b]
     scriptOp.numSamples = 1
     for name, v in zip(CHANS, row):
