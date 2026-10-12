@@ -44,8 +44,9 @@ esfera del nucleo ya no crece: taparia las hondonadas.
 
 LA CAMARA
 ---------
-La camara se aleja con el radio para no quedar dentro del planeta. La
-camara definitiva (distancia constante a la superficie) llega en la 10.
+La camara de globo (estratos_comun.py, motor v24) encuadra el planeta
+entero y retrocede lo justo a cada enterramiento. La fase 10 anade la de
+superficie como modo.
 
 COMO USARLO
 -----------
@@ -56,7 +57,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v5  (el mundo enterrado se deposita sobre el relieve: columnas, Colmatacion, zocalo)'
+VERSION = 'fase8 v6  (columnas, Colmatacion, zocalo; camara de globo)'
 banner(VERSION)
 
 base = require_base(8)
@@ -88,9 +89,6 @@ if done:
 else:
     fail('no pude enlazar el radio del nucleo')
 
-cam = base.op('camara')
-if setexpr(cam, 'tz', "parent().op('motor').module.surface_radius(absTime.frame) + 9.0"):
-    ok('camara: se aleja con el radio del planeta')
 
 leeme(base, 8, """FASE 8 - CONCHAS
   En cada fin de ciclo cada celda deposita una loseta sobre su columna,

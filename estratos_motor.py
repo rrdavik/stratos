@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v23'
+MOTOR_VERSION = 'motor v24'
 
 import math
 
@@ -2199,38 +2199,183 @@ def flash_value(k, frame=None):
     return flash_light()[k]
 
 
+# --- camara (motor v24) --------------------------------------------------------
+# Por defecto, camara de GLOBO: mira al centro, en la direccion de referencia
+# (+Z, hacia la que se balancea el eje), y encuadra el planeta entero tan
+# cerca como permite el cuadro. Retrocede lo justo a cada enterramiento.
+# La de SUPERFICIE (fase 10 v4) queda como modo (Modocamara).
+
+CAM_DIR = (0.0, 0.0, 1.0)          # direccion de referencia de la camara
+CAM_TRANS = 20.0                   # segundos de Planofinal y del cambio de modo
+
+
+def altura_max(cfg):
+    """Lo mas alto que llega, sobre su suelo, algo que gira con el planeta:
+    una formacion en el limite hinchada por el latido y, encima, la corona
+    mas larga (la de una torre en su ultimo tramo de cumbre)."""
+    lim = limit(cfg)
+    corona = 0.90 * (1.0 + 0.25 * max(0, int(cfg['cumbre_tramos']))) * lim
+    return lim * (1.0 + LATIDO_AMP) + corona
+
+
+def radio_encuadre(W, cfg):
+    """Radio que se encuadra: el nominal mas la altura maxima. Solo cambia
+    cuando el planeta engorda (los suelos nunca pasan del nominal)."""
+    return top_radius(W, cfg) + altura_max(cfg)
+
+
+def fovs(fov_deg, aspect, metodo='horzfov'):
+    """(fov horizontal, fov vertical) en radianes. 'metodo' dice a que lado
+    se aplica fov_deg (TouchDesigner: horizontal por defecto)."""
+    f = math.radians(max(1.0, min(179.0, fov_deg)))
+    aspect = max(1e-3, aspect)
+    if 'vert' in str(metodo):
+        fv = f
+        fh = 2.0 * math.atan(aspect * math.tan(fv / 2.0))
+    else:
+        fh = f
+        fv = 2.0 * math.atan(math.tan(fh / 2.0) / aspect)
+    return fh, fv
+
+
+def globe_distance(R, fov_deg, aspect, margen, metodo='horzfov'):
+    """(d_obj, d_min, theta): distancia al centro a la que una esfera de
+    radio R cabe en el lado mas estrecho del cuadro, con y sin holgura."""
+    fh, fv = fovs(fov_deg, aspect, metodo)
+    th = min(fh, fv)
+    sh = math.sin(th / 2.0)
+    d_min = R / sh
+    return d_min * max(1.0, margen), d_min, th
+
+
+def smooth_damp(cur, vel, target, dt, t_suave):
+    """Amortiguado critico: arranca y frena suave, sin rebote. Llega a ~98 %
+    en t_suave segundos. Devuelve (posicion, velocidad)."""
+    if t_suave <= 1e-6 or dt <= 0:
+        return (target, 0.0) if t_suave <= 1e-6 else (cur, vel)
+    w = 6.0 / t_suave
+    x = w * dt
+    e = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x)
+    ch = cur - target
+    tmp = (vel + w * ch) * dt
+    vel = (vel - w * tmp) * e
+    return target + (ch + tmp) * e, vel
+
+
+def _cam_optics():
+    """(fov en grados, metodo, aspecto) de la camara y el render reales."""
+    fov, metodo = 45.0, 'horzfov'
+    try:
+        cop = parent().op('camara')
+        fov = float(cop.par.fov.eval())
+        try:
+            metodo = str(cop.par.viewanglemethod.eval())
+        except Exception:
+            pass
+        if 'focal' in metodo:
+            fo = float(cop.par.focal.eval())
+            ap = float(cop.par.aperture.eval())
+            fov, metodo = math.degrees(2.0 * math.atan(ap / (2.0 * max(1e-3, fo)))), 'horzfov'
+    except Exception:
+        pass
+    if not 1.0 <= fov <= 179.0:            # camara sin FOV legible: el de TD por defecto
+        fov = 45.0
+    aspect = 16.0 / 9.0
+    try:
+        r = parent().op('render')
+        w, h = float(r.width), float(r.height)
+        if w > 0 and h > 0:
+            aspect = w / h
+    except Exception:
+        try:
+            r = parent().op('render')
+            aspect = float(r.par.resolutionw.eval()) / max(1.0, float(r.par.resolutionh.eval()))
+        except Exception:
+            pass
+    return fov, metodo, aspect
+
+
+def _slerp_dir(a, b, t):
+    a, b = _norm(a), _norm(b)
+    d = max(-1.0, min(1.0, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))
+    om = math.acos(d)
+    if om < 1e-6:
+        return b
+    so = math.sin(om)
+    ka, kb = math.sin((1 - t) * om) / so, math.sin(t * om) / so
+    return _norm((a[0] * ka + b[0] * kb, a[1] * ka + b[1] * kb, a[2] * ka + b[2] * kb))
+
+
 def camera_state():
     if _CACHE.get('cam_frame') == absTime.frame:
         return _CACHE['cam']
-    R = surface_radius()
+    W, c = world(), cfg()
+    R = top_radius(W, c)
+    Re = radio_encuadre(W, c)
     t = absTime.seconds
-    h = _p('Camaltura', 4.0)
-    vel = _p('Camvel', 0.6)
-    final = _p('Planofinal', False)
-    fb = _CACHE.get('cam_final', 0.0)
-    last = _CACHE.get('cam_t', t)
-    dt = max(0.0, min(0.25, t - last))
-    fb += (1.0 if final else -1.0) * dt / 20.0
-    fb = max(0.0, min(1.0, fb))
-    _CACHE['cam_final'] = fb
+    last = _CACHE.get('cam_t')
+    dt = 0.0 if last is None else max(0.0, min(0.25, t - last))
     _CACHE['cam_t'] = t
-    s = fb * fb * (3 - 2 * fb)
-    az = math.radians(vel * t)
-    el = math.radians(12.0 + 8.0 * math.sin(t * 0.05))
-    def sph(a, e, r):
-        return (r * math.cos(e) * math.cos(a), r * math.sin(e), r * math.cos(e) * math.sin(a))
-    hh = h + (2.2 * R - h) * s
-    pos = sph(az, el, R + hh)
-    tgt = sph(az + math.radians(25.0), el - math.radians(6.0), R)
-    tgt = _mul(tgt, 1.0 - s)
-    st = dict(pos=pos, tgt=tgt, R=R)
+    # globo: distancia que persigue el encuadre, con un minimo de seguridad
+    fov, metodo, aspect = _cam_optics()
+    margen = max(1.0, _p('Encuadremargen', 1.08))
+    suave = max(0.0, _p('Camsuave', 3.0))
+    d_obj, d_min, th = globe_distance(Re, fov, aspect, margen, metodo)
+    d = _CACHE.get('cam_d')
+    if d is None or Re < _CACHE.get('cam_Re', Re) - 1e-6:
+        d, v = d_obj, 0.0              # arranque, Resetmundo, rango o mundo cargado: sin transicion
+    else:
+        d, v = smooth_damp(d, _CACHE.get('cam_v', 0.0), d_obj, dt, suave)
+    salto = 0.0
+    if d < d_min:
+        salto = d_min - d
+        d, v = d_min, max(0.0, v)
+    _CACHE.update(cam_d=d, cam_v=v, cam_Re=Re)
+    # modo: peso de la camara de superficie (0 globo, 1 superficie)
+    sup = c['nivel'] >= 10 and str(_p('Modocamara', 'globo')) == 'superficie' \
+        and not _p('Planofinal', False)
+    wq = _CACHE.get('cam_w')
+    if wq is None:
+        wq = 1.0 if sup else 0.0
+    wq = max(0.0, min(1.0, wq + (1.0 if sup else -1.0) * dt / CAM_TRANS))
+    _CACHE['cam_w'] = wq
+    s = wq * wq * (3 - 2 * wq)
+    g_pos = _mul(CAM_DIR, d)
+    if s > 0.0:
+        h = _p('Camaltura', 4.0)
+        vel = _p('Camvel', 0.6)
+        az = math.radians(vel * t)
+        el = math.radians(12.0 + 8.0 * math.sin(t * 0.05))
+
+        def sph(a, e, r):
+            return (r * math.cos(e) * math.cos(a), r * math.sin(e), r * math.cos(e) * math.sin(a))
+        s_pos = sph(az, el, R + h)
+        s_tgt = sph(az + math.radians(25.0), el - math.radians(6.0), R)
+        rad = (R + h) * s + d * (1 - s)
+        pos = _mul(_slerp_dir(CAM_DIR, s_pos, s), rad)
+        tgt = _mul(s_tgt, s)
+    else:
+        pos, tgt = g_pos, (0.0, 0.0, 0.0)
+    dist = math.sqrt(pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2)
+    near = max(0.05, min(5.0, 0.25 * (dist - Re)))
+    far = dist + 2.0 * Re + 10.0
+    st = dict(pos=pos, tgt=tgt, R=R, Re=Re, d=d, d_obj=d_obj, d_min=d_min, theta=th,
+              fov=fov, metodo=metodo, aspect=aspect, margen=margen, w=s, near=near, far=far,
+              salto=salto, modo='superficie' if s >= 0.5 else 'globo')
     _CACHE['cam'] = st
     _CACHE['cam_frame'] = absTime.frame
     return st
 
 
-def cam(key, k, frame=None):
-    return camera_state()[key][k]
+def cam(key, k=0, frame=None):
+    v = camera_state()[key]
+    return v[k] if isinstance(v, (tuple, list)) else v
+
+
+def cam_reset():
+    """La proxima lectura de la camara salta al encuadre (sin transicion)."""
+    for k in ('cam_d', 'cam_v', 'cam_Re', 'cam_frame'):
+        _CACHE.pop(k, None)
 
 
 # --- leyenda -----------------------------------------------------------------
@@ -2330,6 +2475,18 @@ def _legend():
                      '   herencia %d%%   continentes %d'
                      % (n_shells(W), top_radius(W, c), ult, lag, int(round(c['colmatacion'] * 100)),
                         int(c['herencia'] * 100), continents(W)))
+    if lvl >= 8:
+        try:
+            cs = camera_state()
+            lado = 'vertical' if cs['theta'] <= fovs(cs['fov'], cs['aspect'], cs['metodo'])[0] - 1e-9 \
+                else 'horizontal'
+            lines.append('  CAMARA   %s   dist %.1f -> %.1f   radio encuadre %.2f   fov %.0f (%s; '
+                         'manda el %s)   margen %.2f'
+                         % (cs['modo'], cs['d'], cs['d_obj'], cs['Re'], cs['fov'],
+                            'vertical' if 'vert' in cs['metodo'] else 'horizontal', lado,
+                            cs['margen']))
+        except Exception:
+            pass
     if lvl >= 9:
         k = W['ev'].get('corte')
         if k:
