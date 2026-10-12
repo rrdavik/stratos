@@ -21,7 +21,7 @@ el corte sigue la forma del suelo.
 color de su generacion: bandas que son la historia cromatica de la sesion.
 
   CICATRIZ   lo recien expuesto (fondo y paredes) se ve CIAN y se integra
-             al mineral en Cicatriz segundos. El hueco es permanente: la
+             al color de su concha en Cicatriz segundos. El hueco es permanente: la
              concha siguiente lo tapiza sin rellenarlo (salvo lo que
              rellene Colmatacion, fase 8). Enterrar no enciende cicatrices.
   DESTELLO   cada destruccion dispara un golpe de luz sobre la celda;
@@ -44,7 +44,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v6  (cortes en la columna de cada celda, tope por mundo, el nucleo es el fondo)'
+VERSION = 'fase9 v7  (cortes en la columna de cada celda, tope por mundo, cicatriz que se funde con su concha)'
 banner(VERSION)
 
 base = require_base(9)

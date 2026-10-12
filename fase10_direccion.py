@@ -7,8 +7,8 @@ marco conceptual.
 
 QUE HACE
 --------
-  PALETA       nucleo negro profundo, conchas en grises minerales con
-               ambar en la base, cian solo en cicatrices.
+  PALETA       nucleo negro profundo, cada concha de un color (fase 8,
+               Paleta; mineral para la anterior), cian solo en cicatrices.
   LUZ          cenital fria y constante (sube con el planeta), relleno
                azulado muy tenue. Eje inclinado 20 grados (Tilt).
   CAMARA       (Modocamara)
@@ -37,7 +37,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v5  (camara de globo por defecto; superficie como modo)'
+VERSION = 'fase10 v6  (camara de globo por defecto; superficie como modo; paleta de generaciones)'
 banner(VERSION)
 
 base = require_base(10)
@@ -121,7 +121,7 @@ leeme(base, 10, """FASE 10 - DIRECCION VISUAL
   enterramiento. Superficie: a Camaltura, orbita a Camvel grados/s;
   Planofinal la lleva al globo en 20 s.
   Modoactuacion: sin reticula ni leyenda; la luz de celda se ve.
-  Luz cenital fria; nucleo negro; ambar en la base; cian en cicatrices.""")
+  Luz cenital fria; nucleo negro; una concha de cada color; cian en cicatrices.""")
 
 print_report()
 
