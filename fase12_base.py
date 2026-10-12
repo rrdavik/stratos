@@ -45,7 +45,7 @@ la anterior NO pasa a la nueva.
 import td
 import math
 
-VERSION = 'fase12 v5  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda; leyenda mas pequena y ocultable)'
+VERSION = 'fase12 v6  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda; leyenda ocultable; camara de globo)'
 print('=' * 66)
 print('EJECUTANDO: ' + VERSION)
 print('=' * 66)
@@ -650,9 +650,25 @@ setp(mat_marca, 'colorb', 1.0)
 setp(reticula, 'material', 'mat_reticula')
 
 cam = mk(base, 'cameraCOMP', 'camara', 260, -280)
-setp(cam, 'tz', CORE_RADIUS + 9.0)
-setp(cam, 'ty', 1.5)
-setp(cam, 'rx', -5)
+# camara de globo (la misma regla que el motor v24, aqui sin motor): mira
+# al centro desde +Z y encuadra el nucleo entero con un 8 % de holgura en
+# el lado mas estrecho del cuadro (FOV de la camara, horizontal en TD).
+def _encuadre(R, fov_h=45.0, aspect=1280.0 / 720.0, margen=1.08):
+    fh = math.radians(fov_h)
+    fv = 2.0 * math.atan(math.tan(fh / 2.0) / aspect)
+    return R * margen / math.sin(min(fh, fv) / 2.0)
+try:
+    _fov = float(cam.par.fov.eval())
+except Exception:
+    _fov = 45.0
+if not 1.0 <= _fov <= 179.0:
+    _fov = 45.0
+CAM_D = _encuadre(CORE_RADIUS + 0.3, _fov)
+setp(cam, 'tz', CAM_D)
+setp(cam, 'ty', 0.0)
+setp(cam, 'rx', 0.0)
+setp(cam, 'far', CAM_D + 2 * CORE_RADIUS + 10.0)
+ok('camara: el nucleo entero y centrado (a %.1f del centro)' % CAM_D)
 
 luz = mk(base, 'lightCOMP', 'luz_principal', 260, -420)
 setp(luz, 'tx', -12)

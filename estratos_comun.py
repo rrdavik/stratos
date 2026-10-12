@@ -18,7 +18,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v14'
+VERSION_COMUN = 'comun v15'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -554,6 +554,7 @@ def install_core(base, carpeta, fase):
     ok('pulsos: botones de las paginas de fase -> motor')
 
     add_grid_pars(base)
+    set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
     install_luz_celda(base)
@@ -670,6 +671,37 @@ def patch_ritmo(base):
     r.text = t
     ok('ritmo: el giro se multiplica por el giro vivo del motor')
     return True
+
+
+CAM_EXPR = "parent().op('motor').module.cam('%s', %d, absTime.frame)"
+
+
+def set_camera(base):
+    """Camara de globo (motor v24): el planeta entero, centrado y tan cerca
+    como permite el cuadro. Posicion y planos de recorte los da el motor.
+    Si existe 'objetivo' (fase 10) mira a el; si no, mira al centro desde +Z."""
+    cam = base.op('camara')
+    if cam is None:
+        fail('no encuentro la camara')
+        return False
+    good = all(setexpr(cam, ax, CAM_EXPR % ('pos', k)) for k, ax in enumerate(('tx', 'ty', 'tz')))
+    obj = base.op('objetivo')
+    if obj is not None:
+        setp(cam, 'lookat', 'objetivo')
+    else:
+        for ax in ('rx', 'ry', 'rz'):
+            try:
+                getattr(cam.par, ax).expr = ''
+            except Exception:
+                pass
+            setp(cam, ax, 0.0)
+    setexpr(cam, 'near', CAM_EXPR % ('near', 0))
+    setexpr(cam, 'far', CAM_EXPR % ('far', 0))
+    if good:
+        ok('camara: el globo entero y centrado; retrocede a cada enterramiento')
+    else:
+        fail('no pude enlazar la camara al motor')
+    return good
 
 
 def remove_par(base, name):
