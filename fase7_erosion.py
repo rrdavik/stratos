@@ -103,7 +103,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v7  (erosion en notas y con la velocidad, perfiles del usuario, borde de la celda)'
+VERSION = 'fase7 v8  (erosion en notas y con la velocidad, perfiles del usuario, borde de la celda)'
 banner(VERSION)
 
 base = require_base(7)
@@ -336,8 +336,7 @@ def prueba(t):
         m.light_cell(W3, cd, i, pad, 1.0, 2.0)
     centro, borde = losetas(W3, cd, 2.05, i)
     t.check('golpe en la celda del SEQ1: el centro conserva su color y el borde el del pad',
-            centro == [redondo([v * (0.6 + 0.4 * math.exp(-0.05 / m.SEQ_DECAY))
-                                for v in m.seq_color(cd, 1)])]
+            centro == [redondo(m.seq_color(cd, 1))]                 # nota pulsada: plena
             and sorted(borde) == list(range(8))
             and all(borde[pd] == redondo(cd['colores_drum'][pd]) for pd in range(8)),
             'centro %s, %d sectores' % (centro, len(borde)))

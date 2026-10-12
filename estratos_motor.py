@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v19'
+MOTOR_VERSION = 'motor v20'
 
 import math
 
@@ -372,7 +372,9 @@ def new_world():
         v=1,
         occ=[0] * N,        # ocupacion (triggers de construccion)
         carga=[0] * N,      # notas acumuladas hacia el siguiente trigger
-        lat=[-99.0] * N,    # instante de la ultima nota (latido)
+        lat=[-99.0] * N,    # inicio del latido: la nota, y al soltarla, el note off
+        lat_s=[1] * N,      # secuenciador de la ultima nota (color del latido)
+        seq_off={1: -99.0, 2: -99.0},   # cuando se solto la ultima nota de cada SEQ
         h=[0.0] * N,        # altura objetivo
         vh=[0.0] * N,       # altura visible (se acerca a h suavemente)
         sp=[0] * N,         # especie visible: 0, geo, arq, hib
@@ -434,6 +436,8 @@ def ensure(W):
     for k, v in base.items():
         if k not in W:
             W[k] = v
+    for k, v in base['seq_off'].items():
+        W['seq_off'].setdefault(k, v)
     for k, v in base['clock'].items():
         W['clock'].setdefault(k, v)
     return W
@@ -560,6 +564,23 @@ def _ceiling(W, cfg, i):
     return min(limit(cfg), top)
 
 
+GATE_MAX = 2.0      # una nota sin note off cuenta como pulsada como mucho 2 s
+
+
+def held(W, now, s=None, cell=None):
+    """True si hay una nota pulsada (gate abierto) del secuenciador s o en
+    la celda cell."""
+    for k, p in W.get('pend', {}).items():
+        if now - p[1] > GATE_MAX or now < p[1]:
+            continue
+        if s is not None and not k.startswith('%d:' % s):
+            continue
+        if cell is not None and p[0] != cell:
+            continue
+        return True
+    return False
+
+
 def _charge(W, cfg, i, now):
     """Una nota (o una presion) llega a una formacion que ya existe.
     Suma 1 a su carga y la hace subir un trozo de escalon: Growstep /
@@ -593,6 +614,7 @@ def grow(W, cfg, i, s, vel, now):
         W['occ'][i] = 1
         W['carga'][i] = 0
         W['lat'][i] = now
+        W['lat_s'][i] = s
         W['own'][i] = s
         W['sp'][i] = s
         W['traza'][i] = _bit(s)
@@ -602,6 +624,7 @@ def grow(W, cfg, i, s, vel, now):
         W['huella'][i] = 0.0
         return dict(estado='semilla', inc=0.0, celda=i, trigger=True)
 
+    W['lat_s'][i] = s
     if W['par'][i] >= 0:                    # un satelite que recibe senal
         W['par'][i] = -1                    # directa se independiza
     _mark(W, i, s)
@@ -654,6 +677,10 @@ def satellites_of(W, i):
 
 def note_off(W, cfg, s, note, now, tempo):
     p = W['pend'].pop('%d:%d' % (s, int(note)), None)
+    if p:                           # se suelta la nota: el latido empieza a apagarse
+        W['seq_off'][s] = now
+        if 0 <= p[0] < N:
+            W['lat'][p[0]] = now
     if not p or not cfg['gate_mode']:
         return None
     i, t_on, inc, o = p
@@ -1203,10 +1230,16 @@ def _material_col(base_col, pulido):
     return _tint(_mix(base_col, COL_POROSO, 0.45), 0.72)
 
 
-LATIDO_AMP, LATIDO_DUR = 0.05, 0.18     # cada nota hincha la formacion un 5 %
+# Latido: la nota hincha la formacion un 12 % y la tine del color de su
+# secuenciador mientras el gate esta abierto (lo que dura la nota, del note
+# on al note off); al soltarla se apaga en ~0,25 s. Una nota corta da un
+# destello; una ligada, una formacion encendida todo lo que suena.
+LATIDO_AMP, LATIDO_DUR, LATIDO_TINTE = 0.12, 0.25, 0.55
 
 
 def _latido(W, i, now):
+    if held(W, now, cell=i):
+        return 1.0
     dt = now - W['lat'][i]
     if dt < 0 or dt > 4 * LATIDO_DUR:
         return 0.0
@@ -1308,9 +1341,10 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         base_col = COL_GEO if own == GEO else COL_ARQ
         col = _material_col(base_col, pulido)
         lt = _latido(W, i, now)
-        if lt > 0:                  # la nota ha llegado aunque no construya
+        if lt > 0:                  # la nota suena: la formacion se enciende
             vh *= 1.0 + LATIDO_AMP * lt
-            col = _tint(col, 1.0 + 0.35 * lt)
+            sc = seq_color(cfg, W['lat_s'][i] if W['lat_s'][i] in (1, 2) else 1)
+            col = _tint(_mix(col, sc, LATIDO_TINTE * lt), 1.0 + 0.6 * lt)
         if sat:
             col = _tint(col, 0.85)
         if own == GEO:
@@ -1442,7 +1476,11 @@ def seq_lights(W, cfg, now):
         last = W['last'].get(s)
         if not last or last.get('cell') is None or last['cell'] < 0 or last['cell'] >= N:
             continue
-        env = math.exp(-max(0.0, now - W['hit_t'].get(s, -99.0)) / SEQ_DECAY)
+        if held(W, now, s=s):           # gate abierto: luz plena
+            env = 1.0
+        else:                           # se apaga desde que se solto la nota
+            t0 = max(W['hit_t'].get(s, -99.0), W['seq_off'].get(s, -99.0))
+            env = math.exp(-max(0.0, now - t0) / SEQ_DECAY)
         out.setdefault(last['cell'], []).append((s, env))
     return out
 
@@ -1473,7 +1511,7 @@ def cell_lights(W, cfg, now):
             cw, cl = cw * 1.25, cl * 1.25
         # centro: quien construye
         if c in centros:
-            lado_x, lado_z = 0.26 * cw, 0.26 * cl
+            lado_x, lado_z = 0.34 * cw, 0.34 * cl
             if W['vh'][c] > 0.005 and W['own'][c]:       # asoma alrededor de la base
                 sc = cfg['sat_size'] if W['par'][c] >= 0 else 1.0
                 m_ = 0.52 * min(cw, cl) * sc
@@ -1482,13 +1520,13 @@ def cell_lights(W, cfg, now):
             partes = len(lista)
             for q, (s_, env) in enumerate(lista):
                 col = seq_color(cfg, s_)
-                b = 0.6 + 0.4 * env                    # tenue en reposo, plena en el pulso
+                b = 0.7 + 0.3 * env                    # tenue en reposo, plena con el gate
                 col = (col[0] * b, col[1] * b, col[2] * b)
-                g = 0.75 + 0.25 * env
+                g = 0.80 + 0.20 * env
                 sx = lado_x * g / partes
                 dx = 0.0 if partes == 1 else (-0.5 + q) * lado_x * g / 2.0
                 rows.append(_tile(n, e, t, base, dx, 0.0, sx * 0.96, lado_z * g,
-                                  0.05 + 0.08 * env, col))
+                                  0.06 + 0.22 * env, col))
         # borde: quien destruye
         for pd, h in sorted(luz.get(c, {}).items()):
             I = light_level(cfg, h, now) * k
