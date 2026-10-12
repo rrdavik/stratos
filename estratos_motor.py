@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v24'
+MOTOR_VERSION = 'motor v25'
 
 import math
 
@@ -115,6 +115,8 @@ DEFAULT_CFG = dict(
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
     balizas_drum=1, luz_drum=1.0, vida_baliza_drum=0.8, luz_seq=1,
+    # fase 8: la luz de los secuenciadores se extiende a las conchas de la celda
+    luz_conchas=1, luz_conchas_pulso=0.35, luz_conchas_reposo=0.10, luz_conchas_alcance=4,
     erosion_vel=1, vel_ref=100,
     colores_drum=COLORES_DRUM,
 )
@@ -1439,7 +1441,8 @@ def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True)
 def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     lvl = cfg['nivel']
     lim = limit(cfg)
-    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], luz_celda=[])
+    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], luz_celda=[],
+               luz_conchas=[])
     R = top_radius(W, cfg)
     for i in range(N):
         vh = W['vh'][i]
@@ -1507,6 +1510,7 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                                                0.03 * kw * cl, COL_CROWN))
                     out['coronas'].append(_row(top, n, 0.20 * cl, 0.05 * lim, 0.20 * cl, COL_CROWN))
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
+    out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
         out['estratos'] = build_tiles(W, cfg, now)
     return out
@@ -1536,16 +1540,72 @@ def build_tiles(W, cfg, now):
             rows.append(_row(_mul(n, core), n, cw * 1.04, (top - core) * 0.98, cl * 1.04, COL_ZOCALO))
         for s, r_in, r_out in col[first:]:
             sh = W['shells'][s]
-            th = r_out - r_in
-            r_mid = 0.5 * (r_in + r_out)
             colr = _tint(sh['col'], 0.75 + 0.35 * min(1.0, sh['occ'][c] / 4.0))
             t0 = W['scars'].get(s * 1000 + c)
             if t0 is not None:
                 colr = _mix(COL_SCAR, colr, max(0.0, min(1.0, (now - t0) / st)))
-            cw, cl = _cell_sizes(r_mid, c)
-            if is_pole(c):
-                cw, cl = cw * 1.25, cl * 1.25
-            rows.append(_row(_mul(n, r_in), n, cw * 1.04, th * 0.98, cl * 1.04, colr))
+            rows.append(_tile_row(c, n, r_in, r_out, colr))
+    return rows
+
+
+def _tile_row(c, n, r_in, r_out, col, k=1.0, kh=1.0):
+    """Una loseta de la columna de c entre r_in y r_out (k: ancho relativo,
+    kh: alto relativo; la loseta normal es 1, 1)."""
+    th = r_out - r_in
+    cw, cl = _cell_sizes(0.5 * (r_in + r_out), c)
+    if is_pole(c):
+        cw, cl = cw * 1.25, cl * 1.25
+    return _row(_mul(n, r_in), n, cw * 1.04 * k, th * 0.98 * kh, cl * 1.04 * k, col)
+
+
+# --- la luz del secuenciador en las conchas (motor v25) ---------------------------
+# Una nota tine tenuemente las losetas de su celda: la superior con toda la
+# luz, y se apaga hacia abajo en Luzconchasalcance losetas. Es una capa
+# aditiva (luz, material constante): suma color sin tapar el de la
+# generacion, se ve tambien en la cara en sombra y nunca oscurece. En
+# reposo respira despacio: una loseta ocupada es mas clara pero quieta, asi
+# que el reposo del SEQ1 (blanco) no se confunde con ella. La cicatriz manda.
+
+LUZ_CONCHAS_K = 1.06        # la capa envuelve la loseta (que mide 1.04)
+LUZ_CONCHAS_KH = 1.012      # y asoma por arriba, sin llegar a la luz de celda
+RESPIRA_T = 2.4             # periodo del reposo (s)
+
+
+def shell_lights(W, cfg, now):
+    """Filas de la capa de luz sobre las losetas de las celdas que tocan
+    los secuenciadores (solo esas: unas pocas filas por fotograma)."""
+    if cfg['nivel'] < 8 or not cfg.get('luz_conchas', 1) or not cfg.get('luz_seq', 1):
+        return []
+    centros = seq_lights(W, cfg, now)
+    if not centros:
+        return []
+    rows = []
+    alc = max(1, int(cfg['luz_conchas_alcance']))
+    maxs = max(1, int(cfg['max_shells']))
+    pul, rep_ = cfg['luz_conchas_pulso'], cfg['luz_conchas_reposo']
+    st = cfg['scar_time']
+    respira = 0.70 + 0.30 * math.sin(2.0 * math.pi * now / RESPIRA_T)
+    for c, lista in centros.items():
+        col = column_radii(W, cfg, c)
+        if not col:
+            continue
+        # dos secuenciadores en la celda: el mas encendido; si empatan, el ultimo
+        s_, env = max(lista, key=lambda q: (q[1], W['hit_t'].get(q[0], -99.0)))
+        I = rep_ * respira + max(0.0, pul - rep_) * env
+        if I <= 1e-4:
+            continue
+        sc = seq_color(cfg, s_)
+        n = normal_i(c)
+        first = max(0, len(col) - maxs)
+        for k, (s, r_in, r_out) in enumerate(reversed(col[first:])):
+            if k >= alc:
+                break
+            t0 = W['scars'].get(s * 1000 + c)
+            if t0 is not None and now - t0 < st:
+                continue                    # el cian de la cicatriz no se tapa
+            w = I * (1.0 - k / float(alc))
+            rows.append(_tile_row(c, n, r_in, r_out, (sc[0] * w, sc[1] * w, sc[2] * w),
+                                  LUZ_CONCHAS_K, LUZ_CONCHAS_KH))
     return rows
 
 
@@ -1726,7 +1786,7 @@ def wobble_step(st, dt, on, paused, amp, period, fade=3.0):
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
-              'i_estratos', 'i_luz_celda']
+              'i_estratos', 'i_luz_celda', 'i_luz_conchas']
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 
@@ -1806,6 +1866,10 @@ def cfg():
     c.update(
         nivel=_p('Nivel', 3),
         luz_seq=int(_p('Luzseq', True)),
+        luz_conchas=int(_p('Luzconchas', True)),
+        luz_conchas_pulso=max(0.0, _p('Luzconchaspulso', c['luz_conchas_pulso'])),
+        luz_conchas_reposo=max(0.0, _p('Luzconchasreposo', c['luz_conchas_reposo'])),
+        luz_conchas_alcance=max(1, int(_p('Luzconchasalcance', c['luz_conchas_alcance']))),
         shell_thick=_p('Shellthick', c['shell_thick']),
         height_factor=_p('Alturafactor', c['height_factor']),
         seed_frac=_p('Semillafrac', c['seed_frac']),
