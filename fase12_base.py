@@ -1,6 +1,6 @@
 """
 =============================================================================
-ESTRATOS - FASE 1+2: LA BASE (NUCLEO, RETICULA, BALIZA Y MIDI)
+ESTRATOS - FASE 1+2: LA BASE (NUCLEO, RETICULA, LUZ DE CELDA Y MIDI)
 =============================================================================
 Sustituye a fase1_tempo_beatstep.py y fase2_seq1_baliza.py, y lleva dentro
 el arreglo del render (fix_render_fase2.py ya no hace falta).
@@ -13,14 +13,17 @@ QUE CONSTRUYE
     y Notapolonorte (108, do8) es una celda. La nota mas grave es el polo
     sur, la mas aguda el polo norte, y las de en medio van en anillos, uno
     por octava (la clase de nota es el meridiano). Pagina Fase3.
-  - la BALIZA cian que va a la celda de cada nota del SEQ1 y pulsa
+  - la LUZ DE CELDA (v3, sustituye a la baliza): cada nota del SEQ1
+    enciende en cian el centro de su celda, con un pulso, y la deja tenue
+    hasta la siguiente nota. Es la misma luz que da el motor desde la
+    fase 3 (mismos nodos: luz_celda, i_luz_celda, mat_luz_celda).
   - la entrada MIDI (nota y canal leidos de los bytes)
   - render, camara, luces y leyenda, y la salida en el nodo 'salida'
 
 EL RENDER
 ---------
 La lista de geometrias del render se ESCRIBE entera desde el principio
-('nucleo reticula baliza'). Leerla con .eval() y ampliarla la corrompia
+('nucleo reticula luz_celda'). Leerla con .eval() y ampliarla la corrompia
 (ese parametro referencia operadores): por eso desaparecia la esfera.
 Al final, un DIAGNOSTICO DEL RENDER dice que dibuja el render y si algun
 nodo de la cadena hasta 'salida' tiene errores.
@@ -42,7 +45,7 @@ la anterior NO pasa a la nueva.
 import td
 import math
 
-VERSION = 'fase12 v2  (fase 1 + fase 2 + arreglo del render; reticula en anillos de polo a polo)'
+VERSION = 'fase12 v3  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda)'
 print('=' * 66)
 print('EJECUTANDO: ' + VERSION)
 print('=' * 66)
@@ -378,7 +381,7 @@ ok('ritmo creado: giro acumulado a partir del tempo del proyecto')
 
 
 # -----------------------------------------------------------------------------
-# 4. LA RETICULA EN ESPIRAL
+# 4. LA RETICULA DE POLO A POLO
 # -----------------------------------------------------------------------------
 
 RETICULA_CB = r'''# Posicion de las celdas sobre la esfera: polos en las notas extremas
@@ -579,11 +582,52 @@ setp(reticula, 'instanceop', 'reticula_chop')
 setp_any(reticula, ['instancing', 'instance'], True)
 for par_name, chan in [('instancetx', 'tx'), ('instancety', 'ty'), ('instancetz', 'tz'),
                        ('instancerottox', 'nx'), ('instancerottoy', 'ny'),
-                       ('instancerottoz', 'nz'), ('instancecolorr', 'r'),
-                       ('instancecolorg', 'g'), ('instancecolorb', 'b')]:
+                       ('instancerottoz', 'nz')]:
     setp(reticula, par_name, chan)
 setp_any(reticula, ['instancerotmode', 'instancerotatemode'], 1)
-setp_any(reticula, ['instancecolormode', 'instcolormode'], 1)
+
+
+def setmenu(o, names, wanted, index=None):
+    for n in names:
+        p = getattr(o.par, n, None) if has_par(o, n) else None
+        if p is None:
+            continue
+        try:
+            opts = [str(x).lower() for x in p.menuNames]
+            for w in wanted:
+                if w.lower() in opts:
+                    p.val = p.menuNames[opts.index(w.lower())]
+                    return True
+        except Exception:
+            pass
+        if index is not None:
+            try:
+                p.menuIndex = index
+                return True
+            except Exception:
+                pass
+    return False
+
+
+def set_instance_color(geo):
+    # El color por instancia es instancer/g/b (pagina Instance 2). La v2 usaba
+    # instancecolorr/g/b, que no existe: la reticula salia blanca.
+    good = True
+    for ch, names in (('r', ['instancer', 'instancecolorr']),
+                      ('g', ['instanceg', 'instancecolorg']),
+                      ('b', ['instanceb', 'instancecolorb'])):
+        if not setp_any(geo, names, ch):
+            good = False
+    if not setmenu(geo, ['instancecolormode', 'instcolormode', 'colormode'], ['replace'], None):
+        good = False
+    return good
+
+
+if set_instance_color(reticula):
+    ok('reticula: cada marca con su color (Instance 2: Color R/G/B = r g b, Replace)')
+else:
+    info('reticula: no pude enlazar el color por instancia; Instance 2 -> Color R/G/B = '
+         'r g b, Color Mode = Replace')
 
 
 # -----------------------------------------------------------------------------
@@ -626,7 +670,7 @@ setp(relleno, 'lightcolorb', 0.80)
 render = mk(base, 'renderTOP', 'render', 520, -140)
 setp(render, 'camera', 'camara')
 # La lista se ESCRIBE entera, nunca se lee y se amplia (ver cabecera).
-RENDER_GEO = 'nucleo reticula baliza'
+RENDER_GEO = 'nucleo reticula luz_celda'
 setp(render, 'lights', 'luz_principal luz_relleno')
 setp(render, 'resolutionw', 1280)      # limite de la licencia no comercial
 setp(render, 'resolutionh', 720)
@@ -642,7 +686,7 @@ setp_any(rotulo, ['alignx'], 'left')
 setp_any(rotulo, ['aligny'], 'top')
 setexpr(rotulo, 'text',
         "parent().op('ritmo').module.legend(absTime.frame) + "
-        "parent().op('baliza_callbacks').module.legend(absTime.frame)")
+        "parent().op('luz12_callbacks').module.legend(absTime.frame)")
 
 salida = mk(base, 'outTOP', 'salida', 960, -140)
 if bg:
@@ -662,11 +706,16 @@ except Exception:
 
 
 # -----------------------------------------------------------------------------
-# 7. LA BALIZA
+# 7. LA LUZ DE CELDA (sustituye a la baliza)
 # -----------------------------------------------------------------------------
+# Cada nota del SEQ1 enciende el centro de su celda en cian: un pulso con la
+# nota, y tenue hasta la siguiente. Es la misma luz que da el motor desde la
+# fase 3, con los mismos nodos (luz_celda, i_luz_celda, mat_luz_celda): la
+# fase 3 solo cambia quien calcula las losetas.
 
-BALIZA_CB = r'''# Baliza: lleva la esfera cian a la celda de la nota y la hace pulsar.
-# La celda se calcula igual que en reticula_callbacks.
+LUZ12_CB = r'''# Luz de celda de las fases 1 y 2: el centro de la celda de la ultima nota
+# del SEQ1, en cian. La celda se calcula igual que en reticula_callbacks.
+# (Desde la fase 3 la calcula el motor y este DAT se retira.)
 
 import math
 
@@ -770,10 +819,10 @@ def note_name(note):
     # Convencion latina: el do central (60) es do4.
     return '%s%d' % (NOTE_NAMES[int(note) % 12], int(note) // 12 - 1)
 
-DECAY = 0.12          # segundos hasta caer a un tercio: cada nota, un golpe
-BASE_RADIUS = 0.90    # tamano en reposo
-PEAK_RADIUS = 1.80    # cuanto crece en el golpe
-LIFT = 0.30           # separacion de la superficie
+SEQ_DECAY = 0.25      # el pulso de la nota cae en 1/4 de segundo
+COL_SEQ1 = (0.10, 0.90, 1.00)
+LIFT = 0.02
+CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b']
 
 
 def current_note():
@@ -781,6 +830,27 @@ def current_note():
         return int(parent().par.Nota)
     except Exception:
         return 60
+
+
+def orient(n):
+    x, y, z = n
+    y = max(-1.0, min(1.0, y))
+    return 90.0 - math.degrees(math.asin(y)), 90.0 - math.degrees(math.atan2(z, x))
+
+
+def cell_size(k):
+    """(ancho este-oeste, largo norte-sur) de la celda k sobre el nucleo."""
+    lo, hi = note_range()
+    cell_normal(k)
+    normals, ring_of, rings, band, cap = _LAYOUT['data']
+    if k <= 0 or k >= hi - lo:
+        d = 2.0 * CORE_RADIUS * math.radians(cap) * 1.25
+        return d, d
+    j = ring_of[int(k)]
+    phi = math.radians(-90.0 + cap + band * (j + 0.5))
+    ns = CORE_RADIUS * math.radians(band)
+    ew = CORE_RADIUS * math.cos(phi) * 2.0 * math.pi / max(1, len(rings[j]))
+    return ew, ns
 
 
 def onSetupParameters(scriptOp):
@@ -803,31 +873,34 @@ def onCook(scriptOp):
     if trig:
         scriptOp.store('t0', now)
     t0 = scriptOp.fetch('t0', now - 10.0)
-    env = math.exp(-max(0.0, now - t0) / DECAY)
-    radius = BASE_RADIUS + PEAK_RADIUS * env
+    env = math.exp(-max(0.0, now - t0) / SEQ_DECAY)
+    scriptOp.store('env', env)
     f = fold_note(note)
     if f is None:
-        p = (0.0, -9999.0, 0.0)
+        row = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
     else:
         lo, _ = note_range()
-        nx, ny, nz = cell_normal(f - lo)
-        d = CORE_RADIUS + LIFT + radius
-        p = (nx * d, ny * d, nz * d)
+        k = f - lo
+        n = cell_normal(k)
+        cw, cl = cell_size(k)
+        g = 0.75 + 0.25 * env                      # crece en el pulso
+        b = 0.6 + 0.4 * env                        # tenue en reposo
+        rx, ry = orient(n)
+        d = CORE_RADIUS + LIFT
+        row = [n[0] * d, n[1] * d, n[2] * d, rx, ry, 0.0,
+               0.26 * cw * g, 0.05 + 0.08 * env, 0.26 * cl * g,
+               COL_SEQ1[0] * b, COL_SEQ1[1] * b, COL_SEQ1[2] * b]
     scriptOp.numSamples = 1
-    for name, v in [('tx', p[0]), ('ty', p[1]), ('tz', p[2]),
-                    ('env', env), ('radius', radius), ('note', note)]:
+    for name, v in zip(CHANS, row):
         scriptOp.appendChan(name)[0] = float(v)
     return
 
 
 def legend(frame=None):
     try:
-        b = op('baliza_chop')
-        try:
-            note = int(b['note'][0])
-            env = float(b['env'][0])
-        except Exception:
-            note, env = current_note(), 0.0
+        c = op('i_luz_celda')
+        note = current_note()
+        env = c.fetch('env', 0.0) if c is not None else 0.0
         lo, hi = note_range()
         f = fold_note(note)
         if f is None:
@@ -842,7 +915,7 @@ def legend(frame=None):
             ch = int(parent().par.Canal)
         except Exception:
             ch = 13
-        hits = b.fetch('hits', 0) if b is not None else 0
+        hits = c.fetch('hits', 0) if c is not None else 0
         lines = ['',
                  '  NOTA     %-5s %3d    %s' % (note_name(note), note, donde),
                  '  PULSO    [%s]' % ('#' * n + '.' * (12 - n)),
@@ -852,11 +925,19 @@ def legend(frame=None):
         return '\n  NOTA     (fallo en la leyenda: %s)' % e
 '''
 
-baliza_cb = fresh(base, 'textDAT', 'baliza_callbacks', -220, 200)
-baliza_cb.text = BALIZA_CB
-baliza_chop = fresh(base, 'scriptCHOP', 'baliza_chop', 0, 200)
-if setp_any(baliza_chop, ['callbacks', 'callbackdat', 'dat'], 'baliza_callbacks'):
-    ok('baliza_chop creado')
+for viejo in ('baliza', 'baliza_chop', 'baliza_callbacks', 'mat_baliza'):
+    o = base.op(viejo)
+    if o is not None:
+        try:
+            o.destroy()
+        except Exception:
+            pass
+
+luz_cb = fresh(base, 'textDAT', 'luz12_callbacks', -220, 200)
+luz_cb.text = LUZ12_CB
+luz_chop = fresh(base, 'scriptCHOP', 'i_luz_celda', 0, 200)
+if setp_any(luz_chop, ['callbacks', 'callbackdat', 'dat'], 'luz12_callbacks'):
+    ok('i_luz_celda creado')
 else:
     fail('no encontre el campo de callbacks del Script CHOP: asignalo a mano')
 
@@ -864,58 +945,46 @@ else:
 # fotograma.
 latido = fresh(base, 'executeDAT', 'latido', -220, 320)
 latido.text = '''def onFrameStart(frame):
-    c = parent().op('baliza_chop')
+    c = parent().op('i_luz_celda')
     if c is not None:
         c.cook(force=True)
     return
 '''
 setp(latido, 'active', True)
 if setp_any(latido, ['framestart', 'onframestart'], True):
-    ok('latido: la baliza se recalcula en cada fotograma')
+    ok('latido: la luz de celda se recalcula en cada fotograma')
 else:
     fail('latido: activa a mano "Frame Start" en el nodo latido')
 
-
-# -----------------------------------------------------------------------------
-# 7b. LA BALIZA: geometria (el SOP va DENTRO del Geometry COMP)
-# -----------------------------------------------------------------------------
-
-baliza = fresh(base, 'geometryCOMP', 'baliza', 260, 200)
-for k in list(baliza.children):          # apagar el relleno por defecto
+# Geometria: una caja de 1x1x1 con la base en y = 0, instanciada con
+# posicion, giro, escala y color (igual que hara make_instanced en la fase 3)
+luz_geo = fresh(base, 'geometryCOMP', 'luz_celda', 260, 200)
+for k in list(luz_geo.children):
     try:
         k.render = False
         k.display = False
     except Exception:
         pass
-esfera = mk(baliza, 'sphereSOP', 'esfera_baliza', 0, 0)
-R_EXPR = "parent(2).op('baliza_chop')['radius'][0]"   # el valor, no el canal
-for ax in ('radx', 'rady', 'radz'):
-    setexpr(esfera, ax, R_EXPR)
-setp_any(esfera, ['type', 'primtype'], 'polymesh')
-setp_any(esfera, ['rows'], 24)
-setp_any(esfera, ['cols'], 24)
-for attr in ('render', 'display'):
-    try:
-        setattr(esfera, attr, True)
-    except Exception:
-        pass
-
-# Posicion por instanciado (una instancia). Solo traslacion.
-setp(baliza, 'instanceop', 'baliza_chop')
-setp_any(baliza, ['instancing', 'instance'], True)
-setp(baliza, 'instancetx', 'tx')
-setp(baliza, 'instancety', 'ty')
-setp(baliza, 'instancetz', 'tz')
-
-# Gira con el planeta: el mismo angulo que nucleo y reticula
-setexpr(baliza, 'ry', "parent().op('ritmo').module.rotation(absTime.frame)")
-setexpr(baliza, 'rz', 'parent().par.Tilt')
-
-mat = fresh(base, 'constantMAT', 'mat_baliza', 260, 320)
-setp(mat, 'colorr', 0.10)
-setp(mat, 'colorg', 0.90)
-setp(mat, 'colorb', 1.00)
-setp(baliza, 'material', 'mat_baliza')
+caja = mk(luz_geo, 'boxSOP', 'bloque', 0, 0)
+for ax in ('sizex', 'sizey', 'sizez'):
+    setp(caja, ax, 1.0)
+setp(caja, 'ty', 0.5)
+flags_on(caja)
+setp(luz_geo, 'instanceop', 'i_luz_celda')
+setp_any(luz_geo, ['instancing', 'instance'], True)
+for par_name, ch in [('instancetx', 'tx'), ('instancety', 'ty'), ('instancetz', 'tz'),
+                     ('instancerx', 'rx'), ('instancery', 'ry'), ('instancerz', 'rz'),
+                     ('instancesx', 'sx'), ('instancesy', 'sy'), ('instancesz', 'sz')]:
+    setp(luz_geo, par_name, ch)
+setmenu(luz_geo, ['instancerord'], ['xyz'], 0)
+color_ok = set_instance_color(luz_geo)
+setexpr(luz_geo, 'ry', "parent().op('ritmo').module.rotation(absTime.frame)")
+setexpr(luz_geo, 'rz', 'parent().par.Tilt')
+mat = fresh(base, 'constantMAT', 'mat_luz_celda', 260, 320)
+setp(mat, 'colorr', 1.0)
+setp(mat, 'colorg', 1.0)
+setp(mat, 'colorb', 1.0)
+setp(luz_geo, 'material', 'mat_luz_celda')
 
 # La lista se ESCRIBE entera, no se lee y se amplia: este parametro
 # referencia operadores, y leerlo con .eval() devuelve un operador, no el
@@ -925,7 +994,11 @@ if setp(render, 'geometry', RENDER_GEO):
     ok('render dibuja: %s' % RENDER_GEO)
 else:
     fail('no pude fijar la geometria del render: pon a mano "%s"' % RENDER_GEO)
-ok('baliza: esfera cian con su propio material, gira con el planeta')
+if color_ok:
+    ok('luz_celda: el centro de la celda de cada nota en cian, gira con el planeta')
+else:
+    info('luz_celda: no pude enlazar el color por instancia; Instance 2 -> Color '
+         'R/G/B = r g b, Color Mode = Replace')
 
 
 # -----------------------------------------------------------------------------
@@ -936,7 +1009,7 @@ midi_log = fresh(base, 'tableDAT', 'midi_log', -440, 200)
 midi_log.clear()
 midi_log.appendRow(['frame', 'canal', 'nota', 'vel', 'resultado'])
 
-MIDI_CB = '''# Notas del SEQ1 -> baliza.
+MIDI_CB = '''# Notas del SEQ1 -> luz de celda.
 #
 # Nota y canal se leen de los BYTES del mensaje: 9n kk vv = note on en el
 # canal n+1, nota kk, velocidad vv. Asi no importa como numere
@@ -981,7 +1054,7 @@ def trigger(note):
         parent().par.Nota = int(note)
     except Exception:
         pass
-    c = op('baliza_chop')
+    c = op('i_luz_celda')
     if c is not None:
         c.store('hit_t', absTime.seconds)
         c.store('hits', c.fetch('hits', 0) + 1)
@@ -1010,7 +1083,7 @@ def handle(ch, note, vel):
         trigger(note)
         result = 'DISPARO'
     _log([absTime.frame, ch, note, vel, result])
-    c = op('baliza_chop')
+    c = op('i_luz_celda')
     n = c.fetch('printed', 0) if c is not None else 99
     if n < PRINT_FIRST:
         print('MIDI  canal %s  nota %s  vel %s  ->  %s' % (ch, note, vel, result))
@@ -1136,7 +1209,7 @@ def diagnostico_render():
         print('  %-6s %-9s renderiza: %s%s' % ('OK' if vivos and not e else 'FALLO', nm,
               vivos if vivos else 'NADA', ('   ERROR: ' + e) if e else ''))
     malos = []
-    for nm in ('ritmo', 'reticula_chop', 'baliza_chop', 'camara', 'render',
+    for nm in ('ritmo', 'reticula_chop', 'i_luz_celda', 'camara', 'render',
                'rotulo', 'con_rotulo', 'salida'):
         o = base.op(nm)
         if o is None:
@@ -1171,23 +1244,28 @@ try:
     print('  polos                   : %s' % ('do1 abajo, do8 arriba' if sur else 'MAL'))
     mm = midi_cb.module
     before = int(base.par.Nota)
-    baliza_chop.store('printed', 99)
+    luz_chop.store('printed', 99)
     mm.onReceiveMIDI(None, 0, 'Note On', 13, 65, 100, True, bytes([0x9C, 0x40, 0x64]))
-    baliza_chop.cook(force=True)
-    note = int(baliza_chop['note'][0])
-    env = float(baliza_chop['env'][0])
+    luz_chop.cook(force=True)
+    note = int(base.par.Nota)
+    env = float(luz_chop.fetch('env', 0.0))
+    col = [float(luz_chop[ch][0]) for ch in ('r', 'g', 'b')]
+    cian = abs(col[1] / max(1e-6, col[2]) - 0.9) < 0.05 and col[0] < 0.2
     ign = mm.handle(1, 60, 100)
     print('  nota leida de los bytes : %d  (debe ser 64, aunque el campo decia 65)' % note)
     print('  pulso                   : %.2f  (debe estar cerca de 1)' % env)
+    print('  luz de celda            : %s' % ('cian en el centro de la celda' if cian else 'MAL %s' % col))
     print('  nota en el canal 1      : %s' % ign)
-    for l in baliza_cb.module.legend().split('\n'):
+    sin_baliza = all(base.op(nm) is None for nm in ('baliza', 'baliza_chop', 'baliza_callbacks'))
+    print('  sin baliza              : %s' % ('si' if sin_baliza else 'NO'))
+    for l in luz_cb.module.legend().split('\n'):
         if l.strip():
             print('   ' + l)
-    passed = (n_cel == K + 1 and sur and note == 64 and env > 0.8
+    passed = (n_cel == K + 1 and sur and note == 64 and env > 0.8 and cian and sin_baliza
               and str(ign).startswith('ignorado'))
     base.par.Nota = before
-    baliza_chop.store('hits', 0)
-    baliza_chop.store('printed', 0)
+    luz_chop.store('hits', 0)
+    luz_chop.store('printed', 0)
     midi_log.clear()
     midi_log.appendRow(['frame', 'canal', 'nota', 'vel', 'resultado'])
 except Exception as e:
@@ -1209,7 +1287,7 @@ except Exception as e:
 print('-' * 66)
 print('  AUTOPRUEBA %s' % ('OK' if passed else 'FALLIDA: pegame este bloque'))
 print('-' * 66)
-print('  Viewer Active sobre "salida": nucleo, reticula y baliza cian.')
+print('  Viewer Active sobre "salida": nucleo, reticula y la luz cian en la celda de la nota.')
 print('  Ahora: PLAY en la linea de tiempo y en el BeatStep con el SEQ1.')
 print('  Si las notas no salen aqui: el Device ID de midi_in no es el del BeatStep.')
 print('  Siguiente: fase3_semilla.py')

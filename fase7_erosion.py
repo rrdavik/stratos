@@ -31,6 +31,18 @@ HUELLA (una mancha oscura hasta que la celda se vuelve a sembrar).
 En las vecinas, las fracciones de nota se acumulan: con radio 1 y
 reduccion 1, cada vecina pierde una nota cada dos golpes.
 
+LA VELOCIDAD (v7)
+-----------------
+Con Erosionvel (encendido), la reduccion de la tabla es la de un golpe a
+velocidad Velref (100) y escala en proporcion: a 50, la mitad; a 127, x1,27.
+Minimo: un golpe siempre deshace al menos una nota en su celda (o la
+reduccion, si es menor), para que un golpe flojo no quede en nada. Las
+fracciones de nota se acumulan en cada celda: N golpes iguales deshacen
+siempre lo mismo. Solo escala la reduccion; radio y profundidad no.
+Apagado, la reduccion es la de la tabla, sin mas.
+    Erosionvel   la velocidad escala la erosion (encendido)
+    Velref       velocidad a la que valen los numeros de la tabla (100)
+
 PERFILES POR DEFECTO (v6, elegidos por el usuario)
 --------------------------------------------------
     pad 1  bombo        temblor          -4 notas   radio 2  profundidad 2
@@ -73,7 +85,7 @@ DONDE CAE LA EROSION (decision tomada)
 Los pads de bateria no tienen altura, asi que no dicen celda. Objetivo:
   alterna   (defecto) pads impares donde esta el SEQ1, pares donde el SEQ2
   seq1/seq2 siempre donde esta ese secuenciador
-  velocidad la velocidad del golpe elige una de las 96 celdas
+  velocidad la velocidad del golpe elige una de las celdas (85 con do1-do8)
 En los tres primeros, la velocidad desplaza el golpe un meridiano a un
 lado o al otro: decide el aparato, no el software.
 
@@ -91,7 +103,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v6  (erosion en notas, perfiles del usuario, el borde de la celda es la bateria)'
+VERSION = 'fase7 v7  (erosion en notas y con la velocidad, perfiles del usuario, borde de la celda)'
 banner(VERSION)
 
 base = require_base(7)
@@ -112,10 +124,12 @@ add_par(base, page, 'pulse', 'Erosionar', 'Erosionar con el pad de prueba')
 add_par(base, page, 'toggle', 'Balizasdrum', 'Luz de la bateria en las celdas', True)
 add_par(base, page, 'float', 'Luzdrum', 'Intensidad de la luz de la bateria', 1.0, 0.0, 2.0)
 add_par(base, page, 'float', 'Vidabalizadrum', 'Vida de la luz (s)', 0.8, 0.05, 5.0)
+add_par(base, page, 'toggle', 'Erosionvel', 'La velocidad escala la erosion', True)
+add_par(base, page, 'int', 'Velref', 'Velocidad a la que vale la tabla', 100, 1, 127, clamp=True)
 renew_default(base, 'Vidabalizadrum', 0.6, 0.8)
 renew_default(base, 'Vidabalizadrum', 1.0, 0.8)
 ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
-   'Multradio, Padprueba, Erosionar, Balizasdrum, Luzdrum, Vidabalizadrum')
+   'Multradio, Padprueba, Erosionar, Balizasdrum, Luzdrum, Vidabalizadrum, Erosionvel, Velref')
 
 COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'tipo', 'rol']
 
@@ -223,6 +237,8 @@ leeme(base, 7, """FASE 7 - EROSION
     reduccion    notas de construccion que deshace en la celda
     radio        anillos de vecinas (cada anillo, la mitad)
     profundidad  conchas que corta (fase 9)
+  Erosionvel: la tabla vale a velocidad Velref (100) y escala con la del
+  golpe; como minimo, una nota por golpe.
   Una nota de erosion deshace lo que hizo una nota del SEQ: baja la carga
   y la altura; al agotarse la carga, baja un escalon. Orden: satelites,
   altura, huella.
@@ -249,7 +265,7 @@ def prueba(t):
     sats0 = sum(W['occ'][j] for j in m.satellites_of(W, i))
     occ0 = W['occ'][i]
     c['perfiles'] = [(1, 0, 0)] * 8
-    c['target_mode'] = 0
+    c['target_mode'], c['erosion_vel'] = 0, 0
     m.erosion(W, c, 0, 1, 0.0)                    # velocidad 1: sin desplazar
     sats1 = sum(W['occ'][j] for j in m.satellites_of(W, i))
     t.check('la erosion quita primero satelites', sats1 == sats0 - 1 and W['occ'][i] == occ0,
@@ -276,6 +292,7 @@ def prueba(t):
     cd = dict(m.cfg())
     cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
     cd['target_mode'], cd['balizas_drum'], cd['luz_drum'] = 0, 1, 1.0
+    cd['erosion_vel'] = 0               # las pruebas de siempre, sin velocidad
     v1 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V1[k]) + [m.TIPOS_V1[k]] for k in range(8)]
     v3 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V3[k]) + [m.TIPOS_DEFECTO[k]] for k in range(8)]
     ed = [COLS[:5]] + [[k + 1, 2, 2, 0, 'aranazo'] for k in range(8)]
@@ -411,6 +428,39 @@ def prueba(t):
     t.check('atenuacion: la celda objetivo pierde mas que sus vecinas',
             caida(ev['celda']) > max(caida(x) for x in vec) >= 0,
             '%.3f / %.3f' % (caida(ev['celda']), max(caida(x) for x in vec)))
+    # velocidad
+    cv = dict(cd)
+    cv['erosion_vel'], cv['vel_ref'] = 1, 100
+    W9 = m.new_world()
+    for k in range(30):
+        m.note_on(W9, cv, 1, 64, 100, 0.0)
+        m.note_on(W9, cv, 1, 50, 100, 0.0)
+    W10 = {k_: (list(v) if isinstance(v, list) else v) for k_, v in W9.items()}
+    W10['ero_resto'] = list(W9['ero_resto'])
+    fuerte = m.erosion(W9, cv, 3, 127, 6.0)['notas']   # pad 4: 3 notas a Velref
+    flojo = m.erosion(W10, cv, 3, 40, 6.0)['notas']
+    t.check('con Erosionvel, un golpe fuerte deshace mas notas que uno flojo',
+            fuerte > flojo and abs(m.erosion_notes(cv, 3, 100) - 3) < 1e-9,
+            '%.2f / %.2f notas' % (fuerte, flojo))
+    t.check('el minimo (una nota) se respeta con velocidad 1',
+            m.erosion_notes(cv, 15, 1) == 1.0 and m.erosion_notes(cv, 1, 1) == 1.0)
+    cv0 = dict(cv)
+    cv0['erosion_vel'] = 0
+    t.check('sin Erosionvel la velocidad no cambia nada',
+            m.erosion_notes(cv0, 3, 1) == 3 and m.erosion_notes(cv0, 3, 127) == 3)
+    totales = []
+    for r_ in range(2):
+        Wn = m.new_world()
+        for k in range(20):
+            m.note_on(Wn, cv, 1, 64, 100, 0.0)
+        quitado = 0
+        for k in range(8):
+            quitado += m.erosion(Wn, cv, 3, 61, 7.0 + k)['quitado']   # 61 % 3 = 1: sin desplazar
+        totales.append(quitado)
+    r60 = m.erosion_notes(cv, 3, 61)
+    t.check('N golpes iguales deshacen siempre lo mismo, sin perder fracciones',
+            totales[0] == totales[1] and totales[0] >= int(8 * r60 * 1.0),
+            '%s notas (%.2f por golpe en la celda)' % (totales, r60))
     # 7. sin balizas
     t.check('ninguna baliza en escena ni en CHOP_NAMES',
             all(base.op(nm) is None for nm in ('baliza', 'baliza_chop', 'baliza2', 'i_baliza2',

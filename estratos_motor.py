@@ -19,7 +19,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v18'
+MOTOR_VERSION = 'motor v19'
 
 import math
 
@@ -114,6 +114,7 @@ DEFAULT_CFG = dict(
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
     balizas_drum=1, luz_drum=1.0, vida_baliza_drum=0.8, luz_seq=1,
+    erosion_vel=1, vel_ref=100,
     colores_drum=COLORES_DRUM,
 )
 
@@ -952,6 +953,18 @@ def degrade(W, cfg, i, k):
     return removed
 
 
+def erosion_notes(cfg, red, vel):
+    """Notas que deshace un golpe en su celda. Con Erosionvel, la reduccion
+    de la tabla vale a la velocidad Velref (100) y escala en proporcion
+    (x1,27 a 127). Minimo: una nota (o la reduccion, si es menor), para que
+    un golpe flojo siempre deje huella. Sin Erosionvel, la de la tabla."""
+    red = float(red)
+    if not cfg.get('erosion_vel', 0) or red <= 0:
+        return red
+    f = max(0.0, float(vel)) / max(1.0, float(cfg.get('vel_ref', 100)))
+    return max(min(red, 1.0), red * f)
+
+
 def erosion(W, cfg, pad, vel, now):
     perf = cfg['perfiles']
     pad = int(pad) % len(perf)
@@ -963,9 +976,10 @@ def erosion(W, cfg, pad, vel, now):
     removed = 0
     W['t'] = W['t'] if W['t'] is not None else now
     resto = W['ero_resto']
+    notas = erosion_notes(cfg, red, vel)
     for c, d in rings(target, rad_eff):
         w = ATENUACION ** d             # 1 en la celda, 1/2 el primer anillo, 1/4...
-        x = red * w + resto[c]
+        x = notas * w + resto[c]
         k = int(math.floor(x + 1e-9))
         resto[c] = x - k
         removed += degrade(W, cfg, c, k)
@@ -974,7 +988,7 @@ def erosion(W, cfg, pad, vel, now):
     W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
     tipos = cfg.get('tipos') or []
     tipo = tipos[pad] if pad < len(tipos) and tipos[pad] else tipo_perfil(red, rad, depth)
-    ev = dict(pad=pad, red=red, rad=rad_eff, prof=depth, celda=target, dens=dens,
+    ev = dict(pad=pad, red=red, notas=notas, rad=rad_eff, prof=depth, celda=target, dens=dens,
               doble=over, quitado=removed, t=now, tipo=tipo)
     W['ev']['erosion'] = ev
     if cfg['nivel'] >= 9:
@@ -1645,6 +1659,8 @@ def cfg():
         c['colores_drum'] = _colores_drum()
         c.update(balizas_drum=int(_p('Balizasdrum', True)),
                  luz_drum=_p('Luzdrum', c['luz_drum']),
+                 erosion_vel=int(_p('Erosionvel', True)),
+                 vel_ref=_p('Velref', c['vel_ref']),
                  vida_baliza_drum=_p('Vidabalizadrum', c['vida_baliza_drum']))
     return c
 
@@ -2097,9 +2113,9 @@ def _legend():
         dens = occupied(W) / float(N)
         flag = '  x%g' % c['rad_mult'] if dens > c['dens_umbral'] else ''
         if e:
-            lines.append('  EROSION  pad %d   %s   -%d notas   radio %d   celda %d   densidad %d%%%s'
-                         % (e['pad'] + 1, e.get('tipo', '-'), e['red'], e['rad'], e['celda'],
-                            int(dens * 100), flag))
+            lines.append('  EROSION  pad %d   %s   -%.1f notas   radio %d   celda %d   densidad %d%%%s'
+                         % (e['pad'] + 1, e.get('tipo', '-'), e.get('notas', e['red']), e['rad'],
+                            e['celda'], int(dens * 100), flag))
         else:
             lines.append('  EROSION  -   densidad %d%%%s' % (int(dens * 100), flag))
     if lvl >= 8:
