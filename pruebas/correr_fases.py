@@ -2,7 +2,7 @@
 Ejecuta los scripts de fase en un TouchDesigner simulado y resume lo que
 dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
-    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 12
+    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 13
     python3 pruebas/correr_fases.py -v         # con todo el Textport
 
 Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
@@ -23,7 +23,8 @@ import td_simulado  # noqa: E402
 
 FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_especies.py',
          'fase6_ciclo.py', 'fase7_erosion.py', 'fase8_conchas.py', 'fase9_arqueologia.py',
-         'fase10_direccion.py', 'fase11_piel.py', 'fase12_moduladores.py']
+         'fase10_direccion.py', 'fase11_piel.py', 'fase12_moduladores.py',
+         'fase13_tejido.py']
 
 
 def correr(sim, archivo, verbose=False):

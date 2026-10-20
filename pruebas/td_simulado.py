@@ -37,7 +37,7 @@ _DEFAULTS = {'sx': 1.0, 'sy': 1.0, 'sz': 1.0, 'scale': 1.0, 'rord': 'xyz', 'xord
              'instancerord': 'xyz', 'instancexord': 'srt', 'instancecolormode': 'multiply',
              'fov': 45.0, 'viewanglemethod': 'horzfov', 'focal': 50.0, 'aperture': 36.0,
              'near': 0.1, 'far': 1000.0, 'dimmer': 1.0, 'render': True, 'instancing': False,
-             'lightcolorr': 1.0, 'lightcolorg': 1.0, 'lightcolorb': 1.0,
+             'cr': 1.0, 'cg': 1.0, 'cb': 1.0,
              'resolutionw': 1280, 'resolutionh': 720}
 STRICT = {
     'baseCOMP': [],
@@ -50,8 +50,7 @@ STRICT = {
         'instancecolormode'],
     'cameraCOMP': list(_XFORM) + ['xord', 'rord', 'fov', 'viewanglemethod', 'focal',
                                   'aperture', 'near', 'far', 'projection'],
-    'lightCOMP': list(_XFORM) + ['xord', 'rord', 'dimmer', 'lightcolorr', 'lightcolorg',
-                                 'lightcolorb', 'lighttype'],
+    'lightCOMP': list(_XFORM) + ['xord', 'rord', 'dimmer', 'cr', 'cg', 'cb', 'lighttype'],
 }
 
 

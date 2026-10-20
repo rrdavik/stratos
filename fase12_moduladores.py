@@ -45,7 +45,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v1  (moduladores: velocidad -> material por shader, gate -> vigor y plantas)'
+VERSION = 'fase12 v2  (moduladores: velocidad -> material por shader, gate -> vigor y plantas)'
 banner(VERSION)
 
 base = require_base(12)
@@ -141,6 +141,19 @@ def _prueba(t, m):
             sh[0] is not None and sh[1] is not None and sh[0].text == PIEL_VERTEX
             and sh[1].text == PIEL_PIXEL and all(x is not None for x in mats)
             and all(str(x.par.vec0name.eval()) == 'uFamilia' for x in mats if x is not None))
+    malos = []
+    for x in mats:
+        for q in range(len(PIEL_UNIFORMES)):
+            for comp in 'xyzw':
+                p = getattr(x.par, 'vec%dvalue%s' % (q, comp), None) if x is not None else None
+                try:
+                    float(p.eval())
+                except Exception as e:
+                    malos.append('%s.vec%dvalue%s: %s' % (x.name if x is not None else '?', q, comp, e))
+    col = [m.luz_color(nm, k) for nm in ('luz_principal', 'luz_relleno') for k in range(3)]
+    t.check('los uniformes del shader (luces, familia) se evaluan sin error',
+            not malos and all(v > 0 for v in col), '; '.join(malos[:2]) or
+            'color x dimmer %s' % ' '.join('%.2f' % v for v in col))
     # 2. velocidad -> material: Sembrar con Velprueba 10 y 120 (por el camino real)
     nota = int(base.par.Nota)
     i = m.note_cell(nota)

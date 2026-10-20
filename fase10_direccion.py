@@ -37,7 +37,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v6  (camara de globo por defecto; superficie como modo; paleta de generaciones)'
+VERSION = 'fase10 v7  (camara de globo por defecto; superficie como modo; paleta de generaciones)'
 banner(VERSION)
 
 base = require_base(10)
@@ -83,11 +83,12 @@ setp(luz, 'tx', 0.0)
 setexpr(luz, 'ty', "parent().op('motor').module.surface_radius(absTime.frame) * 2.0 + 14.0")
 setp(luz, 'tz', 4.0)
 setp(luz, 'dimmer', 1.15)
-setp(luz, 'lightcolorr', 0.82)
-setp(luz, 'lightcolorg', 0.90)
-setp(luz, 'lightcolorb', 1.00)
+frias = color_luz(luz, (0.82, 0.90, 1.00))
 rel = base.op('luz_relleno')
 setp(rel, 'dimmer', 0.16)
+frias = color_luz(rel, (0.35, 0.55, 0.80)) and frias
+if not frias:
+    info('no encontre el color de las luces (cr cg cb): luz_principal y luz_relleno saldran blancas')
 # el relleno se aleja con el planeta (antes quedaba dentro al pasar de ~17 de
 # radio) y alumbra desde abajo y por delante: la cara que ve la camara de globo
 RELLENO = "parent().op('motor').module.cam('Re', 0, absTime.frame) * 2.0 + 14.0"

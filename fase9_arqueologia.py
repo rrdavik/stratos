@@ -44,7 +44,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v7  (cortes en la columna de cada celda, tope por mundo, cicatriz que se funde con su concha)'
+VERSION = 'fase9 v8  (cortes en la columna de cada celda, tope por mundo, cicatriz que se funde con su concha)'
 banner(VERSION)
 
 base = require_base(9)
@@ -60,10 +60,11 @@ setmenu(luz, ['lighttype'], ['point'], 0)
 for k, ax in enumerate(('tx', 'ty', 'tz')):
     setexpr(luz, ax, "parent().op('motor').module.flash_value(%d, absTime.frame)" % k)
 setexpr(luz, 'dimmer', "parent().op('motor').module.flash_value(3, absTime.frame)")
-for k, ch in enumerate(('lightcolorr', 'lightcolorg', 'lightcolorb')):
-    if not setexpr(luz, ch, "parent().op('motor').module.flash_value(%d, absTime.frame)" % (4 + k)):
-        setp(luz, ch, (0.80, 0.95, 1.00)[k])
-ok('luz_destello: golpe de luz sobre cada destruccion, del color de su pad, sigue el giro')
+if color_luz_expr(luz, ["parent().op('motor').module.flash_value(%d, absTime.frame)" % (4 + k)
+                         for k in range(3)]):
+    ok('luz_destello: golpe de luz sobre cada destruccion, del color de su pad, sigue el giro')
+else:
+    info('luz_destello: no encontre su color (cr cg cb); el destello saldra blanco')
 
 ok('luz del SEQ1: blanca desde esta fase (el cian queda para lo recien expuesto)')
 set_render(base)
