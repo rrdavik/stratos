@@ -24,6 +24,9 @@ import types
 CARPETA_TD = 'C:/Users/DareDave/Downloads/est'
 
 ROT_ORDERS = ['xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx']
+# Parametros que apuntan a un operador: en TouchDesigner, eval() devuelve el
+# operador (que se escribe como su ruta completa), no el texto.
+OP_PARS = ('material', 'instanceop', 'lookat')
 XFORM_ORDERS = ['srt', 'str', 'rst', 'rts', 'tsr', 'trs']
 
 _XFORM = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'px', 'py', 'pz', 'scale',
@@ -116,9 +119,12 @@ class Par(object):
         self.val = self.menuNames[int(i)]
 
     def eval(self):
-        if self.expr:
-            return self.owner._eval_expr(self.expr, self)
-        return self._val
+        v = self.owner._eval_expr(self.expr, self) if self.expr else self._val
+        if self.name in OP_PARS and not self.custom:
+            if not v:
+                return None
+            return self.owner._op_hermano(str(v)) or self.owner.op(str(v))
+        return v
 
     def pulse(self):
         self.owner._pulsado(self)
@@ -323,6 +329,9 @@ class OP(object):
 
     def __repr__(self):
         return '<%s %s>' % (self.OPType, self.path)
+
+    def __str__(self):
+        return self.path
 
     # nombre y ruta
     @property

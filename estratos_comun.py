@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v20'
+VERSION_COMUN = 'comun v21'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -201,6 +201,14 @@ def setmenu(o, names, wanted, index=None):
             except Exception:
                 pass
     return False
+
+
+def nombre_op(v):
+    """Nombre del operador al que apunta un parametro de tipo OP: eval()
+    devuelve el operador (su ruta completa), no el texto que se escribio."""
+    if v is None:
+        return ''
+    return getattr(v, 'name', None) or str(v).rstrip('/').rsplit('/', 1)[-1]
 
 
 def has_par(o, name):
