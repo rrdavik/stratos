@@ -100,7 +100,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v9  (erosion en notas y con la velocidad, perfiles del usuario, el golpe se ve como una nota)'
+VERSION = 'fase7 v10  (erosion en notas y con la velocidad, perfiles del usuario, el golpe se ve como una nota)'
 banner(VERSION)
 
 base = require_base(7)
@@ -310,8 +310,11 @@ def prueba(t):
     redondo = lambda col: tuple(round(v, 3) for v in col)
 
     def tinte_formacion(Wx, cx, now, celda):
-        """Color de la pieza principal de la formacion de la celda."""
+        """Color de la pieza principal de la formacion de la celda (en caja:
+        desde la fase 11 la formacion es un modelo del tema)."""
         Wx['vh'] = list(Wx['h'])
+        cx = dict(cx)
+        cx['nivel'] = min(cx['nivel'], 10)
         inst = m.build_instances(Wx, cx, now)
         nn = m.normal_i(celda)
         mejor = None

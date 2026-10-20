@@ -1,6 +1,6 @@
 """
 =============================================================================
-ESTRATOS - PIEZAS COMUNES DE LAS FASES 3 A 10
+ESTRATOS - PIEZAS COMUNES DE LAS FASES 3 A 11
 =============================================================================
 No se ejecuta solo: lo carga cada script de fase. Contiene:
 
@@ -11,6 +11,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
     fase deja siempre el motor al dia. Tambien retira las balizas de
     versiones anteriores (baliza, baliza2, balizas_drum, luz_drum).
   - make_instanced(): un Geometry COMP alimentado por un Script CHOP del motor
+    (una caja, una esfera o, desde la fase 11, un modelo del catalogo)
   - set_render(), set_legend(), autoprueba
 =============================================================================
 """
@@ -18,11 +19,12 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v16'
+VERSION_COMUN = 'comun v17'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'luz_celda', 'luz_conchas']   # la capa aditiva, al final
+                'coronas', 'particulas', 'luz_celda', 'luz_conchas']   # la capa aditiva, al final
+PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
 
@@ -421,7 +423,8 @@ def onValueChange(par, prev):
 '''
 
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
-# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_celda).
+# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_celda;
+# desde la fase 11, i_particulas y un i_mod_... por modelo del catalogo).
 
 CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b']
 DUMMY = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
@@ -952,10 +955,11 @@ def set_additive(mat):
     return bool(a and b and d)
 
 
-def make_instanced(base, name, x, y, mat, sop='box'):
+def make_instanced(base, name, x, y, mat, sop='box', quiet=False):
     """Geometry COMP 'name' + Script CHOP 'i_name' que pide al motor sus
     instancias. Una caja de 1x1x1 con la base en y=0 (o una esfera de radio
-    1), escalada, girada y coloreada por instancia."""
+    1, o con sop='select:<ruta>' el SOP de un modelo), escalada, girada y
+    coloreada por instancia."""
     chop = fresh(base, 'scriptCHOP', 'i_' + name, x - 220, y)
     setp_any(chop, ['callbacks', 'callbackdat', 'dat'], 'formas_callbacks')
     geo = fresh(base, 'geometryCOMP', name, x, y)
@@ -965,7 +969,12 @@ def make_instanced(base, name, x, y, mat, sop='box'):
             k.display = False
         except Exception:
             pass
-    if sop == 'sphere':
+    if sop.startswith('select:'):
+        s = mk(geo, 'selectSOP', 'modelo', 0, 0)
+        if not setp_any(s, ['sop', 'sops', 'soppath'], sop.split(':', 1)[1]):
+            info('%s: no encontre el parametro SOP del Select SOP; pon a mano %s'
+                 % (name, sop.split(':', 1)[1]))
+    elif sop == 'sphere':
         s = mk(geo, 'sphereSOP', 'bola', 0, 0)
         for ax in ('radx', 'rady', 'radz'):
             setp(s, ax, 1.0)
@@ -997,18 +1006,27 @@ def make_instanced(base, name, x, y, mat, sop='box'):
         chop.cook(force=True)
     except Exception:
         pass
-    ok('%s: geometria instanciada desde i_%s, gira con el planeta' % (name, name))
+    if not quiet:
+        ok('%s: geometria instanciada desde i_%s, gira con el planeta' % (name, name))
     return geo
 
 
 def set_render(base):
     names = [n for n in RENDER_ORDER if base.op(n) is not None]
+    piel = sorted(o.name for o in base.children if o.name.startswith(PIEL_PREFIJO)
+                  and str(getattr(o, 'OPType', '')) == 'geometryCOMP')
+    if piel:                         # los modelos de la fase 11, tras las formas
+        k = names.index('coronas') if 'coronas' in names else len(names)
+        names = names[:k] + piel + names[k:]
     lights = [n for n in LIGHT_ORDER if base.op(n) is not None]
     r = base.op('render')
     a = setp(r, 'geometry', ' '.join(names))
     b = setp(r, 'lights', ' '.join(lights))
     if a:
-        ok('render dibuja: %s' % ' '.join(names))
+        resto = [n for n in names if not n.startswith(PIEL_PREFIJO)]
+        ok('render dibuja: %s' % ' '.join(resto)
+           + ('  y %d geometrias de modelos (mod_...)' % (len(names) - len(resto))
+              if len(resto) < len(names) else ''))
     else:
         fail('no pude fijar la geometria del render: pon a mano "%s"' % ' '.join(names))
     return a and b

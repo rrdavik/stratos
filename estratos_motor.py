@@ -7,7 +7,9 @@
 # Contiene TODA la logica del mundo, en dos bloques:
 #
 #   1. NUCLEO     Python puro: ocupacion, desbordamiento, especies, ciclo,
-#                 erosion, conchas y cortes. No toca TouchDesigner.
+#                 erosion, conchas, cortes y la piel tematica (fase 11:
+#                 catalogo de modelos, clusters, compuestos y transitos).
+#                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -19,7 +21,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v26'
+MOTOR_VERSION = 'motor v27'
 
 import math
 
@@ -120,6 +122,9 @@ DEFAULT_CFG = dict(
     luz_conchas=1, luz_conchas_pulso=0.35, luz_conchas_reposo=0.10, luz_conchas_alcance=4,
     erosion_vel=1, vel_ref=100,
     colores_drum=COLORES_DRUM,
+    # fase 11: la piel
+    tema=0, peso_vecina=0.5, umbral_vecindad=4.0, min_cluster=2, caos=3.91, max_piezas=6,
+    avance=0, pasos_etapa=2, rebote=0.2, catalogo=None,
 )
 
 
@@ -420,6 +425,20 @@ def new_world():
         esperando=False,        # pasada la edad maxima, sin territorio ocupado
         ciclo_t0=None,          # instante en que empezo el mundo actual
         marcha=False,           # el reloj del ciclo avanza
+        # la piel (fase 11): transitos de cada celda
+        et_f=[0] * N,           # etapa visible de la cadena de fusion
+        et_c=[0] * N,           # etapa visible de la cadena de coronacion
+        ant_et_f=[0] * N,       # la etapa anterior (para animar el paso)
+        ant_et_c=[0] * N,
+        t_et_f=[-99.0] * N,     # cuando cambio la etapa
+        t_et_c=[-99.0] * N,
+        t_gate=[-99.0] * N,     # ultima nota en la celda
+        t_nac=[-99.0] * N,      # cuando nacio la formacion (rebote)
+        h_obj=[0.0] * N,        # altura que persigue el stop-motion
+        h0=[0.0] * N,           # altura visible al empezar el tramo
+        t_h=[-99.0] * N,        # cuando empezo el tramo
+        paso=0.125,             # duracion de un paso al tempo actual
+        piel={},                # resumen de la piel para la leyenda
         aviso='',
         ev={},
         t=None,
@@ -693,6 +712,7 @@ def grow(W, cfg, i, s, vel, now):
         W['par'][i] = -1
         W['h'][i] = cfg['seed_frac'] * lim
         W['huella'][i] = 0.0
+        W['t_nac'][i] = now
         return dict(estado='semilla', inc=0.0, celda=i, trigger=True)
 
     W['lat_s'][i] = s
@@ -727,6 +747,7 @@ def overflow(W, cfg, i, s, vel, now):
         W['vel'][j] = int(vel)
         W['h'][j] = cfg['seed_frac'] * lim
         W['huella'][j] = 0.0
+        W['t_nac'][j] = now
         kind = 'satelite nuevo'
     elif W['par'][j] == i:
         W['occ'][j] = o + 1
@@ -778,6 +799,7 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
     W.setdefault('terr', {})[i] = W.get('bar_n', 0)
     res = grow(W, cfg, i, s, vel, now)
+    gate_piel(W, cfg, i, now)           # fase 11: el gate adelanta las obras
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
     W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now,
                              carga=W['carga'][i], coste=cost(cfg, W['occ'][i]))
@@ -1307,6 +1329,7 @@ def end_cycle(W, cfg, now, bars=None):
     W['ev']['ciclo'] = dict(t=now, n=W.get('ciclo_n', 1))
     if cfg['nivel'] < 8:
         return False
+    cerrar_obras(W, cfg)                # los transitos se cierran antes de hornear
     r_in = top_radius(W, cfg)
     g = shell_grosor(cfg, bars)
     # cada celda deposita su loseta sobre lo que le queda debajo: una
@@ -1340,6 +1363,7 @@ def end_cycle(W, cfg, now, bars=None):
         W['vh'][i] = 0.0           # lo heredado vuelve a brotar de la superficie
         W['huella'][i] = 0.0
     W['pend'] = {}
+    cerrar_obras(W, cfg)                # y lo heredado empieza sin obras a medias
     W['dirty'] = True
     return True
 
@@ -1372,9 +1396,13 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
     dt = 0.0 if last is None else max(0.0, min(0.25, now - last))
     W['t'] = now
     a = 1.0 - math.exp(-dt / 0.12) if dt > 0 else 0.0
+    piel = cfg['nivel'] >= 11
+    W['paso'] = step_dur(cfg, tempo)
     for i in range(N):
         h, vh = W['h'][i], W['vh'][i]
-        if vh != h:
+        if piel:                    # fase 11: la altura, a saltos de stop-motion
+            W['vh'][i] = vh = vh_stop(W, i, now, W['paso'])
+        elif vh != h:
             vh += (h - vh) * a
             if abs(h - vh) < 1e-4:
                 vh = h
@@ -1392,6 +1420,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
     if cfg['nivel'] >= 6:
         out['burst'] = _resolve_burst(W, cfg, now, playing)
         out['ciclo'] = cycle_tick(W, cfg, now, dt, tempo, playing)
+    if piel:
+        tick_piel(W, cfg, now, W['paso'], playing)
     giro_step(W, cfg, dt, tempo)
     return out
 
@@ -1529,6 +1559,11 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], luz_celda=[],
                luz_conchas=[])
     R = top_radius(W, cfg)
+    piel = lvl >= 11
+    if piel:                        # fase 11: todas las geometrias de los modelos, vacias
+        for g, _, _ in geometrias_piel():
+            out[g] = []
+        out['particulas'] = []
     for i in range(N):
         vh = W['vh'][i]
         own = W['own'][i]
@@ -1540,6 +1575,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
             if lvl >= 7 and W['huella'][i] > 0 and W['occ'][i] == 0:
                 out['formas_porosas'].append(
                     _row(_add(p0, n, 0.01), n, 0.45 * min(cl, cw), 0.03, 0.45 * cl, COL_HUELLA))
+            continue
+        if piel:                    # las formaciones son modelos del tema (build_piel)
             continue
         pulido = W['vel'][i] >= cfg['vel_umbral']
         lst = out['formas_pulidas'] if pulido else out['formas_porosas']
@@ -1594,6 +1631,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                     out['coronas'].append(_row(top, n, 0.03 * kw * cl, 0.90 * kl * lim,
                                                0.03 * kw * cl, COL_CROWN))
                     out['coronas'].append(_row(top, n, 0.20 * cl, 0.05 * lim, 0.20 * cl, COL_CROWN))
+    if piel:
+        W['piel'] = build_piel(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -1863,6 +1902,1117 @@ def wobble_step(st, dt, on, paused, amp, period, fade=3.0):
     return s * amp * math.sin(2 * math.pi * st['ph'])
 
 
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la piel (fase 11): los modelos del catalogo
+# -----------------------------------------------------------------------------
+# Cada modelo es una lista de piezas primitivas en su espacio local: +Y
+# arriba (la normal de la celda), la base en y = 0 y el alto ~1. Una pieza
+# es ('caja' o 'hexa', centro x y z, tamano x y z, giro x y z en grados,
+# orden xyz). En TouchDesigner cada pieza es un Transform SOP sobre una caja
+# o un prisma hexagonal (Tube SOP de 6 lados) unidad; el modelo, su Merge.
+# Aqui solo hay datos: que modelo va en cada sitio lo decide el motor.
+#
+# La vegetacion sale de un L-system con angulos cuantizados a 30 grados; el
+# basalto, de prismas hexagonales; la ciudad, de pilas de cajas.
+
+def _rot_xyz(rx, ry, rz):
+    """Matriz (por filas) de Rz Ry Rx: el orden xyz de TouchDesigner (primero
+    X, luego Y, luego Z)."""
+    a, b, c = math.radians(rx), math.radians(ry), math.radians(rz)
+    ca, sa, cb, sb, cc, sc = math.cos(a), math.sin(a), math.cos(b), math.sin(b), math.cos(c), math.sin(c)
+    return ((cb * cc, sa * sb * cc - ca * sc, ca * sb * cc + sa * sc),
+            (cb * sc, sa * sb * sc + ca * cc, ca * sb * sc - sa * cc),
+            (-sb, sa * cb, ca * cb))
+
+
+def _euler_xyz(X, Y, Z):
+    """(rx, ry, rz) en grados, orden xyz, que llevan los ejes locales x, y, z
+    a los vectores X, Y, Z (ortonormales, a derechas)."""
+    sb = max(-1.0, min(1.0, -X[2]))
+    b = math.asin(sb)
+    if abs(math.cos(b)) > 1e-6:
+        a = math.atan2(Y[2], Z[2])
+        c = math.atan2(X[1], X[0])
+    else:
+        a = math.atan2(-Z[1], Y[1])
+        c = 0.0
+    return math.degrees(a), math.degrees(b), math.degrees(c)
+
+
+def _aplicar(M, v):
+    return (M[0][0] * v[0] + M[0][1] * v[1] + M[0][2] * v[2],
+            M[1][0] * v[0] + M[1][1] * v[1] + M[1][2] * v[2],
+            M[2][0] * v[0] + M[2][1] * v[1] + M[2][2] * v[2])
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _dot(a, b):
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _girar_eje(v, eje, grados):
+    """Gira v alrededor del eje unitario (Rodrigues)."""
+    t = math.radians(grados)
+    c, s = math.cos(t), math.sin(t)
+    k = _dot(eje, v) * (1 - c)
+    x = _cross(eje, v)
+    return (v[0] * c + x[0] * s + eje[0] * k, v[1] * c + x[1] * s + eje[1] * k,
+            v[2] * c + x[2] * s + eje[2] * k)
+
+
+def _caja(cx, cy, cz, sx, sy, sz, rx=0.0, ry=0.0, rz=0.0):
+    return ('caja', cx, cy, cz, sx, sy, sz, rx, ry, rz)
+
+
+def _hexa(cx, cy, cz, d, h, rx=0.0, ry=0.0, rz=0.0):
+    return ('hexa', cx, cy, cz, d, h, d, rx, ry, rz)
+
+
+def _losa(x0, x1, y0, y1, z0, z1, forma='caja'):
+    """Pieza recta entre dos esquinas (sin giro)."""
+    return (forma, (x0 + x1) / 2.0, (y0 + y1) / 2.0, (z0 + z1) / 2.0,
+            abs(x1 - x0), abs(y1 - y0), abs(z1 - z0), 0.0, 0.0, 0.0)
+
+
+def _tramo(a, b, w, forma='caja'):
+    """Pieza de seccion w que va del punto a al b."""
+    d = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    l = math.sqrt(_dot(d, d)) or 1e-6
+    rx, ry = orient(_mul(d, 1.0 / l))
+    c = _mul(_add(a, b), 0.5)
+    return (forma, c[0], c[1], c[2], w, l, w, rx, ry, 0.0)
+
+
+def _esquinas(p):
+    """Las 8 esquinas de una pieza (el prisma, como su caja)."""
+    M = _rot_xyz(p[7], p[8], p[9])
+    out = []
+    for sx in (-0.5, 0.5):
+        for sy in (-0.5, 0.5):
+            for sz in (-0.5, 0.5):
+                q = _aplicar(M, (sx * p[4], sy * p[5], sz * p[6]))
+                out.append((p[1] + q[0], p[2] + q[1], p[3] + q[2]))
+    return out
+
+
+def _caja_modelo(prims):
+    """(xmin, xmax, ymin, ymax, zmin, zmax) del modelo."""
+    pts = [q for p in prims for q in _esquinas(p)]
+    return (min(q[0] for q in pts), max(q[0] for q in pts), min(q[1] for q in pts),
+            max(q[1] for q in pts), min(q[2] for q in pts), max(q[2] for q in pts))
+
+
+def _escalar(prims, k, dy=0.0):
+    return [(p[0], p[1] * k, p[2] * k + dy, p[3] * k, p[4] * k, p[5] * k, p[6] * k) + tuple(p[7:])
+            for p in prims]
+
+
+def _a_alto_uno(prims):
+    """Escala uniforme para que el modelo vaya de y = 0 a y = 1."""
+    b = _caja_modelo(prims)
+    k = 1.0 / max(1e-6, b[3] - b[2])
+    return _escalar(prims, k, -b[2] * k)
+
+
+def _encajar(prims, ancho=1.0):
+    """Escala uniforme para que quepa en alto 1 y en una planta de 'ancho'
+    centrada (la base en y = 0)."""
+    b = _caja_modelo(prims)
+    k = min(1.0 / max(1e-6, b[3] - b[2]),
+            0.5 * ancho / max(1e-6, abs(b[0]), abs(b[1]), abs(b[4]), abs(b[5])))
+    return _escalar(prims, k, -b[2] * k)
+
+
+# --- el L-system de la vegetacion (angulos de 30 grados) ---------------------
+#   F  tramo de tronco o rama        f  avanza sin dibujar
+#   +  -  gira 30 grados (a un lado, al otro)
+#   &  ^  cabecea 30 grados (se abre, se cierra)
+#   /  \  rueda 120 grados (reparte las ramas alrededor)
+#   [  ]  empieza y acaba una rama (mas corta y mas fina)
+#   C     copa (prisma hexagonal)    H  hoja angular (lamina)
+#   D     dosel (copa ancha y plana)
+
+def _lsistema(axioma, reglas, gen):
+    s = axioma
+    for _ in range(int(gen)):
+        s = ''.join(reglas.get(ch, ch) for ch in s)
+    return s
+
+
+def _tortuga(cadena, largo=0.3, ancho=0.07, copa=0.32, k_largo=0.72, k_ancho=0.66):
+    pos = (0.0, 0.0, 0.0)
+    X, H, Z = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
+    pila, prims = [], []
+    L, Wd, C = largo, ancho, copa
+    for ch in cadena:
+        if ch in 'Ff':
+            b = _add(pos, H, L)
+            if ch == 'F':
+                prims.append(_tramo(pos, b, Wd))
+            pos = b
+        elif ch in '+-':
+            g = 30.0 if ch == '+' else -30.0
+            H, X = _girar_eje(H, Z, g), _girar_eje(X, Z, g)
+        elif ch in '&^':
+            g = 30.0 if ch == '&' else -30.0
+            H, Z = _girar_eje(H, X, g), _girar_eje(Z, X, g)
+        elif ch in '/\\':
+            g = 120.0 if ch == '/' else -120.0
+            X, Z = _girar_eje(X, H, g), _girar_eje(Z, H, g)
+        elif ch == '[':
+            pila.append((pos, X, H, Z, L, Wd, C))
+            L, Wd, C = L * k_largo, Wd * k_ancho, C * 0.85
+        elif ch == ']':
+            pos, X, H, Z, L, Wd, C = pila.pop()
+        elif ch in 'CD':
+            k = (1.0, 0.62) if ch == 'C' else (1.7, 0.30)
+            c = _add(pos, (0.0, 1.0, 0.0), C * k[1] * 0.25)
+            yaw = math.degrees(math.atan2(H[2], H[0])) // 30 * 30
+            prims.append(_hexa(c[0], c[1], c[2], C * k[0], C * k[1], 0.0, yaw, 0.0))
+        elif ch == 'H':
+            c = _add(pos, H, L * 0.5)
+            rx, ry, rz = _euler_xyz(X, H, Z)
+            prims.append(_caja(c[0], c[1], c[2], L * 0.8, L * 1.1, Wd * 0.6, rx, ry, rz))
+    return prims
+
+
+def _arbol(axioma, reglas, gen, **kw):
+    return _a_alto_uno(_tortuga(_lsistema(axioma, reglas, gen), **kw))
+
+
+# --- basalto: columnas hexagonales en panal ----------------------------------
+
+PANAL = [(0.0, 0.0)] + [(math.cos(math.radians(60 * k + 30)), math.sin(math.radians(60 * k + 30)))
+                        for k in range(6)]
+
+
+def _columnas(alturas, d=0.26, sep=None, tapa=None):
+    """Columnas de basalto en panal: la central y su anillo de 6. alturas[k]
+    es la de la columna k (0 o menos: no hay). tapa: losa sobre las altas."""
+    sep = d * 0.87 if sep is None else sep
+    out = []
+    for (x, z), h in zip(PANAL, alturas):
+        if h > 0:
+            out.append(_hexa(x * sep, h / 2.0, z * sep, d, h))
+    if tapa:
+        out.append(_hexa(0.0, tapa - 0.04, 0.0, d * 2.9, 0.08))
+    return out
+
+
+# --- ciudad: pilas de cajas ---------------------------------------------------
+
+def _plantas(x, z, w, d, n, h=0.25, losa=0.035, y0=0.0, sobra=0.06):
+    """Torre de n plantas: cuerpo y losa que sobresale en cada una."""
+    out = []
+    for k in range(int(n)):
+        y = y0 + k * h
+        out.append(_losa(x - w / 2, x + w / 2, y, y + h - losa, z - d / 2, z + d / 2))
+        out.append(_losa(x - w / 2 - sobra / 2, x + w / 2 + sobra / 2, y + h - losa, y + h,
+                         z - d / 2 - sobra / 2, z + d / 2 + sobra / 2))
+    return out
+
+
+def _modelos():
+    M = {}
+    # ------------------------------------------------------------- vegetacion
+    hoja = dict(largo=0.30, ancho=0.05)
+    M['veg_brote'] = _a_alto_uno(_tortuga('F[&&H]/[&&H]/[&&H]F[&H]/[&H]/[&H]', **hoja))
+    M['veg_brote2'] = _a_alto_uno(_tortuga('F[&&&H]/[&&H]/[&&H]F[&H]', **hoja))
+    copa = dict(largo=0.30, ancho=0.08, copa=0.50)
+    M['veg_arbol'] = _arbol('FA', {'A': '[&&FC]/[&&FC]/[&&FC]FC'}, 1, **copa)
+    M['veg_arboleda'] = _arbol('FA', {'A': '[&&FA]/[&&FA]/[&FA]FC'}, 2, largo=0.34, ancho=0.09,
+                               copa=0.55)
+    M['veg_bosque'] = _arbol('FFA', {'A': '[&&FD]/[&&FD]/[&&FD]FD'}, 1, largo=0.30, ancho=0.09,
+                             copa=0.50)
+    M['veg_madre'] = _arbol('FFFFA', {'A': '[&&FA]/[&&FA]/[&&FA]FD'}, 3, largo=0.40, ancho=0.15,
+                            copa=0.66, k_largo=0.68)
+    M['veg_prot1'] = _arbol('FA', {'A': '[&&FA]/[&&FA]/[&&FA]C'}, 2, largo=0.36, ancho=0.10, copa=0.58)
+    M['veg_prot2'] = _arbol('FFA', {'A': '[&&FA]/[&&FA]/[&&FA]FC'}, 2, largo=0.38, ancho=0.11, copa=0.70)
+    M['veg_prot3'] = _arbol('FFA', {'A': '[&&FA]/[&&FA]/[&&FA]FD'}, 3, largo=0.40, ancho=0.12,
+                            copa=0.62, k_largo=0.68)
+    # el dosel: copas anchas y planas de la celda a la vecina (z de 0 a 1)
+    M['veg_dosel'] = [_hexa(0.0, 0.5, 0.18, 0.85, 1.0), _hexa(0.08, 0.42, 0.52, 0.80, 0.84, 0.0, 30.0),
+                      _hexa(-0.06, 0.55, 0.84, 0.82, 0.9)]
+    # bosque sobre terrazas de basalto (el relieve coloniza la vegetacion)
+    M['veg_hib'] = [_hexa(0.0, 0.08, 0.0, 1.0, 0.16), _hexa(0.10, 0.22, -0.08, 0.7, 0.14, 0.0, 30.0),
+                    _hexa(-0.12, 0.34, 0.10, 0.45, 0.12)]
+    # --------------------------------------------------------------- relieve
+    M['rel_columna'] = _columnas([1.0], d=0.36)
+    M['rel_columna2'] = _columnas([1.0, 0.7, 0, 0, 0.55], d=0.30)
+    M['rel_columnas'] = _columnas([1.0, 0.85, 0.7, 0.55, 0.9, 0.62, 0.78], d=0.28)
+    M['rel_mesetas'] = _columnas([1.0, 0.72, 0.72, 0.72, 0.72, 0.72, 0.72], d=0.30, tapa=0.72)
+    M['rel_meseta'] = _columnas([1.0] * 7, d=0.32, tapa=1.0)
+    M['rel_cumbre'] = (_columnas([1.0, 0.45, 0.45, 0.45, 0.45, 0.45, 0.45], d=0.34, sep=0.36)
+                       + _columnas([0.72, 0.72, 0.72, 0, 0, 0, 0], d=0.22, sep=0.12)[1:])
+    M['rel_prot1'] = _columnas([1.0, 0.8, 0.9, 0.7, 0.85, 0.75, 0.95], d=0.32, tapa=0.7)
+    M['rel_prot2'] = (_columnas([0.7] * 7, d=0.36, sep=0.34, tapa=0.7)
+                      + [_hexa(0.0, 0.85, 0.0, 0.34, 0.3)])
+    M['rel_prot3'] = (_columnas([0.5] * 7, d=0.40, sep=0.40)
+                      + _columnas([0.8, 0.8, 0.8, 0.8, 0, 0, 0], d=0.26, sep=0.16)
+                      + [_hexa(0.0, 0.9, 0.0, 0.22, 0.2)])
+    M['rel_puente'] = [_hexa(0.0, 0.5, z, 0.62, 1.0, 0.0, 30.0 * k) for k, z in enumerate((0.2, 0.55, 0.88))]
+    # arboles que parten la roca (la vegetacion coloniza el relieve)
+    M['rel_hib'] = _encajar(_tortuga('[&F&FC]/[&&FFC]', largo=0.28, ancho=0.06, copa=0.26), 0.9)
+    # -------------------------------------------------------------- informal
+    techo = lambda x, y, z, w, d, g=30.0: _caja(x, y, z, w * 1.15, 0.05, d * 1.1, 0.0, 0.0, g)
+    M['inf_caseta'] = [_losa(-0.35, 0.35, 0.0, 0.72, -0.3, 0.3), techo(0.0, 0.84, 0.0, 0.62, 0.66, 20.0)]
+    M['inf_caseta2'] = [_losa(-0.3, 0.3, 0.0, 0.8, -0.3, 0.3), _losa(0.3, 0.55, 0.0, 0.5, -0.22, 0.18),
+                        techo(0.0, 0.92, 0.0, 0.6, 0.6, -20.0)]
+    M['inf_anadidos'] = [_losa(-0.36, 0.36, 0.0, 0.42, -0.3, 0.3),
+                         _caja(0.06, 0.6, -0.04, 0.58, 0.34, 0.48, 0.0, 30.0, 0.0),
+                         _caja(-0.08, 0.86, 0.06, 0.40, 0.26, 0.38, 0.0, -30.0, 0.0),
+                         techo(-0.08, 1.0, 0.06, 0.4, 0.38, 20.0)]
+    M['inf_pasarelas'] = (M['inf_anadidos'][:3]
+                          + [_losa(0.25, 0.75, 0.52, 0.56, -0.07, 0.07), _losa(-0.07, 0.07, 0.30, 0.34, 0.25, 0.75),
+                             _caja(0.0, 1.0, 0.0, 0.3, 0.2, 0.3, 0.0, 60.0, 0.0)])
+    M['inf_barrio'] = [_losa(-0.42, -0.02, 0.0, 0.55, -0.4, 0.0), _losa(0.02, 0.42, 0.0, 0.72, -0.38, 0.02),
+                       _losa(-0.4, 0.0, 0.0, 0.85, 0.04, 0.42), _losa(0.04, 0.4, 0.0, 0.45, 0.06, 0.4),
+                       _caja(0.2, 0.86, -0.18, 0.34, 0.28, 0.3, 0.0, 30.0, 0.0),
+                       _caja(-0.2, 1.0, 0.24, 0.26, 0.24, 0.26, 0.0, -30.0, 0.0),
+                       _caja(0.22, 0.56, 0.24, 0.3, 0.22, 0.28, 0.0, 60.0, 0.0)]
+    M['inf_torre'] = [_losa(-0.3, 0.3, 0.0, 0.3, -0.28, 0.28), _caja(0.04, 0.42, 0.0, 0.5, 0.24, 0.46, 0.0, 30.0, 0.0),
+                      _caja(-0.03, 0.62, 0.02, 0.42, 0.2, 0.4, 0.0, -30.0, 0.0),
+                      _caja(0.02, 0.78, 0.0, 0.32, 0.16, 0.32, 0.0, 60.0, 0.0),
+                      _losa(-0.11, -0.09, 0.84, 1.0, -0.06, -0.04), _losa(0.06, 0.08, 0.84, 0.96, 0.05, 0.07),
+                      _caja(0.12, 0.9, -0.08, 0.012, 0.16, 0.012, 0.0, 0.0, 30.0)]
+    M['inf_prot1'] = M['inf_barrio'][:4] + [_caja(0.0, 0.92, 0.0, 0.42, 0.3, 0.42, 0.0, 30.0, 0.0)]
+    M['inf_prot2'] = M['inf_barrio'] + [_losa(-0.42, 0.42, 0.62, 0.66, -0.06, 0.06)]
+    M['inf_prot3'] = (_escalar(M['inf_barrio'], 0.8) + _escalar(M['inf_torre'], 1.0)[1:])
+    M['inf_puente'] = [_losa(-0.5, 0.5, 0.0, 0.25, 0.0, 1.0), _losa(-0.5, -0.4, 0.25, 1.0, 0.0, 1.0),
+                       _losa(0.4, 0.5, 0.25, 1.0, 0.0, 1.0)]
+    # barrio con plantas rectas impuestas (la planificada coloniza la informal)
+    M['inf_hib'] = [_losa(-0.40, 0.30, 0.30, 0.34, -0.30, 0.30), _losa(-0.26, 0.40, 0.62, 0.66, -0.24, 0.30)]
+    # ------------------------------------------------------------ planificada
+    M['pla_bloque'] = _plantas(0.0, 0.0, 0.8, 0.8, 1, h=1.0, losa=0.08)
+    M['pla_bloque2'] = (_plantas(-0.15, 0.0, 0.5, 0.8, 1, h=1.0, losa=0.08)
+                        + _plantas(0.25, -0.2, 0.3, 0.4, 1, h=0.7, losa=0.06))
+    M['pla_plantas'] = _plantas(0.0, 0.0, 0.62, 0.62, 4)
+    M['pla_manzana'] = _plantas(-0.1, -0.08, 0.5, 0.5, 4) + _plantas(0.22, 0.22, 0.36, 0.4, 2, sobra=0.04)
+    M['pla_podio'] = [_losa(-0.48, 0.48, 0.0, 0.22, -0.48, 0.48)] + _plantas(0.0, 0.0, 0.48, 0.48, 3, y0=0.22, h=0.26)
+    M['pla_rascacielos'] = (_plantas(0.0, 0.0, 0.5, 0.5, 2, h=0.2)
+                            + _plantas(0.0, 0.0, 0.40, 0.40, 2, h=0.2, y0=0.4)
+                            + _plantas(0.0, 0.0, 0.30, 0.30, 1, h=0.2, y0=0.8))
+    M['pla_aguja'] = [_losa(-0.12, 0.12, 0.0, 0.12, -0.12, 0.12), _losa(-0.03, 0.03, 0.12, 1.0, -0.03, 0.03)]
+    M['pla_prot1'] = [_losa(-0.48, 0.48, 0.0, 0.18, -0.48, 0.48)] + _plantas(0.0, 0.0, 0.56, 0.56, 3, y0=0.18, h=0.27)
+    M['pla_prot2'] = ([_losa(-0.48, 0.48, 0.0, 0.16, -0.48, 0.48)] + _plantas(-0.12, -0.12, 0.4, 0.4, 4, y0=0.16, h=0.21)
+                      + _plantas(0.22, 0.22, 0.3, 0.3, 2, y0=0.16, h=0.21))
+    M['pla_prot3'] = ([_losa(-0.48, 0.48, 0.0, 0.14, -0.48, 0.48)]
+                      + _plantas(0.0, 0.0, 0.5, 0.5, 2, y0=0.14, h=0.2)
+                      + _plantas(0.0, 0.0, 0.38, 0.38, 2, y0=0.54, h=0.2)
+                      + [_losa(-0.02, 0.02, 0.94, 1.0, -0.02, 0.02)])
+    M['pla_puente'] = [_losa(-0.5, 0.5, 0.0, 1.0, 0.0, 1.0)]
+    # torre invadida por anadidos (la informal coloniza la planificada)
+    M['pla_hib'] = [_caja(0.42, 0.45, 0.0, 0.22, 0.2, 0.3, 0.0, 30.0, 0.0),
+                    _caja(-0.4, 0.7, 0.1, 0.2, 0.16, 0.26, 0.0, -30.0, 0.0),
+                    _caja(0.05, 0.3, 0.42, 0.28, 0.18, 0.2, 0.0, 30.0, 0.0)]
+    # ------------------------------------------------------------ obras de la ciudad
+    M['ciu_valla'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, -0.47), _losa(-0.5, 0.5, 0.0, 1.0, 0.47, 0.5),
+                      _losa(-0.5, -0.47, 0.0, 1.0, -0.47, 0.47), _losa(0.47, 0.5, 0.0, 1.0, -0.47, 0.47)]
+    M['ciu_foso'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
+    M['ciu_andamio'] = ([_losa(x - 0.02, x + 0.02, 0.0, 1.0, z - 0.02, z + 0.02)
+                         for x in (-0.48, 0.48) for z in (-0.48, 0.48)]
+                        + [_losa(-0.5, 0.5, y, y + 0.03, z - 0.02, z + 0.02)
+                           for y in (0.33, 0.66, 0.97) for z in (-0.48, 0.48)])
+    M['ciu_grua'] = [_losa(-0.04, 0.04, 0.0, 1.0, -0.04, 0.04), _losa(-0.25, 0.85, 0.94, 0.98, -0.03, 0.03),
+                     _losa(-0.25, -0.14, 0.86, 0.94, -0.05, 0.05), _losa(0.6, 0.61, 0.72, 0.94, -0.005, 0.005)]
+    for k, prims in M.items():          # ninguno pasa de alto 1 ni baja de 0
+        b = _caja_modelo(prims)
+        if b[2] < -1e-6 or b[3] > 1.0 + 1e-6:
+            M[k] = _a_alto_uno(prims)
+    return M
+
+
+MODELOS = _modelos()
+
+
+# Como se apoya cada modelo en su celda:
+#   ('esbelto', k)  proporciones propias: escala uniforme con la altura de la
+#                   formacion, sin pasar de k veces el ancho de la celda
+#   ('celda', k)    planta de k veces la celda (este-oeste y norte-sur);
+#                   el alto, el de la formacion
+PIE = {}
+for _m in MODELOS:
+    PIE[_m] = ('esbelto', 0.9)
+for _m in ('veg_hib', 'rel_mesetas', 'rel_meseta', 'rel_cumbre', 'rel_prot1', 'rel_prot2',
+           'rel_prot3', 'inf_barrio', 'inf_prot1', 'inf_prot2', 'inf_prot3', 'inf_hib',
+           'pla_manzana', 'pla_podio', 'pla_prot1', 'pla_prot2', 'pla_prot3', 'ciu_valla'):
+    PIE[_m] = ('celda', 0.85)
+PIE.update(rel_hib=('celda', 0.6), inf_torre=('celda', 0.6), pla_bloque=('celda', 0.75),
+           pla_bloque2=('celda', 0.75), pla_plantas=('celda', 0.6), pla_rascacielos=('celda', 0.55),
+           ciu_foso=('celda', 0.75), ciu_andamio=('celda', 0.9))
+
+
+def _ancho_natural(m):
+    b = _caja_modelo(MODELOS[m])
+    return max(1e-3, b[1] - b[0], b[5] - b[4])
+
+
+ANCHO = dict((m, _ancho_natural(m)) for m in MODELOS)
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la piel (fase 11): catalogo, vecindad, compuestos y transitos
+# -----------------------------------------------------------------------------
+# Logica en el motor, piel en el catalogo. El catalogo dice que modelo va en
+# cada estado de cada especie y las cadenas de transito de cada tema; el
+# motor decide donde, cuantos y cuando. Toda eleccion (variante, giro,
+# operacion) sale del mapa logistico sembrado con la velocidad fundadora y
+# la celda; la ocupacion dice cuantas piezas lleva el compuesto.
+
+TEMAS = ['naturaleza', 'ciudad']
+AVANCES = ['gates', 'pasos']
+ESTADOS = ['semilla', 'crecimiento', 'ramificacion', 'fusion', 'coronacion']
+ESPECIES = {('naturaleza', GEO): 'vegetacion', ('naturaleza', ARQ): 'relieve',
+            ('ciudad', GEO): 'informal', ('ciudad', ARQ): 'planificada'}
+CATALOGO_COLS = ['tema', 'especie', 'estado', 'variante', 'modelo']
+
+
+def _catalogo_defecto():
+    filas = []
+
+    def add(tema, esp, estado, cosas):
+        for v, x in enumerate(cosas):
+            filas.append((tema, esp, estado, v, x))
+    for tema, esp, p in (('naturaleza', 'vegetacion', 'veg'), ('naturaleza', 'relieve', 'rel'),
+                         ('ciudad', 'informal', 'inf'), ('ciudad', 'planificada', 'pla')):
+        semilla = {'veg': ['veg_brote', 'veg_brote2'], 'rel': ['rel_columna', 'rel_columna2'],
+                   'inf': ['inf_caseta', 'inf_caseta2'], 'pla': ['pla_bloque', 'pla_bloque2']}[p]
+        resto = {'veg': ['veg_arbol', 'veg_arboleda', 'veg_bosque', 'veg_madre'],
+                 'rel': ['rel_columnas', 'rel_mesetas', 'rel_meseta', 'rel_cumbre'],
+                 'inf': ['inf_anadidos', 'inf_pasarelas', 'inf_barrio', 'inf_torre'],
+                 'pla': ['pla_plantas', 'pla_manzana', 'pla_podio', 'pla_rascacielos']}[p]
+        add(tema, esp, 'semilla', semilla)
+        for estado, mo in zip(ESTADOS[1:], resto):
+            add(tema, esp, estado, [mo])
+        add(tema, esp, 'puente', ['veg_dosel' if p == 'veg' else p + '_puente'])
+        add(tema, esp, 'protagonista', [p + '_prot1', p + '_prot2', p + '_prot3'])
+        add(tema, esp, 'hibrido', [p + '_hib'])
+    add('ciudad', 'planificada', 'remate', ['pla_aguja'])
+    for obra in ('valla', 'foso', 'andamio', 'grua'):
+        add('ciudad', 'obra', obra, ['ciu_' + obra])
+    cadenas = {('naturaleza', 'vegetacion'): (['inclinar', 'puentes', 'hundir', 'esporas'], ['emerger']),
+               ('naturaleza', 'relieve'): (['soldadura', 'relleno'], ['soldadura', 'relleno']),
+               ('ciudad', 'informal'): (['soldadura', 'relleno'], ['soldadura', 'relleno']),
+               ('ciudad', 'planificada'): (['solar', 'excavacion', 'obreros', 'andamio'],
+                                           ['grua', 'fachada', 'aguja'])}
+    for (tema, esp), (cf, cc) in sorted(cadenas.items()):
+        add(tema, esp, 'cadena fusion', cf)
+        add(tema, esp, 'cadena corona', cc)
+    return filas
+
+
+CATALOGO_FILAS = _catalogo_defecto()
+ETAPAS = ['inclinar', 'puentes', 'hundir', 'esporas', 'emerger', 'soldadura', 'relleno',
+          'solar', 'excavacion', 'obreros', 'andamio', 'grua', 'fachada', 'aguja']
+
+
+def catalogo_de(filas):
+    """{(tema, especie, estado): [modelo o etapa por variante]} de unas filas
+    del catalogo. Los modelos y etapas que el motor no conoce se ignoran."""
+    out = {}
+    for tema, esp, estado, var, x in filas:
+        lista = out.setdefault((tema, esp, estado), [])
+        if (estado.startswith('cadena') and x in ETAPAS) or x in MODELOS:
+            lista.append((int(var), x))
+    return dict((k, [x for _, x in sorted(v)]) for k, v in out.items())
+
+
+CATALOGO = catalogo_de(CATALOGO_FILAS)
+
+
+def _cat(cfg):
+    return cfg.get('catalogo') or CATALOGO
+
+
+def tema_de(cfg):
+    return TEMAS[int(cfg.get('tema', 0)) % len(TEMAS)]
+
+
+def especie_de(tema, own):
+    return ESPECIES.get((tema, own), 'vegetacion' if tema == 'naturaleza' else 'informal')
+
+
+def modelos_de(cfg, tema, esp, estado):
+    """Modelos del catalogo para ese estado (con el de por defecto si el
+    catalogo editado lo dejo vacio)."""
+    lista = _cat(cfg).get((tema, esp, estado)) or CATALOGO.get((tema, esp, estado)) or []
+    return lista
+
+
+def cadenas_de(cfg, tema, esp):
+    """(etapas de la fusion, etapas de la coronacion)."""
+    c = _cat(cfg)
+    return (c.get((tema, esp, 'cadena fusion'), CATALOGO.get((tema, esp, 'cadena fusion'), [])),
+            c.get((tema, esp, 'cadena corona'), CATALOGO.get((tema, esp, 'cadena corona'), [])))
+
+
+def estado_idx(cfg, occ):
+    """0 semilla, 1 crecimiento, 2 ramificacion, 3 fusion, 4 coronacion, con
+    los umbrales de la fase 4."""
+    if occ <= 1:
+        return 0
+    if occ < cfg['th_branch']:
+        return 1
+    if occ < cfg['th_fusion']:
+        return 2
+    if occ < cfg['th_crown']:
+        return 3
+    return 4
+
+
+# --- el mapa logistico: sin azar de software ------------------------------------
+
+def semilla_caos(vel, celda):
+    """x0 en (0,05; 0,95) de la velocidad fundadora y la celda."""
+    return 0.05 + 0.9 * ((int(vel) * 0.6180339887 + int(celda) * 0.3819660113 + 0.1234) % 1.0)
+
+
+def logistica(x0, r, n, calentar=8):
+    """n valores de x -> r x (1 - x), tras unas vueltas de calentamiento."""
+    x = min(0.999, max(0.001, float(x0)))
+    r = max(0.0, min(4.0, float(r)))
+    out = []
+    for k in range(int(calentar) + int(n)):
+        x = r * x * (1.0 - x)
+        if not 1e-9 < x < 1.0 - 1e-9:
+            x = 0.3819660113             # punto fijo en 0 o 1: se sale por el aureo
+        if k >= calentar:
+            out.append(x)
+    return out
+
+
+# --- vecindad: clusters ---------------------------------------------------------
+
+def presion(W, cfg, i):
+    """P = ocupacion + Pesovecina x ocupacion de las vecinas de su especie."""
+    o = W['occ'][i]
+    if o <= 0:
+        return 0.0
+    s = W['own'][i]
+    return o + cfg['peso_vecina'] * sum(W['occ'][j] for j in NEIGH[i]
+                                        if W['occ'][j] > 0 and W['own'][j] == s)
+
+
+_CLUSTERS = {}
+
+
+def clusters(W, cfg):
+    """Formaciones fundidas (se guarda el ultimo calculo: mismo mundo, mismo
+    resultado; no lo modifiques)."""
+    clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), cfg['umbral_vecindad'],
+             cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'])
+    if _CLUSTERS.get('clave') != clave:
+        _CLUSTERS['clave'], _CLUSTERS['cl'] = clave, _clusters(W, cfg)
+    return _CLUSTERS['cl']
+
+
+def _clusters(W, cfg):
+    """Formaciones fundidas. Dos vecinas de la misma especie se unen si las dos
+    tienen P >= Umbralvecindad; una formacion en fusion (fase 4) se une con
+    sus satelites. Union-find; cuentan los grupos de Mincluster celdas o mas.
+    Devuelve dict(de=[cluster de cada celda o -1], celdas={id: [...]},
+    capital={id: celda}, mascara=[[vecinas del cluster unidas a la celda]])."""
+    U = cfg['umbral_vecindad']
+    P = [presion(W, cfg, i) for i in range(N)]
+    padre = list(range(N))
+
+    def raiz(a):
+        while padre[a] != a:
+            padre[a] = padre[padre[a]]
+            a = padre[a]
+        return a
+    enlaces = []
+    for i in range(N):
+        if W['occ'][i] <= 0 or not W['own'][i]:
+            continue
+        for j in NEIGH[i]:
+            if j <= i or W['occ'][j] <= 0 or W['own'][j] != W['own'][i]:
+                continue
+            vec = P[i] >= U and P[j] >= U
+            des = (W['par'][j] == i and W['occ'][i] >= cfg['th_fusion']) or \
+                  (W['par'][i] == j and W['occ'][j] >= cfg['th_fusion'])
+            if vec or des:
+                enlaces.append((i, j))
+                padre[raiz(i)] = raiz(j)
+    grupos = {}
+    for i in range(N):
+        if W['occ'][i] > 0:
+            grupos.setdefault(raiz(i), []).append(i)
+    minimo = max(2, int(cfg['min_cluster']))
+    de = [-1] * N
+    celdas, capital = {}, {}
+    for k, (r, cs) in enumerate(sorted(grupos.items(), key=lambda kv: min(kv[1]))):
+        if len(cs) < minimo:
+            continue
+        celdas[k] = cs
+        capital[k] = max(cs, key=lambda c: (W['par'][c] < 0, W['occ'][c], -c))
+        for c in cs:
+            de[c] = k
+    mascara = [[] for _ in range(N)]
+    for i, j in enlaces:
+        if de[i] >= 0 and de[i] == de[j]:
+            mascara[i].append(j)
+            mascara[j].append(i)
+    return dict(de=de, celdas=celdas, capital=capital, mascara=mascara, presion=P)
+
+
+def clase_cluster(n):
+    """Pieza protagonista por tamano: 2-3 celdas, 4-6, o 7 y mas."""
+    return 0 if n <= 3 else (1 if n <= 6 else 2)
+
+
+# --- compuestos: el juego del caos ------------------------------------------------
+
+OPS_CAOS = ['incrustar', 'apilar', 'orbitar', 'hundir', 'inclinar']
+TOPE_COMPUESTO = 1.2        # nada del compuesto pasa de 1,2 veces la formacion
+
+
+_COMPUESTOS = {}
+
+
+def compuesto(cfg, own, vel, celda, occ, sat=False):
+    """Piezas de una formacion, en la celda: x, z en fracciones de la celda,
+    y en alturas de la formacion, giro e inclinacion en grados (multiplos de
+    30; la malla ortogonal del SEQ2, de 90 y sin inclinar), esc relativa a
+    la pieza principal, var (0-1) para elegir variante. Iteraciones =
+    min(ocupacion, Maxpiezas). La misma semilla da el mismo compuesto, y una
+    ocupacion mayor solo le anade piezas. Se guarda: no lo modifiques."""
+    n = 1 if sat else max(1, min(int(occ), int(cfg['max_piezas'])))
+    clave = (own, int(vel), int(celda), n, float(cfg['caos']))
+    out = _COMPUESTOS.get(clave)
+    if out is None:
+        if len(_COMPUESTOS) > 20000:
+            _COMPUESTOS.clear()
+        out = _COMPUESTOS[clave] = _compuesto(cfg['caos'], own, vel, celda, n)
+    return out
+
+
+def _compuesto(caos, own, vel, celda, n):
+    xs = logistica(semilla_caos(vel, celda), caos, 5 * n + 1)
+    orto = own == ARQ
+    paso = 90 if orto else 30
+
+    def ang(x):
+        return (int(x * 360.0 / paso) * paso) % 360
+
+    piezas = [dict(op='base', x=0.0, y=0.0, z=0.0, giro=float(ang(xs[0])), incl=0.0, rumbo=0.0,
+                   esc=1.0, var=xs[0])]
+    for k in range(1, n):
+        a, b, c, d, v = xs[5 * k - 4:5 * k + 1]
+        op = OPS_CAOS[min(len(OPS_CAOS) - 1, int(a * len(OPS_CAOS)))]
+        if orto and op == 'inclinar':
+            op = 'apilar'
+        pr = piezas[-1]
+        q = dict(op=op, x=pr['x'], y=pr['y'], z=pr['z'], giro=pr['giro'], incl=0.0, rumbo=0.0,
+                 esc=pr['esc'], var=v)
+        if op == 'incrustar':
+            q.update(x=pr['x'] + (b - 0.5) * 0.3, z=pr['z'] + (c - 0.5) * 0.3,
+                     y=pr['y'] + pr['esc'] * (0.2 + 0.4 * d), esc=pr['esc'] * 0.55,
+                     giro=(pr['giro'] + paso) % 360)
+        elif op == 'apilar':
+            q.update(y=pr['y'] + pr['esc'] * 0.85, esc=pr['esc'] * 0.65,
+                     giro=(pr['giro'] + paso * (1 + int(b * 3))) % 360)
+        elif op in ('orbitar', 'hundir'):
+            g = math.radians(ang(b))
+            rad = 0.2 + 0.2 * c
+            esc = (0.4 + 0.25 * d) if op == 'orbitar' else (0.5 + 0.3 * d)
+            q.update(x=rad * math.cos(g), z=rad * math.sin(g), giro=float(ang(b)), esc=esc,
+                     y=0.0 if op == 'orbitar' else -0.3 * esc)
+        else:                                       # inclinar
+            r_ = ang(b)
+            g = math.radians(r_)
+            q.update(x=pr['x'] + 0.15 * math.cos(g), z=pr['z'] + 0.15 * math.sin(g),
+                     y=pr['y'] + pr['esc'] * 0.3, esc=pr['esc'] * 0.6, incl=30.0, rumbo=float(r_))
+        if orto:                                    # a la malla
+            q['x'], q['z'] = round(q['x'] * 8) / 8.0, round(q['z'] * 8) / 8.0
+        q['x'] = max(-0.4, min(0.4, q['x']))
+        q['z'] = max(-0.4, min(0.4, q['z']))
+        q['esc'] = max(0.12, min(1.0, q['esc']))
+        q['y'] = max(-0.35, min(TOPE_COMPUESTO - q['esc'], q['y']))
+        piezas.append(q)
+    return piezas
+
+
+# --- transitos: la animacion no decide ------------------------------------------
+# El estado logico cambia al instante; lo visible lo persigue. Cada celda
+# lleva la etapa visible de su cadena de fusion (et_f) y de coronacion
+# (et_c). El objetivo es la cadena entera si la celda esta en un cluster (o
+# coronada); si no, 0. Con Avance = gates, cada nota en una celda del
+# cluster adelanta una etapa la obra del cluster (todas sus celdas); con
+# Avance = pasos, una etapa cada Pasosetapa pasos. Hacia atras (la ocupacion baja) se recorre
+# sola, una etapa cada Pasosetapa pasos. Un fin de ciclo lo cierra de golpe.
+
+FOTOS_PASO = 3               # fotogramas de stop-motion por paso
+
+
+def objetivos(W, cfg, cl=None):
+    """(objetivo de la fusion, objetivo de la coronacion) de cada celda."""
+    cl = cl or clusters(W, cfg)
+    tema = tema_de(cfg)
+    tf, tc = [0] * N, [0] * N
+    for i in range(N):
+        if W['occ'][i] <= 0 or not W['own'][i]:
+            continue
+        cf, cc = cadenas_de(cfg, tema, especie_de(tema, W['own'][i]))
+        if cl['de'][i] >= 0:
+            tf[i] = len(cf)
+        if W['par'][i] < 0 and W['occ'][i] >= cfg['th_crown']:
+            tc[i] = len(cc)
+    return tf, tc
+
+
+def _etapa(W, i, clave, valor, now):
+    ant = W[clave][i]
+    if valor != ant:
+        W[clave][i] = valor
+        W['ant_' + clave][i] = ant
+        W['t_' + clave][i] = now
+
+
+def gate_piel(W, cfg, i, now):
+    """Una nota en la celda i: con Avance = gates, adelanta una etapa la obra
+    de su cluster (o la suya, si esta sola). La obra es del cluster: una
+    celda que se une a mitad de obra se incorpora en la etapa por la que va."""
+    if cfg['nivel'] < 11 or i is None or not 0 <= i < N:
+        return
+    W['t_gate'][i] = now
+    if int(cfg.get('avance', 0)) != 0:
+        return
+    cl = clusters(W, cfg)
+    tf, tc = objetivos(W, cfg, cl)
+    k = cl['de'][i]
+    celdas = cl['celdas'][k] if k >= 0 else [i]
+    meta = max(W['et_f'][c] for c in celdas) + 1
+    for c in celdas:
+        if W['et_f'][c] < tf[c]:
+            _etapa(W, c, 'et_f', min(tf[c], meta), now)
+        if W['et_c'][c] < tc[c]:
+            _etapa(W, c, 'et_c', W['et_c'][c] + 1, now)
+
+
+def tick_piel(W, cfg, now, paso, playing=True):
+    """Las obras que van solas: hacia atras siempre, hacia delante con
+    Avance = pasos. Las celdas vacias no tienen obra."""
+    espera = max(1, int(cfg['pasos_etapa'])) * paso
+    pasos = int(cfg.get('avance', 0)) == 1
+    tf, tc = objetivos(W, cfg)
+    for i in range(N):
+        if W['occ'][i] <= 0:
+            W['et_f'][i] = W['et_c'][i] = 0
+            continue
+        for clave, obj in (('et_f', tf[i]), ('et_c', tc[i])):
+            e = W[clave][i]
+            if now - W['t_' + clave][i] < espera:
+                continue
+            if e > obj:
+                _etapa(W, i, clave, e - 1, now)
+            elif e < obj and pasos and playing:
+                _etapa(W, i, clave, e + 1, now)
+
+
+def cerrar_obras(W, cfg):
+    """Fin de ciclo: cada transito, en su estado final, sin animacion."""
+    if cfg['nivel'] < 11:
+        return
+    tf, tc = objetivos(W, cfg)
+    for i in range(N):
+        for clave, obj in (('et_f', tf[i]), ('et_c', tc[i])):
+            W[clave][i] = W['ant_' + clave][i] = obj
+            W['t_' + clave][i] = -99.0
+
+
+def _stop(u, fotos=FOTOS_PASO):
+    """Progreso 0-1 de un transito a saltos de stop-motion (u en pasos)."""
+    if u < 0:
+        return 1.0
+    return min(1.0, (math.floor(u * fotos) + 1.0) / fotos)
+
+
+def avance_etapa(W, i, clave, k, now, paso, pasos_k=1.0):
+    """Cuanto de la etapa k (1, 2...) se ve en la celda i: 0 si no ha llegado,
+    1 si ya esta; entre medias mientras dura su transito (pasos_k pasos)."""
+    e = W[clave][i]
+    if e < k:
+        return 0.0
+    if e == k and W['ant_' + clave][i] < k:
+        return _stop((now - W['t_' + clave][i]) / (paso * max(1e-6, pasos_k)))
+    return 1.0
+
+
+def rebote(cfg, W, i, now, paso):
+    """(escala, destello) del nacimiento: stop-motion de un paso como mucho."""
+    u = (now - W['t_nac'][i]) / max(1e-6, paso)
+    if u < 0 or u >= 1:
+        return 1.0, 0.0
+    R = cfg['rebote']
+    fotos = (0.45, 1.0 + R, 1.0 - R / 2.0, 1.0)
+    return fotos[min(3, int(u * 4))], 1.0 - u
+
+
+def vh_stop(W, i, now, paso):
+    """La altura visible persigue a la logica en un paso, a saltos. Al nacer
+    se pone de golpe: el rebote hace el resto."""
+    h = W['h'][i]
+    if h != W['h_obj'][i]:
+        nace = W['vh'][i] <= 0.005 and h > 0 and 0 <= now - W['t_nac'][i] < paso
+        W['h0'][i] = h if nace else W['vh'][i]
+        W['h_obj'][i] = h
+        W['t_h'][i] = now
+    q = _stop((now - W['t_h'][i]) / max(1e-6, paso))
+    return W['h0'][i] + (h - W['h0'][i]) * q
+
+
+# --- dibujar la piel ------------------------------------------------------------
+
+COL_ESPECIE = dict(vegetacion=(0.34, 0.52, 0.30), relieve=(0.30, 0.31, 0.35),
+                   informal=(0.66, 0.50, 0.38), planificada=(0.60, 0.63, 0.68))
+COL_PUENTE = dict(vegetacion=(0.27, 0.44, 0.25), relieve=(0.28, 0.29, 0.33),
+                  informal=(0.52, 0.40, 0.30), planificada=(0.52, 0.53, 0.56))
+COL_OBRA = dict(valla=(0.80, 0.62, 0.28), foso=(0.16, 0.13, 0.11), andamio=(0.72, 0.68, 0.58),
+                grua=(0.92, 0.80, 0.30))
+COL_ESPORA = (0.86, 0.94, 0.72)
+COL_POLVO = (0.58, 0.52, 0.44)
+COL_OBRERO = (1.00, 0.68, 0.22)
+# puente de cada especie: (ancho x celda, base y grosor x la formacion mas baja)
+PUENTE = dict(vegetacion=(0.32, 0.62, 0.24), relieve=(0.40, 0.0, 0.50),
+              informal=(0.12, 0.45, 0.14), planificada=(0.62, 0.0, 0.22))
+CORONA_K = 1.35              # la pieza de coronacion, mas alta que la formacion
+CORONA_TRAMO = 0.10          # y un 10 % mas por tramo de cumbre
+ANDAMIO_PASOS = 3.0          # el andamio sube planta a planta en 3 pasos
+ESPORAS_PASOS = 16.0         # las esporas duran 16 pasos
+INCLINAR = 20.0              # grados que se inclinan los arboles hacia la capital
+
+
+_GEOMETRIAS = {}
+
+
+def geometria_de(modelo, pulido=True):
+    """Nombre de la geometria de TouchDesigner de un modelo. Las obras de la
+    ciudad tienen una sola; los demas, pulida y porosa (hasta la fase 12)."""
+    g = _GEOMETRIAS.get((modelo, pulido))
+    if g is None:
+        g = 'mod_' + modelo if modelo.startswith('ciu_') else \
+            'mod_%s_%s' % (modelo, 'pul' if pulido else 'por')
+        _GEOMETRIAS[(modelo, pulido)] = g
+    return g
+
+
+def geometrias_piel():
+    """[(geometria, modelo, material)] de la fase 11."""
+    out = []
+    for mo in sorted(MODELOS):
+        if mo.startswith('ciu_'):
+            out.append((geometria_de(mo), mo, 'mat_poroso'))
+        else:
+            out.append((geometria_de(mo, True), mo, 'mat_pulido'))
+            out.append((geometria_de(mo, False), mo, 'mat_poroso'))
+    return out
+
+
+def _ejes(n, giro=0.0, incl=0.0, rumbo=0.0):
+    """Ejes (X, Y, Z) de una pieza sobre la normal n: girada 'giro' grados
+    alrededor de la normal e inclinada 'incl' grados hacia 'rumbo'."""
+    e, t = tangents(n)
+    X, Y, Z = e, n, t
+    if giro:
+        g = math.radians(giro)
+        X, Z = (_add(_mul(X, math.cos(g)), Z, -math.sin(g)), _add(_mul(X, math.sin(g)), Z, math.cos(g)))
+    if incl:
+        r = math.radians(rumbo)
+        d = _add(_mul(e, math.cos(r)), t, math.sin(r))
+        eje = _norm(_cross(Y, d))
+        X, Y, Z = _girar_eje(X, eje, incl), _girar_eje(Y, eje, incl), _girar_eje(Z, eje, incl)
+    return X, Y, Z
+
+
+_MARCOS = {}
+
+
+def _marco(i, giro=0.0, incl=0.0, rumbo=0.0):
+    """(X, Y, Z, (rx, ry, rz)) de una pieza en la celda i (ver _ejes). Se
+    guardan: el giro va en multiplos de 30 y la inclinacion, a los saltos del
+    stop-motion, asi que se repiten."""
+    clave = (GRID['lo'], GRID['hi'], i, giro, incl, rumbo)
+    v = _MARCOS.get(clave)
+    if v is None:
+        if len(_MARCOS) > 50000:
+            _MARCOS.clear()
+        ej = _ejes(normal_i(i), giro, incl, rumbo)
+        v = _MARCOS[clave] = ej + (_euler_xyz(*ej),)
+    return v
+
+
+def _marco_puente(i, j):
+    """Marco del puente de la celda i hacia su vecina j: Z hacia j, Y la normal."""
+    clave = (GRID['lo'], GRID['hi'], i, 'puente', j)
+    v = _MARCOS.get(clave)
+    if v is None:
+        n = normal_i(i)
+        d = _hacia(n, n, normal_i(j))
+        ej = (_cross(n, d), n, d)
+        v = _MARCOS[clave] = ej + (_euler_xyz(*ej),)
+    return v
+
+
+def _fila_m(p, marco, sx, sy, sz, col):
+    rx, ry, rz = marco[3]
+    return [p[0], p[1], p[2], rx, ry, rz, sx, sy, sz, col[0], col[1], col[2]]
+
+
+def _pie(modelo, vh, cw, cl):
+    """(sx, sy, sz) de un modelo con altura vh en una celda cw x cl."""
+    modo, k = PIE.get(modelo, ('esbelto', 0.9))
+    if modo == 'celda':
+        return k * cw, vh, k * cl
+    s = min(vh, k * min(cw, cl) / ANCHO.get(modelo, 1.0))
+    return s, vh, s
+
+
+def _hacia(n, p_de, p_a):
+    """Direccion unitaria de p_de a p_a, sobre el plano tangente de n."""
+    d = (p_a[0] - p_de[0], p_a[1] - p_de[1], p_a[2] - p_de[2])
+    d = _add(d, n, -_dot(d, n))
+    return _norm(d)
+
+
+def _rumbo(n, d):
+    """Grados del rumbo d (en el plano tangente) desde el este hacia el sur."""
+    e, t = tangents(n)
+    return math.degrees(math.atan2(_dot(d, t), _dot(d, e)))
+
+
+def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo):
+    """Instancias de particulas (cajas del motor) de una celda."""
+    e, t = tangents(n)
+    xs = _COMPUESTOS.get(('particulas', semilla, k))
+    if xs is None:
+        xs = _COMPUESTOS[('particulas', semilla, k)] = logistica(semilla, 3.91, 3 * k)
+    tau = math.floor(now / paso * FOTOS_PASO) / FOTOS_PASO       # tiempo a saltos
+    m = min(cw, cl)
+    for q in range(k):
+        a, b, c = xs[3 * q:3 * q + 3]
+        if modo == 'esporas':           # suben y derivan sobre el dosel
+            f = (tau / 8.0 + a) % 1.0
+            g = 2 * math.pi * b + tau * 0.15
+            r_, h_, s_ = 0.15 + 0.3 * c, vh * (0.6 + 0.9 * f), 0.035 * m
+        elif modo == 'polvo':           # nube que se abre a ras de suelo
+            f = (tau / 6.0 + a) % 1.0
+            g = 2 * math.pi * b
+            r_, h_, s_ = 0.1 + 0.4 * f, 0.05 + 0.25 * f * vh, (0.04 + 0.05 * f) * m
+        else:                           # obreros: puntos que dan vueltas a la obra
+            g = 2 * math.pi * b + tau * (0.4 + 0.4 * c) * (1 if a > 0.5 else -1)
+            r_, h_, s_ = 0.25 + 0.15 * a, 0.0, 0.03 * m
+        p = _add(_add(_add(p0, e, math.cos(g) * r_ * cw), t, math.sin(g) * r_ * cl), n, h_)
+        out.append(_row(p, n, s_, s_ * (2.0 if modo == 'obreros' else 1.0), s_, col))
+
+
+def build_piel(W, cfg, now, out):
+    """Las formaciones como modelos del tema: compuesto, puentes del cluster,
+    pieza protagonista, cadenas de transito y particulas. Devuelve el resumen
+    para la leyenda."""
+    lim = limit(cfg)
+    tema = tema_de(cfg)
+    paso = W.get('paso') or 0.125
+    cl = clusters(W, cfg)
+    tf, tc = objetivos(W, cfg, cl)
+    piezas = compuestos = 0
+    bases = {}
+    for i in range(N):
+        bases[i] = _mul(normal_i(i), base_radius(W, cfg, i))
+
+    def emit(modelo, pulido, p, marco, dims, col):
+        nonlocal piezas
+        out.setdefault(geometria_de(modelo, pulido), []).append(_fila_m(p, marco, dims[0], dims[1], dims[2], col))
+        piezas += 1
+
+    for i in range(N):
+        vh = W['vh'][i]
+        own = W['own'][i]
+        if vh <= 0.005 or not own:
+            continue
+        n = normal_i(i)
+        e, _, t, _ = _marco(i)
+        p0 = bases[i]
+        base = base_radius(W, cfg, i)
+        cw, cl_ = _cell_sizes(base, i)
+        esp = especie_de(tema, own)
+        cf, cc = cadenas_de(cfg, tema, esp)
+        sat = W['par'][i] >= 0
+        o = W['occ'][i]
+        est = estado_idx(cfg, o)
+        pulido = W['vel'][i] >= cfg['vel_umbral']
+        col = _material_col(COL_ESPECIE[esp], pulido)
+        lt = _latido(W, i, now)
+        sc = seq_color(cfg, W['lat_s'][i] if W['lat_s'][i] in (1, 2) else 1)
+        Id, pd_ = drum_light(W, cfg, i, now)
+        if pd_ is not None and Id >= lt:
+            lt, sc = Id, drum_color(cfg, pd_)
+        kb, fl = rebote(cfg, W, i, now, paso)
+        if lt > 0:
+            vh *= 1.0 + LATIDO_AMP * lt
+            col = _tint(_mix(col, sc, LATIDO_TINTE * lt), 1.0 + 0.25 * lt)
+        if fl > 0:                                  # destello del nacimiento
+            col = _mix(col, (1.0, 1.0, 1.0), 0.6 * fl)
+        if sat:
+            col = _tint(col, 0.85)
+        k_ = cl['de'][i]
+        capital = k_ >= 0 and cl['capital'][k_] == i
+        comp = compuesto(cfg, own, W['vel'][i], i, o, sat)
+        # pieza principal: el estado, la protagonista o la coronacion
+        modelo = None
+        alto = 1.0
+        dy = 0.0
+        q_c = [avance_etapa(W, i, 'et_c', k + 1, now, paso) for k in range(len(cc))]
+        if not sat and q_c and q_c[0] > 0:
+            tr = cumbre_tramos(cfg, o)
+            kc = CORONA_K + CORONA_TRAMO * tr
+            modelo = (modelos_de(cfg, tema, esp, 'coronacion') or [None])[0]
+            if 'emerger' in cc:                     # el arbol madre emerge del dosel
+                alto, dy = kc, -(1.0 - q_c[cc.index('emerger')]) * 0.5
+            elif 'fachada' in cc:                   # grua -> la fachada se cierra -> aguja
+                alto = kc * (0.55 + 0.45 * q_c[cc.index('fachada')])
+            else:                                   # soldadura -> relleno
+                alto = kc * (0.6 + 0.4 * q_c[-1])
+        elif capital and W['et_f'][i] >= len(cf) and cf:
+            prot = modelos_de(cfg, tema, esp, 'protagonista')
+            if prot:
+                modelo = prot[min(len(prot) - 1, clase_cluster(len(cl['celdas'][k_])))]
+                alto = 1.0 + 0.1 * clase_cluster(len(cl['celdas'][k_]))
+        if modelo is None:
+            lista = modelos_de(cfg, tema, esp, ESTADOS[min(est, 1) if sat else min(est, 3)])
+            if not lista:
+                continue
+            modelo = lista[min(len(lista) - 1, int(comp[0]['var'] * len(lista)))]
+        # inclinacion hacia la capital (vegetacion, etapa 'inclinar')
+        incl, rumbo = 0.0, 0.0
+        if k_ >= 0 and not capital and 'inclinar' in cf:
+            q = avance_etapa(W, i, 'et_f', cf.index('inclinar') + 1, now, paso)
+            if q > 0:
+                incl = INCLINAR * q
+                rumbo = round(_rumbo(n, _hacia(n, n, normal_i(cl['capital'][k_]))), 1)
+        hund = 'hundir' in cf and k_ >= 0 and avance_etapa(W, i, 'et_f', cf.index('hundir') + 1,
+                                                             now, paso)
+        if len(comp) > 1:
+            compuestos += 1
+        esc_sat = cfg['sat_size'] if sat else 1.0
+        for k, pz in enumerate(comp):
+            if k == 0:
+                mo, esc, giro = modelo, 1.0, pz['giro']
+                ej = _marco(i, giro, incl, rumbo)
+                h_ = vh * alto * kb
+                dims = _pie(mo, h_, cw * esc_sat * kb, cl_ * esc_sat * kb)
+                p = _add(p0, ej[1], dy * vh)
+            else:
+                sub = modelos_de(cfg, tema, esp, 'crecimiento' if est >= 2 and pz['var'] > 0.5
+                                 else 'semilla') or [modelo]
+                mo = sub[min(len(sub) - 1, int(pz['var'] * 7) % len(sub))]
+                esc = pz['esc']
+                ej = _marco(i, pz['giro'], pz['incl'] + incl, pz['rumbo'] if pz['incl'] else rumbo)
+                y = pz['y'] - (0.4 * esc * hund if hund else 0.0)
+                h_ = vh * esc * kb
+                dims = _pie(mo, h_, cw * esc * esc_sat * kb, cl_ * esc * esc_sat * kb)
+                p = _add(_add(_add(p0, e, pz['x'] * cw * esc_sat), t, pz['z'] * cl_ * esc_sat), n, y * vh)
+            ck = _tint(col, 0.88 + 0.24 * pz['var'])
+            emit(mo, pulido, p, ej, dims, ck)
+        # hibrido: la otra especie deja su rastro, con la planta de la principal
+        if W['sp'][i] == HIB:
+            hib = modelos_de(cfg, tema, esp, 'hibrido')
+            otra = especie_de(tema, ARQ if own == GEO else GEO)
+            if hib:
+                ej = _marco(i, comp[0]['giro'])
+                propio = PIE.get(hib[0], ('esbelto', 0))[0] == 'celda'
+                dims = _pie(hib[0] if propio else modelo, vh * kb, cw * esc_sat * kb, cl_ * esc_sat * kb)
+                emit(hib[0], pulido, p0, ej, dims, _material_col(COL_ESPECIE[otra], pulido))
+        # remate y grua de la coronacion de la ciudad
+        if not sat and 'aguja' in cc and q_c and q_c[0] > 0:
+            top = _add(p0, n, vh * alto)
+            qa = q_c[cc.index('aguja')]
+            if qa > 0:
+                rem = modelos_de(cfg, tema, esp, 'remate')
+                if rem:
+                    emit(rem[0], pulido, top, _marco(i), (0.5 * cw * 0.3, 0.35 * vh * qa, 0.5 * cl_ * 0.3), col)
+            else:
+                g = modelos_de(cfg, tema, 'obra', 'grua')
+                if g:
+                    pg = _add(_add(p0, e, 0.42 * cw), t, -0.3 * cl_)
+                    emit(g[0], False, pg, _marco(i, 90.0), (0.5 * cw, vh * CORONA_K * 1.15, 0.5 * cl_),
+                         COL_OBRA['grua'])
+        # puentes del cluster
+        if k_ >= 0 and cl['mascara'][i]:
+            kp = 0.0
+            for nombre, valor in (('soldadura', 0.35), ('relleno', 1.0), ('puentes', 1.0), ('andamio', 1.0)):
+                if nombre in cf:
+                    kp = max(kp, valor * avance_etapa(W, i, 'et_f', cf.index(nombre) + 1, now, paso,
+                                                      ANDAMIO_PASOS if nombre == 'andamio' else 1.0))
+            pm = modelos_de(cfg, tema, esp, 'puente')
+            if kp > 0 and pm:
+                kw, y0, gr = PUENTE[esp]
+                if 'andamio' in cf:                 # el podio sube planta a planta
+                    k_ancho, k_alto = 1.0, kp
+                elif 'soldadura' in cf:             # soldadura fina, luego relleno
+                    k_ancho, k_alto = (0.35 if kp < 1 else 1.0), 1.0
+                else:                               # los puentes del dosel crecen
+                    k_ancho, k_alto = kp, 1.0
+                for j in cl['mascara'][i]:
+                    vmin = min(W['vh'][i], W['vh'][j]) if W['vh'][j] > 0.005 else W['vh'][i]
+                    pj = bases[j]
+                    largo = 0.5 * math.sqrt((p0[0] - pj[0]) ** 2 + (p0[1] - pj[1]) ** 2
+                                            + (p0[2] - pj[2]) ** 2) + 0.06
+                    ej = _marco_puente(i, j)
+                    alto_p = max(0.01, gr * vmin * k_alto)
+                    emit(pm[0], pulido, _add(p0, n, y0 * vmin), ej, (kw * min(cw, cl_) * k_ancho, alto_p, largo),
+                         _material_col(COL_PUENTE[esp], pulido))
+        # obras de la ciudad y particulas
+        if k_ >= 0 and cf:
+            ef = W['et_f'][i]
+            if 'solar' in cf and 1 <= ef < len(cf):
+                emit('ciu_valla', False, p0, _marco(i), _pie('ciu_valla', 0.12 * lim, cw, cl_), COL_OBRA['valla'])
+            if 'excavacion' in cf and cf.index('excavacion') + 1 <= ef < len(cf):
+                emit('ciu_foso', False, _add(p0, n, 0.005), _marco(i), _pie('ciu_foso', 0.03 * lim, cw, cl_),
+                     COL_OBRA['foso'])
+                if ef == cf.index('excavacion') + 1:
+                    _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, vh,
+                                semilla_caos(i, 7), 8, COL_POLVO, now, paso, 'polvo')
+            if 'obreros' in cf and ef == cf.index('obreros') + 1:
+                _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, vh,
+                            semilla_caos(i, 11), 8, COL_OBRERO, now, paso, 'obreros')
+            if 'andamio' in cf:
+                qa = avance_etapa(W, i, 'et_f', cf.index('andamio') + 1, now, paso, ANDAMIO_PASOS)
+                if 0 < qa < 1:
+                    emit('ciu_andamio', False, p0, _marco(i),
+                         _pie('ciu_andamio', PUENTE[esp][2] * vh * 1.3, cw, cl_), COL_OBRA['andamio'])
+            if 'esporas' in cf and ef >= cf.index('esporas') + 1 \
+                    and now - W['t_et_f'][i] < ESPORAS_PASOS * paso:
+                _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, vh,
+                            semilla_caos(i, 3), 6, COL_ESPORA, now, paso, 'esporas')
+    # resumen para la leyenda
+    obras = medias = 0
+    compas = paso * max(1, int(cfg['steps_per_beat'])) * max(1, int(cfg['beats_per_bar']))
+    vistos = set()
+    for i in range(N):
+        if W['occ'][i] <= 0:
+            continue
+        k_ = cl['de'][i]
+        grupo = cl['celdas'][k_] if k_ >= 0 else [i]
+        clave = ('c', k_) if k_ >= 0 else ('i', i)
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        pend = [c for c in grupo if W['et_f'][c] != tf[c] or W['et_c'][c] != tc[c]]
+        if pend:
+            obras += 1
+            ult = max(max(W['t_et_f'][c], W['t_et_c'][c], W['t_gate'][c]) for c in grupo)
+            if now - ult > compas:
+                medias += 1
+    tam = [len(v) for v in cl['celdas'].values()]
+    return dict(tema=tema, clusters=len(tam), max=max(tam or [0]), compuestos=compuestos,
+                piezas=piezas, obras=obras, medias=medias)
+
+
 # =============================================================================
 # 2. ADAPTADOR TOUCHDESIGNER
 # =============================================================================
@@ -1873,6 +3023,15 @@ _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
               'i_estratos', 'i_luz_celda', 'i_luz_conchas']
+
+
+def chop_names(c=None):
+    """Los Script CHOP de instancias; desde la fase 11, tambien los de los
+    modelos y el de las particulas."""
+    c = c or cfg()
+    if c['nivel'] < 11:
+        return list(CHOP_NAMES)
+    return CHOP_NAMES + ['i_particulas'] + ['i_' + g for g, _, _ in geometrias_piel()]
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 
@@ -1929,6 +3088,29 @@ def _perfiles():
         out.append(PERFILES_DEFECTO[len(out)])
         tipos.append(TIPOS_DEFECTO[len(tipos)])
     return out, tipos
+
+
+def _catalogo():
+    """El catalogo de la tabla 'catalogo' (tema especie estado variante
+    modelo). Se relee cada medio segundo (60 fps): un cambio en la tabla
+    llega enseguida sin leerla en cada fotograma. Sin tabla, el de por defecto."""
+    f = _CACHE.get('cat_frame')
+    if f is not None and 0 <= absTime.frame - f < 30 and _CACHE.get('cat') is not None:
+        return _CACHE['cat']
+    t = parent().op('catalogo')
+    cat = CATALOGO
+    if t is not None and t.numRows > 1:
+        filas = []
+        for r in range(1, t.numRows):
+            try:
+                filas.append((t[r, 'tema'].val.strip(), t[r, 'especie'].val.strip(),
+                              t[r, 'estado'].val.strip(), int(float(t[r, 'variante'].val)),
+                              t[r, 'modelo'].val.strip()))
+            except Exception:
+                pass
+        cat = catalogo_de(filas) or CATALOGO
+    _CACHE['cat'], _CACHE['cat_frame'] = cat, absTime.frame
+    return cat
 
 
 def _colores_drum():
@@ -2005,6 +3187,17 @@ def cfg():
                  erosion_vel=int(_p('Erosionvel', True)),
                  vel_ref=_p('Velref', c['vel_ref']),
                  vida_baliza_drum=_p('Vidabalizadrum', c['vida_baliza_drum']))
+    if c['nivel'] >= 11:
+        c.update(tema=_menu('Tema', TEMAS, 0),
+                 peso_vecina=max(0.0, _p('Pesovecina', c['peso_vecina'])),
+                 umbral_vecindad=_p('Umbralvecindad', c['umbral_vecindad']),
+                 min_cluster=max(2, int(_p('Mincluster', c['min_cluster']))),
+                 caos=max(0.0, min(4.0, _p('Caos', c['caos']))),
+                 max_piezas=max(1, int(_p('Maxpiezas', c['max_piezas']))),
+                 avance=_menu('Avance', AVANCES, 0),
+                 pasos_etapa=max(1, int(_p('Pasosetapa', c['pasos_etapa']))),
+                 rebote=max(0.0, _p('Rebote', c['rebote'])),
+                 catalogo=_catalogo())
     return c
 
 
@@ -2228,12 +3421,18 @@ def frame_tick():
         inst['estratos'] = _CACHE['tiles']
     _CACHE['inst'] = inst
     _CACHE['frame'] = absTime.frame
-    for name in CHOP_NAMES:
+    hechas = _CACHE.setdefault('filas_chop', {})
+    for name in chop_names(c):
         o = parent().op(name)
         if o is None:
             continue
         if name == 'i_estratos' and not dirty:
             continue
+        if name not in CHOP_NAMES:      # fase 11: solo los modelos que han cambiado
+            filas = inst.get(name[2:], [])
+            if hechas.get(name) == filas:
+                continue
+            hechas[name] = filas
         o.cook(force=True)
     if dirty or _CACHE.get('ret_R') != top_radius(W, c):
         _CACHE['ret_R'] = top_radius(W, c)
@@ -2275,6 +3474,23 @@ def on_pulse(name):
         ev = erosion(W, c, _p('Padprueba', 1) - 1, _p('Velprueba', 100), now)
         print('EROSION  pad %d (%s) -> celda %d, radio %d, notas deshechas %d'
               % (ev['pad'] + 1, ev['tipo'], ev['celda'], ev['rad'], ev['quitado']))
+    elif name in ('Sembrarzona', 'Sembrarzona2'):
+        s = GEO if name == 'Sembrarzona' else ARQ
+        note = _p('Nota' if s == GEO else 'Nota2', 60)
+        ci = note_cell(note)
+        if ci is None:
+            print('SEMBRARZONA  %s fuera de rango' % note_name(note))
+        else:
+            for x in [ci] + list(NEIGH[ci]):
+                note_on(W, c, s, cell_note(x), _p('Velprueba', 100), now, tempo())
+            if s == GEO:
+                _seq1_beacon(note)
+            cl = clusters(W, c)
+            k = cl['de'][ci]
+            print('SEMBRARZONA  %s %s -> celda %d y %d vecinas   %s'
+                  % ('SEQ1' if s == GEO else 'SEQ2', note_name(note), ci, len(NEIGH[ci]),
+                     'cluster de %d celdas, capital %d' % (len(cl['celdas'][k]), cl['capital'][k])
+                     if k >= 0 else 'sin cluster todavia (pulsa otra vez)'))
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
@@ -2650,4 +3866,9 @@ def _legend():
                          % (k['celda'], k['conchas'], k.get('suelo', 0.0), k.get('laguna', 0.0), left))
             if k.get('nucleo') is not None:
                 lines.append('  CORTE    celda %d   nucleo alcanzado' % k['nucleo'])
+    if lvl >= 11:
+        pz = W.get('piel') or {}
+        lines.append('  TEMA     %s   clusters %d (max %d)   compuestos %d   piezas %d   obras %d (%d a medias)'
+                     % (tema_de(c), pz.get('clusters', 0), pz.get('max', 0), pz.get('compuestos', 0),
+                        pz.get('piezas', 0), pz.get('obras', 0), pz.get('medias', 0)))
     return '\n'.join(lines)

@@ -46,7 +46,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase4 v6  (desborde con carga, satelites, fusion, coronacion, cumbre)'
+VERSION = 'fase4 v7  (desborde con carga, satelites, fusion, coronacion, cumbre)'
 banner(VERSION)
 
 base = require_base(4)
@@ -120,7 +120,9 @@ def prueba(t):
             'satelites en %s' % sats)
     t.check('estado: coronacion', m.state_name(c, W['occ'][i], c['nivel']) == 'coronacion')
     W['vh'] = list(W['h'])
-    m._CACHE['inst'] = m.build_instances(W, c, 0.0)
+    c10 = dict(c)
+    c10['nivel'] = min(c10['nivel'], 10)   # las coronas en caja (desde la fase 11, del tema)
+    m._CACHE['inst'] = m.build_instances(W, c10, 0.0)
     cor = base.op('i_coronas')
     cor.cook(force=True)
     t.check('i_coronas: una corona', cor.numSamples == 1, '%d' % cor.numSamples)
@@ -128,7 +130,7 @@ def prueba(t):
     for k in range(10):
         t.midi(0x9C, 0x40, 0x64)
     W['vh'] = list(W['h'])
-    largo1 = m.build_instances(W, c, 0.0)['coronas'][0][7]
+    largo1 = m.build_instances(W, c10, 0.0)['coronas'][0][7]
     t.check('41 notas -> cumbre: la corona crece',
             m.state_name(c, W['occ'][i], c['nivel']) == 'cumbre' and largo1 > largo0 * 1.2,
             'corona %.2f -> %.2f' % (largo0, largo1))
