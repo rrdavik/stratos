@@ -23,7 +23,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v30'
+MOTOR_VERSION = 'motor v31'
 
 import math
 
@@ -4019,18 +4019,18 @@ def _cam_optics():
         pass
     if not 1.0 <= fov <= 179.0:            # camara sin FOV legible: el de TD por defecto
         fov = 45.0
+    # El aspecto sale de los parametros de resolucion del render, nunca de
+    # su imagen (r.width): leerla haria depender el render de la camara y la
+    # camara del render, y TouchDesigner avisa de un bucle de cocinado.
     aspect = 16.0 / 9.0
     try:
         r = parent().op('render')
-        w, h = float(r.width), float(r.height)
+        w = float(r.par.resolutionw.eval())
+        h = float(r.par.resolutionh.eval())
         if w > 0 and h > 0:
             aspect = w / h
     except Exception:
-        try:
-            r = parent().op('render')
-            aspect = float(r.par.resolutionw.eval()) / max(1.0, float(r.par.resolutionh.eval()))
-        except Exception:
-            pass
+        pass
     return fov, metodo, aspect
 
 

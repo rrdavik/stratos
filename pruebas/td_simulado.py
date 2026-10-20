@@ -50,7 +50,7 @@ STRICT = {
         'instancing', 'instanceop', 'instancetx', 'instancety', 'instancetz',
         'instancerx', 'instancery', 'instancerz', 'instancesx', 'instancesy', 'instancesz',
         'instancerord', 'instancexord', 'instancer', 'instanceg', 'instanceb', 'instancea',
-        'instancecolormode'],
+        'instancecolormode', 'instancerottox', 'instancerottoy', 'instancerottoz'],
     'cameraCOMP': list(_XFORM) + ['xord', 'rord', 'fov', 'viewanglemethod', 'focal',
                                   'aperture', 'near', 'far', 'projection'],
     'lightCOMP': list(_XFORM) + ['xord', 'rord', 'dimmer', 'cr', 'cg', 'cb', 'lighttype'],
@@ -174,7 +174,7 @@ class ParCollection(object):
         if strict:
             for n in STRICT[owner.OPType]:
                 kind = 'menu' if n in _MENUS else ('str' if n in ('material', 'instanceop', 'lookat')
-                                                   else 'float')
+                                                   or n.startswith('instancerotto') else 'float')
                 if n in ('render', 'instancing'):
                     kind = 'toggle'
                 self._pars[n] = Par(owner, n, _DEFAULTS.get(n, '' if kind == 'str' else 0.0),

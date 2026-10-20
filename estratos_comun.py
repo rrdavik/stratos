@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v21'
+VERSION_COMUN = 'comun v22'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -473,9 +473,11 @@ RETICULA_CB = r'''# Posicion de las celdas (85 con do1-do8) sobre la superficie 
 # De polo a polo: los polos son las notas extremas del rango y en medio
 # un anillo por octava; la clase de nota elige el meridiano.
 # (Reescrito por estratos_comun.py: la geometria la da el motor, para que
-# la reticula suba con las conchas.)
+# la reticula suba con las conchas. El giro de cada marca, rx ry rz, tambien:
+# "rotar hacia un vector" no sabe girar en los polos, donde la normal es
+# paralela al vector arriba.)
 
-CHANS = ['tx', 'ty', 'tz', 'nx', 'ny', 'nz', 'r', 'g', 'b']
+CHANS = ['tx', 'ty', 'tz', 'nx', 'ny', 'nz', 'rx', 'ry', 'rz', 'r', 'g', 'b']
 
 
 def onSetupParameters(scriptOp):
@@ -495,11 +497,12 @@ def onCook(scriptOp):
         for i in range(m.N):
             R = m.suelo(W, c, i) + 0.06      # cada marca sobre el suelo de su celda
             nx, ny, nz = m.normal_i(i)
+            rx, ry = m.orient((nx, ny, nz))  # la marca, plana sobre su celda
             t = i / float(max(1, m.N - 1))
-            rows.append([nx * R, ny * R, nz * R, nx, ny, nz,
+            rows.append([nx * R, ny * R, nz * R, nx, ny, nz, rx, ry, 0.0,
                          0.30 + 0.45 * t, 0.55, 0.75 - 0.35 * t])
     if not rows:
-        rows = [[0, -9999, 0, 0, 1, 0, 0, 0, 0]]
+        rows = [[0, -9999, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]]
     n = len(rows)
     scriptOp.numSamples = n
     chans = [scriptOp.appendChan(nm) for nm in CHANS]
@@ -660,6 +663,29 @@ def read_text(carpeta, name):
                            'todos los archivos de Estratos.' % path)
 
 
+def reticula_giro(base):
+    """Cada marca de la reticula gira con los canales rx ry rz del
+    reticula_chop, como las demas geometrias. fase12_base.py usaba "rotar
+    hacia un vector" (Rotate To X/Y/Z = nx ny nz): en los polos la normal es
+    paralela al vector arriba y TouchDesigner avisa ('co-linear with the Up
+    Vector') y deja esas marcas sin girar."""
+    geo = base.op('reticula')
+    if geo is None:
+        return False
+    bien = True
+    for par_name, chan in [('instancerx', 'rx'), ('instancery', 'ry'), ('instancerz', 'rz')]:
+        bien = setp(geo, par_name, chan) and bien
+    setp(geo, 'instancerord', 'xyz')
+    for par_name in ('instancerottox', 'instancerottoy', 'instancerottoz'):
+        setp(geo, par_name, '')
+    if bien:
+        ok('reticula: cada marca gira con rx ry rz (sin "rotar hacia un vector")')
+    else:
+        fail('reticula: no pude enlazar el giro; Instance -> Rotate X/Y/Z = rx ry rz '
+             'y vacia Rotate To X/Y/Z')
+    return bien
+
+
 def install_core(base, carpeta, fase):
     nivel = set_level(base, fase)
     ok('nivel de FASE1: %d' % nivel)
@@ -689,6 +715,7 @@ def install_core(base, carpeta, fase):
 
     base.op('reticula_callbacks').text = RETICULA_CB
     ok('reticula: sigue la superficie que da el motor')
+    reticula_giro(base)
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
