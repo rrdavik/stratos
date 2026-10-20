@@ -14,12 +14,14 @@ QUE HACE
   CAMARA       (Modocamara)
      globo       por defecto: mira al centro y encuadra el planeta entero
                  tan cerca como permite el cuadro (Encuadremargen de
-                 holgura). Radio que se encuadra = radio nominal + altura
-                 maxima de las formaciones: solo cambia al enterrar. A cada
-                 enterramiento retrocede en Camsuave s (amortiguado critico,
-                 travelling: el FOV no cambia); si el globo no cabe, la
-                 parte que falta se corrige al instante. Fija en +Z: el
-                 giro y el balanceo del planeta ensenan todas sus caras.
+                 holgura, 1,02). Autoencuadre (motor v32): el radio que se
+                 encuadra es lo mas lejos que llega algo de lo que se
+                 dibuja; cuando algo crece se aleja en medio segundo y,
+                 cuando el mundo mengua, se acerca en Camsuave s
+                 (amortiguado critico, travelling: el FOV no cambia). Si
+                 algo no cabe, la parte que falta se corrige al instante.
+                 Fija en +Z: el giro y el balanceo del planeta ensenan
+                 todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
                  Planofinal la lleva en 20 s al encuadre de globo.
@@ -37,7 +39,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v7  (camara de globo por defecto; superficie como modo; paleta de generaciones)'
+VERSION = 'fase10 v8  (camara de globo con autoencuadre; superficie como modo; paleta de generaciones)'
 banner(VERSION)
 
 base = require_base(10)
@@ -46,7 +48,8 @@ motor = install_core(base, CARPETA, 10)
 page = get_page(base, 'Fase10')
 add_par(base, page, 'menu', 'Modocamara', 'Camara', 'globo', menu=['globo', 'superficie'],
         menu_labels=['Globo entero', 'Superficie'])
-add_par(base, page, 'float', 'Encuadremargen', 'Holgura alrededor del globo', 1.08, 1.0, 1.5, clamp=True)
+add_par(base, page, 'float', 'Encuadremargen', 'Holgura alrededor del globo', 1.02, 1.0, 1.5, clamp=True)
+renew_default(base, 'Encuadremargen', 1.08, 1.02)    # motor v32: encuadra lo que se ve
 add_par(base, page, 'float', 'Camsuave', 'Segundos para el encuadre nuevo', 3.0, 0.0, 20.0)
 add_par(base, page, 'toggle', 'Modoactuacion', 'Modo actuacion (sin diagnostico)', False)
 add_par(base, page, 'toggle', 'Planofinal', 'Plano final: el globo entero (en superficie)', False)
@@ -59,7 +62,7 @@ for nm, lb in (('Planofinal', 'Plano final: el globo entero (en superficie)'),
         getattr(base.par, nm).label = lb
     except Exception:
         pass
-ok('pagina Fase10: Modocamara (globo), Encuadremargen (1,08), Camsuave (3 s), Modoactuacion, '
+ok('pagina Fase10: Modocamara (globo), Encuadremargen (1,02), Camsuave (3 s), Modoactuacion, '
    'Planofinal, Camaltura, Camvel')
 
 # --- camara -------------------------------------------------------------------
@@ -155,6 +158,7 @@ def prueba(t):
             and math.asin(st['Re'] / dist) <= st['theta'] / 2 + 1e-9,
             'dist %.2f radio encuadre %.2f' % (dist, st['Re']))
     t.check('planos de recorte', st['far'] >= dist + 2 * st['Re'] and 0 < st['near'] < dist - st['Re'])
+    _autoencuadre(t, m)
     # superficie como modo (sin transicion, para medirla)
     base.par.Modocamara = 'superficie'
     m._CACHE['cam_w'] = 1.0
@@ -184,6 +188,72 @@ def prueba(t):
     base.par.Modoactuacion = before
     m.on_value('Modoactuacion', before)
     t.check('al quitarlo vuelve la reticula', bool(int(base.par.Showgrid)) == (not before))
+
+
+def _autoencuadre(t, m):
+    """Autoencuadre (motor v32): encuadra lo que se dibuja; se aleja rapido
+    cuando algo crece y se acerca en Camsuave s cuando el mundo mengua."""
+    import math
+    t0 = absTime.seconds
+
+    def lejos(inst):
+        return max([math.sqrt(f[0] ** 2 + f[1] ** 2 + f[2] ** 2)
+                    for g, filas in inst.items() if g not in m.SIN_EXTENSION for f in filas] or [0.0])
+
+    def mirar(W, c, crecer=True):
+        if crecer:
+            W['vh'] = list(W['h'])
+        m._CACHE['inst'] = m.build_instances(W, c, t0)
+
+    def paso(seg):
+        m._CACHE['cam_t'] = t0 - seg           # como si hubieran pasado 'seg' segundos
+        pico = m._CACHE.get('cam_pico')
+        if pico:
+            m._CACHE['cam_pico'] = (pico[0], pico[1] - seg)
+        m._CACHE.pop('cam_frame', None)
+        st_ = m.camera_state()
+        p_ = st_['pos']
+        return st_, math.sqrt(p_[0] ** 2 + p_[1] ** 2 + p_[2] ** 2)
+
+    m.reset_world()
+    base.par.Velprueba = 100
+    base.par.Nota = 64
+    m.on_pulse('Sembrar')
+    W, c = m.world(), m.cfg()
+    mirar(W, c)
+    m.cam_reset()
+    st, d0 = paso(0.0)
+    rv = m.radio_visible(m._CACHE['inst'], W, c)
+    d_ok = m.globe_distance(rv, st['fov'], st['aspect'], st['margen'], st['metodo'])[0]
+    t.check('autoencuadre: encuadra lo que se dibuja (no el tope teorico) con Encuadremargen',
+            abs(d0 - d_ok) < 1e-6 and rv >= lejos(m._CACHE['inst']) and rv < m.radio_encuadre(W, c),
+            'radio visible %.2f (tope %.2f), dist %.2f' % (rv, m.radio_encuadre(W, c), d0))
+    # crece: se aleja enseguida y nada se sale del cuadro
+    for _ in range(8):
+        m.on_pulse('Sembrar')
+    mirar(W, c)
+    rv2 = m.radio_visible(m._CACHE['inst'], W, c)
+    cabe, ds = True, []
+    for _ in range(6):
+        st, d = paso(0.25)
+        ds.append(d)
+        cabe = cabe and math.asin(min(1.0, rv2 / d)) <= st['theta'] / 2 + 1e-9
+    d_fin = m.globe_distance(rv2, st['fov'], st['aspect'], st['margen'], st['metodo'])[0]
+    t.check('autoencuadre: algo crece -> se aleja en menos de 1,5 s, sin dejar nada fuera',
+            rv2 > rv and cabe and abs(ds[-1] - d_fin) < 0.02 * d_fin,
+            'radio %.2f -> %.2f, dist %.2f -> %.2f' % (rv, rv2, d0, ds[-1]))
+    # mengua: se acerca despacio (Camsuave), sin saltos
+    m.reset_world()
+    W = m.world()
+    mirar(W, c)
+    st, d1 = paso(0.25)
+    for _ in range(int(4 * max(1.0, float(base.par.Camsuave)) / 0.25) + 8):
+        st, d2 = paso(0.25)
+    t.check('autoencuadre: el mundo mengua -> se acerca despacio (Camsuave)',
+            ds[-1] * 1.001 >= d1 > d2 and (ds[-1] - d1) < 0.5 * (ds[-1] - d2)
+            and abs(d2 - st['d_obj']) < 0.02 * st['d_obj'],
+            'dist %.2f -> %.2f -> %.2f' % (ds[-1], d1, d2))
+    m.cam_reset()
 
 
 run_test(base, prueba)

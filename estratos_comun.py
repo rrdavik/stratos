@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v22'
+VERSION_COMUN = 'comun v23'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -519,7 +519,8 @@ def onCook(scriptOp):
 # Lee la rugosidad del alfa del color de cada instancia (0 pulido, 1 rugoso).
 # Pulido: reflejo fino y fuerte y un reflejo de borde frio. Rugoso: mate y con
 # poros (pomez, hormigon). uFamilia: 0 mineral (obsidiana <-> pomez), 1 dosel
-# (vidrio ahumado con vetas ambar), 2 ciudad (vidrio negro <-> hormigon, con
+# (toda la vegetacion: hojas en manchas de dos verdes, lados pardos, luz que
+# envuelve y contraluz; hoja cerosa <-> musgo seco), 2 ciudad (vidrio negro <-> hormigon, con
 # ventanas ambar que enciende uVentanas.x desde la fase 17). Las luces llegan
 # como uniformes (posicion y color x dimmer de luz_principal, luz_relleno y
 # luz_destello). Si el shader falla, Materialrespaldo vuelve a un Phong.
@@ -592,13 +593,16 @@ float ruido(vec3 x)
     return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
-vec3 luz(vec3 pos, vec3 col, vec3 p, vec3 n, vec3 v, vec3 base, float expo, float ks, inout vec3 spec)
+vec3 luz(vec3 pos, vec3 col, vec3 p, vec3 n, vec3 v, vec3 base, float expo, float ks, float wrap,
+         inout vec3 spec)
 {
+    // wrap > 0: la luz "envuelve" (hojas): las caras de lado no quedan negras
     vec3 l = normalize(pos - p);
-    float nl = max(dot(n, l), 0.0);
+    float nl = dot(n, l);
+    float nw = max((nl + wrap) / (1.0 + wrap), 0.0);
     vec3 h = normalize(l + v);
     spec += col * ks * pow(max(dot(n, h), 0.0), expo) * step(0.0001, nl);
-    return base * col * nl;
+    return base * col * nw;
 }
 
 void main()
@@ -612,24 +616,45 @@ void main()
     vec3 v = normalize(cam - iVert.wPos);
     if (dot(n, v) < 0.0)
         n = -n;
-    // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
     vec3 q = iVert.oPos * 7.0 + vec3(float(iVert.inst) * 1.731);
     float poro = ruido(q) * 0.65 + ruido(q * 3.1) * 0.35;
-    base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
     float expo = mix(120.0, 6.0, rug);
     float ks = mix(1.2, 0.03, rug);
+    float wrap = 0.0;
+    float amb = 1.0;
+    bool vegetal = fam > 0.5 && fam < 1.5;
+    if (vegetal) {
+        // vegetal: hojas en manchas anchas de dos verdes (nada de lineas finas);
+        // las caras de lado (troncos, ramas, bordes de copa), mas pardas y oscuras;
+        // cada planta con su matiz. Pulido: hoja cerosa; rugoso: musgo seco.
+        float arriba = abs(dot(n, normalize(iVert.wPos)));
+        float hoja = ruido(q * 0.6) * 0.6 + ruido(q * 1.7) * 0.4;
+        float matiz = hash13(vec3(float(iVert.inst) * 0.37, 1.3, 2.7));
+        vec3 hojas = base * mix(0.72, 1.28, hoja) * mix(vec3(0.92, 1.0, 1.06), vec3(1.10, 1.02, 0.84), matiz);
+        float fibra = ruido(vec3(q.x * 3.0, q.y * 0.35, q.z * 3.0));
+        vec3 corteza = base * vec3(0.80, 0.62, 0.44) * mix(0.62, 0.95, fibra);
+        base = mix(corteza, hojas, smoothstep(0.30, 0.80, arriba));
+        base *= 1.0 - 0.30 * rug * smoothstep(0.45, 0.80, poro);
+        expo = mix(36.0, 8.0, rug);
+        ks = mix(0.30, 0.02, rug);
+        wrap = 0.5;
+        amb = 1.6;
+    } else {
+        // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
+        base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
+    }
     vec3 spec = vec3(0.0);
-    vec3 dif = base * uAmbiente.rgb;
-    dif += luz(uLuz0.xyz, uLuz0Col.rgb, iVert.wPos, n, v, base, expo, ks, spec);
-    dif += luz(uLuz1.xyz, uLuz1Col.rgb, iVert.wPos, n, v, base, expo, ks, spec);
-    dif += luz(uLuz2.xyz, uLuz2Col.rgb, iVert.wPos, n, v, base, expo, ks, spec);
+    vec3 dif = base * uAmbiente.rgb * amb;
+    dif += luz(uLuz0.xyz, uLuz0Col.rgb, iVert.wPos, n, v, base, expo, ks, wrap, spec);
+    dif += luz(uLuz1.xyz, uLuz1Col.rgb, iVert.wPos, n, v, base, expo, ks, wrap, spec);
+    dif += luz(uLuz2.xyz, uLuz2Col.rgb, iVert.wPos, n, v, base, expo, ks, wrap, spec);
     float fres = pow(1.0 - max(dot(n, v), 0.0), 5.0);
     vec3 col = dif + spec;
-    if (fam > 0.5 && fam < 1.5) {
-        // dosel: vidrio ahumado (reflejo de borde) con vetas ambar
-        float onda = abs(sin(dot(iVert.oPos, vec3(9.0, 3.0, 7.0)) + ruido(q) * 4.0));
-        float veta = 1.0 - smoothstep(0.0, 0.08, onda);
-        col = col * 0.75 + fres * vec3(0.30, 0.34, 0.32) + veta * vec3(1.0, 0.62, 0.22) * 0.5;
+    if (vegetal) {
+        // a contraluz la copa deja pasar la luz: brillo verde, sin reflejo de vidrio
+        vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
+        float tras = pow(max(dot(-l0, v), 0.0), 3.0) * (1.0 - 0.5 * rug);
+        col += tras * base * uLuz0Col.rgb * 0.35 + fres * vec3(0.05, 0.08, 0.05);
     } else if (fam > 1.5) {
         // ciudad: vidrio negro con reflejo de borde; ventanas ambar (apagadas hasta la fase 17)
         col += fres * (1.0 - rug) * vec3(0.25, 0.28, 0.32);
@@ -716,6 +741,7 @@ def install_core(base, carpeta, fase):
     base.op('reticula_callbacks').text = RETICULA_CB
     ok('reticula: sigue la superficie que da el motor')
     reticula_giro(base)
+    renew_default(base, 'Encuadremargen', 1.08, 1.02)    # motor v32: encuadra lo que se dibuja
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
@@ -739,7 +765,35 @@ def install_core(base, carpeta, fase):
     reparar_color_instancias(base)
     apply_wobble(base)
     patch_ritmo(base)
+    piel_al_dia(base, motor.module)
     return motor
+
+
+def piel_al_dia(base, m):
+    """Con la piel ya montada (nivel 12 o mas): el shader de la piel al dia y
+    cada geometria de modelo con el material de su familia (motor v32: los
+    arboles y brotes pasan del mineral al vegetal, mat_piel_dosel). Sin
+    rehacer las geometrias."""
+    try:
+        c = m.cfg()
+        if c['nivel'] < 12 or base.op('mat_piel_dosel') is None:
+            return
+        materiales_piel(base)
+        cambiadas = 0
+        for g, mo, mat in m.geometrias_piel(c):
+            geo = base.op(g)
+            if geo is None or mo.startswith('ciu_'):
+                continue
+            expr = "'mat_respaldo' if parent().par.Materialrespaldo else '%s'" % mat
+            p = getattr(geo.par, 'material', None)
+            if p is not None and getattr(p, 'expr', '') != expr:
+                setexpr(geo, 'material', expr)
+                cambiadas += 1
+        if cambiadas:
+            ok('piel: %d geometrias con el material de su familia (la vegetacion, mat_piel_dosel)'
+               % cambiadas)
+    except Exception as e:
+        info('piel: no pude poner al dia los materiales (%s); relanza fase12_moduladores.py' % e)
 
 
 BALIZAS_VIEJAS = ['baliza', 'baliza_chop', 'baliza_callbacks', 'mat_baliza',

@@ -23,7 +23,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v31'
+MOTOR_VERSION = 'motor v32'
 
 import math
 
@@ -360,6 +360,10 @@ def tangents(n):
 def _norm(v):
     l = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2) or 1.0
     return (v[0] / l, v[1] / l, v[2] / l)
+
+
+def _len(v):
+    return math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
 
 
 def _add(a, b, k=1.0):
@@ -2700,7 +2704,8 @@ def vh_stop(W, i, now, paso):
 # ahora) o continuo (de Rugmax a 0 a Rugmin a 127). Va en el alfa del color
 # de cada instancia; el GLSL MAT de la piel la lee (pulido: reflejo fino y
 # fuerte; rugoso: mate y con poros). El color se acerca al material del
-# tema: obsidiana <-> pomez y dosel de vidrio ahumado en naturaleza, vidrio
+# tema: obsidiana <-> pomez en el relieve, hoja cerosa <-> musgo seco en la
+# vegetacion (desde la v32; antes los arboles eran de obsidiana), vidrio
 # negro <-> hormigon en la ciudad. La velocidad sigue sembrando el caos.
 # El gate, al soltar la nota: en naturaleza da vigor (tronco mas grueso y
 # copa mas ancha); en la ciudad, un gate ligado construye Plantasligado
@@ -2710,7 +2715,7 @@ MATERIALES = ['binario', 'continuo']
 LIGADO = 1.0                # un gate de un paso o mas es ligado
 # familia: (color pulido, color rugoso, cuanto pesa sobre el color de la especie)
 MATERIAL = dict(mineral=((0.10, 0.10, 0.12), (0.80, 0.78, 0.72), 0.50),
-                dosel=((0.16, 0.21, 0.18), (0.34, 0.40, 0.32), 0.55),
+                dosel=((0.14, 0.32, 0.17), (0.42, 0.47, 0.27), 0.45),
                 ciudad=((0.08, 0.09, 0.12), (0.68, 0.66, 0.62), 0.60))
 MAT_FAMILIA = dict(mineral='mat_piel_mineral', dosel='mat_piel_dosel', ciudad='mat_piel_ciudad',
                    obra='mat_poroso')
@@ -2726,9 +2731,12 @@ def rugosidad(cfg, vel):
 
 
 def familia_de(modelo):
+    """Familia de material de un modelo. Toda la vegetacion (arboles, brotes y
+    dosel) es 'dosel', el material vegetal; desde la v32 los arboles ya no
+    son de obsidiana: se veian como alambre."""
     if modelo.startswith('ciu_'):
         return 'obra'
-    if modelo == 'veg_dosel':
+    if modelo.startswith('veg_'):
         return 'dosel'
     return 'ciudad' if modelo[:3] in ('inf', 'pla') else 'mineral'
 
@@ -2782,8 +2790,13 @@ COL_ESPORA = (0.86, 0.94, 0.72)
 COL_POLVO = (0.58, 0.52, 0.44)
 COL_OBRERO = (1.00, 0.68, 0.22)
 # puente de cada especie: (ancho x celda, base y grosor x la formacion mas baja)
-PUENTE = dict(vegetacion=(0.32, 0.62, 0.24), relieve=(0.40, 0.0, 0.50),
+PUENTE = dict(vegetacion=(0.42, 0.62, 0.24), relieve=(0.40, 0.0, 0.50),
               informal=(0.12, 0.45, 0.14), planificada=(0.62, 0.0, 0.22))
+# hueco del dosel (motor v32): la copa que cierra el triangulo entre tres celdas
+# del cluster, con el modelo del dosel centrado (su ancho, su largo y el centro
+# de su planta, en unidades del modelo) y un diametro de DOSEL_HUECO x el radio
+DOSEL_HUECO = 1.5
+DOSEL_ANCHO, DOSEL_LARGO, DOSEL_CENTRO = 1.10, 1.495, (0.08, 0.5025)
 CORONA_K = 1.35              # la pieza de coronacion, mas alta que la formacion
 CORONA_TRAMO = 0.10          # y un 10 % mas por tramo de cumbre
 ANDAMIO_PASOS = 3.0          # el andamio sube planta a planta en 3 pasos
@@ -2867,6 +2880,34 @@ def _marco_puente(i, j):
         ej = (_cross(n, d), n, d)
         v = _MARCOS[clave] = ej + (_euler_xyz(*ej),)
     return v
+
+
+def _huecos_dosel(i, mascara, bases):
+    """Los huecos del dosel que cierra la celda i: cada triangulo de celdas
+    del cluster unidas entre si (i, j, k) en el que i es la de indice menor.
+    Da (celdas, centro sobre la superficie, marco, radio del triangulo)."""
+    out = []
+    mi = mascara[i]
+    for j in mi:
+        if j <= i:
+            continue
+        for k in mi:
+            if k <= j or k not in mascara[j]:
+                continue
+            tri = (i, j, k)
+            a, b, c = bases[i], bases[j], bases[k]
+            g = ((a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0, (a[2] + b[2] + c[2]) / 3.0)
+            r = (_len(a) + _len(b) + _len(c)) / 3.0
+            nc = _norm(g)
+            pc = _mul(nc, r)
+            clave = (GRID['lo'], GRID['hi'], 'hueco', tri)
+            ej = _MARCOS.get(clave)
+            if ej is None:
+                d = _hacia(nc, pc, a)
+                ej = _MARCOS[clave] = (_cross(nc, d), nc, d, _euler_xyz(_cross(nc, d), nc, d))
+            rho = max(_len(_add(x, pc, -1.0)) for x in (a, b, c))
+            out.append((tri, pc, ej, rho))
+    return out
 
 
 def _fila_m(p, marco, sx, sy, sz, col):
@@ -2968,7 +3009,8 @@ def build_piel(W, cfg, now, out):
         pulido = W['vel'][i] >= cfg['vel_umbral']
         if doce:                                    # el material del tema, por la velocidad
             rug = rugosidad(cfg, W['vel'][i])
-            col = material_tema(cfg, COL_ESPECIE[esp], 'ciudad' if tema == 'ciudad' else 'mineral', rug)
+            col = material_tema(cfg, COL_ESPECIE[esp], 'ciudad' if tema == 'ciudad' else
+                                'dosel' if esp == 'vegetacion' else 'mineral', rug)
             ancho = W['vig'][i] if tema == 'naturaleza' else 1.0
         else:
             rug, ancho = 1.0, 1.0
@@ -3098,6 +3140,14 @@ def build_piel(W, cfg, now, out):
                         else _material_col(COL_PUENTE[esp], pulido)
                     emit(pm[0], pulido, _add(p0, n, y0 * vmin), ej, (kw * min(cw, cl_) * k_ancho, alto_p, largo),
                          cp, rug)
+                if esp == 'vegetacion':             # el dosel se cierra: una copa en cada hueco
+                    for tri, pc, ej, rho in _huecos_dosel(i, cl['mascara'], bases):
+                        vs = [W['vh'][x] for x in tri if W['vh'][x] > 0.005]
+                        vmin = min(vs) if vs else W['vh'][i]
+                        sx_, sz_ = DOSEL_HUECO * rho * k_ancho / DOSEL_ANCHO, DOSEL_HUECO * rho * k_ancho / DOSEL_LARGO
+                        pc = _add(_add(_add(pc, ej[1], y0 * vmin), ej[0], -DOSEL_CENTRO[0] * sx_),
+                                  ej[2], -DOSEL_CENTRO[1] * sz_)
+                        emit(pm[0], pulido, pc, ej, (sx_, max(0.01, gr * vmin * k_alto), sz_), cp, rug)
         # obras de la ciudad y particulas
         if k_ >= 0 and cf:
             ef = W['et_f'][i]
@@ -3938,14 +3988,21 @@ def luz_color(nombre, k, frame=None):
         return 0.0
 
 
-# --- camara (motor v24) --------------------------------------------------------
+# --- camara (motor v24; autoencuadre, v32) ----------------------------------------
 # Por defecto, camara de GLOBO: mira al centro, en la direccion de referencia
 # (+Z, hacia la que se balancea el eje), y encuadra el planeta entero tan
-# cerca como permite el cuadro. Retrocede lo justo a cada enterramiento.
-# La de SUPERFICIE (fase 10 v4) queda como modo (Modocamara).
+# cerca como permite el cuadro. Desde la v32 encuadra lo que de verdad se
+# dibuja (radio_visible): se aleja en cuanto algo crece y se acerca despacio
+# (Camsuave) cuando el mundo mengua. La de SUPERFICIE (fase 10 v4) queda
+# como modo (Modocamara).
 
 CAM_DIR = (0.0, 0.0, 1.0)          # direccion de referencia de la camara
 CAM_TRANS = 20.0                   # segundos de Planofinal y del cambio de modo
+CAM_SALIDA = 0.5                   # segundos para alejarse cuando algo crece
+CAM_PICO = 2.0                     # segundos que se sostiene el radio mas grande (latido)
+CAJA_EXT = (0.5, 1.0, 0.5)         # semiejes de la caja de las geometrias (base en y = 0)
+SIN_EXTENSION = ('estratos', 'luz_conchas')     # no pasan de la superficie
+_EXT = {}
 
 
 def altura_max(cfg):
@@ -3958,9 +4015,80 @@ def altura_max(cfg):
 
 
 def radio_encuadre(W, cfg):
-    """Radio que se encuadra: el nominal mas la altura maxima. Solo cambia
-    cuando el planeta engorda (los suelos nunca pasan del nominal)."""
+    """Lo mas lejos que podria llegar algo: el radio nominal mas la altura
+    maxima. Es un tope teorico; la camara encuadra radio_visible."""
     return top_radius(W, cfg) + altura_max(cfg)
+
+
+def _ext_modelo(modelo):
+    """Semiejes (x, y, z) de un modelo del catalogo, desde su origen."""
+    v = _EXT.get(modelo)
+    if v is None:
+        b = _caja_modelo(MODELOS[modelo])
+        v = _EXT[modelo] = (max(abs(b[0]), abs(b[1])), max(abs(b[2]), abs(b[3])),
+                            max(abs(b[4]), abs(b[5])))
+    return v
+
+
+_EJE_Y = {}
+
+
+def _eje_y(rx, ry, rz):
+    """El eje Y local de una instancia girada rx ry rz (orden xyz)."""
+    k = (rx, ry, rz)
+    v = _EJE_Y.get(k)
+    if v is None:
+        if len(_EJE_Y) > 50000:
+            _EJE_Y.clear()
+        a, b, c = math.radians(rx), math.radians(ry), math.radians(rz)
+        sa, ca, sb, cb, sc, cc = math.sin(a), math.cos(a), math.sin(b), math.cos(b), math.sin(c), math.cos(c)
+        v = _EJE_Y[k] = (sa * sb * cc - ca * sc, sa * sb * sc + ca * cc, sa * cb)
+    return v
+
+
+def radio_visible(inst, W, cfg):
+    """Lo mas lejos del centro que llega algo de lo que se dibuja: la
+    superficie (con la reticula) y cada instancia. De cada pieza se toma su
+    alto (eje Y local, segun lo inclinada que este respecto a la vertical
+    de su sitio) y su ancho: una pieza tumbada, como un puente, no cuenta
+    su largo como altura. No depende del giro del planeta."""
+    r2 = (top_radius(W, cfg) + 0.2) ** 2
+    modelos = dict((g, mo) for g, mo, _ in geometrias_piel(cfg)) if cfg['nivel'] >= 11 else {}
+    sq = math.sqrt
+    for g, filas in inst.items():
+        if not filas or g in SIN_EXTENSION:
+            continue
+        ex, ey, ez = _ext_modelo(modelos[g]) if g in modelos else CAJA_EXT
+        for f in filas:
+            P = sq(f[0] * f[0] + f[1] * f[1] + f[2] * f[2])
+            h = ey * abs(f[7])
+            lat = sq((ex * f[6]) ** 2 + (ez * f[8]) ** 2)
+            if P > 1e-9:
+                uy = _eje_y(f[3], f[4], f[5])
+                co = abs(f[0] * uy[0] + f[1] * uy[1] + f[2] * uy[2]) / P
+                si = sq(max(0.0, 1.0 - co * co))
+            else:
+                co, si = 1.0, 1.0
+            rad = P + h * co + lat * si
+            per = h * si + lat
+            d2 = rad * rad + per * per
+            if d2 > r2:
+                r2 = d2
+    return sq(r2)
+
+
+def _radio_camara(W, c, t):
+    """(radio ahora, radio sostenido): el sostenido guarda el mas grande de
+    los ultimos CAM_PICO segundos, para que el latido no mueva la camara."""
+    inst = _CACHE.get('inst')
+    if inst is None:
+        inst = build_instances(W, c, t, hide_beacons=performance())
+    r = radio_visible(inst, W, c)
+    pico, t_pico = _CACHE.get('cam_pico', (0.0, -1e9))
+    if r >= pico or t - t_pico > CAM_PICO or t < t_pico:
+        pico, t_pico = r, t
+    _CACHE['cam_pico'] = (pico, t_pico)
+    return r, pico
 
 
 def fovs(fov_deg, aspect, metodo='horzfov'):
@@ -4050,26 +4178,29 @@ def camera_state():
         return _CACHE['cam']
     W, c = world(), cfg()
     R = top_radius(W, c)
-    Re = radio_encuadre(W, c)
     t = absTime.seconds
     last = _CACHE.get('cam_t')
     dt = 0.0 if last is None else max(0.0, min(0.25, t - last))
     _CACHE['cam_t'] = t
-    # globo: distancia que persigue el encuadre, con un minimo de seguridad
+    # globo: persigue el encuadre de lo que se dibuja (alejarse rapido,
+    # acercarse en Camsuave s), sin dejar nunca nada fuera del cuadro
+    r_ahora, Re = _radio_camara(W, c, t)
     fov, metodo, aspect = _cam_optics()
-    margen = max(1.0, _p('Encuadremargen', 1.08))
+    margen = max(1.0, _p('Encuadremargen', 1.02))
     suave = max(0.0, _p('Camsuave', 3.0))
-    d_obj, d_min, th = globe_distance(Re, fov, aspect, margen, metodo)
+    d_obj, _, th = globe_distance(Re, fov, aspect, margen, metodo)
+    d_min = globe_distance(r_ahora, fov, aspect, 1.0, metodo)[1]
     d = _CACHE.get('cam_d')
-    if d is None or Re < _CACHE.get('cam_Re', Re) - 1e-6:
+    if d is None or R < _CACHE.get('cam_R', R) - 1e-6:
         d, v = d_obj, 0.0              # arranque, Resetmundo, rango o mundo cargado: sin transicion
     else:
-        d, v = smooth_damp(d, _CACHE.get('cam_v', 0.0), d_obj, dt, suave)
+        d, v = smooth_damp(d, _CACHE.get('cam_v', 0.0), d_obj, dt,
+                           min(suave, CAM_SALIDA) if d_obj > d else suave)
     salto = 0.0
     if d < d_min:
         salto = d_min - d
         d, v = d_min, max(0.0, v)
-    _CACHE.update(cam_d=d, cam_v=v, cam_Re=Re)
+    _CACHE.update(cam_d=d, cam_v=v, cam_R=R)
     # modo: peso de la camara de superficie (0 globo, 1 superficie)
     sup = c['nivel'] >= 10 and str(_p('Modocamara', 'globo')) == 'superficie' \
         and not _p('Planofinal', False)
@@ -4113,7 +4244,7 @@ def cam(key, k=0, frame=None):
 
 def cam_reset():
     """La proxima lectura de la camara salta al encuadre (sin transicion)."""
-    for k in ('cam_d', 'cam_v', 'cam_Re', 'cam_frame'):
+    for k in ('cam_d', 'cam_v', 'cam_R', 'cam_frame', 'cam_pico'):
         _CACHE.pop(k, None)
 
 

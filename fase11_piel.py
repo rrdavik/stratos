@@ -59,7 +59,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v2  (la piel: catalogo de modelos, clusters, puentes, compuestos y transitos)'
+VERSION = 'fase11 v3  (la piel: catalogo de modelos, clusters, puentes, compuestos y transitos; dosel cerrado)'
 banner(VERSION)
 
 base = require_base(11)
@@ -316,9 +316,13 @@ def _prueba(t, m):
             prot = m.modelos_de(c, tema, esp, 'protagonista')[m.clase_cluster(n_cl)]
             n_prot = sum(len(inst.get(g, [])) for g in geos[prot])
             enlaces = sum(len(x) for x in cl['mascara'])
+            if esp == 'vegetacion':          # motor v32: el dosel cierra cada hueco entre tres celdas
+                mk_ = cl['mascara']
+                enlaces += sum(1 for a in range(m.N) for b in mk_[a] if b > a
+                               for c_ in mk_[a] if c_ > b and c_ in mk_[b])
             otro = [g for g, mo, _ in m.geometrias_piel(c) if inst.get(g)
                     and (mo[:3] in ('veg', 'rel')) != (tema == 'naturaleza')]
-            t.check('%s, %s: Sembrarzona x2 -> cluster de %d celdas, %d puentes y protagonista'
+            t.check('%s, %s: Sembrarzona x2 -> cluster de %d celdas, %d puentes (y huecos del dosel) y protagonista'
                     % (tema, esp, n_cl, puentes),
                     n_cl == 1 + len(m.NEIGH[i]) and puentes == enlaces > 0 and n_prot == 1 and not otro,
                     'cluster %d, puentes %d de %d, protagonista %d, del otro tema %d'
