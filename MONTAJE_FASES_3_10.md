@@ -18,8 +18,8 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v32, el autoencuadre (la cámara sigue lo que se dibuja) | `motor v32` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar | `comun v23` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva) | `motor v33` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura` | `comun v24` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11) | `fase3 v12` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
@@ -27,7 +27,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11) | `fase7 v10` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`) | `fase8 v8` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo) | `fase9 v8` |
-| `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v8: autoencuadre) | `fase10 v8` |
+| `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v9: encuadre cercano con `Holguraaltura`) | `fase10 v9` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
 
@@ -559,7 +559,8 @@ CORTE    celda 41   nucleo alcanzado
 ## FASE 10 · Dirección visual
 
 - **Cámara de globo** (por defecto, `Modocamara` = globo; fase 10 v5, motor v24). Mira al centro del planeta (`objetivo` en el origen) y lo encuadra entero, tan cerca como permite el cuadro.
-  - **Autoencuadre** (motor v32, fase 10 v8). La cámara ya no reserva sitio para la altura máxima teórica: encuadra **lo que se dibuja**. En cada fotograma el motor mide el radio visible (`radio_visible`): la superficie y cada instancia, con su alto según lo inclinada que esté y su ancho (un puente tumbado no cuenta su largo como altura). Sobra un 5 % como mucho y nunca se queda corto. Ese radio se sostiene 2 s (el latido no mueve la cámara). Cuando algo crece, la cámara se aleja en medio segundo; cuando el mundo mengua (erosión, cortes, `Resetmundo` sin conchas), se acerca en `Camsuave` segundos. Si algo no cabe, la parte que falta se corrige al instante. `Encuadremargen` baja de 1,08 a 1,02 (al relanzar cualquier fase, si seguía en 1,08). Con el mundo de prueba de la fase 11 el planeta pasa de ocupar la mitad del alto del cuadro a unas tres cuartas partes. Lo de abajo describe la versión anterior (motor v24 a v31); la fórmula de la distancia sigue igual, con el radio visible en lugar del radio de encuadre.
+  - **Encuadre cercano** (motor v33, fase 10 v9). El radio que se encuadra es `radio nominal + Holguraaltura × altura máxima`, con `Holguraaltura` 0,4: el planeta entero, tan cerca como permite el cuadro, con algo de sitio para la altura de las construcciones. Con 1 vuelve el encuadre de antes (todo lo que podría llegar a crecer, también las coronas de cumbre); con 0, solo el planeta. Como antes, **solo cambia cuando el planeta engorda** (una concha nueva): crecer, erosionar, los cortes o el latido no mueven la cámara. Con cada concha se aleja en `Camsuave` segundos, y el planeta nunca se sale del cuadro (lo que no cabe se corrige al instante). Lo más alto de una construcción puede salirse del cuadro: la leyenda dice hasta dónde llega lo dibujado (`lo dibujado llega a`), para ajustar `Holguraaltura`. `Encuadremargen` pasa de 1,08 a 1,02 (al relanzar cualquier fase, si seguía en 1,08). Con el mundo de prueba de la fase 11 (planeta de radio 6), el radio encuadrado baja de 11,47 a 8,19.
+    *La v32 probó a encuadrar lo que se dibujaba en cada fotograma: la cámara se alejaba de golpe con cada latido y volvía a acercarse, y el mundo se veía a ratos. Se retiró en la v33.*
   - **Radio que se encuadra (hasta motor v31):** `radio_encuadre = radio nominal + altura máxima`. La altura máxima es lo más alto que llega algo que gira con el planeta: una formación en el límite hinchada por el latido (límite × 1,12) más la corona más larga (la de una torre en el último tramo de cumbre: 0,9 × (1 + 0,25 × `Tramoscumbre`) × límite). Con los valores por defecto, 1,875 × 2,92 = 5,475. Sale del código, no de medir la geometría: el encuadre solo cambia cuando el planeta engorda. El crecimiento, la erosión, los cortes y la colmatación no lo mueven, y ningún suelo pasa del radio nominal.
   - **Distancia:** una esfera de radio R cabe entera si la cámara está a R / sin(θ/2) de su centro, con θ el ángulo de visión del lado más estrecho del cuadro:
 
@@ -583,12 +584,12 @@ CORTE    celda 41   nucleo alcanzado
 - **Solo la leyenda.** `Leyenda` (página Fase1, activado) la muestra u oculta sin tocar nada más; la letra es de 9 puntos (15 hasta comun v12). Al relanzar cualquier fase, la letra pasa de 15 a 9 solo si seguía en 15, y aparece `Leyenda`.
 - **Modo actuación.** `Modoactuacion` oculta la retícula y la leyenda (la luz de celda se sigue viendo: es parte del mundo): el switch `modo` pasa la salida al render limpio. Al quitarlo vuelve el modo diagnóstico.
 
-**Página Fase10:** `Modocamara` globo · `Encuadremargen` 1,02 (1–1,5; 1,08 hasta la fase 10 v7) · `Camsuave` 3 s · `Modoactuacion` · `Planofinal` · `Camaltura` 4 · `Camvel` 0,6. `Planofinal`, `Camaltura` y `Camvel` solo actúan en modo superficie.
+**Página Fase10:** `Modocamara` globo · `Encuadremargen` 1,02 (1–1,5; 1,08 hasta la fase 10 v7) · `Camsuave` 3 s · `Holguraaltura` 0,4 (0–1) · `Modoactuacion` · `Planofinal` · `Camaltura` 4 · `Camvel` 0,6. `Planofinal`, `Camaltura` y `Camvel` solo actúan en modo superficie.
 
 **Leyenda** (diagnóstico, desde la fase 8):
 
 ```
-CAMARA   globo   dist 64.2 -> 66.0   radio encuadre 9.00   fov 45 (horizontal; manda el vertical)   margen 1.08
+CAMARA   globo   dist 36.8 -> 36.8   radio encuadre 8.19 (lo dibujado llega a 8.27)   fov 45 (horizontal; manda el vertical)   margen 1.02
 ```
 
 **Relanzar** (fase 10 v5) en un proyecto en la fase 10: `fase10_direccion.py`. Si quieres la cámara de globo también en la fase 8 de un proyecto que no ha llegado a la 10, relanza la última fase aplicada.
@@ -632,8 +633,9 @@ CAMARA   globo   dist 64.2 -> 66.0   radio encuadre 9.00   fov 45 (horizontal; m
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
 | Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota (la leyenda pone `parado`) |
 | El globo se sale del cuadro un instante al enterrar | La concha nueva es más gruesa que la holgura y la transición tarda | Sube `Encuadremargen` o baja `Camsuave` (Fase10) |
-| El planeta se ve pequeño | Motor v31 o anterior: encuadraba la altura máxima teórica | Relanza cualquier fase con motor v32 o posterior (autoencuadre); si aún sobra, baja `Encuadremargen` (mínimo 1) |
-| La cámara no se mueve al crecer el mundo | Motor v30: el bucle de cocinado del render la dejaba parada | Relanza cualquier fase con motor v32 |
+| El planeta se ve pequeño | Motor v31 o anterior: encuadraba la altura máxima teórica entera | Relanza cualquier fase con motor v33 o posterior; si aún sobra, baja `Holguraaltura` o `Encuadremargen` (mínimo 1) |
+| Una construcción alta se sale del cuadro | `Holguraaltura` pequeña para ese mundo | Sube `Holguraaltura` (1 = todo lo que podría crecer); la leyenda dice `lo dibujado llega a` |
+| La cámara se mueve todo el rato y el mundo se ve a ratos | Motor v32 (encuadraba lo que se dibujaba en cada fotograma) | Relanza cualquier fase con motor v33 |
 | Hondonadas que bajan sin parar | Un pad con profundidad cae en cada mundo sobre las mismas celdas: pierde N losetas y recibe 1 | Sube `Colmatacion` (Fase8) o baja su profundidad en `perfiles_erosion` |
 | El planeta engorda demasiado rápido | Engorde = `Shellthick` por cada `Ciclomin` compases | Sube `Ciclomin` o baja `Shellthick` |
 | `Cambioentierra` no hace nada | El BeatStep no envía All Notes Off al cambiar de pattern | Prueba pendiente con el aparato |

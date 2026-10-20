@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v23'
+VERSION_COMUN = 'comun v24'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -741,7 +741,10 @@ def install_core(base, carpeta, fase):
     base.op('reticula_callbacks').text = RETICULA_CB
     ok('reticula: sigue la superficie que da el motor')
     reticula_giro(base)
-    renew_default(base, 'Encuadremargen', 1.08, 1.02)    # motor v32: encuadra lo que se dibuja
+    renew_default(base, 'Encuadremargen', 1.08, 1.02)    # motor v33: encuadre cercano
+    if has_par(base, 'Encuadremargen'):                   # proyecto en la fase 10 o mas
+        add_par(base, get_page(base, 'Fase10'), 'float', 'Holguraaltura',
+                'Holgura para la altura de las construcciones (0 planeta, 1 todo)', 0.4, 0.0, 1.0, clamp=True)
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB

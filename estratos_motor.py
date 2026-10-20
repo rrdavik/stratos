@@ -23,7 +23,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v32'
+MOTOR_VERSION = 'motor v33'
 
 import math
 
@@ -3129,13 +3129,15 @@ def build_piel(W, cfg, now, out):
                     k_ancho, k_alto = (0.35 if kp < 1 else 1.0), 1.0
                 else:                               # los puentes del dosel crecen
                     k_ancho, k_alto = kp, 1.0
-                for j in cl['mascara'][i]:
+                for q, j in enumerate(cl['mascara'][i]):
                     vmin = min(W['vh'][i], W['vh'][j]) if W['vh'][j] > 0.005 else W['vh'][i]
                     pj = bases[j]
                     largo = 0.5 * math.sqrt((p0[0] - pj[0]) ** 2 + (p0[1] - pj[1]) ** 2
                                             + (p0[2] - pj[2]) ** 2) + 0.06
                     ej = _marco_puente(i, j)
-                    alto_p = max(0.01, gr * vmin * k_alto)
+                    # cada medio puente de la celda, un poco mas alto que el anterior: sus
+                    # tapas, en el mismo plano, se pisarian y parpadearian (z-fighting)
+                    alto_p = max(0.01, gr * vmin * k_alto * (1.0 + 0.04 * (q % 3)))
                     cp = material_tema(cfg, COL_PUENTE[esp], familia_de(pm[0]), rug) if doce \
                         else _material_col(COL_PUENTE[esp], pulido)
                     emit(pm[0], pulido, _add(p0, n, y0 * vmin), ej, (kw * min(cw, cl_) * k_ancho, alto_p, largo),
@@ -3988,18 +3990,18 @@ def luz_color(nombre, k, frame=None):
         return 0.0
 
 
-# --- camara (motor v24; autoencuadre, v32) ----------------------------------------
+# --- camara (motor v24; encuadre cercano, v33) -----------------------------------
 # Por defecto, camara de GLOBO: mira al centro, en la direccion de referencia
 # (+Z, hacia la que se balancea el eje), y encuadra el planeta entero tan
-# cerca como permite el cuadro. Desde la v32 encuadra lo que de verdad se
-# dibuja (radio_visible): se aleja en cuanto algo crece y se acerca despacio
-# (Camsuave) cuando el mundo mengua. La de SUPERFICIE (fase 10 v4) queda
-# como modo (Modocamara).
+# cerca como permite el cuadro, con Holguraaltura de la altura maxima para las
+# construcciones. El encuadre solo cambia cuando el planeta engorda (una
+# concha nueva): crecer, erosionar o el latido no mueven la camara. (La v32
+# perseguia lo que se dibujaba y la camara no paraba quieta.) La de
+# SUPERFICIE (fase 10 v4) queda como modo (Modocamara).
 
 CAM_DIR = (0.0, 0.0, 1.0)          # direccion de referencia de la camara
 CAM_TRANS = 20.0                   # segundos de Planofinal y del cambio de modo
-CAM_SALIDA = 0.5                   # segundos para alejarse cuando algo crece
-CAM_PICO = 2.0                     # segundos que se sostiene el radio mas grande (latido)
+HOLGURA_ALTURA = 0.4               # fraccion de la altura maxima que se encuadra
 CAJA_EXT = (0.5, 1.0, 0.5)         # semiejes de la caja de las geometrias (base en y = 0)
 SIN_EXTENSION = ('estratos', 'luz_conchas')     # no pasan de la superficie
 _EXT = {}
@@ -4014,10 +4016,14 @@ def altura_max(cfg):
     return lim * (1.0 + LATIDO_AMP) + corona
 
 
-def radio_encuadre(W, cfg):
-    """Lo mas lejos que podria llegar algo: el radio nominal mas la altura
-    maxima. Es un tope teorico; la camara encuadra radio_visible."""
-    return top_radius(W, cfg) + altura_max(cfg)
+def radio_encuadre(W, cfg, holgura=None):
+    """Radio que se encuadra: el nominal mas 'holgura' (Holguraaltura, 0,4)
+    por la altura maxima. Con 1, todo lo que podria llegar a crecer (el
+    encuadre de la v24 a la v31); con 0, solo el planeta. Solo cambia cuando
+    el planeta engorda (los suelos nunca pasan del nominal)."""
+    if holgura is None:
+        holgura = _p('Holguraaltura', HOLGURA_ALTURA)
+    return top_radius(W, cfg) + max(0.0, min(1.0, float(holgura))) * altura_max(cfg)
 
 
 def _ext_modelo(modelo):
@@ -4047,8 +4053,9 @@ def _eje_y(rx, ry, rz):
 
 
 def radio_visible(inst, W, cfg):
-    """Lo mas lejos del centro que llega algo de lo que se dibuja: la
-    superficie (con la reticula) y cada instancia. De cada pieza se toma su
+    """Lo mas lejos del centro que llega algo de lo que se dibuja (solo para
+    la leyenda: dice si Holguraaltura deja fuera algo): la superficie (con la
+    reticula) y cada instancia. De cada pieza se toma su
     alto (eje Y local, segun lo inclinada que este respecto a la vertical
     de su sitio) y su ancho: una pieza tumbada, como un puente, no cuenta
     su largo como altura. No depende del giro del planeta."""
@@ -4075,20 +4082,6 @@ def radio_visible(inst, W, cfg):
             if d2 > r2:
                 r2 = d2
     return sq(r2)
-
-
-def _radio_camara(W, c, t):
-    """(radio ahora, radio sostenido): el sostenido guarda el mas grande de
-    los ultimos CAM_PICO segundos, para que el latido no mueva la camara."""
-    inst = _CACHE.get('inst')
-    if inst is None:
-        inst = build_instances(W, c, t, hide_beacons=performance())
-    r = radio_visible(inst, W, c)
-    pico, t_pico = _CACHE.get('cam_pico', (0.0, -1e9))
-    if r >= pico or t - t_pico > CAM_PICO or t < t_pico:
-        pico, t_pico = r, t
-    _CACHE['cam_pico'] = (pico, t_pico)
-    return r, pico
 
 
 def fovs(fov_deg, aspect, metodo='horzfov'):
@@ -4182,20 +4175,19 @@ def camera_state():
     last = _CACHE.get('cam_t')
     dt = 0.0 if last is None else max(0.0, min(0.25, t - last))
     _CACHE['cam_t'] = t
-    # globo: persigue el encuadre de lo que se dibuja (alejarse rapido,
-    # acercarse en Camsuave s), sin dejar nunca nada fuera del cuadro
-    r_ahora, Re = _radio_camara(W, c, t)
+    # globo: persigue el encuadre (solo cambia con una concha nueva o los
+    # parametros) en Camsuave s; el planeta nunca se sale del cuadro
+    Re = radio_encuadre(W, c)
     fov, metodo, aspect = _cam_optics()
     margen = max(1.0, _p('Encuadremargen', 1.02))
     suave = max(0.0, _p('Camsuave', 3.0))
     d_obj, _, th = globe_distance(Re, fov, aspect, margen, metodo)
-    d_min = globe_distance(r_ahora, fov, aspect, 1.0, metodo)[1]
+    d_min = globe_distance(R + 0.2, fov, aspect, 1.0, metodo)[1]
     d = _CACHE.get('cam_d')
     if d is None or R < _CACHE.get('cam_R', R) - 1e-6:
         d, v = d_obj, 0.0              # arranque, Resetmundo, rango o mundo cargado: sin transicion
     else:
-        d, v = smooth_damp(d, _CACHE.get('cam_v', 0.0), d_obj, dt,
-                           min(suave, CAM_SALIDA) if d_obj > d else suave)
+        d, v = smooth_damp(d, _CACHE.get('cam_v', 0.0), d_obj, dt, suave)
     salto = 0.0
     if d < d_min:
         salto = d_min - d
@@ -4244,7 +4236,7 @@ def cam(key, k=0, frame=None):
 
 def cam_reset():
     """La proxima lectura de la camara salta al encuadre (sin transicion)."""
-    for k in ('cam_d', 'cam_v', 'cam_R', 'cam_frame', 'cam_pico'):
+    for k in ('cam_d', 'cam_v', 'cam_R', 'cam_frame'):
         _CACHE.pop(k, None)
 
 
@@ -4350,9 +4342,11 @@ def _legend():
             cs = camera_state()
             lado = 'vertical' if cs['theta'] <= fovs(cs['fov'], cs['aspect'], cs['metodo'])[0] - 1e-9 \
                 else 'horizontal'
-            lines.append('  CAMARA   %s   dist %.1f -> %.1f   radio encuadre %.2f   fov %.0f (%s; '
-                         'manda el %s)   margen %.2f'
-                         % (cs['modo'], cs['d'], cs['d_obj'], cs['Re'], cs['fov'],
+            inst = _CACHE.get('inst')
+            vis = radio_visible(inst, W, c) if inst else cs['R']
+            lines.append('  CAMARA   %s   dist %.1f -> %.1f   radio encuadre %.2f (lo dibujado llega a %.2f)'
+                         '   fov %.0f (%s; manda el %s)   margen %.2f'
+                         % (cs['modo'], cs['d'], cs['d_obj'], cs['Re'], vis, cs['fov'],
                             'vertical' if 'vert' in cs['metodo'] else 'horizontal', lado,
                             cs['margen']))
         except Exception:
