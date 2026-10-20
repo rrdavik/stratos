@@ -21,10 +21,10 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v18'
+VERSION_COMUN = 'comun v19'
 COMP_PATH = '/project1/FASE1'
 
-RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
+RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
                 'coronas', 'particulas', 'luz_celda', 'luz_conchas']   # la capa aditiva, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
@@ -426,7 +426,8 @@ def onValueChange(par, prev):
 
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
 # (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_celda;
-# desde la fase 11, i_particulas y un i_mod_... por modelo del catalogo).
+# desde la fase 11, i_particulas y un i_mod_... por modelo del catalogo;
+# desde la fase 13, i_tejido: rios y carreteras).
 # Desde la fase 12 las filas de los modelos traen un canal mas, 'a': la
 # rugosidad que lee el shader de la piel.
 

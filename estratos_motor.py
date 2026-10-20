@@ -9,7 +9,8 @@
 #   1. NUCLEO     Python puro: ocupacion, desbordamiento, especies, ciclo,
 #                 erosion, conchas, cortes y la piel tematica (fase 11:
 #                 catalogo de modelos, clusters, compuestos y transitos;
-#                 fase 12: material por la velocidad, vigor por el gate).
+#                 fase 12: material por la velocidad, vigor por el gate;
+#                 fase 13: rios y carreteras).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -22,7 +23,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v28'
+MOTOR_VERSION = 'motor v29'
 
 import math
 
@@ -129,6 +130,8 @@ DEFAULT_CFG = dict(
     # fase 12: moduladores
     material_modo=1, rug_min=0.05, rug_max=0.85, vigor_max=1.5, plantas_ligado=2,
     gate_prueba=0.5, respaldo=0,
+    # fase 13: tejido conectivo
+    rios=1, carreteras=1, min_via=2, grosor_via=0.18, max_rio=12,
 )
 
 
@@ -443,6 +446,7 @@ def new_world():
         t_h=[-99.0] * N,        # cuando empezo el tramo
         paso=0.125,             # duracion de un paso al tempo actual
         piel={},                # resumen de la piel para la leyenda
+        tejido={},              # resumen de rios y carreteras para la leyenda
         vig=[1.0] * N,          # vigor de cada formacion (fase 12: duracion del gate)
         gate_sim=[],            # note off simulados de los botones: [t, s, nota]
         aviso='',
@@ -1656,6 +1660,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                     out['coronas'].append(_row(top, n, 0.20 * cl, 0.05 * lim, 0.20 * cl, COL_CROWN))
     if piel:
         W['piel'] = build_piel(W, cfg, now, out)
+    if lvl >= 13:                   # fase 13: rios y carreteras
+        out['tejido'], W['tejido'] = build_tejido(W, cfg)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -3139,6 +3145,196 @@ def build_piel(W, cfg, now, out):
                 piezas=piezas, obras=obras, medias=medias)
 
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - tejido conectivo (fase 13): rios y carreteras
+# -----------------------------------------------------------------------------
+# Lo que ninguna senal pide: el sistema lo deduce del estado.
+#   RIOS (naturaleza)  nacen en la capital de cada cluster de relieve y bajan
+#                      celda a celda hacia la vecina menos ocupada (empate:
+#                      la de indice menor), sin volver atras, hasta una celda
+#                      vacia, hasta otro rio (confluyen) o hasta Maxrio celdas.
+#   CARRETERAS (ciudad) arbol de expansion minima (Kruskal) entre las capitales
+#                      de cluster y las formaciones sueltas con ocupacion de
+#                      Minvia o mas; cada arista, el camino mas corto por la
+#                      reticula.
+# Los tramos van de centro a centro de celda, a ras del suelo (por debajo de
+# las formaciones), en dos medios tramos que siguen la curva del planeta. Se
+# recalculan solo cuando cambia la ocupacion.
+
+COL_RIO = (0.12, 0.26, 0.56)       # azul profundo (fuera del cian de la cicatriz)
+COL_VIA = (0.17, 0.17, 0.19)       # asfalto
+RUG_RIO, RUG_VIA = 0.05, 0.75      # el agua brilla; el asfalto, mate
+TEJIDO_LIFT = 0.006                # sobre el suelo de la celda
+TEJIDO_ALTO = 0.035
+_TEJIDO = {}
+
+
+def rios(W, cfg, cl=None):
+    """[[celdas del rio], ...] y {celda: celda aguas abajo}. Los rios se trazan
+    por orden de capital; uno que llega a otro rio confluye y acaba ahi."""
+    cl = cl or clusters(W, cfg)
+    fuentes = sorted(cl['capital'][k] for k in cl['capital']
+                     if W['own'][cl['capital'][k]] == ARQ)
+    lista, abajo = [], {}
+    tope = max(1, int(cfg['max_rio']))
+    for f in fuentes:
+        if f in abajo:                  # la capital ya esta en otro rio
+            continue
+        camino = [f]
+        while len(camino) <= tope:
+            c = camino[-1]
+            libres = [j for j in NEIGH[c] if j not in camino]
+            if not libres:
+                break
+            j = min(libres, key=lambda x: (W['occ'][x], x))
+            camino.append(j)
+            if W['occ'][j] <= 0 or j in abajo or any(j in r for r in lista):
+                break                   # celda vacia o confluencia
+        if len(camino) < 2:
+            continue
+        for a, b in zip(camino, camino[1:]):
+            abajo.setdefault(a, b)
+        lista.append(camino)
+    return lista, abajo
+
+
+def _caudal(lista, abajo):
+    """{(a, b): rios que pasan por el tramo}: cada rio suma 1 a sus tramos y,
+    si confluye, a los del rio al que llega, aguas abajo de la confluencia."""
+    q = {}
+    for camino in lista:
+        for a, b in zip(camino, camino[1:]):
+            q[(a, b)] = q.get((a, b), 0) + 1
+        c, vistos = camino[-1], set(camino)
+        while c in abajo and abajo[c] not in vistos:
+            d = abajo[c]
+            q[(c, d)] = q.get((c, d), 0) + 1
+            vistos.add(d)
+            c = d
+    return q
+
+
+def camino_corto(a, b):
+    """Celdas del camino mas corto de a a b por la reticula (BFS; a igualdad,
+    por las vecinas de indice menor)."""
+    if a == b:
+        return [a]
+    padre = {a: None}
+    frente = [a]
+    while frente and b not in padre:
+        sig = []
+        for c in frente:
+            for j in sorted(NEIGH[c]):
+                if j not in padre:
+                    padre[j] = c
+                    sig.append(j)
+        frente = sig
+    if b not in padre:
+        return []
+    out = [b]
+    while out[-1] != a:
+        out.append(padre[out[-1]])
+    return out[::-1]
+
+
+def nodos_via(W, cfg, cl=None):
+    """Capitales de cluster y formaciones sueltas (sin satelites) con ocupacion
+    de Minvia o mas."""
+    cl = cl or clusters(W, cfg)
+    nodos = set(cl['capital'].values())
+    for i in range(N):
+        if W['occ'][i] >= cfg['min_via'] and W['par'][i] < 0 and cl['de'][i] < 0:
+            nodos.add(i)
+    return sorted(nodos)
+
+
+def carreteras(W, cfg, cl=None):
+    """(aristas del arbol [(a, b, distancia)], tramos [(c, d)]): Kruskal sobre
+    las distancias por la reticula entre los nodos."""
+    nodos = nodos_via(W, cfg, cl)
+    pares = []
+    for k, a in enumerate(nodos):
+        for b in nodos[k + 1:]:
+            pares.append((len(camino_corto(a, b)) - 1, a, b))
+    padre = dict((x, x) for x in nodos)
+
+    def raiz(x):
+        while padre[x] != x:
+            padre[x] = padre[padre[x]]
+            x = padre[x]
+        return x
+    arbol, tramos = [], []
+    for d, a, b in sorted(pares):
+        ra, rb = raiz(a), raiz(b)
+        if ra == rb or d < 0:
+            continue
+        padre[ra] = rb
+        arbol.append((a, b, d))
+        camino = camino_corto(a, b)
+        for c, e in zip(camino, camino[1:]):
+            if (c, e) not in tramos and (e, c) not in tramos:
+                tramos.append((c, e))
+    return arbol, tramos
+
+
+def tejido(W, cfg):
+    """Topologia del tejido (se guarda: solo se recalcula si cambia la
+    ocupacion). dict(rios, abajo, caudal, arbol, vias)."""
+    tema = tema_de(cfg)
+    clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), tema, cfg['rios'], cfg['carreteras'],
+             cfg['min_via'], cfg['max_rio'], cfg['umbral_vecindad'], cfg['peso_vecina'],
+             cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'])
+    if _TEJIDO.get('clave') == clave:
+        return _TEJIDO['t']
+    t = dict(rios=[], abajo={}, caudal={}, arbol=[], vias=[])
+    cl = clusters(W, cfg)
+    if tema == 'naturaleza' and cfg['rios']:
+        t['rios'], t['abajo'] = rios(W, cfg, cl)
+        t['caudal'] = _caudal(t['rios'], t['abajo'])
+    if tema == 'ciudad' and cfg['carreteras']:
+        t['arbol'], t['vias'] = carreteras(W, cfg, cl)
+    _TEJIDO['clave'], _TEJIDO['t'] = clave, t
+    return t
+
+
+def _tramo_suelo(W, cfg, a, b, ancho, col, rug, out):
+    """Dos medios tramos de la celda a a la b, a ras del suelo, siguiendo la
+    curva: centro de a -> punto medio -> centro de b."""
+    na, nb = normal_i(a), normal_i(b)
+    ra = base_radius(W, cfg, a) + TEJIDO_LIFT
+    rb = base_radius(W, cfg, b) + TEJIDO_LIFT
+    pa, pb = _mul(na, ra), _mul(nb, rb)
+    pm = _mul(_norm(_add(na, nb)), 0.5 * (ra + rb))
+    for p, q in ((pa, pm), (pm, pb)):
+        Y = _norm(_add(p, q))           # el centro, sobre la superficie (no en la cuerda)
+        c = _mul(Y, 0.5 * (math.sqrt(_dot(p, p)) + math.sqrt(_dot(q, q))))
+        d = (q[0] - p[0], q[1] - p[1], q[2] - p[2])
+        d = _add(d, Y, -_dot(d, Y))
+        L = math.sqrt(_dot(d, d))
+        if L < 1e-6:
+            continue
+        Z = _mul(d, 1.0 / L)
+        X = _cross(Y, Z)
+        rx, ry, rz = _euler_xyz(X, Y, Z)
+        out.append([c[0], c[1], c[2], rx, ry, rz, ancho, TEJIDO_ALTO, L + 0.5 * ancho,
+                    col[0], col[1], col[2], rug])
+
+
+def build_tejido(W, cfg):
+    """(filas de la geometria 'tejido', resumen para la leyenda)."""
+    t = tejido(W, cfg)
+    filas = []
+    w = cfg['grosor_via']
+    for (a, b), q in sorted(t['caudal'].items()):
+        _tramo_suelo(W, cfg, a, b, w * (0.7 + 0.3 * q), COL_RIO, RUG_RIO, filas)
+    for a, b in t['vias']:
+        _tramo_suelo(W, cfg, a, b, w, COL_VIA, RUG_VIA, filas)
+    if cfg.get('respaldo', 0):
+        for f in filas:
+            f[12] = 1.0
+    return filas, dict(rios=len(t['rios']), tramos_rio=len(t['caudal']), tramos_via=len(t['vias']))
+
+
 # =============================================================================
 # 2. ADAPTADOR TOUCHDESIGNER
 # =============================================================================
@@ -3157,7 +3353,8 @@ def chop_names(c=None):
     c = c or cfg()
     if c['nivel'] < 11:
         return list(CHOP_NAMES)
-    return CHOP_NAMES + ['i_particulas'] + ['i_' + g for g, _, _ in geometrias_piel(c)]
+    extra = ['i_tejido'] if c['nivel'] >= 13 else []
+    return CHOP_NAMES + ['i_particulas'] + extra + ['i_' + g for g, _, _ in geometrias_piel(c)]
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 
@@ -3332,6 +3529,11 @@ def cfg():
                  plantas_ligado=max(1, int(_p('Plantasligado', c['plantas_ligado']))),
                  gate_prueba=max(0.01, _p('Gateprueba', c['gate_prueba'])),
                  respaldo=int(_p('Materialrespaldo', False)))
+    if c['nivel'] >= 13:
+        c.update(rios=int(_p('Rios', True)), carreteras=int(_p('Carreteras', True)),
+                 min_via=max(1, int(_p('Minvia', c['min_via']))),
+                 grosor_via=max(0.01, _p('Grosorvia', c['grosor_via'])),
+                 max_rio=max(1, int(_p('Maxrio', c['max_rio']))))
     return c
 
 
@@ -4023,4 +4225,8 @@ def _legend():
                          % (md['vel'], md['rug'], gate, modo))
         else:
             lines.append('  MOD      -   %s' % modo)
+    if lvl >= 13:
+        tj = W.get('tejido') or {}
+        lines.append('  TEJIDO   rios %d (%d tramos)   carreteras %d tramos'
+                     % (tj.get('rios', 0), tj.get('tramos_rio', 0), tj.get('tramos_via', 0)))
     return '\n'.join(lines)

@@ -15,15 +15,17 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12 | `motor v28` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto | `comun v18` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras | `motor v29` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render | `comun v19` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12) | `fase11 v2` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2) | `fase12 v1` |
+| `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase11_piel.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase12_moduladores.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase13_tejido.py').read())
 ```
 
 Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v10`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11.
@@ -215,6 +217,60 @@ La mitad de geometrías y de Script CHOP que en la fase 11. En simulación, con 
 
 ---
 
+## FASE 13 · Tejido conectivo: ríos y carreteras
+
+### Qué hace
+
+Une las formaciones con algo que ninguna señal pide: el sistema lo deduce del estado. Es la fase en la que el tema se lee de lejos.
+
+- **Ríos (naturaleza).**
+  - Nacen en la capital de cada cluster de relieve.
+  - Bajan celda a celda hacia la vecina menos ocupada (en empate, la de índice menor), sin volver por donde han pasado.
+  - Acaban al llegar a una celda vacía (la desembocadura), al llegar a otro río (confluyen), tras `Maxrio` tramos o si no les queda vecina libre.
+  - Se trazan por orden de capital. Un río que llega a otro acaba ahí, y aguas abajo de la confluencia el río que lo recibe se ensancha: ancho = `Grosorvia` × (0,7 + 0,3 × ríos que pasan por el tramo).
+- **Carreteras (ciudad).**
+  - Los nodos son las capitales de los clusters y las formaciones sueltas (sin cluster ni satélites) con ocupación de `Minvia` o más.
+  - La distancia entre dos nodos es el número de saltos por la retícula. Kruskal elige el árbol de expansión mínima (en empate, por los índices).
+  - Cada arista se dibuja por el camino más corto de la retícula. Los tramos compartidos se dibujan una vez.
+- **Los tramos** van de centro a centro de celda, a ras del suelo de cada celda (6 milésimas por encima), en dos medios tramos que siguen la curva del planeta. Pasan por debajo de las formaciones que cruzan.
+- **La geometría `tejido`** es la caja instanciada de siempre, con el shader de la piel: el agua (azul profundo, fuera de la banda del cian) brilla, el asfalto es mate. `Materialrespaldo` también la cambia a Phong. Se dibuja justo encima de las conchas.
+- **Se recalcula solo cuando cambia la ocupación** (las especies o los satélites); si no, se reutiliza. Las filas sí se rehacen en cada fotograma, porque el suelo cambia con las conchas y los cortes.
+
+### Parámetros (página Fase13)
+
+`Rios` (encendido) · `Carreteras` (encendido) · `Minvia` 2 · `Grosorvia` 0,18 · `Maxrio` 12 (tramos)
+
+### Leyenda
+
+```
+TEJIDO   rios 2 (9 tramos)   carreteras 7 tramos
+```
+
+### Probar sin BeatStep
+
+1. `Tema` ciudad. Pon `Nota` 64 y pulsa `Sembrarzona` dos veces; pon `Nota` 70 (el meridiano opuesto) y pulsa otras dos. Aparece la carretera que une las dos capitales. Con `Sembrar` en una nota suelta (3 veces, para llegar a `Minvia`) la red se rehace y la incluye.
+2. `Tema` naturaleza. `Sembrarzona2` dos veces y `Sembrar2` una docena de veces en el centro (`Nota2`): el río baja de la cumbre hasta la primera celda vacía. Dos zonas cercanas pueden dar dos ríos que confluyen.
+
+Con zonas de 7 celdas los ríos son cortos: acaban en cuanto encuentran una celda vacía. Se alargan cuando el relieve queda rodeado de territorio ocupado.
+
+### Autoprueba
+
+Comprueba:
+- **Carreteras:**
+  - dos zonas en la ciudad quedan unidas por el camino más corto;
+  - una formación suelta entra en la red y el árbol tiene nodos − 1 aristas;
+  - el cálculo se reutiliza si la ocupación no cambia;
+  - el árbol es el de menor longitud total, comparado con todos los demás posibles;
+  - `Carreteras` apagado quita las carreteras.
+- **Ríos:**
+  - el río nace en la capital del relieve y en cada paso baja a la vecina menos ocupada;
+  - acaba en una celda vacía, en otro río o al tope de longitud;
+  - en una confluencia suma el caudal aguas abajo;
+  - `Maxrio` corta la longitud y `Rios` apagado los quita.
+- **Dibujo:** los tramos van a ras del suelo, `i_tejido` recibe las filas con el canal `a`, y la leyenda tiene la línea `TEJIDO`.
+
+---
+
 ### Decisiones tomadas en la fase 11
 
 | Pregunta | Decisión |
@@ -244,19 +300,32 @@ La mitad de geometrías y de Script CHOP que en la fase 11. En simulación, con 
 
 ---
 
+### Decisiones tomadas en la fase 13
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Tramos por centros o por bordes de celda? | Centros, a ras del suelo, en dos medios tramos que siguen la curva |
+| ¿Dónde nace un río? | En la capital de cada cluster de relieve (la más ocupada) |
+| ¿Empates al bajar? | La vecina de índice menor |
+| ¿Qué es una formación suelta? | Una formación (no satélite) que no está en ningún cluster |
+| ¿Distancia de Kruskal? | Saltos por la retícula (camino más corto) |
+| ¿Ríos en la ciudad o carreteras en la naturaleza? | No: cada tema tiene su tejido |
+
+---
+
 ### Cómo se ha probado
 
 Sin TouchDesigner a mano, con un **TouchDesigner simulado** que ejecuta los scripts tal cual (`pruebas/td_simulado.py`): operadores y rutas, parámetros con expresiones, páginas propias, storage, el módulo de los Text DAT, Script CHOP, Table DAT y el tiempo del proyecto. Los COMP solo aceptan los parámetros que tienen en TouchDesigner.
 
 ```
-python3 pruebas/correr_fases.py        # base y fases 3 a 12 desde cero, sesión, relanzar y otra sesión
+python3 pruebas/correr_fases.py        # base y fases 3 a 13 desde cero, sesión, relanzar y otra sesión
 python3 pruebas/vista_previa.py        # hoja de contactos del catálogo (pruebas/catalogo.png)
 xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la piel con OpenGL (necesita moderngl)
 ```
 
-- **Desde cero**: `fase12_base.py` y las fases 3 a 12, todas con `AUTOPRUEBA OK`.
+- **Desde cero**: `fase12_base.py` y las fases 3 a 13, todas con `AUTOPRUEBA OK`.
 - **Sesión simulada** de 16 compases a 120 BPM con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
-- **Relanzar** las fases 3 a 12 sobre el proyecto ya en la fase 12 (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
+- **Relanzar** las fases 3 a 13 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
 - **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, dosel ahumado con vetas ámbar.
 - **Catálogo**: una hoja de contactos dibujada con un rasterizador propio (`pruebas/vista_previa.py`) para ver cada modelo, y escenas de los dos temas con clusters, puentes, coronaciones e híbridos.
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
@@ -272,6 +341,7 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 5. **Obras a medias**: con `Avance` = gates, un cluster que deja de sonar se queda a medias; comprobar que se lee como obra parada y no como fallo.
 6. **El shader (fase 12)**: que `mat_piel_mineral`, `mat_piel_dosel` y `mat_piel_ciudad` compilan sin errores (clic derecho → Info) y que la página Vectors tiene `uFamilia`, `uLuz0`... con valores. Si no, `Materialrespaldo` y pegarme los errores.
 7. **Pulido y rugoso**: con la cámara de globo, que la obsidiana y la pómez (y el vidrio y el hormigón) se distinguen; si no, ajustar `Rugmin` y `Rugmax`.
+8. **Ríos y carreteras (fase 13)**: con varias conchas, que se leen desde la cámara de globo sobre los colores de las conchas; si no, subir `Grosorvia`.
 
 ### Problemas frecuentes
 
