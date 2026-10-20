@@ -77,7 +77,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v11  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v12  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -185,7 +185,9 @@ def prueba(t):
     j = m.note_cell(48)
     t.check('velocidad 20 -> material poroso', W['vel'][j] == 20 and W['vel'][i] == 100)
     W['vh'] = list(W['h'])
-    m._CACHE['inst'] = m.build_instances(W, c, 0.0)
+    c10 = dict(c)
+    c10['nivel'] = min(c10['nivel'], 10)   # las cajas (desde la fase 11 son modelos del tema)
+    m._CACHE['inst'] = m.build_instances(W, c10, 0.0)
     chop = base.op('i_formas_pulidas')
     chop.cook(force=True)
     n_pul = chop.numSamples
