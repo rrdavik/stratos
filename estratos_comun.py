@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v19'
+VERSION_COMUN = 'comun v20'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1153,20 +1153,42 @@ def make_instanced(base, name, x, y, mat, sop='box', quiet=False):
     return geo
 
 
+# El color x dimmer de cada luz lo da el motor: la Light COMP llama a su color
+# cr cg cb (no lightcolorr...), y asi no depende del nombre.
+LUZ_COL = "parent().op('motor').module.luz_color('%s', %d, absTime.frame)"
+COLOR_LUZ = ('c%s', 'lightcolor%s')      # nombres del color de una Light COMP, por orden
+
+
+def color_luz(luz, rgb):
+    """Fija el color de una Light COMP (cr cg cb). Devuelve el nombre usado."""
+    usado = None
+    for ch, v in zip('rgb', rgb):
+        usado = setp_any(luz, [pat % ch for pat in COLOR_LUZ], v) or usado
+    return usado
+
+
+def color_luz_expr(luz, exprs):
+    """Pone expresiones al color de una Light COMP (cr cg cb)."""
+    usado = None
+    for ch, e in zip('rgb', exprs):
+        for pat in COLOR_LUZ:
+            if setexpr(luz, pat % ch, e):
+                usado = pat % ch
+                break
+    return usado
+
+
 PIEL_UNIFORMES = [
     ('uFamilia', ('%d', '0', '0', '0')),
     ('uLuz0', ("parent().op('luz_principal').par.tx", "parent().op('luz_principal').par.ty",
                "parent().op('luz_principal').par.tz", '0')),
-    ('uLuz0Col', tuple("parent().op('luz_principal').par.lightcolor%s * parent().op('luz_principal').par.dimmer"
-                       % ch for ch in 'rgb') + ('0',)),
+    ('uLuz0Col', tuple(LUZ_COL % ('luz_principal', k) for k in range(3)) + ('0',)),
     ('uLuz1', ("parent().op('luz_relleno').par.tx", "parent().op('luz_relleno').par.ty",
                "parent().op('luz_relleno').par.tz", '0')),
-    ('uLuz1Col', tuple("parent().op('luz_relleno').par.lightcolor%s * parent().op('luz_relleno').par.dimmer"
-                       % ch for ch in 'rgb') + ('0',)),
+    ('uLuz1Col', tuple(LUZ_COL % ('luz_relleno', k) for k in range(3)) + ('0',)),
     ('uLuz2', ("parent().op('luz_destello').par.tx", "parent().op('luz_destello').par.ty",
                "parent().op('luz_destello').par.tz", '0')),
-    ('uLuz2Col', tuple("parent().op('luz_destello').par.lightcolor%s * parent().op('luz_destello').par.dimmer"
-                       % ch for ch in 'rgb') + ('0',)),
+    ('uLuz2Col', tuple(LUZ_COL % ('luz_destello', k) for k in range(3)) + ('0',)),
     ('uAmbiente', ('0.16', '0.16', '0.18', '0')),
     ('uVentanas', ('0', '0', '0', '0')),          # la fase 17 las enciende
 ]

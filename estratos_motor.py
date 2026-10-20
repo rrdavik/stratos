@@ -23,7 +23,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v29'
+MOTOR_VERSION = 'motor v30'
 
 import math
 
@@ -3913,6 +3913,29 @@ def flash_light():
 
 def flash_value(k, frame=None):
     return flash_light()[k]
+
+
+LUZ_COLOR = ('c%s', 'lightcolor%s', 'color%s')     # el color de una Light COMP es cr cg cb
+
+
+def luz_color(nombre, k, frame=None):
+    """Componente k (0 r, 1 g, 2 b) del color x dimmer de la luz 'nombre',
+    para el shader de la piel (fase 12). Prueba los nombres del color de la
+    Light COMP (cr cg cb); si no hay ninguno, blanco."""
+    try:
+        o = parent().op(nombre)
+        if o is None:
+            return 0.0
+        v = 1.0
+        for patron in LUZ_COLOR:
+            p = getattr(o.par, patron % 'rgb'[int(k)], None)
+            if p is not None:
+                v = float(p.eval())
+                break
+        d = getattr(o.par, 'dimmer', None)
+        return v * (float(d.eval()) if d is not None else 1.0)
+    except Exception:
+        return 0.0
 
 
 # --- camara (motor v24) --------------------------------------------------------

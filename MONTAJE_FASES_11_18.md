@@ -15,10 +15,10 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras | `motor v29` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render | `comun v19` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`) | `motor v30` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader | `comun v20` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12) | `fase11 v2` |
-| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2) | `fase12 v1` |
+| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan | `fase12 v2` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
@@ -161,7 +161,8 @@ Las dos señales que ya modulaban las cajas pasan a modular los modelos temátic
   - pulido: reflejo fino y fuerte, y un reflejo de borde frío;
   - rugoso: mate y con poros (manchas de ruido en el espacio del modelo, distintas en cada instancia).
 - **El color** también se acerca al material: el de la especie se mezcla con obsidiana o pómez (naturaleza) o con vidrio negro u hormigón (ciudad), según la rugosidad. Así, pulido y rugoso se distinguen también con el material de respaldo.
-- **Luces**: el shader no usa las funciones de iluminación de TouchDesigner. Lee como uniformes la posición y el color × dimmer de `luz_principal`, `luz_relleno` y `luz_destello` (página Vectors del GLSL MAT, con expresiones), más un ambiente.
+- **Luces**: el shader no usa las funciones de iluminación de TouchDesigner. Lee como uniformes la posición y el color × dimmer de `luz_principal`, `luz_relleno` y `luz_destello` (página Vectors del GLSL MAT, con expresiones), más un ambiente. El color lo da el motor (`luz_color`), que prueba los nombres del color de la Light COMP (`cr cg cb`).
+- **Corregido en comun v20**: la primera versión leía el color de las luces como `lightcolorr/g/b`, que la Light COMP no tiene, y los tres `mat_piel_*` daban `tdAttributeError: 'td.ParCollection' object has no attribute 'lightcolorr'`. Relanza `fase12_moduladores.py` (o la 13) para arreglarlo.
 
 ### Velocidad → material
 
@@ -355,5 +356,6 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | La obra no avanza | `Avance` = gates y no suena ninguna nota en el cluster | Es lo esperado; con `Avance` = pasos avanza sola |
 | `catalogo editado a mano: se conserva` | La tabla no es la de por defecto | Si no la has tocado tú, bórrala y relanza la fase 11 |
 | Fase 12: los modelos salen negros, blancos o no se ven | El shader no compila o no recibe sus uniformes | `Materialrespaldo` (Phong, en vivo) y pégame los errores de `mat_piel_mineral` |
+| `mat_piel_...`: `no attribute 'lightcolorr'` | Uniformes de la primera versión (comun v18/v19) | Relanza `fase12_moduladores.py` con comun v20 o posterior |
 | Fase 12: pulido y rugoso iguales | La geometría no lee el canal `a` | En la geometría `mod_...`: Instance 2 → Color A = `a`. El informe lo avisa con `FALLO ... no lee la rugosidad` |
 | Fase 12: el gate no cambia nada | Sin note off (el aparato no lo envía) o `Gateprueba` en los botones | Mira la línea `MOD`: sin `gate` es que no llega el note off |
