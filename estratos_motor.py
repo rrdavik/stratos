@@ -8,7 +8,8 @@
 #
 #   1. NUCLEO     Python puro: ocupacion, desbordamiento, especies, ciclo,
 #                 erosion, conchas, cortes y la piel tematica (fase 11:
-#                 catalogo de modelos, clusters, compuestos y transitos).
+#                 catalogo de modelos, clusters, compuestos y transitos;
+#                 fase 12: material por la velocidad, vigor por el gate).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -21,7 +22,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v27'
+MOTOR_VERSION = 'motor v28'
 
 import math
 
@@ -125,6 +126,9 @@ DEFAULT_CFG = dict(
     # fase 11: la piel
     tema=0, peso_vecina=0.5, umbral_vecindad=4.0, min_cluster=2, caos=3.91, max_piezas=6,
     avance=0, pasos_etapa=2, rebote=0.2, catalogo=None,
+    # fase 12: moduladores
+    material_modo=1, rug_min=0.05, rug_max=0.85, vigor_max=1.5, plantas_ligado=2,
+    gate_prueba=0.5, respaldo=0,
 )
 
 
@@ -439,6 +443,8 @@ def new_world():
         t_h=[-99.0] * N,        # cuando empezo el tramo
         paso=0.125,             # duracion de un paso al tempo actual
         piel={},                # resumen de la piel para la leyenda
+        vig=[1.0] * N,          # vigor de cada formacion (fase 12: duracion del gate)
+        gate_sim=[],            # note off simulados de los botones: [t, s, nota]
         aviso='',
         ev={},
         t=None,
@@ -713,6 +719,7 @@ def grow(W, cfg, i, s, vel, now):
         W['h'][i] = cfg['seed_frac'] * lim
         W['huella'][i] = 0.0
         W['t_nac'][i] = now
+        W['vig'][i] = 1.0
         return dict(estado='semilla', inc=0.0, celda=i, trigger=True)
 
     W['lat_s'][i] = s
@@ -748,6 +755,7 @@ def overflow(W, cfg, i, s, vel, now):
         W['h'][j] = cfg['seed_frac'] * lim
         W['huella'][j] = 0.0
         W['t_nac'][j] = now
+        W['vig'][j] = 1.0
         kind = 'satelite nuevo'
     elif W['par'][j] == i:
         W['occ'][j] = o + 1
@@ -773,6 +781,14 @@ def note_off(W, cfg, s, note, now, tempo):
         W['seq_off'][s] = now
         if 0 <= p[0] < N:
             W['lat'][p[0]] = now
+    m = _gate_altura(W, cfg, p, now, tempo)
+    if p and cfg['nivel'] >= 12:    # fase 12: el gate da vigor (naturaleza) o plantas (ciudad)
+        gate_vigor(W, cfg, s, p, now, tempo)
+    return m
+
+
+def _gate_altura(W, cfg, p, now, tempo):
+    """Fase 3: el gate decide cuanto sube la nota (Gatemode)."""
     if not p or not cfg['gate_mode']:
         return None
     i, t_on, inc, o = p
@@ -798,6 +814,8 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
         return dict(estado='fuera de rango', inc=0.0, celda=-1)
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
     W.setdefault('terr', {})[i] = W.get('bar_n', 0)
+    if cfg['nivel'] >= 12:              # fase 12: la velocidad da el material
+        W['ev']['mod'] = dict(s=s, celda=i, vel=int(vel), rug=rugosidad(cfg, vel), gate=None, efecto='')
     res = grow(W, cfg, i, s, vel, now)
     gate_piel(W, cfg, i, now)           # fase 11: el gate adelanta las obras
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
@@ -1398,6 +1416,11 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
     a = 1.0 - math.exp(-dt / 0.12) if dt > 0 else 0.0
     piel = cfg['nivel'] >= 11
     W['paso'] = step_dur(cfg, tempo)
+    sim = W.get('gate_sim')
+    if sim:                         # fase 12: los note off simulados de los botones
+        for t_off, s_, nota in sorted(e for e in sim if e[0] <= now):
+            note_off(W, cfg, s_, nota, t_off, tempo)
+        W['gate_sim'] = [e for e in sim if e[0] > now]
     for i in range(N):
         h, vh = W['h'][i], W['vh'][i]
         if piel:                    # fase 11: la altura, a saltos de stop-motion
@@ -1561,7 +1584,7 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
     R = top_radius(W, cfg)
     piel = lvl >= 11
     if piel:                        # fase 11: todas las geometrias de los modelos, vacias
-        for g, _, _ in geometrias_piel():
+        for g, _, _ in geometrias_piel(cfg):
             out[g] = []
         out['particulas'] = []
     for i in range(N):
@@ -2666,6 +2689,81 @@ def vh_stop(W, i, now, paso):
     return W['h0'][i] + (h - W['h0'][i]) * q
 
 
+# --- moduladores (fase 12): velocidad -> material, gate -> vigor -------------------
+# La velocidad fundadora da la rugosidad: binario (Umbralvel, como hasta
+# ahora) o continuo (de Rugmax a 0 a Rugmin a 127). Va en el alfa del color
+# de cada instancia; el GLSL MAT de la piel la lee (pulido: reflejo fino y
+# fuerte; rugoso: mate y con poros). El color se acerca al material del
+# tema: obsidiana <-> pomez y dosel de vidrio ahumado en naturaleza, vidrio
+# negro <-> hormigon en la ciudad. La velocidad sigue sembrando el caos.
+# El gate, al soltar la nota: en naturaleza da vigor (tronco mas grueso y
+# copa mas ancha); en la ciudad, un gate ligado construye Plantasligado
+# plantas en vez de una.
+
+MATERIALES = ['binario', 'continuo']
+LIGADO = 1.0                # un gate de un paso o mas es ligado
+# familia: (color pulido, color rugoso, cuanto pesa sobre el color de la especie)
+MATERIAL = dict(mineral=((0.10, 0.10, 0.12), (0.80, 0.78, 0.72), 0.50),
+                dosel=((0.16, 0.21, 0.18), (0.34, 0.40, 0.32), 0.55),
+                ciudad=((0.08, 0.09, 0.12), (0.68, 0.66, 0.62), 0.60))
+MAT_FAMILIA = dict(mineral='mat_piel_mineral', dosel='mat_piel_dosel', ciudad='mat_piel_ciudad',
+                   obra='mat_poroso')
+FAMILIAS = ['mineral', 'dosel', 'ciudad']           # uFamilia del shader: 0, 1, 2
+
+
+def rugosidad(cfg, vel):
+    """Rugosidad 0-1 de la velocidad fundadora."""
+    lo, hi = cfg['rug_min'], cfg['rug_max']
+    if int(cfg.get('material_modo', 1)) == 0:
+        return lo if vel >= cfg['vel_umbral'] else hi
+    return hi + (lo - hi) * max(0.0, min(1.0, float(vel) / 127.0))
+
+
+def familia_de(modelo):
+    if modelo.startswith('ciu_'):
+        return 'obra'
+    if modelo == 'veg_dosel':
+        return 'dosel'
+    return 'ciudad' if modelo[:3] in ('inf', 'pla') else 'mineral'
+
+
+def material_tema(cfg, col, familia, rug):
+    """El color de la especie acercado al material de su familia."""
+    m = MATERIAL.get(familia)
+    if m is None:
+        return col
+    t = (rug - cfg['rug_min']) / max(1e-6, cfg['rug_max'] - cfg['rug_min'])
+    return _mix(col, _mix(m[0], m[1], max(0.0, min(1.0, t))), m[2])
+
+
+def vigor_de(cfg, gate_pasos):
+    """Vigor de un gate: 1 con el gate normal (medio paso), menos si es
+    corto, hasta Vigormax si es ligado."""
+    return max(0.6, min(max(0.6, cfg['vigor_max']), 0.6 + 0.8 * gate_pasos))
+
+
+def gate_vigor(W, cfg, s, p, now, tempo):
+    """Se suelta una nota (fase 12). Naturaleza: el vigor de la formacion
+    persigue el del gate. Ciudad: un gate ligado construye Plantasligado
+    plantas (las que faltan, como notas de la misma velocidad)."""
+    i, t_on = p[0], p[1]
+    if not 0 <= i < N or W['occ'][i] <= 0:
+        return
+    g = max(0.0, now - t_on) / step_dur(cfg, tempo)
+    W['vig'][i] = 0.5 * W['vig'][i] + 0.5 * vigor_de(cfg, g)
+    if tema_de(cfg) == 'ciudad':
+        plantas = max(1, int(cfg['plantas_ligado'])) if g >= LIGADO else 1
+        for _ in range(plantas - 1):
+            grow(W, cfg, i, s, W['vel'][i], now)
+        efecto = '%d planta%s' % (plantas, '' if plantas == 1 else 's')
+    else:
+        efecto = 'vigor %.2f' % W['vig'][i]
+    mod = W['ev'].get('mod')
+    if mod is None or mod.get('celda') != i:
+        mod = W['ev']['mod'] = dict(s=s, celda=i, vel=W['vel'][i], rug=rugosidad(cfg, W['vel'][i]))
+    mod.update(gate=g, efecto=efecto)
+
+
 # --- dibujar la piel ------------------------------------------------------------
 
 COL_ESPECIE = dict(vegetacion=(0.34, 0.52, 0.30), relieve=(0.30, 0.31, 0.35),
@@ -2690,26 +2788,33 @@ INCLINAR = 20.0              # grados que se inclinan los arboles hacia la capit
 _GEOMETRIAS = {}
 
 
-def geometria_de(modelo, pulido=True):
-    """Nombre de la geometria de TouchDesigner de un modelo. Las obras de la
-    ciudad tienen una sola; los demas, pulida y porosa (hasta la fase 12)."""
-    g = _GEOMETRIAS.get((modelo, pulido))
+def geometria_de(modelo, pulido=True, doble=True):
+    """Nombre de la geometria de TouchDesigner de un modelo. En la fase 11,
+    pulida y porosa (doble); desde la fase 12, una sola por modelo (el
+    material lo da el shader). Las obras de la ciudad tienen siempre una."""
+    clave = (modelo, pulido, doble)
+    g = _GEOMETRIAS.get(clave)
     if g is None:
-        g = 'mod_' + modelo if modelo.startswith('ciu_') else \
+        g = 'mod_' + modelo if modelo.startswith('ciu_') or not doble else \
             'mod_%s_%s' % (modelo, 'pul' if pulido else 'por')
-        _GEOMETRIAS[(modelo, pulido)] = g
+        _GEOMETRIAS[clave] = g
     return g
 
 
-def geometrias_piel():
-    """[(geometria, modelo, material)] de la fase 11."""
+def geometrias_piel(cfg=None):
+    """[(geometria, modelo, material)]: en la fase 11, pulida (mat_pulido) y
+    porosa (mat_poroso); desde la fase 12, una por modelo con el material de
+    su familia."""
+    doble = (cfg or DEFAULT_CFG)['nivel'] < 12
     out = []
     for mo in sorted(MODELOS):
         if mo.startswith('ciu_'):
             out.append((geometria_de(mo), mo, 'mat_poroso'))
-        else:
+        elif doble:
             out.append((geometria_de(mo, True), mo, 'mat_pulido'))
             out.append((geometria_de(mo, False), mo, 'mat_poroso'))
+        else:
+            out.append((geometria_de(mo, doble=False), mo, MAT_FAMILIA[familia_de(mo)]))
     return out
 
 
@@ -2763,12 +2868,16 @@ def _fila_m(p, marco, sx, sy, sz, col):
     return [p[0], p[1], p[2], rx, ry, rz, sx, sy, sz, col[0], col[1], col[2]]
 
 
-def _pie(modelo, vh, cw, cl):
-    """(sx, sy, sz) de un modelo con altura vh en una celda cw x cl."""
+def _pie(modelo, vh, cw, cl, ancho=1.0):
+    """(sx, sy, sz) de un modelo con altura vh en una celda cw x cl. 'ancho'
+    (el vigor, fase 12) lo ensancha; con vigor, la copa puede pasar un poco
+    del ancho de la celda."""
     modo, k = PIE.get(modelo, ('esbelto', 0.9))
     if modo == 'celda':
+        k = min(0.98, k * ancho)
         return k * cw, vh, k * cl
-    s = min(vh, k * min(cw, cl) / ANCHO.get(modelo, 1.0))
+    tope = k * min(cw, cl) / ANCHO.get(modelo, 1.0) * (1.0 + 0.3 * max(0.0, ancho - 1.0))
+    s = min(vh * ancho, tope)
     return s, vh, s
 
 
@@ -2824,9 +2933,15 @@ def build_piel(W, cfg, now, out):
     for i in range(N):
         bases[i] = _mul(normal_i(i), base_radius(W, cfg, i))
 
-    def emit(modelo, pulido, p, marco, dims, col):
+    doce = cfg['nivel'] >= 12         # fase 12: una geometria por modelo, rugosidad en el alfa
+    respaldo = doce and cfg.get('respaldo', 0)
+
+    def emit(modelo, pulido, p, marco, dims, col, rug=1.0):
         nonlocal piezas
-        out.setdefault(geometria_de(modelo, pulido), []).append(_fila_m(p, marco, dims[0], dims[1], dims[2], col))
+        fila = _fila_m(p, marco, dims[0], dims[1], dims[2], col)
+        if doce:
+            fila.append(1.0 if respaldo else rug)
+        out.setdefault(geometria_de(modelo, pulido, not doce), []).append(fila)
         piezas += 1
 
     for i in range(N):
@@ -2845,7 +2960,13 @@ def build_piel(W, cfg, now, out):
         o = W['occ'][i]
         est = estado_idx(cfg, o)
         pulido = W['vel'][i] >= cfg['vel_umbral']
-        col = _material_col(COL_ESPECIE[esp], pulido)
+        if doce:                                    # el material del tema, por la velocidad
+            rug = rugosidad(cfg, W['vel'][i])
+            col = material_tema(cfg, COL_ESPECIE[esp], 'ciudad' if tema == 'ciudad' else 'mineral', rug)
+            ancho = W['vig'][i] if tema == 'naturaleza' else 1.0
+        else:
+            rug, ancho = 1.0, 1.0
+            col = _material_col(COL_ESPECIE[esp], pulido)
         lt = _latido(W, i, now)
         sc = seq_color(cfg, W['lat_s'][i] if W['lat_s'][i] in (1, 2) else 1)
         Id, pd_ = drum_light(W, cfg, i, now)
@@ -2904,7 +3025,7 @@ def build_piel(W, cfg, now, out):
                 mo, esc, giro = modelo, 1.0, pz['giro']
                 ej = _marco(i, giro, incl, rumbo)
                 h_ = vh * alto * kb
-                dims = _pie(mo, h_, cw * esc_sat * kb, cl_ * esc_sat * kb)
+                dims = _pie(mo, h_, cw * esc_sat * kb, cl_ * esc_sat * kb, ancho)
                 p = _add(p0, ej[1], dy * vh)
             else:
                 sub = modelos_de(cfg, tema, esp, 'crecimiento' if est >= 2 and pz['var'] > 0.5
@@ -2914,10 +3035,10 @@ def build_piel(W, cfg, now, out):
                 ej = _marco(i, pz['giro'], pz['incl'] + incl, pz['rumbo'] if pz['incl'] else rumbo)
                 y = pz['y'] - (0.4 * esc * hund if hund else 0.0)
                 h_ = vh * esc * kb
-                dims = _pie(mo, h_, cw * esc * esc_sat * kb, cl_ * esc * esc_sat * kb)
+                dims = _pie(mo, h_, cw * esc * esc_sat * kb, cl_ * esc * esc_sat * kb, ancho)
                 p = _add(_add(_add(p0, e, pz['x'] * cw * esc_sat), t, pz['z'] * cl_ * esc_sat), n, y * vh)
             ck = _tint(col, 0.88 + 0.24 * pz['var'])
-            emit(mo, pulido, p, ej, dims, ck)
+            emit(mo, pulido, p, ej, dims, ck, rug)
         # hibrido: la otra especie deja su rastro, con la planta de la principal
         if W['sp'][i] == HIB:
             hib = modelos_de(cfg, tema, esp, 'hibrido')
@@ -2926,7 +3047,9 @@ def build_piel(W, cfg, now, out):
                 ej = _marco(i, comp[0]['giro'])
                 propio = PIE.get(hib[0], ('esbelto', 0))[0] == 'celda'
                 dims = _pie(hib[0] if propio else modelo, vh * kb, cw * esc_sat * kb, cl_ * esc_sat * kb)
-                emit(hib[0], pulido, p0, ej, dims, _material_col(COL_ESPECIE[otra], pulido))
+                ch = material_tema(cfg, COL_ESPECIE[otra], familia_de(hib[0]), rug) if doce \
+                    else _material_col(COL_ESPECIE[otra], pulido)
+                emit(hib[0], pulido, p0, ej, dims, ch, rug)
         # remate y grua de la coronacion de la ciudad
         if not sat and 'aguja' in cc and q_c and q_c[0] > 0:
             top = _add(p0, n, vh * alto)
@@ -2934,7 +3057,8 @@ def build_piel(W, cfg, now, out):
             if qa > 0:
                 rem = modelos_de(cfg, tema, esp, 'remate')
                 if rem:
-                    emit(rem[0], pulido, top, _marco(i), (0.5 * cw * 0.3, 0.35 * vh * qa, 0.5 * cl_ * 0.3), col)
+                    emit(rem[0], pulido, top, _marco(i), (0.5 * cw * 0.3, 0.35 * vh * qa, 0.5 * cl_ * 0.3),
+                         col, rug)
             else:
                 g = modelos_de(cfg, tema, 'obra', 'grua')
                 if g:
@@ -2964,8 +3088,10 @@ def build_piel(W, cfg, now, out):
                                             + (p0[2] - pj[2]) ** 2) + 0.06
                     ej = _marco_puente(i, j)
                     alto_p = max(0.01, gr * vmin * k_alto)
+                    cp = material_tema(cfg, COL_PUENTE[esp], familia_de(pm[0]), rug) if doce \
+                        else _material_col(COL_PUENTE[esp], pulido)
                     emit(pm[0], pulido, _add(p0, n, y0 * vmin), ej, (kw * min(cw, cl_) * k_ancho, alto_p, largo),
-                         _material_col(COL_PUENTE[esp], pulido))
+                         cp, rug)
         # obras de la ciudad y particulas
         if k_ >= 0 and cf:
             ef = W['et_f'][i]
@@ -3031,7 +3157,7 @@ def chop_names(c=None):
     c = c or cfg()
     if c['nivel'] < 11:
         return list(CHOP_NAMES)
-    return CHOP_NAMES + ['i_particulas'] + ['i_' + g for g, _, _ in geometrias_piel()]
+    return CHOP_NAMES + ['i_particulas'] + ['i_' + g for g, _, _ in geometrias_piel(c)]
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 
@@ -3198,6 +3324,14 @@ def cfg():
                  pasos_etapa=max(1, int(_p('Pasosetapa', c['pasos_etapa']))),
                  rebote=max(0.0, _p('Rebote', c['rebote'])),
                  catalogo=_catalogo())
+    if c['nivel'] >= 12:
+        c.update(material_modo=_menu('Materialmodo', MATERIALES, 1),
+                 rug_min=max(0.0, min(1.0, _p('Rugmin', c['rug_min']))),
+                 rug_max=max(0.0, min(1.0, _p('Rugmax', c['rug_max']))),
+                 vigor_max=max(0.6, _p('Vigormax', c['vigor_max'])),
+                 plantas_ligado=max(1, int(_p('Plantasligado', c['plantas_ligado']))),
+                 gate_prueba=max(0.01, _p('Gateprueba', c['gate_prueba'])),
+                 respaldo=int(_p('Materialrespaldo', False)))
     return c
 
 
@@ -3452,6 +3586,12 @@ def instance_rows(chop_name):
 
 # --- pulsos de los parametros ------------------------------------------------
 
+def _gate_prueba(W, c, s, note, now):
+    """Fase 12: los botones de prueba sueltan la nota tras Gateprueba pasos."""
+    if c['nivel'] >= 12:
+        W.setdefault('gate_sim', []).append([now + c['gate_prueba'] * step_dur(c, tempo()), s, int(note)])
+
+
 def on_pulse(name):
     W, c = world(), cfg()
     now = absTime.seconds
@@ -3459,6 +3599,7 @@ def on_pulse(name):
         note = _p('Nota', 60)
         _seq1_beacon(note)
         r = note_on(W, c, GEO, note, _p('Velprueba', 100), now, tempo())
+        _gate_prueba(W, c, GEO, note, now)
         ci = r['celda']
         print('SEMBRAR  %s -> celda %d  ocupacion %d  carga %d/%d  (%s)'
               % (note_name(note), ci, W['occ'][ci] if ci >= 0 else 0, W['carga'][ci] if ci >= 0 else 0,
@@ -3466,6 +3607,7 @@ def on_pulse(name):
     elif name == 'Sembrar2':
         note = _p('Nota2', 60)
         r = note_on(W, c, ARQ, note, _p('Velprueba', 100), now, tempo())
+        _gate_prueba(W, c, ARQ, note, now)
         ci = r['celda']
         print('SEMBRAR2 %s -> celda %d  ocupacion %d  carga %d/%d  (%s)'
               % (note_name(note), ci, W['occ'][ci] if ci >= 0 else 0, W['carga'][ci] if ci >= 0 else 0,
@@ -3483,6 +3625,7 @@ def on_pulse(name):
         else:
             for x in [ci] + list(NEIGH[ci]):
                 note_on(W, c, s, cell_note(x), _p('Velprueba', 100), now, tempo())
+                _gate_prueba(W, c, s, cell_note(x), now)
             if s == GEO:
                 _seq1_beacon(note)
             cl = clusters(W, c)
@@ -3871,4 +4014,13 @@ def _legend():
         lines.append('  TEMA     %s   clusters %d (max %d)   compuestos %d   piezas %d   obras %d (%d a medias)'
                      % (tema_de(c), pz.get('clusters', 0), pz.get('max', 0), pz.get('compuestos', 0),
                         pz.get('piezas', 0), pz.get('obras', 0), pz.get('medias', 0)))
+    if lvl >= 12:
+        md = W['ev'].get('mod')
+        modo = MATERIALES[int(c['material_modo'])] + ('   RESPALDO (Phong)' if c['respaldo'] else '')
+        if md:
+            gate = '   gate %.2f -> %s' % (md['gate'], md['efecto']) if md.get('gate') is not None else ''
+            lines.append('  MOD      vel %d -> rugosidad %.2f%s   %s'
+                         % (md['vel'], md['rug'], gate, modo))
+        else:
+            lines.append('  MOD      -   %s' % modo)
     return '\n'.join(lines)

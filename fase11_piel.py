@@ -59,7 +59,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v1  (la piel: catalogo de modelos, clusters, puentes, compuestos y transitos)'
+VERSION = 'fase11 v2  (la piel: catalogo de modelos, clusters, puentes, compuestos y transitos)'
 banner(VERSION)
 
 base = require_base(11)
@@ -211,28 +211,11 @@ if AJUSTADAS:
          'a la unidad midiendo sus puntos' % (len(AJUSTADAS), AJUSTADAS[0]))
 
 # -----------------------------------------------------------------------------
-# GEOMETRIAS: una por modelo (pulida y porosa), y las particulas
+# GEOMETRIAS: una por modelo (pulida y porosa; desde la fase 12, una sola con
+# el shader de la piel), y las particulas
 # -----------------------------------------------------------------------------
 
-for nm in [o.name for o in base.children if o.name.startswith(PIEL_PREFIJO)]:
-    for viejo in (nm, 'i_' + nm):
-        o = base.op(viejo)
-        if o is not None:
-            try:
-                o.destroy()
-            except Exception:
-                pass
-geos = m.geometrias_piel()
-sin_color = []
-for k, (g, mo, mat) in enumerate(geos):
-    geo = make_instanced(base, g, 1400 + (k % 8) * 180, 600 - (k // 8) * 110, mat,
-                         sop='select:%s/%s/salida' % (modelos.path, mo), quiet=True)
-    if not instance_color_ok(geo)[0]:
-        sin_color.append(g)
-ok('%d geometrias de modelos (mod_...): pulidas con mat_pulido, porosas y obras con mat_poroso; '
-   'giran con el planeta' % len(geos))
-for g in sin_color[:3]:
-    fail('%s no lee el color por instancia: Instance 2 -> Color R/G/B = r g b, Color Mode = Replace' % g)
+instanciar_modelos(base, m)
 make_constant(base, 'mat_particulas', 780, 860, (1.0, 1.0, 1.0))
 make_instanced(base, 'particulas', 520, 860, 'mat_particulas')
 set_render(base)
@@ -295,9 +278,9 @@ def _prueba(t, m):
             falta.append('ciudad obra %s' % obra)
     t.check('catalogo completo en los dos temas (estados, puentes, protagonistas, hibridos, cadenas)',
             not falta, ', '.join(falta[:4]))
-    sin_nodos = [g for g, mo, _ in m.geometrias_piel()
+    sin_nodos = [g for g, mo, _ in m.geometrias_piel(c)
                  if base.op(g) is None or base.op('modelos/%s/salida' % mo) is None]
-    t.check('cada modelo tiene sus SOP en modelos y sus geometrias (pulida y porosa)',
+    t.check('cada modelo tiene sus SOP en modelos y sus geometrias',
             not sin_nodos, ', '.join(sin_nodos[:4]))
     grandes = []
     for mo, prims in m.MODELOS.items():
@@ -326,11 +309,14 @@ def _prueba(t, m):
             n_cl = len(cl['celdas'][k]) if k >= 0 else 0
             inst = m.build_instances(W, c, absTime.seconds + 10.0)
             pm = m.modelos_de(c, tema, esp, 'puente')[0]
-            puentes = sum(len(inst.get(m.geometria_de(pm, p), [])) for p in (True, False))
+            geos = dict((mo, set()) for mo in m.MODELOS)
+            for g, mo, _ in m.geometrias_piel(c):
+                geos[mo].add(g)
+            puentes = sum(len(inst.get(g, [])) for g in geos[pm])
             prot = m.modelos_de(c, tema, esp, 'protagonista')[m.clase_cluster(n_cl)]
-            n_prot = sum(len(inst.get(m.geometria_de(prot, p), [])) for p in (True, False))
+            n_prot = sum(len(inst.get(g, [])) for g in geos[prot])
             enlaces = sum(len(x) for x in cl['mascara'])
-            otro = [g for g, mo, _ in m.geometrias_piel() if inst.get(g)
+            otro = [g for g, mo, _ in m.geometrias_piel(c) if inst.get(g)
                     and (mo[:3] in ('veg', 'rel')) != (tema == 'naturaleza')]
             t.check('%s, %s: Sembrarzona x2 -> cluster de %d celdas, %d puentes y protagonista'
                     % (tema, esp, n_cl, puentes),
@@ -449,8 +435,8 @@ def _prueba(t, m):
     instz = m.build_instances(Wz, cz, now + 10.0)
     cuerpo = m.modelos_de(cz, 'ciudad', 'planificada', 'coronacion')[0]
     t.check('coronacion de la ciudad planificada: rascacielos con aguja',
-            Wz['et_c'][i] == 3 and len(instz.get(m.geometria_de(cuerpo, True), [])) == 1
-            and len(instz.get(m.geometria_de('pla_aguja', True), [])) == 1,
+            Wz['et_c'][i] == 3 and len(instz.get(m.geometria_de(cuerpo, True, cz['nivel'] < 12), [])) == 1
+            and len(instz.get(m.geometria_de('pla_aguja', True, cz['nivel'] < 12), [])) == 1,
             'etapa %d' % Wz['et_c'][i])
     Wz2 = m.new_world()
     for _ in range(2):
