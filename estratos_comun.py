@@ -12,6 +12,8 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
     versiones anteriores (baliza, baliza2, balizas_drum, luz_drum).
   - make_instanced(): un Geometry COMP alimentado por un Script CHOP del motor
     (una caja, una esfera o, desde la fase 11, un modelo del catalogo)
+  - instanciar_modelos(): las geometrias de los modelos (fase 11: pulida y
+    porosa; fase 12: una por modelo con el shader de la piel)
   - set_render(), set_legend(), autoprueba
 =============================================================================
 """
@@ -19,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v17'
+VERSION_COMUN = 'comun v18'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -425,9 +427,11 @@ def onValueChange(par, prev):
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
 # (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_celda;
 # desde la fase 11, i_particulas y un i_mod_... por modelo del catalogo).
+# Desde la fase 12 las filas de los modelos traen un canal mas, 'a': la
+# rugosidad que lee el shader de la piel.
 
-CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b']
-DUMMY = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0]
+CHANS = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'r', 'g', 'b', 'a']
+DUMMY = [0.0, -9999.0, 0.0, 0, 0, 0, 0.001, 0.001, 0.001, 0, 0, 0, 1.0]
 
 
 def onSetupParameters(scriptOp):
@@ -444,7 +448,7 @@ def onCook(scriptOp):
         rows = [DUMMY]
     n = len(rows)
     scriptOp.numSamples = n
-    chans = [scriptOp.appendChan(nm) for nm in CHANS]
+    chans = [scriptOp.appendChan(nm) for nm in CHANS[:len(rows[0])]]
     scriptOp.numSamples = n
     for j, ch in enumerate(chans):
         vals = [float(r[j]) for r in rows]
@@ -496,6 +500,141 @@ def onCook(scriptOp):
             ch[i] = float(rows[i][j])
     return
 '''
+
+# -----------------------------------------------------------------------------
+# SHADER DE LA PIEL (fase 12): un GLSL MAT por familia de material
+# -----------------------------------------------------------------------------
+# Lee la rugosidad del alfa del color de cada instancia (0 pulido, 1 rugoso).
+# Pulido: reflejo fino y fuerte y un reflejo de borde frio. Rugoso: mate y con
+# poros (pomez, hormigon). uFamilia: 0 mineral (obsidiana <-> pomez), 1 dosel
+# (vidrio ahumado con vetas ambar), 2 ciudad (vidrio negro <-> hormigon, con
+# ventanas ambar que enciende uVentanas.x desde la fase 17). Las luces llegan
+# como uniformes (posicion y color x dimmer de luz_principal, luz_relleno y
+# luz_destello). Si el shader falla, Materialrespaldo vuelve a un Phong.
+
+PIEL_VERTEX = r"""// Estratos - piel (fase 12): vertex shader
+out Vertex {
+    vec4 color;
+    vec3 wPos;
+    vec3 wNorm;
+    vec3 oPos;
+    flat int inst;
+    flat int camIndex;
+} oVert;
+
+void main()
+{
+    vec4 wPos = TDDeform(P);
+    gl_Position = TDWorldToProj(wPos);
+#ifndef TD_PICKING_ACTIVE
+    oVert.camIndex = TDCameraIndex();
+    oVert.inst = TDInstanceID();
+    oVert.wPos = wPos.xyz;
+    oVert.wNorm = normalize(TDDeformNorm(N));
+    oVert.oPos = P;
+    oVert.color = TDInstanceColor(Cd);
+#else
+    TDWritePickingValues();
+#endif
+}
+"""
+
+PIEL_PIXEL = r"""// Estratos - piel (fase 12): pixel shader
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad
+uniform vec4 uLuz0;         // posicion de luz_principal
+uniform vec4 uLuz0Col;      // su color x dimmer
+uniform vec4 uLuz1;         // luz_relleno
+uniform vec4 uLuz1Col;
+uniform vec4 uLuz2;         // luz_destello
+uniform vec4 uLuz2Col;
+uniform vec4 uAmbiente;     // rgb
+uniform vec4 uVentanas;     // x: ventanas encendidas 0-1 (fase 17)
+
+in Vertex {
+    vec4 color;
+    vec3 wPos;
+    vec3 wNorm;
+    vec3 oPos;
+    flat int inst;
+    flat int camIndex;
+} iVert;
+
+layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
+
+float hash13(vec3 p)
+{
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
+
+float ruido(vec3 x)
+{
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = mix(hash13(i), hash13(i + vec3(1.0, 0.0, 0.0)), f.x);
+    float b = mix(hash13(i + vec3(0.0, 1.0, 0.0)), hash13(i + vec3(1.0, 1.0, 0.0)), f.x);
+    float c = mix(hash13(i + vec3(0.0, 0.0, 1.0)), hash13(i + vec3(1.0, 0.0, 1.0)), f.x);
+    float d = mix(hash13(i + vec3(0.0, 1.0, 1.0)), hash13(i + vec3(1.0, 1.0, 1.0)), f.x);
+    return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
+}
+
+vec3 luz(vec3 pos, vec3 col, vec3 p, vec3 n, vec3 v, vec3 base, float expo, float ks, inout vec3 spec)
+{
+    vec3 l = normalize(pos - p);
+    float nl = max(dot(n, l), 0.0);
+    vec3 h = normalize(l + v);
+    spec += col * ks * pow(max(dot(n, h), 0.0), expo) * step(0.0001, nl);
+    return base * col * nl;
+}
+
+void main()
+{
+    TDCheckDiscard();
+    float fam = uFamilia.x;
+    float rug = clamp(iVert.color.a, 0.02, 1.0);
+    vec3 base = iVert.color.rgb;
+    vec3 n = normalize(iVert.wNorm);
+    vec3 cam = uTDMats[iVert.camIndex].camInverse[3].xyz;
+    vec3 v = normalize(cam - iVert.wPos);
+    if (dot(n, v) < 0.0)
+        n = -n;
+    // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
+    vec3 q = iVert.oPos * 7.0 + vec3(float(iVert.inst) * 1.731);
+    float poro = ruido(q) * 0.65 + ruido(q * 3.1) * 0.35;
+    base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
+    float expo = mix(120.0, 6.0, rug);
+    float ks = mix(1.2, 0.03, rug);
+    vec3 spec = vec3(0.0);
+    vec3 dif = base * uAmbiente.rgb;
+    dif += luz(uLuz0.xyz, uLuz0Col.rgb, iVert.wPos, n, v, base, expo, ks, spec);
+    dif += luz(uLuz1.xyz, uLuz1Col.rgb, iVert.wPos, n, v, base, expo, ks, spec);
+    dif += luz(uLuz2.xyz, uLuz2Col.rgb, iVert.wPos, n, v, base, expo, ks, spec);
+    float fres = pow(1.0 - max(dot(n, v), 0.0), 5.0);
+    vec3 col = dif + spec;
+    if (fam > 0.5 && fam < 1.5) {
+        // dosel: vidrio ahumado (reflejo de borde) con vetas ambar
+        float onda = abs(sin(dot(iVert.oPos, vec3(9.0, 3.0, 7.0)) + ruido(q) * 4.0));
+        float veta = 1.0 - smoothstep(0.0, 0.08, onda);
+        col = col * 0.75 + fres * vec3(0.30, 0.34, 0.32) + veta * vec3(1.0, 0.62, 0.22) * 0.5;
+    } else if (fam > 1.5) {
+        // ciudad: vidrio negro con reflejo de borde; ventanas ambar (apagadas hasta la fase 17)
+        col += fres * (1.0 - rug) * vec3(0.25, 0.28, 0.32);
+        vec2 w = fract(vec2(iVert.oPos.y * 10.0, (iVert.oPos.x + iVert.oPos.z) * 7.0));
+        float ventana = step(0.3, w.x) * step(w.x, 0.8) * step(0.25, w.y) * step(w.y, 0.75);
+        float lado = 1.0 - abs(dot(n, normalize(iVert.wPos)));
+        col += ventana * step(0.5, lado) * uVentanas.x * vec3(1.0, 0.62, 0.25);
+    } else {
+        // mineral: la obsidiana pulida tiene un reflejo de borde frio
+        col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
+    }
+    oFragColor[0] = TDOutputSwizzle(vec4(col, 1.0));
+    for (int i = 1; i < TD_NUM_COLOR_BUFFERS; i++)
+        oFragColor[i] = vec4(0.0);
+}
+"""
+
 
 # -----------------------------------------------------------------------------
 # INSTALAR EL MOTOR
@@ -886,8 +1025,10 @@ def apply_wobble(base):
         if not set_spin(g):
             sin_orden.append(g.name)
         names.append(g.name)
-    ok('balanceo del eje en %d geometrias (%s): Rotextra, Balanceo, Balanceoper'
-       % (len(names), ', '.join(names)))
+    piel = [n for n in names if n.startswith(PIEL_PREFIJO)]
+    resto = [n for n in names if not n.startswith(PIEL_PREFIJO)]
+    ok('balanceo del eje en %d geometrias (%s%s): Rotextra, Balanceo, Balanceoper'
+       % (len(names), ', '.join(resto), ' y %d de modelos' % len(piel) if piel else ''))
     for n in sin_orden:
         info('%s: no pude fijar Rotate Order = Ry Rx Rz; ponlo a mano' % n)
 
@@ -1009,6 +1150,116 @@ def make_instanced(base, name, x, y, mat, sop='box', quiet=False):
     if not quiet:
         ok('%s: geometria instanciada desde i_%s, gira con el planeta' % (name, name))
     return geo
+
+
+PIEL_UNIFORMES = [
+    ('uFamilia', ('%d', '0', '0', '0')),
+    ('uLuz0', ("parent().op('luz_principal').par.tx", "parent().op('luz_principal').par.ty",
+               "parent().op('luz_principal').par.tz", '0')),
+    ('uLuz0Col', tuple("parent().op('luz_principal').par.lightcolor%s * parent().op('luz_principal').par.dimmer"
+                       % ch for ch in 'rgb') + ('0',)),
+    ('uLuz1', ("parent().op('luz_relleno').par.tx", "parent().op('luz_relleno').par.ty",
+               "parent().op('luz_relleno').par.tz", '0')),
+    ('uLuz1Col', tuple("parent().op('luz_relleno').par.lightcolor%s * parent().op('luz_relleno').par.dimmer"
+                       % ch for ch in 'rgb') + ('0',)),
+    ('uLuz2', ("parent().op('luz_destello').par.tx", "parent().op('luz_destello').par.ty",
+               "parent().op('luz_destello').par.tz", '0')),
+    ('uLuz2Col', tuple("parent().op('luz_destello').par.lightcolor%s * parent().op('luz_destello').par.dimmer"
+                       % ch for ch in 'rgb') + ('0',)),
+    ('uAmbiente', ('0.16', '0.16', '0.18', '0')),
+    ('uVentanas', ('0', '0', '0', '0')),          # la fase 17 las enciende
+]
+FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad']
+
+
+def _uniforme(mat, k, nombre, valores):
+    """Uniforme vec4 k del GLSL MAT (pagina Vectors): nombre y cuatro valores,
+    numeros o expresiones."""
+    bien = setp(mat, 'vec%dname' % k, nombre)
+    for comp, v in zip('xyzw', valores):
+        par = 'vec%dvalue%s' % (k, comp)
+        try:
+            bien = setp(mat, par, float(v)) and bien
+        except ValueError:
+            bien = setexpr(mat, par, v) and bien
+    return bien
+
+
+def materiales_piel(base):
+    """El shader de la piel (fase 12): un GLSL MAT por familia de material
+    (mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad) que lee la rugosidad
+    del alfa de cada instancia, y mat_respaldo (Phong) para Materialrespaldo."""
+    vdat = get_or_make(base, 'textDAT', 'piel_vertex', 1180, 1020)
+    vdat.text = PIEL_VERTEX
+    pdat = get_or_make(base, 'textDAT', 'piel_pixel', 1180, 940)
+    pdat.text = PIEL_PIXEL
+    malos = []
+    for k, fam in enumerate(FAMILIAS_PIEL):
+        mat = get_or_make(base, 'glslMAT', 'mat_piel_' + fam, 1400, 1020 - 80 * k)
+        bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'piel_vertex'))
+        bien = bool(setp_any(mat, ['pdat', 'pixeldat'], 'piel_pixel')) and bien
+        try:                         # TouchDesigner 2022+: la pagina Vectors es una secuencia
+            sec = mat.seq.vec
+            if sec.numBlocks < len(PIEL_UNIFORMES):
+                sec.numBlocks = len(PIEL_UNIFORMES)
+        except Exception:
+            pass
+        for q, (nombre, valores) in enumerate(PIEL_UNIFORMES):
+            vals = tuple(v % k if '%d' in v else v for v in valores)
+            bien = _uniforme(mat, q, nombre, vals) and bien
+        if not bien:
+            malos.append(mat.name)
+    make_phong(base, 'mat_respaldo', 1400, 780, spec=0.5, shin=24, diff=1.0, amb=0.22, emit=0.03)
+    if malos:
+        info('%s: no pude fijar los shaders o los uniformes (Vertex/Pixel Shader = piel_vertex / '
+             'piel_pixel; Vectors: uFamilia, uLuz0...); si la piel no se ve, Materialrespaldo'
+             % ', '.join(malos))
+    else:
+        ok('shader de la piel: mat_piel_mineral, mat_piel_dosel y mat_piel_ciudad (GLSL), '
+           'mat_respaldo (Phong)')
+    return not malos
+
+
+def instanciar_modelos(base, m):
+    """Las geometrias de los modelos de la piel, las que pide el motor para el
+    nivel actual: en la fase 11, pulida (mat_pulido) y porosa (mat_poroso);
+    desde la fase 12, una por modelo, con el shader de su familia, la
+    rugosidad en el canal 'a' y Materialrespaldo para volver a un Phong. Borra
+    las que hubiera."""
+    c = m.cfg()
+    doce = c['nivel'] >= 12
+    if doce:
+        materiales_piel(base)
+    for nm in [o.name for o in base.children if o.name.startswith(PIEL_PREFIJO)]:
+        for viejo in (nm, 'i_' + nm):
+            o = base.op(viejo)
+            if o is not None:
+                try:
+                    o.destroy()
+                except Exception:
+                    pass
+    modelos = base.op('modelos')
+    geos, sin_color, sin_alfa = m.geometrias_piel(c), [], []
+    for k, (g, mo, mat) in enumerate(geos):
+        geo = make_instanced(base, g, 1400 + (k % 8) * 180, 600 - (k // 8) * 110, mat,
+                             sop='select:%s/%s/salida' % (modelos.path, mo), quiet=True)
+        if not instance_color_ok(geo)[0]:
+            sin_color.append(g)
+        if doce and not mo.startswith('ciu_'):
+            if not setp_any(geo, ['instancea'], 'a'):
+                sin_alfa.append(g)
+            setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else '%s'" % mat)
+    if doce:
+        ok('%d geometrias de modelos (mod_...): una por modelo, con el shader de su familia '
+           '(Materialrespaldo: Phong); giran con el planeta' % len(geos))
+    else:
+        ok('%d geometrias de modelos (mod_...): pulidas con mat_pulido, porosas y obras con mat_poroso; '
+           'giran con el planeta' % len(geos))
+    for g in sin_color[:3]:
+        fail('%s no lee el color por instancia: Instance 2 -> Color R/G/B = r g b, Color Mode = Replace' % g)
+    for g in sin_alfa[:3]:
+        fail('%s no lee la rugosidad: Instance 2 -> Color A = a' % g)
+    return geos
 
 
 def set_render(base):

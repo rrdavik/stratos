@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates.
+Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez, vidrio negro u hormigón) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
 
 ---
 
@@ -15,13 +15,15 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas | `motor v27` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP | `comun v17` |
-| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, una geometría por modelo, partículas, página Fase11 | `fase11 v1` |
-| `pruebas/` | TouchDesigner simulado y vista previa del catálogo (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12 | `motor v28` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto | `comun v18` |
+| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12) | `fase11 v2` |
+| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2) | `fase12 v1` |
+| `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase11_piel.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase12_moduladores.py').read())
 ```
 
 Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v10`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11.
@@ -138,6 +140,81 @@ Comprueba: el catálogo completo en los dos temas (estados, puentes, protagonist
 
 ---
 
+## FASE 12 · Moduladores: velocidad y duración del gate
+
+### Qué hace
+
+Las dos señales que ya modulaban las cajas pasan a modular los modelos temáticos, y el material deja de necesitar geometrías duplicadas. La velocidad sigue sembrando el caos de la fase 11: eso no cambia.
+
+### Un material por modelo
+
+- **Una geometría por modelo**: de 94 a 49 (`mod_<modelo>`; las obras de la ciudad ya tenían una).
+- **Shader de la piel**: un GLSL MAT por familia de material, con los mismos shaders (`piel_vertex`, `piel_pixel`):
+  - `mat_piel_mineral`: naturaleza, obsidiana ↔ piedra pómez;
+  - `mat_piel_dosel`: el dosel, vidrio ahumado con vetas ámbar;
+  - `mat_piel_ciudad`: vidrio negro ↔ hormigón brutalista, con ventanas ámbar que se quedan apagadas hasta la fase 17 (`uVentanas`).
+  
+  Las obras de la ciudad (valla, foso, andamio, grúa) siguen con `mat_poroso`.
+- **La rugosidad va en el canal `a`** (el alfa del color de cada instancia: Instance 2 → Color A = `a`). Cada Script CHOP de modelo tiene un canal más. El shader la lee:
+  - pulido: reflejo fino y fuerte, y un reflejo de borde frío;
+  - rugoso: mate y con poros (manchas de ruido en el espacio del modelo, distintas en cada instancia).
+- **El color** también se acerca al material: el de la especie se mezcla con obsidiana o pómez (naturaleza) o con vidrio negro u hormigón (ciudad), según la rugosidad. Así, pulido y rugoso se distinguen también con el material de respaldo.
+- **Luces**: el shader no usa las funciones de iluminación de TouchDesigner. Lee como uniformes la posición y el color × dimmer de `luz_principal`, `luz_relleno` y `luz_destello` (página Vectors del GLSL MAT, con expresiones), más un ambiente.
+
+### Velocidad → material
+
+```
+continuo (por defecto): rugosidad = Rugmax + (Rugmin − Rugmax) × velocidad / 127
+binario:                rugosidad = Rugmin desde Umbralvel (64), Rugmax por debajo
+```
+
+Con `Rugmin` 0,05 y `Rugmax` 0,85: velocidad 97 → 0,24; 10 → 0,79; 120 → 0,09. Decisión: continuo.
+
+### Duración del gate → vigor
+
+El gate se mide al soltar la nota, en pasos (60 / (BPM × 4)).
+
+- **Naturaleza**: vigor = 0,6 + 0,8 × gate, entre 0,6 y `Vigormax` (1,5). Gate normal (medio paso) = 1; corto (¼ de paso) = 0,8; ligado (un paso o más) = 1,4 a 1,5. El vigor de cada formación persigue el de sus gates (media con el anterior) y ensancha el tronco y la copa (los modelos de proporciones propias, y la planta de los de celda), sus piezas pequeñas incluidas. Con vigor, una copa puede pasar un poco del ancho de su celda.
+- **Ciudad**: plantas por señal. Un gate corto o normal construye una; un gate **ligado** (un paso o más) construye `Plantasligado` (2): la nota cuenta como `Plantasligado` notas de construcción, con la misma velocidad. El gate de la fase 3 (cuánto sube cada nota) sigue igual.
+
+### Materialrespaldo
+
+El shader es lo único que la simulación de TouchDesigner no puede ejecutar. Si la piel no se ve o sale negra, `Materialrespaldo` cambia **en vivo** todas las geometrías de modelos a un Phong (`mat_respaldo`) y pone el alfa a 1. No hace falta relanzar nada.
+
+*Diferencia con el plan*: el plan decía «vuelve a las geometrías duplicadas». Con una sola geometría por modelo y el color ya acercado al material, el Phong distingue pulido y rugoso por el color. El cambio es inmediato y no hace falta mantener 94 geometrías por si acaso.
+
+### Probar sin BeatStep
+
+Los botones de prueba (`Sembrar`, `Sembrar2`, `Sembrarzona`, `Sembrarzona2`) sueltan ahora la nota tras `Gateprueba` pasos (0,5: un gate normal), así que modulan igual que el aparato.
+
+1. `Resetmundo`, `Velprueba` 10 y `Sembrar` varias veces: piedra pómez (o hormigón). `Resetmundo`, `Velprueba` 120: obsidiana (o vidrio negro).
+2. `Gateprueba` 0,25, 1 y 2 con `Tema` naturaleza: árboles cada vez más gruesos y anchos.
+3. `Tema` ciudad, `Gateprueba` 2 y `Sembrar2`: cada pulsación sube dos plantas (`2 plantas` en la leyenda).
+4. Si no se ve la piel: `Materialrespaldo`, y mándame los errores de `mat_piel_mineral` (clic derecho → Info).
+
+### Parámetros (página Fase12)
+
+`Materialmodo` continuo · `Rugmin` 0,05 · `Rugmax` 0,85 · `Vigormax` 1,5 · `Plantasligado` 2 · `Gateprueba` 0,5 (pasos) · `Materialrespaldo` (apagado)
+
+### Leyenda
+
+```
+MOD      vel 97 -> rugosidad 0.24   gate 1.60 -> 2 plantas   continuo
+MOD      vel 97 -> rugosidad 0.24   gate 1.60 -> vigor 1.49   continuo
+```
+
+Velocidad y rugosidad de la última nota, y el gate y su efecto al soltarla. Con `Materialrespaldo` añade `RESPALDO (Phong)`.
+
+### Autoprueba
+
+Comprueba: una geometría por modelo (49) sin las duplicadas; que cada una lee el canal `a` y usa el shader de su familia; los shaders y los tres GLSL MAT; velocidad 10 rugosa y clara, 120 pulida y oscura, por el camino de `Sembrar`; el modo binario; el canal `a` en las filas; el vigor y la anchura crecientes con `Gateprueba` 0,25, 1 y 2; las 2 plantas por gate ligado en la ciudad; que la velocidad sigue sembrando el caos; `Materialrespaldo` en vivo (Phong y alfa 1) y la vuelta al shader; el canal `a` en el Script CHOP; y la leyenda `MOD` (vel 97 → 0.24, gate 1.60).
+
+### Rendimiento
+
+La mitad de geometrías y de Script CHOP que en la fase 11. En simulación, con unas 480 piezas, el motor tarda unos 3,3 ms por fotograma en calcular las instancias y unos 4,5 ms en total.
+
+---
+
 ### Decisiones tomadas en la fase 11
 
 | Pregunta | Decisión |
@@ -154,22 +231,37 @@ Comprueba: el catálogo completo en los dos temas (estados, puentes, protagonist
 
 ---
 
+### Decisiones tomadas en la fase 12
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Material binario o continuo? | Continuo (`Materialmodo`); binario como antes, con `Umbralvel` |
+| ¿Por dónde llega la rugosidad al shader? | Por el alfa del color de cada instancia (canal `a`): no hace falta ningún atributo personalizado |
+| ¿Qué hace `Materialrespaldo`? | Cambia en vivo el material de todas las geometrías a un Phong, sin duplicarlas |
+| ¿Qué es un gate ligado? | Un gate de un paso o más |
+| ¿Cómo da plantas la ciudad? | La nota ligada cuenta como `Plantasligado` notas de construcción |
+| ¿Cómo da vigor la naturaleza? | Ensancha tronco y copa (escala horizontal), con media entre el vigor de la formación y el de cada gate |
+
+---
+
 ### Cómo se ha probado
 
 Sin TouchDesigner a mano, con un **TouchDesigner simulado** que ejecuta los scripts tal cual (`pruebas/td_simulado.py`): operadores y rutas, parámetros con expresiones, páginas propias, storage, el módulo de los Text DAT, Script CHOP, Table DAT y el tiempo del proyecto. Los COMP solo aceptan los parámetros que tienen en TouchDesigner.
 
 ```
-python3 pruebas/correr_fases.py        # base y fases 3 a 11 desde cero, sesión, relanzar y otra sesión
+python3 pruebas/correr_fases.py        # base y fases 3 a 12 desde cero, sesión, relanzar y otra sesión
 python3 pruebas/vista_previa.py        # hoja de contactos del catálogo (pruebas/catalogo.png)
+xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la piel con OpenGL (necesita moderngl)
 ```
 
-- **Desde cero**: `fase12_base.py` y las fases 3 a 11, todas con `AUTOPRUEBA OK`.
+- **Desde cero**: `fase12_base.py` y las fases 3 a 12, todas con `AUTOPRUEBA OK`.
 - **Sesión simulada** de 16 compases a 120 BPM con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
-- **Relanzar** las fases 3 a 11 sobre el proyecto ya en la fase 11: todas OK, el mundo se conserva y otra sesión corre sin errores.
+- **Relanzar** las fases 3 a 12 sobre el proyecto ya en la fase 12 (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
+- **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, dosel ahumado con vetas ámbar.
 - **Catálogo**: una hoja de contactos dibujada con un rasterizador propio (`pruebas/vista_previa.py`) para ver cada modelo, y escenas de los dos temas con clusters, puentes, coronaciones e híbridos.
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
 
-Lo que la simulación no puede comprobar: el aspecto real en el render, los nombres de los parámetros de los SOP (Tube, Transform, Select, Merge) y el tiempo real por fotograma.
+Lo que la simulación no puede comprobar: el aspecto real en el render, los nombres de los parámetros de los SOP (Tube, Transform, Select, Merge) y del GLSL MAT (Vertex/Pixel Shader, página Vectors), que TouchDesigner declare sus funciones de shader como las imitamos, y el tiempo real por fotograma.
 
 ### Pruebas pendientes con el aparato
 
@@ -178,6 +270,8 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 3. **Escala**: con la cámara de globo, comprobar que los árboles y las torres se leen a distancia y que los puentes no tapan las formaciones. Si sobran o faltan, se ajustan en `PUENTE` del motor.
 4. **Rendimiento**: con SEQ1, SEQ2 y batería, mirar los fotogramas con 400–500 piezas.
 5. **Obras a medias**: con `Avance` = gates, un cluster que deja de sonar se queda a medias; comprobar que se lee como obra parada y no como fallo.
+6. **El shader (fase 12)**: que `mat_piel_mineral`, `mat_piel_dosel` y `mat_piel_ciudad` compilan sin errores (clic derecho → Info) y que la página Vectors tiene `uFamilia`, `uLuz0`... con valores. Si no, `Materialrespaldo` y pegarme los errores.
+7. **Pulido y rugoso**: con la cámara de globo, que la obsidiana y la pómez (y el vidrio y el hormigón) se distinguen; si no, ajustar `Rugmin` y `Rugmax`.
 
 ### Problemas frecuentes
 
@@ -190,3 +284,6 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | Todo de un color | Color por instancia sin enlazar | Relanza cualquier fase; si persiste, Instance 2 → Color R/G/B = `r g b`, Color Mode = Replace |
 | La obra no avanza | `Avance` = gates y no suena ninguna nota en el cluster | Es lo esperado; con `Avance` = pasos avanza sola |
 | `catalogo editado a mano: se conserva` | La tabla no es la de por defecto | Si no la has tocado tú, bórrala y relanza la fase 11 |
+| Fase 12: los modelos salen negros, blancos o no se ven | El shader no compila o no recibe sus uniformes | `Materialrespaldo` (Phong, en vivo) y pégame los errores de `mat_piel_mineral` |
+| Fase 12: pulido y rugoso iguales | La geometría no lee el canal `a` | En la geometría `mod_...`: Instance 2 → Color A = `a`. El informe lo avisa con `FALLO ... no lee la rugosidad` |
+| Fase 12: el gate no cambia nada | Sin note off (el aparato no lo envía) o `Gateprueba` en los botones | Mira la línea `MOD`: sin `gate` es que no llega el note off |
