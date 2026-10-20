@@ -45,7 +45,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v2  (moduladores: velocidad -> material por shader, gate -> vigor y plantas)'
+VERSION = 'fase12 v3  (moduladores: velocidad -> material por shader, gate -> vigor y plantas)'
 banner(VERSION)
 
 base = require_base(12)
@@ -131,7 +131,7 @@ def _prueba(t, m):
             alfa = str(geo.par.instancea.eval())
         except Exception:
             alfa = '?'
-        if alfa != 'a' or str(geo.par.material.eval()) != mat:
+        if alfa != 'a' or nombre_op(geo.par.material.eval()) != mat:
             malas.append('%s (a=%s, %s)' % (g, alfa, geo.par.material.eval()))
     t.check('cada geometria lee la rugosidad (canal a) y usa el shader de su familia',
             not malas, ', '.join(malas[:3]))
@@ -226,9 +226,9 @@ def _prueba(t, m):
     _, instr, fr = sembrar(10, 6)
     g0 = next(g for g, mo, _ in geos if not mo.startswith('ciu_'))
     t.check('Materialrespaldo: todas las geometrias a mat_respaldo (Phong), alfa 1',
-            str(base.op(g0).par.material.eval()) == 'mat_respaldo' and fr and fr[12] == 1.0)
+            nombre_op(base.op(g0).par.material.eval()) == 'mat_respaldo' and fr and fr[12] == 1.0)
     base.par.Materialrespaldo = False
-    t.check('sin respaldo vuelve el shader', str(base.op(g0).par.material.eval()).startswith('mat_piel_'))
+    t.check('sin respaldo vuelve el shader', nombre_op(base.op(g0).par.material.eval()).startswith('mat_piel_'))
     # 7. por el camino real: el Script CHOP con su canal a, y la leyenda
     W, inst, _ = sembrar(97, 6, 1.6)
     m._CACHE['inst'] = inst
