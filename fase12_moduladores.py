@@ -14,9 +14,11 @@ QUE HACE
                rugosidad del canal 'a' (el alfa del color) de cada instancia:
                pulido, reflejo fino y fuerte; rugoso, mate y con poros.
   VELOCIDAD -> MATERIAL
-               naturaleza: obsidiana pulida <-> piedra pomez; el dosel, vidrio
-               ahumado con vetas ambar. Ciudad: vidrio negro <-> hormigon
-               brutalista, con ventanas ambar apagadas hasta la fase 17.
+               naturaleza: el relieve, obsidiana pulida <-> piedra pomez; la
+               vegetacion (arboles, brotes y dosel), hoja cerosa <-> musgo
+               seco, con los lados pardos y luz a contraluz (motor v32).
+               Ciudad: vidrio negro <-> hormigon brutalista, con ventanas
+               ambar apagadas hasta la fase 17.
                Materialmodo: binario (Umbralvel, como hasta ahora) o continuo
                (de Rugmax a velocidad 0 a Rugmin a 127).
   GATE -> VIGOR
@@ -45,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v3  (moduladores: velocidad -> material por shader, gate -> vigor y plantas)'
+VERSION = 'fase12 v4  (moduladores: velocidad -> material por shader, gate -> vigor y plantas; vegetal)'
 banner(VERSION)
 
 base = require_base(12)
@@ -78,8 +80,8 @@ instanciar_modelos(base, m)
 set_render(base)
 
 leeme(base, 12, """FASE 12 - MODULADORES
-  Velocidad -> material: obsidiana <-> pomez (naturaleza), vidrio negro <->
-  hormigon (ciudad), dosel de vidrio ahumado con vetas ambar. Rugosidad en
+  Velocidad -> material: obsidiana <-> pomez (relieve), hoja cerosa <->
+  musgo seco (vegetacion), vidrio negro <-> hormigon (ciudad). Rugosidad en
   el canal 'a' de cada instancia; un GLSL MAT por familia (mat_piel_...).
   Materialmodo binario o continuo; Rugmin y Rugmax.
   Gate -> vigor (naturaleza, Vigormax) o plantas por senal (ciudad: gate
@@ -184,10 +186,18 @@ def _prueba(t, m):
     _, inst120, f120 = sembrar(120, 6)
     c = m.cfg()
     luma = lambda f: f[9] + f[10] + f[11]
-    t.check('velocidad 10: rugosa (pomez); 120: pulida (obsidiana)',
+    t.check('vegetacion, velocidad 10: rugosa (musgo seco); 120: pulida (hoja cerosa)',
             f10 and f120 and abs(f10[12] - m.rugosidad(c, 10)) < 1e-9 and abs(f120[12] - m.rugosidad(c, 120)) < 1e-9
-            and f10[12] > 0.7 > 0.15 > f120[12] and luma(f10) > luma(f120) + 0.5,
+            and f10[12] > 0.7 > 0.15 > f120[12] and luma(f10) > luma(f120) + 0.15,
             'rugosidad %.2f y %.2f' % (f10[12] if f10 else -1, f120[12] if f120 else -1))
+    nota2 = int(base.par.Nota2)
+    base.par.Nota2 = nota
+    _, _, r10 = sembrar(10, 6, pulso='Sembrar2')
+    _, _, r120 = sembrar(120, 6, pulso='Sembrar2')
+    base.par.Nota2 = nota2
+    t.check('relieve, velocidad 10: rugosa (pomez); 120: pulida (obsidiana)',
+            r10 and r120 and r10[12] > 0.7 > 0.15 > r120[12] and luma(r10) > luma(r120) + 0.5,
+            'luma %.2f y %.2f' % (luma(r10) if r10 else -1, luma(r120) if r120 else -1))
     base.par.Materialmodo = 'binario'
     cb = m.cfg()
     t.check('Materialmodo binario: Rugmax por debajo de Umbralvel, Rugmin desde ahi',

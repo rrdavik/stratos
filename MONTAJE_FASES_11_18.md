@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez, vidrio negro u hormigón) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
+Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
 
 ---
 
@@ -15,10 +15,10 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado | `motor v31` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor | `comun v22` |
-| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12) | `fase11 v2` |
-| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador) | `fase12 v3` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación, el dosel cerrado y el autoencuadre de la cámara | `motor v32` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia) | `comun v23` |
+| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel) | `fase11 v3` |
+| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
@@ -152,8 +152,8 @@ Las dos señales que ya modulaban las cajas pasan a modular los modelos temátic
 
 - **Una geometría por modelo**: de 94 a 49 (`mod_<modelo>`; las obras de la ciudad ya tenían una).
 - **Shader de la piel**: un GLSL MAT por familia de material, con los mismos shaders (`piel_vertex`, `piel_pixel`):
-  - `mat_piel_mineral`: naturaleza, obsidiana ↔ piedra pómez;
-  - `mat_piel_dosel`: el dosel, vidrio ahumado con vetas ámbar;
+  - `mat_piel_mineral`: el relieve, obsidiana ↔ piedra pómez;
+  - `mat_piel_dosel`: desde el motor v32, **toda la vegetación** (árboles, brotes y dosel): hoja cerosa ↔ musgo seco (ver *El aspecto de la naturaleza*). Hasta la v31 era solo el dosel, de vidrio ahumado con vetas ámbar, y los árboles eran de obsidiana;
   - `mat_piel_ciudad`: vidrio negro ↔ hormigón brutalista, con ventanas ámbar que se quedan apagadas hasta la fase 17 (`uVentanas`).
   
   Las obras de la ciudad (valla, foso, andamio, grúa) siguen con `mat_poroso`.
@@ -163,6 +163,27 @@ Las dos señales que ya modulaban las cajas pasan a modular los modelos temátic
 - **El color** también se acerca al material: el de la especie se mezcla con obsidiana o pómez (naturaleza) o con vidrio negro u hormigón (ciudad), según la rugosidad. Así, pulido y rugoso se distinguen también con el material de respaldo.
 - **Luces**: el shader no usa las funciones de iluminación de TouchDesigner. Lee como uniformes la posición y el color × dimmer de `luz_principal`, `luz_relleno` y `luz_destello` (página Vectors del GLSL MAT, con expresiones), más un ambiente. El color lo da el motor (`luz_color`), que prueba los nombres del color de la Light COMP (`cr cg cb`).
 - **Corregido en comun v20**: la primera versión leía el color de las luces como `lightcolorr/g/b`, que la Light COMP no tiene, y los tres `mat_piel_*` daban `tdAttributeError: 'td.ParCollection' object has no attribute 'lightcolorr'`. Relanza `fase12_moduladores.py` (o la 13) para arreglarlo.
+
+### El aspecto de la naturaleza (motor v32, comun v23)
+
+En TouchDesigner la naturaleza «parecía hilo de alambre». Tres causas, las tres corregidas:
+
+- **Los árboles y brotes eran de piedra.** Solo el dosel usaba el material vegetal; el resto de la vegetación usaba el mineral (obsidiana pulida ↔ pómez): varillas oscuras con reflejos de metal. Ahora toda la vegetación usa `mat_piel_dosel`, y su color se mezcla con la paleta vegetal en vez de con la obsidiana.
+- **El dosel era una red.** Los medios puentes del dosel eran tiras estrechas a media altura de las copas: sobre el planeta formaban una malla de triángulos huecos que flotaba sobre el suelo. Ahora las tiras son más anchas (0,42 × celda en vez de 0,32) y **cada hueco entre tres celdas del cluster unidas entre sí lleva su copa** (el mismo modelo del dosel, centrado en el triángulo y del diámetro de 1,5 × su radio; crece con la etapa `puentes` como los puentes). El dosel se cierra en un techo de copas.
+- **Las vetas ámbar** del dosel eran líneas finas y brillantes: de lejos, filamentos. Han desaparecido.
+
+El shader vegetal (uFamilia 1):
+
+- hojas en manchas anchas de dos verdes (ruido en el espacio del modelo), cada planta con su matiz;
+- las caras de lado (troncos, ramas, bordes de copa: las que no miran hacia fuera del planeta) más pardas y oscuras, con fibra;
+- la luz **envuelve** (las caras de lado no se quedan negras) y la copa **deja pasar la luz a contraluz**; ambiente un 60 % más alto que en la piedra;
+- la velocidad sigue mandando: pulida (velocidad alta), hoja cerosa con un brillo suave; rugosa (baja), musgo seco, mate y con manchas.
+
+El relieve sigue siendo de obsidiana ↔ pómez, y la ciudad no cambia.
+
+**Para aplicarlo** basta relanzar cualquier fase (por ejemplo `fase13_tejido.py`): `piel_al_dia` reescribe el shader y cambia el material de las geometrías de la vegetación (`piel: N geometrias con el material de su familia`).
+
+**¿Lo cambia alguna fase futura?** No. Ninguna de las fases 14 a 18 del plan cambia el aspecto de la vegetación: la 14 añade rayo, incendio y claro de ceniza; la 15, el entierro como veta de carbón; la 16, los fósiles en los cortes; la 17, el balanceo del dosel y el frente; la 18, presets de paleta y luz por tema. Por eso se corrige aquí. La fase 18 podrá guardar la paleta por tema, pero no la geometría ni el material.
 
 ### Velocidad → material
 
@@ -327,7 +348,7 @@ xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la pi
 - **Desde cero**: `fase12_base.py` y las fases 3 a 13, todas con `AUTOPRUEBA OK`.
 - **Sesión simulada** de 16 compases a 120 BPM con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
 - **Relanzar** las fases 3 a 13 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
-- **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, dosel ahumado con vetas ámbar.
+- **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, y la vegetación (desde el motor v32) en dos verdes con los lados pardos.
 - **Catálogo**: una hoja de contactos dibujada con un rasterizador propio (`pruebas/vista_previa.py`) para ver cada modelo, y escenas de los dos temas con clusters, puentes, coronaciones e híbridos.
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
 
@@ -359,6 +380,8 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | `mat_piel_...`: `no attribute 'lightcolorr'` | Uniformes de la primera versión (comun v18/v19) | Relanza `fase12_moduladores.py` con comun v20 o posterior |
 | `render`: `Cook dependency loop detected` (con `luz_relleno`, Translate) | La cámara leía el tamaño de la imagen del render (motor v30 o anterior) | Relanza cualquier fase con motor v31 o posterior |
 | `reticula`: `Rotate to Vectors is co-linear with the Up Vector` | «Rotar hacia un vector» en los polos (comun v21 o anterior) | Relanza cualquier fase con comun v22 o posterior |
+| La naturaleza parece hilo de alambre (varillas oscuras, una red sobre el planeta) | Motor v31 o anterior: árboles de obsidiana y dosel de tiras | Relanza cualquier fase con motor v32 y comun v23: mira la línea `piel: N geometrias con el material de su familia` |
+| El planeta se ve lejos y pequeño | Motor v31 o anterior: encuadraba la altura máxima teórica | Relanza cualquier fase con motor v32 (autoencuadre; `Encuadremargen` 1,02) |
 | `midiout`: `Could not open the MIDI interface` | El mapeador MIDI de TouchDesigner (no es de los scripts) | Nada: la entrada MIDI funciona igual; si molesta, quita la salida en Dialogs → MIDI Device Mapper |
 | Fase 12: pulido y rugoso iguales | La geometría no lee el canal `a` | En la geometría `mod_...`: Instance 2 → Color A = `a`. El informe lo avisa con `FALLO ... no lee la rugosidad` |
 | Fase 12: el gate no cambia nada | Sin note off (el aparato no lo envía) o `Gateprueba` en los botones | Mira la línea `MOD`: sin `gate` es que no llega el note off |
