@@ -18,8 +18,8 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`) | `motor v35` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15 | `comun v26` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`) | `motor v36` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` | `comun v27` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11) | `fase3 v12` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
@@ -27,7 +27,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11) | `fase7 v10` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel | `fase8 v9` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo) | `fase9 v8` |
-| `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v9: encuadre cercano con `Holguraaltura`) | `fase10 v9` |
+| `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v10: `Encuadre`, el alto del planeta en la pantalla) | `fase10 v10` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
 
@@ -559,8 +559,12 @@ CORTE    celda 41   nucleo alcanzado
 ## FASE 10 · Dirección visual
 
 - **Cámara de globo** (por defecto, `Modocamara` = globo; fase 10 v5, motor v24). Mira al centro del planeta (`objetivo` en el origen) y lo encuadra entero, tan cerca como permite el cuadro.
-  - **Encuadre cercano** (motor v33, fase 10 v9). El radio que se encuadra es `radio nominal + Holguraaltura × altura máxima`, con `Holguraaltura` 0,4: el planeta entero, tan cerca como permite el cuadro, con algo de sitio para la altura de las construcciones. Con 1 vuelve el encuadre de antes (todo lo que podría llegar a crecer, también las coronas de cumbre); con 0, solo el planeta. Como antes, **solo cambia cuando el planeta engorda** (una concha nueva): crecer, erosionar, los cortes o el latido no mueven la cámara. Con cada concha se aleja en `Camsuave` segundos, y el planeta nunca se sale del cuadro (lo que no cabe se corrige al instante). Lo más alto de una construcción puede salirse del cuadro: la leyenda dice hasta dónde llega lo dibujado (`lo dibujado llega a`), para ajustar `Holguraaltura`. `Encuadremargen` pasa de 1,08 a 1,02 (al relanzar cualquier fase, si seguía en 1,08). Con el mundo de prueba de la fase 11 (planeta de radio 6), el radio encuadrado baja de 11,47 a 8,19.
-    *La v32 probó a encuadrar lo que se dibujaba en cada fotograma: la cámara se alejaba de golpe con cada latido y volvía a acercarse, y el mundo se veía a ratos. Se retiró en la v33.*
+  - **Encuadre** (motor v36, fase 10 v10). Un solo parámetro: `Encuadre`, **el alto del planeta en la pantalla** (del lado más estrecho del cuadro; con 1280 × 720, el alto). Con 0,85, el valor por defecto, el planeta entero ocupa el 85 % del alto y queda sitio arriba y abajo para lo que crece sobre él; con 1 va de borde a borde. El planeta es el radio nominal (núcleo + conchas) más lo que asoma la retícula (0,2).
+    - **Solo cambia cuando el planeta engorda** (una concha nueva). Entonces la cámara se aleja en `Camsuave` segundos hasta el mismo `Encuadre`, y el planeta nunca se sale del cuadro. Crecer, erosionar, los cortes o el latido no la mueven.
+    - Lo más alto de una construcción puede salirse del cuadro. La leyenda `CAMARA` dice qué parte del alto ocupa el planeta y hasta dónde llega lo más alto (`lo mas alto llega al 97%`; más de 100 %, se sale). Si se sale, baja `Encuadre`.
+    - Sustituye a `Encuadremargen` («holgura alrededor del globo») y `Holguraaltura` («holgura para las construcciones»), que confundían. Al relanzar cualquier fase se quitan y aparece `Encuadre`.
+
+    *Historia: hasta la v31, el radio encuadrado era el planeta más toda la altura máxima posible (se veía lejos). La v32 encuadraba lo que se dibujaba en cada fotograma (la cámara no paraba quieta). La v33 a la v35 usaban `Encuadremargen` y `Holguraaltura`.*
   - **Radio que se encuadra (hasta motor v31):** `radio_encuadre = radio nominal + altura máxima`. La altura máxima es lo más alto que llega algo que gira con el planeta: una formación en el límite hinchada por el latido (límite × 1,12) más la corona más larga (la de una torre en el último tramo de cumbre: 0,9 × (1 + 0,25 × `Tramoscumbre`) × límite). Con los valores por defecto, 1,875 × 2,92 = 5,475. Sale del código, no de medir la geometría: el encuadre solo cambia cuando el planeta engorda. El crecimiento, la erosión, los cortes y la colmatación no lo mueven, y ningún suelo pasa del radio nominal.
   - **Distancia:** una esfera de radio R cabe entera si la cámara está a R / sin(θ/2) de su centro, con θ el ángulo de visión del lado más estrecho del cuadro:
 
@@ -568,12 +572,13 @@ CORTE    celda 41   nucleo alcanzado
     aspecto = ancho / alto del render (su resolución real)
     tan(fov_v / 2) = tan(fov_h / 2) / aspecto        (TouchDesigner fija el horizontal por defecto)
     θ     = min(fov_h, fov_v)
-    d_obj = radio_encuadre × Encuadremargen / sin(θ / 2)
-    d_min = radio_encuadre / sin(θ / 2)
+    α     = atan(Encuadre × tan(θ / 2))                 (el planeta ocupa Encuadre del lado estrecho)
+    d_obj = radio del planeta / sin(α)
+    d_min = radio del planeta / sin(θ / 2)              (de borde a borde: nunca más cerca)
     ```
 
     El FOV se lee de la cámara (`fov` y `viewanglemethod`: horizontal, vertical o focal y apertura) y no cambia: el zoom es un travelling. Con 1280 × 720 y 45° horizontales manda el lado vertical (26,3°).
-  - **Transición:** la distancia persigue a `d_obj` con un amortiguado crítico que llega en `Camsuave` segundos (3): arranca y frena suave, sin rebote, en segundos y ajena al secuenciador. **Seguridad:** en cada fotograma, la distancia nunca baja de `d_min`; si un enterramiento hace crecer el globo más de lo que cubre la holgura, la parte que no cabe se corrige al instante y el resto llega suave. Con `Encuadremargen` 1,08 y conchas de 2,0 solo pasa mientras el radio de encuadre es menor de unos 25.
+  - **Transición:** la distancia persigue a `d_obj` con un amortiguado crítico que llega en `Camsuave` segundos (3): arranca y frena suave, sin rebote, en segundos y ajena al secuenciador. **Seguridad:** en cada fotograma, la distancia nunca baja de `d_min`; si una concha nueva hace crecer el planeta más de lo que cubre el sitio libre (`Encuadre` por debajo de 1), la parte que no cabe se corrige al instante y el resto llega suave. Con `Encuadre` 0,85 no pasa con conchas normales: en la prueba, el planeta llega como mucho al 88 % del alto durante la transición.
   - **Saltos sin transición:** `Resetmundo`, el cambio de rango y la carga de un mundo guardado (o del motor) llevan la cámara al encuadre nuevo al instante.
   - **Dirección:** fija en +Z, la dirección de referencia hacia la que se balancea el eje. El giro y el balanceo del planeta ya enseñan todas sus caras y los dos polos; `Camvel` no actúa.
   - **Planos de recorte:** `near` y `far` los da el motor con la distancia: `far` = distancia + 2 × radio de encuadre + 10; `near` = un cuarto de lo que hay entre la cámara y el radio de encuadre (entre 0,05 y 5).
@@ -584,12 +589,12 @@ CORTE    celda 41   nucleo alcanzado
 - **Solo la leyenda.** `Leyenda` (página Fase1, activado) la muestra u oculta sin tocar nada más; la letra es de 9 puntos (15 hasta comun v12). Al relanzar cualquier fase, la letra pasa de 15 a 9 solo si seguía en 15, y aparece `Leyenda`.
 - **Modo actuación.** `Modoactuacion` oculta la retícula y la leyenda (la luz de celda se sigue viendo: es parte del mundo): el switch `modo` pasa la salida al render limpio. Al quitarlo vuelve el modo diagnóstico.
 
-**Página Fase10:** `Modocamara` globo · `Encuadremargen` 1,02 (1–1,5; 1,08 hasta la fase 10 v7) · `Camsuave` 3 s · `Holguraaltura` 0,4 (0–1) · `Modoactuacion` · `Planofinal` · `Camaltura` 4 · `Camvel` 0,6. `Planofinal`, `Camaltura` y `Camvel` solo actúan en modo superficie.
+**Página Fase10:** `Modocamara` globo · `Encuadre` 0,85 (0,3–1; el alto del planeta en la pantalla) · `Camsuave` 3 s · `Modoactuacion` · `Planofinal` · `Camaltura` 4 · `Camvel` 0,6. `Planofinal`, `Camaltura` y `Camvel` solo actúan en modo superficie.
 
 **Leyenda** (diagnóstico, desde la fase 8):
 
 ```
-CAMARA   globo   dist 36.8 -> 36.8   radio encuadre 8.19 (lo dibujado llega a 8.27)   fov 45 (horizontal; manda el vertical)   margen 1.02
+CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 0.85)   lo mas alto llega al 97%   fov 45 (horizontal)
 ```
 
 **Relanzar** (fase 10 v5) en un proyecto en la fase 10: `fase10_direccion.py`. Si quieres la cámara de globo también en la fase 8 de un proyecto que no ha llegado a la 10, relanza la última fase aplicada.
@@ -632,9 +637,10 @@ CAMARA   globo   dist 36.8 -> 36.8   radio encuadre 8.19 (lo dibujado llega a 8.
 | Los ciclos siempre acaban por edad máxima | Umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
 | Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota (la leyenda pone `parado`) |
-| El globo se sale del cuadro un instante al enterrar | La concha nueva es más gruesa que la holgura y la transición tarda | Sube `Encuadremargen` o baja `Camsuave` (Fase10) |
-| El planeta se ve pequeño | Motor v31 o anterior: encuadraba la altura máxima teórica entera | Relanza cualquier fase con motor v33 o posterior; si aún sobra, baja `Holguraaltura` o `Encuadremargen` (mínimo 1) |
-| Una construcción alta se sale del cuadro | `Holguraaltura` pequeña para ese mundo | Sube `Holguraaltura` (1 = todo lo que podría crecer); la leyenda dice `lo dibujado llega a` |
+| El globo se acerca al borde un instante al enterrar | La concha nueva es gruesa y la transición tarda (nunca se sale) | Baja `Camsuave` o `Encuadre` (Fase10) |
+| El planeta se ve pequeño | `Encuadre` bajo, o motor anterior al v36 | Sube `Encuadre` (1 = de borde a borde); relanza cualquier fase con motor v36 |
+| Una construcción alta se sale del cuadro | `Encuadre` alto para ese mundo | Baja `Encuadre`; la leyenda dice `lo mas alto llega al ...%` |
+| No entiendo `Encuadremargen` ni `Holguraaltura` | Parámetros de los motores v33 a v35 | Relanza cualquier fase con motor v36: se quitan y queda `Encuadre` |
 | La cámara se mueve todo el rato y el mundo se ve a ratos | Motor v32 (encuadraba lo que se dibujaba en cada fotograma) | Relanza cualquier fase con motor v33 |
 | Hondonadas que bajan sin parar | Un pad con profundidad cae en cada mundo sobre las mismas celdas: pierde N losetas y recibe 1 | Sube `Colmatacion` (Fase8) o baja su profundidad en `perfiles_erosion` |
 | El planeta engorda demasiado rápido | Engorde = `Shellthick` por cada `Ciclomin` compases | Sube `Ciclomin` o baja `Shellthick` |
@@ -749,7 +755,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
   - Sesión de 160 compases a 120 BPM con SEQ1, SEQ2 y batería a tramos (16 compases con, 32 sin): 7 ciclos, 39 celdas con laguna tapizadas por conchas posteriores (130 losetas por debajo de su cota nominal), y todas las expresiones se evalúan sin error. Con los perfiles por defecto el bombo también corta, así que las cuencas bajan deprisa.
 
 - **La cámara de globo** (motor v24, fase 10 v5):
-  - Con radios 6, 11,5 y 43, aspectos 16:9, 4:3, 1:1 y 9:16 y FOV horizontal o vertical, el globo cabe entero y su borde queda justo a la holgura de `Encuadremargen` del lado más estrecho.
+  - Con radios 6, 11,5 y 43, aspectos 16:9, 4:3, 1:1 y 9:16 y FOV horizontal o vertical, el planeta ocupa exactamente `Encuadre` del lado más estrecho (0,85 y 1). Con conchas que crecen, fotograma a fotograma, la cámara se aleja y el planeta vuelve al 85 % sin pasar nunca del 100 %.
   - Concha fina: la distancia sube de 54,6 a 55,8 suave (como mucho 0,03 por fotograma) y sin bajar nunca; el globo cabe en todos los fotogramas.
   - Seis conchas gruesas de golpe al principio: salta de 54,6 a 103,5 (lo justo para que quepa) y el resto, hasta 111,7, llega suave.
   - Notas, erosión, cortes y `Colmatacion` sin enterrar: el radio de encuadre no cambia.
@@ -785,7 +791,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 5. **Quitar el bombo:** con un mundo maduro y el bombo sonando, quitarlo y comprobar en cuántos compases se cierra el ciclo por `estancado` (en simulación, unos 24).
 6. **Batería constante:** comprobar que la leyenda dice `esperando territorio` pasado `Ciclomax` y apuntar la ocupación del territorio, para afinar `Umbralterritorio`.
 7. **Cuencas:** con la batería real, medir cuánto bajan las cuencas en 10 minutos (`laguna max` en la leyenda) y ajustar `Colmatacion`.
-8. **Cámara de globo:** comprobar en el proyector real que el globo queda entero con `Encuadremargen` 1,08 y que el FOV de la cámara se lee bien (la leyenda `CAMARA` dice cuál manda).
+8. **Cámara de globo:** comprobar en el proyector real que el planeta ocupa el alto que dice `Encuadre` (la leyenda `CAMARA` lo dice) y que se aleja cuando crece una concha. Si la pantalla o la ventana de salida no es 16:9 y recorta la imagen, el planeta puede salirse aunque el render lo encuadre: pon la ventana con la misma proporción que el render (1280 × 720).
 9. **Luz en las conchas:** con la cámara de globo y 10 conchas o más, comprobar que se ve dónde cae cada nota, y ajustar `Luzconchaspulso` y `Luzconchasreposo` con la luz real del proyector.
 10. **Paleta:** con 10 conchas o más y un corte de 4, comprobar desde la cámara de globo que las bandas se distinguen una a una, y que los pads 7 y 8 no se confunden con las conchas.
 

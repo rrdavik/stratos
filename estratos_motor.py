@@ -25,7 +25,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v35'
+MOTOR_VERSION = 'motor v36'
 
 import math
 
@@ -4652,18 +4652,20 @@ def luz_color(nombre, k, frame=None):
         return 0.0
 
 
-# --- camara (motor v24; encuadre cercano, v33) -----------------------------------
+# --- camara (motor v24; Encuadre, v36) ---------------------------------------------
 # Por defecto, camara de GLOBO: mira al centro, en la direccion de referencia
-# (+Z, hacia la que se balancea el eje), y encuadra el planeta entero tan
-# cerca como permite el cuadro, con Holguraaltura de la altura maxima para las
-# construcciones. El encuadre solo cambia cuando el planeta engorda (una
-# concha nueva): crecer, erosionar o el latido no mueven la camara. (La v32
-# perseguia lo que se dibujaba y la camara no paraba quieta.) La de
-# SUPERFICIE (fase 10 v4) queda como modo (Modocamara).
+# (+Z, hacia la que se balancea el eje), y encuadra el planeta entero: su
+# diametro ocupa Encuadre del lado mas estrecho del cuadro (1 = de borde a
+# borde; con 0,85 queda sitio arriba y abajo para lo que crece sobre el). El
+# encuadre solo cambia cuando el planeta engorda (una concha nueva): la camara
+# se aleja en Camsuave s y el planeta nunca se sale del cuadro. Crecer,
+# erosionar o el latido no la mueven. La de SUPERFICIE (fase 10 v4) queda como
+# modo (Modocamara).
 
 CAM_DIR = (0.0, 0.0, 1.0)          # direccion de referencia de la camara
 CAM_TRANS = 20.0                   # segundos de Planofinal y del cambio de modo
-HOLGURA_ALTURA = 0.4               # fraccion de la altura maxima que se encuadra
+ENCUADRE = 0.85                    # alto del planeta en la pantalla (1 = de borde a borde)
+RETICULA_SOBRE = 0.2               # lo que asoma la reticula sobre el planeta
 CAJA_EXT = (0.5, 1.0, 0.5)         # semiejes de la caja de las geometrias (base en y = 0)
 SIN_EXTENSION = ('estratos', 'luz_conchas')     # no pasan de la superficie
 _EXT = {}
@@ -4678,14 +4680,10 @@ def altura_max(cfg):
     return lim * (1.0 + LATIDO_AMP) + corona
 
 
-def radio_encuadre(W, cfg, holgura=None):
-    """Radio que se encuadra: el nominal mas 'holgura' (Holguraaltura, 0,4)
-    por la altura maxima. Con 1, todo lo que podria llegar a crecer (el
-    encuadre de la v24 a la v31); con 0, solo el planeta. Solo cambia cuando
-    el planeta engorda (los suelos nunca pasan del nominal)."""
-    if holgura is None:
-        holgura = _p('Holguraaltura', HOLGURA_ALTURA)
-    return top_radius(W, cfg) + max(0.0, min(1.0, float(holgura))) * altura_max(cfg)
+def radio_encuadre(W, cfg):
+    """Lo mas lejos que podria llegar algo: el radio nominal mas la altura
+    maxima (el encuadre de la v24 a la v31). La camara ya no lo usa."""
+    return top_radius(W, cfg) + altura_max(cfg)
 
 
 def _ext_modelo(modelo):
@@ -4716,7 +4714,7 @@ def _eje_y(rx, ry, rz):
 
 def radio_visible(inst, W, cfg):
     """Lo mas lejos del centro que llega algo de lo que se dibuja (solo para
-    la leyenda: dice si Holguraaltura deja fuera algo): la superficie (con la
+    la leyenda: dice si lo mas alto cabe con el Encuadre): la superficie (con la
     reticula) y cada instancia. De cada pieza se toma su
     alto (eje Y local, segun lo inclinada que este respecto a la vertical
     de su sitio) y su ancho: una pieza tumbada, como un puente, no cuenta
@@ -4768,6 +4766,24 @@ def globe_distance(R, fov_deg, aspect, margen, metodo='horzfov'):
     sh = math.sin(th / 2.0)
     d_min = R / sh
     return d_min * max(1.0, margen), d_min, th
+
+
+def distancia_encuadre(R, fov_deg, aspect, k, metodo='horzfov'):
+    """(d, theta): distancia a la que una esfera de radio R ocupa la fraccion
+    k del lado mas estrecho del cuadro (1 = de borde a borde), con theta el
+    angulo de vision de ese lado."""
+    fh, fv = fovs(fov_deg, aspect, metodo)
+    th = min(fh, fv)
+    a = math.atan(max(0.05, min(1.0, k)) * math.tan(th / 2.0))
+    return R / math.sin(a), th
+
+
+def fraccion_cuadro(r, d, th):
+    """Fraccion del lado mas estrecho del cuadro que ocupa una esfera de
+    radio r vista desde d (mas de 1: se sale)."""
+    if d <= r:
+        return float('inf')
+    return math.tan(math.asin(r / d)) / math.tan(th / 2.0)
 
 
 def smooth_damp(cur, vel, target, dt, t_suave):
@@ -4837,14 +4853,14 @@ def camera_state():
     last = _CACHE.get('cam_t')
     dt = 0.0 if last is None else max(0.0, min(0.25, t - last))
     _CACHE['cam_t'] = t
-    # globo: persigue el encuadre (solo cambia con una concha nueva o los
-    # parametros) en Camsuave s; el planeta nunca se sale del cuadro
-    Re = radio_encuadre(W, c)
+    # globo: el planeta ocupa Encuadre del cuadro; con una concha nueva la
+    # camara se aleja en Camsuave s, y el planeta nunca se sale del cuadro
+    Re = R + RETICULA_SOBRE
     fov, metodo, aspect = _cam_optics()
-    margen = max(1.0, _p('Encuadremargen', 1.02))
+    k = max(0.3, min(1.0, _p('Encuadre', ENCUADRE)))
     suave = max(0.0, _p('Camsuave', 3.0))
-    d_obj, _, th = globe_distance(Re, fov, aspect, margen, metodo)
-    d_min = globe_distance(R + 0.2, fov, aspect, 1.0, metodo)[1]
+    d_obj, th = distancia_encuadre(Re, fov, aspect, k, metodo)
+    d_min = distancia_encuadre(Re, fov, aspect, 1.0, metodo)[0]
     d = _CACHE.get('cam_d')
     if d is None or R < _CACHE.get('cam_R', R) - 1e-6:
         d, v = d_obj, 0.0              # arranque, Resetmundo, rango o mundo cargado: sin transicion
@@ -4884,7 +4900,7 @@ def camera_state():
     near = max(0.05, min(5.0, 0.25 * (dist - Re)))
     far = dist + 2.0 * Re + 10.0
     st = dict(pos=pos, tgt=tgt, R=R, Re=Re, d=d, d_obj=d_obj, d_min=d_min, theta=th,
-              fov=fov, metodo=metodo, aspect=aspect, margen=margen, w=s, near=near, far=far,
+              fov=fov, metodo=metodo, aspect=aspect, encuadre=k, w=s, near=near, far=far,
               salto=salto, modo='superficie' if s >= 0.5 else 'globo')
     _CACHE['cam'] = st
     _CACHE['cam_frame'] = absTime.frame
@@ -5007,12 +5023,15 @@ def _legend():
             lado = 'vertical' if cs['theta'] <= fovs(cs['fov'], cs['aspect'], cs['metodo'])[0] - 1e-9 \
                 else 'horizontal'
             inst = _CACHE.get('inst')
-            vis = radio_visible(inst, W, c) if inst else cs['R']
-            lines.append('  CAMARA   %s   dist %.1f -> %.1f   radio encuadre %.2f (lo dibujado llega a %.2f)'
-                         '   fov %.0f (%s; manda el %s)   margen %.2f'
-                         % (cs['modo'], cs['d'], cs['d_obj'], cs['Re'], vis, cs['fov'],
-                            'vertical' if 'vert' in cs['metodo'] else 'horizontal', lado,
-                            cs['margen']))
+            vis = radio_visible(inst, W, c) if inst else cs['Re']
+            alto = fraccion_cuadro(cs['Re'], cs['d'], cs['theta'])
+            alto_vis = fraccion_cuadro(vis, cs['d'], cs['theta'])
+            lines.append('  CAMARA   %s   dist %.1f -> %.1f   el planeta ocupa el %d%% del %s (Encuadre %.2f)'
+                         '   lo mas alto llega al %s   fov %.0f (%s)'
+                         % (cs['modo'], cs['d'], cs['d_obj'], int(round(alto * 100)),
+                            'alto' if lado == 'vertical' else 'ancho', cs['encuadre'],
+                            '%d%%' % int(round(alto_vis * 100)) if alto_vis < 9.99 else 'borde',
+                            cs['fov'], 'vertical' if 'vert' in cs['metodo'] else 'horizontal'))
         except Exception:
             pass
     if lvl >= 9:

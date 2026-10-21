@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v26'
+VERSION_COMUN = 'comun v27'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -688,6 +688,37 @@ def read_text(carpeta, name):
                            'todos los archivos de Estratos.' % path)
 
 
+ENCUADRE_DEF = 0.85
+
+
+def add_encuadre(base):
+    """El unico parametro del encuadre de la camara de globo (fase 10)."""
+    return add_par(base, get_page(base, 'Fase10'), 'float', 'Encuadre',
+                   'Alto del planeta en la pantalla (1 = de borde a borde)', ENCUADRE_DEF, 0.3, 1.0, clamp=True)
+
+
+def camara_al_dia(base):
+    """En un proyecto en la fase 10 o mas: el encuadre es un solo parametro,
+    Encuadre (motor v36). Quita los dos de antes, Encuadremargen y
+    Holguraaltura, que confundian."""
+    if not has_par(base, 'Camsuave'):
+        return False
+    quitados = []
+    for nm in ('Encuadremargen', 'Holguraaltura'):
+        if has_par(base, nm):
+            try:
+                getattr(base.par, nm).destroy()
+                quitados.append(nm)
+            except Exception:
+                pass
+    nuevo = add_encuadre(base)
+    if nuevo or quitados:
+        ok('camara: Encuadre (alto del planeta en la pantalla, %s)%s'
+           % (str(ENCUADRE_DEF).replace('.', ','),
+              '; quitados %s' % ' y '.join(quitados) if quitados else ''))
+    return True
+
+
 def reticula_giro(base):
     """Cada marca de la reticula gira con los canales rx ry rz del
     reticula_chop, como las demas geometrias. fase12_base.py usaba "rotar
@@ -741,10 +772,7 @@ def install_core(base, carpeta, fase):
     base.op('reticula_callbacks').text = RETICULA_CB
     ok('reticula: sigue la superficie que da el motor')
     reticula_giro(base)
-    renew_default(base, 'Encuadremargen', 1.08, 1.02)    # motor v33: encuadre cercano
-    if has_par(base, 'Encuadremargen'):                   # proyecto en la fase 10 o mas
-        add_par(base, get_page(base, 'Fase10'), 'float', 'Holguraaltura',
-                'Holgura para la altura de las construcciones (0 planeta, 1 todo)', 0.4, 0.0, 1.0, clamp=True)
+    camara_al_dia(base)
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
