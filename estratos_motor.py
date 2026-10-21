@@ -14,7 +14,8 @@
 #                 escalada, incendio y derrumbes; fase 15: el ciclo como era:
 #                 entierro tematico, registro y herencia; fase 16: lo que
 #                 ensenan los cortes y la union de cortes; fase 17: el tiempo
-#                 en el paisaje: pulso, transporte y frente).
+#                 en el paisaje: pulso, transporte y frente; fase 18: escenas,
+#                 luz local y capas de diagnostico).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -27,7 +28,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v39'
+MOTOR_VERSION = 'motor v40'
 
 import math
 
@@ -145,6 +146,8 @@ DEFAULT_CFG = dict(
     detalle_expuesto=6, unir_cortes=1,
     # fase 17: el tiempo en el paisaje
     sway_max=6.0, trafico=2, pasos_frente=16, master_beat=None,
+    # fase 18: escenas y direccion tematica
+    diagnostico=0, luz_calida=0.0, actuacion=0,
 )
 
 
@@ -1773,6 +1776,9 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         build_arqueologia(W, cfg, now, out)
     if lvl >= 17:                   # fase 17: trafico, esporas y el frente
         build_tiempo(W, cfg, now, out)
+    if lvl >= 18:                   # fase 18: luz local y, fuera de la actuacion, el diagnostico
+        out['luz_local'] = build_luz_local(W, cfg, now)
+        out['diagnostico'] = [] if hide_beacons or not cfg.get('diagnostico', 0) else build_diagnostico(W, cfg)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -4714,6 +4720,174 @@ def build_tiempo(W, cfg, now, out):
     W['tiempo'] = dict(trafico=n_puntos)
 
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - escenas y direccion tematica (fase 18)
+# -----------------------------------------------------------------------------
+# Las dos escenas acotadas, naturaleza y ciudad, como presets listos para
+# actuar: paleta, umbrales, Caos, Maxpiezas, luz y pulso guardados por escena
+# (tabla 'escenas'); Escena los carga y Guardarescena guarda lo que haya.
+# LUZ LOCAL sin luces nuevas: emisivos aditivos e instancias (geometria
+# luz_local). Focos ambar en las obras a medias de la ciudad (la lampara y su
+# charco de luz en el suelo), el brillo de las brasas de lo que arde (a saltos,
+# con la chispa) y la nube de polvo de los derrumbes y accidentes, que se
+# disipa con el polvo. Solo el destello de la fase 9 es una luz de verdad.
+# DIAGNOSTICO (geometria diagnostico, con Diagnostico): los puentes de los
+# clusters (blanco), las rutas del tejido (carreteras amarillas, rios azules) y
+# la presion de cada celda (verde; rojo desde Umbralvecindad). El modo
+# actuacion lo oculta, como la reticula y la leyenda.
+
+ENCUADRE_DEF, RETICULA_SOBRE_DEF = 0.85, 0.2     # los de la camara de globo (ver ENCUADRE)
+ESCENAS = ['naturaleza', 'ciudad']
+# los parametros de una escena: (nombre, naturaleza, ciudad). 'luz_principal.dimmer'
+# y 'luz_relleno.dimmer' son de las luces, no de FASE1.
+ESCENA_PARS = [
+    ('Tema', 'naturaleza', 'ciudad'),
+    ('Paleta', 'generaciones', 'mineral'), ('Paletatono', 20.0, 205.0), ('Paletacroma', 0.09, 0.06),
+    ('Umbralvecindad', 4.0, 4.5), ('Pesovecina', 0.5, 0.5), ('Mincluster', 2, 2),
+    ('Umbraldensidad', 0.6, 0.6),
+    ('Caos', 3.91, 3.74), ('Maxpiezas', 6, 5),
+    ('Rugmin', 0.05, 0.1), ('Rugmax', 0.85, 0.9),
+    ('Swaymax', 6.0, 4.0), ('Trafico', 2, 3),
+    ('Luzcalida', 0.35, 0.0),
+    ('luz_principal.dimmer', 1.15, 1.0), ('luz_relleno.dimmer', 0.16, 0.24),
+]
+LUZ_CALIDA = (1.00, 0.88, 0.72)             # la luz de dia de la escena de naturaleza
+COL_FOCO, COL_CHARCO = (1.00, 0.62, 0.20), (0.30, 0.17, 0.05)
+COL_BRILLO_BRASA = (0.55, 0.20, 0.04)
+COL_POLVO_LUZ = (0.16, 0.13, 0.10)
+COL_DIAG_PUENTE, COL_DIAG_VIA, COL_DIAG_RIO = (0.95, 0.95, 0.95), (1.0, 0.85, 0.2), (0.3, 0.5, 1.0)
+COL_DIAG_BAJA, COL_DIAG_ALTA = (0.25, 0.85, 0.35), (0.95, 0.25, 0.2)
+
+
+def escena_defecto(nombre):
+    """{parametro: valor} de la escena por defecto 'naturaleza' o 'ciudad'."""
+    k = 1 + ESCENAS.index(nombre)
+    return dict((fila[0], fila[k]) for fila in ESCENA_PARS)
+
+
+def obras_a_medias(W, cfg, cl=None):
+    """Celdas de la ciudad con una obra a medias (fusion o coronacion sin acabar)."""
+    if cfg['nivel'] < 11 or tema_de(cfg) != 'ciudad':
+        return []
+    tf, tc = objetivos(W, cfg, cl)
+    return [i for i in range(N) if (0 < W['et_f'][i] < tf[i]) or (0 < W['et_c'][i] < tc[i])]
+
+
+def transitos_colgados(W, cfg):
+    """Celdas cuyo transito no esta en su objetivo (tras un fin de ciclo, ninguna)."""
+    if cfg['nivel'] < 11:
+        return []
+    tf, tc = objetivos(W, cfg)
+    return [i for i in range(N) if W['et_f'][i] != tf[i] or W['et_c'][i] != tc[i]]
+
+
+def px_formaciones(W, cfg, alto_cuadro=720.0, encuadre=ENCUADRE_DEF):
+    """(px de una semilla, px de una coronacion) a distancia de la camara de
+    globo: el planeta ocupa Encuadre del alto del cuadro."""
+    R = top_radius(W, cfg) + RETICULA_SOBRE_DEF
+    px = encuadre * alto_cuadro / (2.0 * R)
+    lim = limit(cfg)
+    return height_for(cfg, 1) * px, lim * (CORONA_K + CORONA_TRAMO * max(0, int(cfg['cumbre_tramos']))) * px
+
+
+def build_luz_local(W, cfg, now):
+    """Focos de las obras, brillo de las brasas y polvo iluminado: filas de la
+    geometria aditiva luz_local."""
+    out = []
+    lim = limit(cfg)
+    paso = W.get('paso') or 0.125
+    for i in obras_a_medias(W, cfg):
+        n, p0, cw, cl_ = _sitio(W, cfg, i)
+        e, t = tangents(n)
+        m_ = min(cw, cl_)
+        poste = _add(_add(p0, e, 0.42 * cw), t, 0.42 * cl_)
+        out.append(_row(_add(poste, n, 0.55 * lim), n, 0.07 * m_, 0.05 * m_, 0.07 * m_, COL_FOCO))
+        out.append(_row(_add(p0, n, 0.012), n, 0.85 * cw, 0.01, 0.85 * cl_, COL_CHARCO))
+    if cfg['nivel'] >= 14:
+        for i, q in sorted(celdas_ardiendo(W, cfg).items()):
+            n, p0, cw, cl_ = _sitio(W, cfg, i)
+            chispa = int(now / paso * FOTOS_PASO + i) % 2
+            k = (0.6 + 0.4 * chispa) * (1.0 - 0.5 * q)
+            col = tuple(c * k for c in COL_BRILLO_BRASA)
+            vh = max(W['vh'][i], 0.3 * lim)
+            out.append(_row(_add(p0, n, 0.012), n, 1.1 * cw, 0.01, 1.1 * cl_, col))
+            out.append(_row(p0, n, 0.8 * cw, 1.1 * vh, 0.8 * cl_, tuple(0.35 * c for c in col)))
+        vida = max(1, int(cfg['pasos_polvo'])) * paso
+        for t0, c, modo, k in W['polvo']:
+            q = (now - t0) / vida
+            if modo != 'polvo' or not 0.0 <= q < 1.0 or not 0 <= c < N:
+                continue
+            n, p0, cw, cl_ = _sitio(W, cfg, c)
+            s_ = 0.6 + 0.6 * q
+            col = tuple(x * (1.0 - q) for x in COL_POLVO_LUZ)
+            out.append(_row(p0, n, s_ * cw, (0.2 + 0.4 * q) * lim, s_ * cl_, col))
+        for cat in W['cats']:
+            if cat['tipo'] == 'incendio':
+                continue
+            for c in sorted(cat['activas']):
+                n, p0, cw, cl_ = _sitio(W, cfg, c)
+                out.append(_row(p0, n, 0.9 * cw, 0.5 * lim, 0.9 * cl_, COL_POLVO_LUZ))
+    return out
+
+
+def _linea(a, b, grueso, col):
+    """Una caja fina de a a b (para el diagnostico)."""
+    Y = _norm(_add(a, b))
+    d = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    d = _add(d, Y, -_dot(d, Y))
+    L = math.sqrt(_dot(d, d))
+    if L < 1e-6:
+        return None
+    Z = _mul(d, 1.0 / L)
+    X = _cross(Y, Z)
+    c = _mul(_add(a, b), 0.5)
+    rx, ry, rz = _euler_xyz(X, Y, Z)
+    return [c[0], c[1], c[2], rx, ry, rz, grueso, grueso, L, col[0], col[1], col[2]]
+
+
+def build_diagnostico(W, cfg):
+    """Puentes de los clusters, rutas del tejido y presion de cada celda."""
+    out = []
+    lim = limit(cfg)
+    cl = clusters(W, cfg)
+    alto = 0.04 * lim
+    sobre = lambda i: _mul(normal_i(i), base_radius(W, cfg, i) + max(W['vh'][i], 0.0) + alto)
+    hechos = set()
+    for i in range(N):
+        for j in cl['mascara'][i]:
+            k = (min(i, j), max(i, j))
+            if k in hechos:
+                continue
+            hechos.add(k)
+            f = _linea(sobre(i), sobre(j), 0.03, COL_DIAG_PUENTE)
+            if f:
+                out.append(f)
+    if cfg['nivel'] >= 13:
+        t = tejido(W, cfg)
+        suelo_ = lambda i: _mul(normal_i(i), base_radius(W, cfg, i) + 0.08)
+        for a, b in t.get('vias', []):
+            f = _linea(suelo_(a), suelo_(b), 0.05, COL_DIAG_VIA)
+            if f:
+                out.append(f)
+        for rio in t.get('rios', []):
+            for a, b in zip(rio, rio[1:]):
+                f = _linea(suelo_(a), suelo_(b), 0.05, COL_DIAG_RIO)
+                if f:
+                    out.append(f)
+    umbral = max(1e-6, cfg['umbral_vecindad'])
+    for i in range(N):
+        P = cl['presion'][i]
+        if P <= 0:
+            continue
+        n = normal_i(i)
+        e, _t = tangents(n)
+        cw, _ = _cell_sizes(base_radius(W, cfg, i), i)
+        p = _add(_mul(n, base_radius(W, cfg, i)), e, 0.38 * cw)
+        out.append(_row(p, n, 0.06, 0.5 * lim * min(2.0, P / umbral), 0.06,
+                        COL_DIAG_ALTA if P >= umbral else COL_DIAG_BAJA))
+    return out
+
+
 # =============================================================================
 # 2. ADAPTADOR TOUCHDESIGNER
 # =============================================================================
@@ -4733,6 +4907,7 @@ def chop_names(c=None):
     if c['nivel'] < 11:
         return list(CHOP_NAMES)
     extra = ['i_tejido'] if c['nivel'] >= 13 else []
+    extra += ['i_luz_local', 'i_diagnostico'] if c['nivel'] >= 18 else []
     return CHOP_NAMES + ['i_particulas'] + extra + ['i_' + g for g, _, _ in geometrias_piel(c)]
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
@@ -4936,6 +5111,10 @@ def cfg():
                  trafico=max(0, int(_p('Trafico', c['trafico']))),
                  pasos_frente=max(1, int(_p('Pasosfrente', c['pasos_frente']))),
                  master_beat=_master_beat())
+    if c['nivel'] >= 18:
+        c.update(diagnostico=int(_p('Diagnostico', False)),
+                 luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
+                 escena=_menu('Escena', ESCENAS, 0))
     return c
 
 
@@ -5162,6 +5341,7 @@ def frame_tick():
     res = tick(W, c, now, tempo(), playing())
     _CACHE['nivel'] = c['nivel']        # fase 17: para la luz y las ventanas del shader
     _CACHE['tinte'] = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
+    _CACHE['luz_calida'] = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
     if res.get('burst'):
         print('AVISO  %s' % W['aviso'])
     if res.get('frente'):
@@ -5279,6 +5459,12 @@ def on_pulse(name):
             print('UNIRPRUEBA  pad %d: cortes en %d y %d -> %s'
                   % (pad + 1, a, b, '%s por %s' % (UNION_NOMBRE[u['tipo']], '-'.join(str(x) for x in u['celdas']))
                      if u else 'sin union (Unircortes apagado o fuera de Ventanaescalada)'))
+    elif name == 'Cargarescena':        # fase 18: volver a la escena guardada
+        n = cargar_escena(ESCENAS[c.get('escena', 0)])
+        print('ESCENA  %s cargada (%d parametros)' % (ESCENAS[c.get('escena', 0)], n))
+    elif name == 'Guardarescena':       # fase 18: lo que hay, en la escena actual
+        n = guardar_escena()
+        print('ESCENA  %s guardada (%d parametros)' % (ESCENAS[c.get('escena', 0)], n))
     elif name == 'Frenteprueba':        # fase 17: un cambio de pattern de prueba
         f = cambio_pattern(W, c)
         W['aviso'] = 'Frenteprueba: cambio de pattern'
@@ -5316,6 +5502,89 @@ def on_value(name, val):
             parent().par.Showgrid = not bool(val)
         except Exception:
             pass
+    elif name == 'Escena':              # fase 18: cargar la escena elegida
+        n = cargar_escena(str(val))
+        print('ESCENA  %s cargada (%d parametros)' % (val, n))
+
+
+# --- escenas (fase 18) --------------------------------------------------------
+
+def tabla_escenas():
+    """La tabla 'escenas' (escena, parametro, valor), o None."""
+    try:
+        return parent().op('escenas')
+    except Exception:
+        return None
+
+
+def valores_escena(nombre):
+    """{parametro: valor (texto)} de la escena en la tabla; si no esta, la de
+    por defecto."""
+    out = dict((k, str(v)) for k, v in escena_defecto(nombre).items()) if nombre in ESCENAS else {}
+    t = tabla_escenas()
+    if t is not None:
+        for r in range(1, t.numRows):
+            if t[r, 0].val == nombre:
+                out[t[r, 1].val] = t[r, 2].val
+    return out
+
+
+def _poner(nombre, valor):
+    """Pone un parametro de la escena: de FASE1 o de una luz (op.par)."""
+    if '.' in nombre:
+        o, par = nombre.split('.', 1)
+        dst = parent().op(o)
+    else:
+        dst, par = parent(), nombre
+    p = getattr(dst.par, par, None) if dst is not None else None
+    if p is None:
+        return False
+    try:
+        v = float(valor)
+        p.val = int(v) if getattr(p, 'style', '') == 'Int' else v
+    except (ValueError, TypeError):
+        p.val = valor
+    return True
+
+
+def cargar_escena(nombre):
+    """Pone los parametros de la escena. Devuelve cuantos."""
+    n = 0
+    for k, v in valores_escena(nombre).items():
+        try:
+            n += 1 if _poner(k, v) else 0
+        except Exception:
+            pass
+    return n
+
+
+def _leer(nombre):
+    if '.' in nombre:
+        o, par = nombre.split('.', 1)
+        src = parent().op(o)
+    else:
+        src, par = parent(), nombre
+    p = getattr(src.par, par, None) if src is not None else None
+    return None if p is None else p.eval()
+
+
+def guardar_escena(nombre=None):
+    """Guarda en la tabla los valores actuales de los parametros de la escena."""
+    nombre = nombre or ESCENAS[_menu('Escena', ESCENAS, 0)]
+    t = tabla_escenas()
+    if t is None:
+        return 0
+    filas = [[t[r, k].val for k in range(3)] for r in range(1, t.numRows) if t[r, 0].val != nombre]
+    nuevas = []
+    for fila in ESCENA_PARS:
+        v = _leer(fila[0])
+        if v is not None:
+            nuevas.append([nombre, fila[0], str(v)])
+    t.clear()
+    t.appendRow(['escena', 'parametro', 'valor'])
+    for f in filas + nuevas:
+        t.appendRow(f)
+    return len(nuevas)
 
 
 # --- balanceo del eje (rotacion extra, desde la fase 3) ----------------------
@@ -5823,6 +6092,8 @@ def _legend():
         lines.append(_legend_era(W, c))
     if lvl >= 17:
         lines.append(_legend_tiempo(W, c))
+    if lvl >= 18:
+        lines.append(_legend_escena(W, c))
     return '\n'.join(lines)
 
 
@@ -5840,6 +6111,17 @@ def _legend_arqueo(W, c, k):
         txt += '   + %s %s (%d celdas)' % (UNION_NOMBRE[u['tipo']], '-'.join(str(x) for x in u['celdas']),
                                          len(u['celdas']))
     return txt
+
+
+def _legend_escena(W, c):
+    """ESCENA (fase 18): la escena, la densidad, las piezas y la luz local."""
+    inst = _CACHE.get('inst') or {}
+    piezas = sum(len(v) for k, v in inst.items() if k.startswith('mod_'))
+    dens = occupied(W) / float(N)
+    return ('  ESCENA   %s   densidad %d%%%s   piezas %d   luz local %d   transitos a medias %d%s'
+            % (ESCENAS[c.get('escena', 0)], int(round(dens * 100)), ' (>60%)' if dens > 0.6 else '', piezas,
+               len(inst.get('luz_local', [])), len(transitos_colgados(W, c)),
+               '   diagnostico' if c.get('diagnostico') else ''))
 
 
 def _legend_tiempo(W, c):
@@ -5881,10 +6163,13 @@ def luz_tiempo(k, frame=None):
     fase 10 tenida por la estacion del pattern (fase 17)."""
     try:
         t = _CACHE.get('tinte')
+        cal = _CACHE.get('luz_calida', 0.0)       # fase 18: la escena calienta la luz
         if t is None:
             W, c = world(), cfg()
             t = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
-        return LUZ_BASE[int(k)] * t[int(k)]
+            cal = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
+        k = int(k)
+        return (LUZ_BASE[k] + (LUZ_CALIDA[k] - LUZ_BASE[k]) * cal) * t[k]
     except Exception:
         return LUZ_BASE[int(k) % 3]
 

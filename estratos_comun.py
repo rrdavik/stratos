@@ -21,11 +21,12 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v30'
+VERSION_COMUN = 'comun v31'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'particulas', 'luz_celda', 'luz_conchas']   # la capa aditiva, al final
+                'coronas', 'particulas', 'diagnostico', 'luz_celda', 'luz_conchas',
+                'luz_local']                    # las capas aditivas, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
@@ -425,14 +426,14 @@ def onFrameStart(frame):
     return
 '''
 
-PULSOS = r'''# Botones y conmutadores de las paginas Fase3 ... Fase10 -> motor
+PULSOS = r'''# Botones y conmutadores de las paginas Fase3 ... Fase18 -> motor
 def onPulse(par):
     op('motor').module.on_pulse(par.name)
     return
 
 
 def onValueChange(par, prev):
-    if par.name in ('Modoactuacion',):
+    if par.name in ('Modoactuacion', 'Escena'):
         op('motor').module.on_value(par.name, par.eval())
     return
 '''
