@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v29'
+VERSION_COMUN = 'comun v30'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -247,6 +247,11 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
         p = page.appendToggle(name, label=label)
     elif kind == 'pulse':
         page.appendPulse(name, label=label)
+        return True
+    elif kind == 'str':
+        p = page.appendStr(name, label=label)
+        if default is not None:
+            p[0].default = p[0].val = default
         return True
     elif kind == 'menu':
         p = page.appendMenu(name, label=label)
@@ -561,7 +566,7 @@ uniform vec4 uLuz1Col;
 uniform vec4 uLuz2;         // luz_destello
 uniform vec4 uLuz2Col;
 uniform vec4 uAmbiente;     // rgb
-uniform vec4 uVentanas;     // x: ventanas encendidas 0-1 (fase 17)
+uniform vec4 uVentanas;     // x: ventanas de la ciudad, 0 apagadas (hasta la fase 17) o 1
 
 in Vertex {
     vec4 color;
@@ -609,7 +614,11 @@ void main()
 {
     TDCheckDiscard();
     float fam = uFamilia.x;
-    float rug = clamp(iVert.color.a, 0.02, 1.0);
+    // el alfa trae la rugosidad (0-1) y, desde la fase 17, las ventanas del
+    // edificio: alfa = rugosidad + 2 x nivel (0-4)
+    float nivelv = floor(iVert.color.a * 0.5 + 0.0001);
+    float rug = clamp(iVert.color.a - 2.0 * nivelv, 0.02, 1.0);
+    float luces = min(1.0, nivelv * 0.25);
     vec3 base = iVert.color.rgb;
     vec3 n = normalize(iVert.wNorm);
     vec3 cam = uTDMats[iVert.camIndex].camInverse[3].xyz;
@@ -656,12 +665,15 @@ void main()
         float tras = pow(max(dot(-l0, v), 0.0), 3.0) * (1.0 - 0.5 * rug);
         col += tras * base * uLuz0Col.rgb * 0.35 + fres * vec3(0.05, 0.08, 0.05);
     } else if (fam > 1.5) {
-        // ciudad: vidrio negro con reflejo de borde; ventanas ambar (apagadas hasta la fase 17)
+        // ciudad: vidrio negro con reflejo de borde; ventanas ambar (fase 17): de
+        // cada edificio se encienden tantas como diga su nivel (1 de 4 ... todas)
         col += fres * (1.0 - rug) * vec3(0.25, 0.28, 0.32);
-        vec2 w = fract(vec2(iVert.oPos.y * 10.0, (iVert.oPos.x + iVert.oPos.z) * 7.0));
+        vec2 wv = vec2(iVert.oPos.y * 10.0, (iVert.oPos.x + iVert.oPos.z) * 7.0);
+        vec2 w = fract(wv);
         float ventana = step(0.3, w.x) * step(w.x, 0.8) * step(0.25, w.y) * step(w.y, 0.75);
+        float cual = hash13(vec3(floor(wv), float(iVert.inst) * 0.731));
         float lado = 1.0 - abs(dot(n, normalize(iVert.wPos)));
-        col += ventana * step(0.5, lado) * uVentanas.x * vec3(1.0, 0.62, 0.25);
+        col += ventana * step(0.5, lado) * uVentanas.x * step(cual, luces - 0.001) * vec3(1.0, 0.62, 0.25);
     } else {
         // mineral: la obsidiana pulida tiene un reflejo de borde frio
         col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
@@ -769,6 +781,27 @@ def calibracion_al_dia(base):
     alturas_coherentes(base)
 
 
+# --- el tiempo en el paisaje (comun v30, motor v39) ---------------------------
+LUZ_TIEMPO = "parent().op('motor').module.luz_tiempo(%d, absTime.frame)"
+
+
+def tiempo_al_dia(base):
+    """Desde la fase 17, el color de luz_principal lo da el motor: la luz
+    cenital fria de la fase 10 tenida por la estacion del pattern que suena."""
+    if current_level(base) < 17:
+        return False
+    luz = base.op('luz_principal')
+    if luz is None:
+        return False
+    hechos = 0
+    for k, ch in enumerate('rgb'):
+        for pat in ('c%s', 'lightcolor%s', 'color%s'):
+            if has_par(luz, pat % ch) and setexpr(luz, pat % ch, LUZ_TIEMPO % k):
+                hechos += 1
+                break
+    return hechos == 3
+
+
 def reticula_giro(base):
     """Cada marca de la reticula gira con los canales rx ry rz del
     reticula_chop, como las demas geometrias. fase12_base.py usaba "rotar
@@ -824,6 +857,7 @@ def install_core(base, carpeta, fase):
     reticula_giro(base)
     camara_al_dia(base)
     calibracion_al_dia(base)
+    tiempo_al_dia(base)
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
@@ -1415,7 +1449,7 @@ PIEL_UNIFORMES = [
                "parent().op('luz_destello').par.tz", '0')),
     ('uLuz2Col', tuple(LUZ_COL % ('luz_destello', k) for k in range(3)) + ('0',)),
     ('uAmbiente', ('0.16', '0.16', '0.18', '0')),
-    ('uVentanas', ('0', '0', '0', '0')),          # la fase 17 las enciende
+    ('uVentanas', ("parent().op('motor').module.ventanas_luz(absTime.frame)", '0', '0', '0')),  # fase 17
 ]
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad']
 
