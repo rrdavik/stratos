@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes; desde la 15, cada ciclo se entierra con la materia de su tema y la herencia rebrota según su lógica; desde la 16, los cortes enseñan lo que hubo en cada concha (troncos fósiles, basalto, cimientos, sótanos y calles) y dos cortes vecinos se unen en un cañón o una galería de metro; desde la 17, el tiempo se ve en el paisaje: el dosel se balancea y el tráfico corre al tempo, STOP lo congela y un cambio de pattern cruza el planeta como un frente que trae la estación de ese pattern; la 18 cierra las dos escenas (naturaleza y ciudad) como presets listos para actuar, con luz local sin luces nuevas y capas de diagnóstico que el modo actuación oculta. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
+Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes; desde la 15, cada ciclo se entierra con la materia de su tema y la herencia rebrota según su lógica; desde la 16, los cortes enseñan lo que hubo en cada concha (troncos fósiles, basalto, cimientos, sótanos y calles) y dos cortes vecinos se unen en un cañón o una galería de metro; desde la 17, el tiempo se ve en el paisaje: el dosel se balancea y el tráfico corre al tempo, STOP lo congela y un cambio de pattern cruza el planeta como un frente que trae la estación de ese pattern; la 18 cierra las dos escenas (naturaleza y ciudad) como presets listos para actuar, con luz local sin luces nuevas y capas de diagnóstico que el modo actuación oculta. La 19, ya fuera del plan 11–18, añade las señales del modular: viento, ventanas que respiran, esporas, smog, niebla de distancia y glitch. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
 
 ---
 
@@ -15,8 +15,8 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18) | `motor v40` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos | `comun v31` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19) | `motor v41` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`) | `comun v32` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun) | `fase11 v4` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
@@ -25,6 +25,7 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 | `fase16_cortes.py` | Arqueología temática: lo que enseñan los cortes (fondo y paredes), unión de cortes (cañón y galería de metro), página Fase16 | `fase16 v1` |
 | `fase17_tiempo.py` | Tiempo: pulso en fase con el beat (dosel, esporas, tráfico, ventanas), transporte, frente de cambio de pattern y biblioteca de patterns, página Fase17 | `fase17 v1` |
 | `fase18_escenas.py` | Escenas por tema (tabla `escenas`, `Escena`, `Guardarescena`, `Cargarescena`), luz local (`luz_local`), capas de diagnóstico (`diagnostico`), página Fase18 | `fase18 v1` |
+| `fase19_modular.py` | Señales del modular (OSC, un CHOP, a mano o de prueba): viento, respiración de las ventanas, esporas, smog, niebla y glitch; página Fase19 y OSC In CHOP `modular_osc` | `fase19 v1` |
 | `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v1` |
 | `pruebas/sesion_escena.py` | La sesión de 20 minutos por escena de la fase 18, sobre el motor: densidad, piezas, coste por fotograma y criterios de cierre | — |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
@@ -38,6 +39,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase15_era.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase16_cortes.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase17_tiempo.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase18_escenas.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase19_modular.py').read())
 ```
 
 Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v11`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11, y las de la erosión de la fase 7, en uno que ya está en la 14 (se miden con el nivel 13: desde la 14 un arañazo es también un accidente). Las de la paleta de la fase 8 (`fase8 v9`) se miden con el nivel 14: desde la 15 la concha lleva la materia de su tema.
@@ -637,6 +639,64 @@ Comprueba:
 
 ---
 
+## FASE 19 · Señales del modular
+
+*Primera fase de «Después de la fase 18» del plan.*
+
+### Qué hace
+
+Cuatro señales de control del modular modulan cómo se ve el mundo, en el nivel de los moduladores (como la velocidad y el gate de la fase 12): no cambian el mundo. Llegan como **valores de control**, el voltaje convertido, y **nunca como análisis del audio**: el marco no lo quiere, y analizar el sonido volvería la pieza visualización reactiva.
+
+| Señal | Naturaleza | Ciudad |
+|---|---|---|
+| **LFO** | viento en el dosel: hasta `Vientomax` grados (12) a un lado y al otro, encima del balanceo del pulso (fase 17) | las ventanas respiran: con el LFO abajo se apagan hasta `Respiracion` (0,75) |
+| **ruido** | más esporas sobre los bosques (de 3 a 12 por celda) | smog: una bruma parda que deriva sobre los edificios (`Smog`) |
+| **espacialidad** | niebla de distancia: lo lejano se funde con la bruma (`Niebla`) | igual |
+| **saturación** | fracturas (vetas oscuras) y glitch (bloques con los canales cambiados) en los materiales de la piel (`Glitch`) | igual |
+
+- **La niebla**: en la piel la calcula su shader (`uNiebla`: cantidad, dónde empieza y dónde es total; `uNieblaCol`). Para los materiales Phong y constantes, la cámara lleva una niebla lineal que la sigue (`modular_al_dia`). Empieza en la cara del planeta que mira a la cámara; con espacialidad 1, el borde del planeta ya es casi todo bruma.
+- **Sin señal, reposo.** Si en 2 segundos no llega nada, las señales vuelven solas al reposo: el LFO al centro (sin viento) y lo demás a 0. Las ventanas no respiran. Un proyecto sin modular se ve como en la fase 18.
+
+### De dónde llegan (`Fuentemodular`)
+
+La decisión del plan seguía abierta (*¿Cómo llegan los voltajes del modular a TouchDesigner? Por confirmar: el BeatStep Pro no tiene entradas de CV*), así que la fase acepta varias fuentes:
+
+- **osc** (por defecto): OSC por UDP (ethernet) al puerto `Puertoosc` (9000), con las rutas `/estratos/lfo`, `/estratos/ruido`, `/estratos/espacio` y `/estratos/saturacion`. Vale cualquier ruta que acabe así; si ningún canal se llama así, se toman los cuatro primeros, en ese orden. Lo recibe el OSC In CHOP `modular_osc`. Sirve para un conversor de CV a OSC o un ordenador o microcontrolador que lea los voltajes.
+- **chop**: cualquier CHOP (`Chopmodular`, su ruta), por ejemplo una interfaz de audio acoplada en continua (Expert Sleepers ES-8 o ES-9 en un Audio Device In CHOP) o los CC de un conversor de CV a MIDI. Se lee su valor actual; no se analiza.
+- **manual**: los deslizadores `Lfo` (0,5: sin viento), `Ruido`, `Espacio` y `Saturacion`.
+- **prueba**: un generador sin azar: un LFO de 4 s, un ruido que salta cada medio segundo por el mapa logístico, una espacialidad que va y viene en 20 s y ráfagas de saturación de 1 s cada 8.
+
+`Rangomodular` dice en qué rango llegan (0..1, -1..1, 0..10 V, -5..5 V) y `Suavizado` (0,15 s) las alisa.
+
+### Parámetros (página Fase19)
+
+`Fuentemodular` (osc / chop / manual / prueba) · `Puertoosc` 9000 · `Chopmodular` · `Rangomodular` (0..1) · `Suavizado` 0,15 · `Lfo` 0,5 · `Ruido` 0 · `Espacio` 0 · `Saturacion` 0 · `Vientomax` 12 · `Respiracion` 0,75 · `Smog` 1 · `Niebla` 1 · `Glitch` 1
+
+### Leyenda
+
+```
+MODULAR  osc :9000   lfo 0.62   ruido 0.10   espacio 0.40   saturacion 0.00   hace 0.1 s
+MODULAR  osc :9000   lfo 0.50   ruido 0.00   espacio 0.00   saturacion 0.00   sin senal
+```
+
+### Probar sin el modular
+
+`Fuentemodular` = prueba: el dosel se mueve con el viento, la niebla va y viene y cada ocho segundos los materiales se fracturan. O `Fuentemodular` = manual y mueve los deslizadores.
+
+### Autoprueba
+
+Comprueba:
+- los rangos y la elección de canales;
+- el suavizado;
+- el viento en el dosel a un lado y al otro y las esporas con el ruido;
+- la niebla (`uNiebla` y la cámara) y el glitch (`uGlitch`);
+- en la ciudad, las ventanas que respiran y el smog;
+- el generador de prueba (cambia, y es el mismo en el mismo instante);
+- que sin mensajes OSC las señales vuelven al reposo;
+- la línea `MODULAR`.
+
+---
+
 ## Calibración de la vista (motor v37, comun v29)
 
 ### Qué pasaba
@@ -785,6 +845,15 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | ¿Qué capas de diagnóstico había? | Ninguna: la fase 18 las crea (puentes, rutas y presión) y el modo actuación las oculta |
 | ¿Cómo se miden los 20 minutos? | Fuera de TouchDesigner (`pruebas/sesion_escena.py`); los fotogramas reales quedan para el aparato |
 
+### Decisiones tomadas en la fase 19
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Cómo llegan los voltajes del modular? | Sigue abierta en el plan. La fase acepta OSC por UDP (lo previsto), cualquier CHOP (interfaz acoplada en continua, CV a MIDI), deslizadores y un generador de prueba |
+| ¿Análisis del audio? | No: solo valores de control |
+| ¿Qué pasa sin señal? | A los 2 s vuelven al reposo (LFO al centro, lo demás a 0): un proyecto sin modular se ve igual |
+| ¿Dónde se calcula la niebla? | En el shader de la piel (`uNiebla`) y, para lo demás, en la niebla lineal de la cámara |
+
 ---
 
 ### Cómo se ha probado
@@ -792,15 +861,15 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 Sin TouchDesigner a mano, con un **TouchDesigner simulado** que ejecuta los scripts tal cual (`pruebas/td_simulado.py`): operadores y rutas, parámetros con expresiones, páginas propias, storage, el módulo de los Text DAT, Script CHOP, Table DAT y el tiempo del proyecto. Los COMP solo aceptan los parámetros que tienen en TouchDesigner.
 
 ```
-python3 pruebas/correr_fases.py        # base y fases 3 a 18 desde cero, sesión, relanzar y otra sesión
+python3 pruebas/correr_fases.py        # base y fases 3 a 19 desde cero, sesión, relanzar y otra sesión
 python3 pruebas/sesion_escena.py       # 20 minutos por escena y los criterios de cierre de la fase 18
 python3 pruebas/vista_previa.py        # hoja de contactos del catálogo (pruebas/catalogo.png)
 xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la piel con OpenGL (necesita moderngl)
 ```
 
-- **Desde cero**: `fase12_base.py` y las fases 3 a 18, todas con `AUTOPRUEBA OK`.
+- **Desde cero**: `fase12_base.py` y las fases 3 a 19, todas con `AUTOPRUEBA OK`.
 - **Sesión simulada** de 48 compases a 120 BPM (entierra un mundo) con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
-- **Relanzar** las fases 3 a 18 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
+- **Relanzar** las fases 3 a 19 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
 - **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, y la vegetación (desde el motor v32) en dos verdes con los lados pardos.
 - **Catálogo**: una hoja de contactos dibujada con un rasterizador propio (`pruebas/vista_previa.py`) para ver cada modelo, y escenas de los dos temas con clusters, puentes, coronaciones e híbridos.
 - **Fase 14**: un incendio en un bosque denso, dibujado con el shader real: el dosel de lo que arde se tiñe de brasa y se carboniza, y lo que se vacía queda como claro de ceniza. La fase 14 añade sus tres modelos a un proyecto cuya fase 11 se hizo con un motor anterior (`modelos: 3 nuevos`).
@@ -808,6 +877,7 @@ xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la pi
 - **Fase 16**: cinco eras de temas alternos y un corte con la caja, dibujados con el shader real: troncos fósiles claros en las paredes de carbón, cimientos en el fondo y, con dos cortes vecinos en la ciudad, la bóveda de la galería en su zanja. La fase 16 añade sus siete modelos a un proyecto cuya fase 15 se hizo con el motor anterior (`modelos: 7 nuevos`).
 - **Fase 17**: una ciudad con las ventanas ámbar encendidas por edificio y un planeta de naturaleza con la banda de nubes del frente a mitad de camino, dibujados con el shader real. Al pasar un proyecto de la fase 16 a la 17, `luz_principal` toma su color del motor y `uVentanas` pasa a 1.
 - **Fase 18**: la sesión de 20 minutos por escena (ver arriba) cumple los cuatro criterios de cierre.
+- **Fase 19**: el shader de la piel con la niebla de distancia y con las fracturas y el glitch, dibujado con OpenGL.
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
 
 Lo que la simulación no puede comprobar: el aspecto real en el render, los nombres de los parámetros de los SOP (Tube, Transform, Select, Merge) y del GLSL MAT (Vertex/Pixel Shader, página Vectors), que TouchDesigner declare sus funciones de shader como las imitamos, y el tiempo real por fotograma.
@@ -827,6 +897,7 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 11. **Cortes temáticos (fase 16)**: con varias conchas de temas distintos y la caja, que desde la cámara de globo se ven las piezas de las paredes y del fondo (si quedan pequeñas o tapadas, dímelo y ajusto su tamaño); que la galería de metro se lee como galería y el cañón como cañón.
 12. **Tiempo (fase 17)**: que el balanceo del dosel y el tráfico van a tempo y se paran con STOP; que el BeatStep manda All Notes Off al cambiar de pattern (si no, solo funciona `Frenteprueba`); que el frente se ve cruzar y que la luz de un pattern conocido vuelve. Si tienes `master_beat`, pon su ruta en `Masterbeat`.
 13. **Escenas (fase 18)**: que cada escena se ve como se espera y que guardar y cargar no tocan el mundo; que los focos de obra, las brasas y el polvo se leen como luz (mezcla aditiva de `mat_luz_local`) y no tapan nada; con la sesión real de 20 minutos, los fotogramas con el máximo de piezas.
+14. **Modular (fase 19)**: decidir cómo llegan los voltajes (OSC o un CHOP) y comprobar en la leyenda `MODULAR` que llegan y en qué rango. Que la niebla de la cámara existe (página Fog de `camara`; si no, solo la piel tiene niebla) y que el glitch no molesta a la lectura con saturación baja.
 
 ### Problemas frecuentes
 
@@ -853,6 +924,8 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | Fase 15: las conchas salen blancas, negras o planas | El shader de la piel en `estratos` | `Materialrespaldo`, y pégame los errores de `mat_piel_mineral` |
 | Fase 15: lo heredado no aparece | Banco de semillas: brota en 4 × `Pasosetapa` pasos | Espera, toca una nota en la celda o apaga `Rebrote` |
 | Fase 16: el corte solo enseña bandas de color | Las conchas se enterraron antes de la fase 15 (sin registro), o estaban vacías, o `Detalleexpuesto` es 0 | Deja enterrar unos ciclos con la fase 15 o la 16 y vuelve a cortar |
+| Fase 19: `MODULAR ... sin senal` | No llegan mensajes al puerto `Puertoosc`, o las rutas no acaban en lfo/ruido/espacio/saturacion | Mira el OSC In CHOP `modular_osc` (canales y valores); revisa el puerto y el cortafuegos; o `Fuentemodular` = chop |
+| Fase 19: los árboles se quedan inclinados | El LFO llega fuera de rango o en reposo no vale el centro | Ajusta `Rangomodular`; con `Fuentemodular` = manual, `Lfo` 0,5 es sin viento |
 | Fase 18: al elegir `Escena` no cambia nada | El cambio de `Escena` no llega al motor (el DAT `pulsos` es de una versión anterior) | Relanza la fase 18; o pulsa `Cargarescena` |
 | Fase 18: la luz local tapa lo que hay detrás | `mat_luz_local` sin mezcla aditiva | En `mat_luz_local`: Blending encendido, Source y Destination en One |
 | Fase 17: nada se mueve | El pulso está parado: línea de tiempo en pausa o el último mensaje del BeatStep fue un STOP (la leyenda dice `PARADO`) | PLAY en el proyecto o START en el BeatStep |

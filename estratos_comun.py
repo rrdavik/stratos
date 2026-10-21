@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v31'
+VERSION_COMUN = 'comun v32'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -568,6 +568,9 @@ uniform vec4 uLuz2;         // luz_destello
 uniform vec4 uLuz2Col;
 uniform vec4 uAmbiente;     // rgb
 uniform vec4 uVentanas;     // x: ventanas de la ciudad, 0 apagadas (hasta la fase 17) o 1
+uniform vec4 uNiebla;       // fase 19: x cantidad 0-1, y distancia donde empieza, z donde es total
+uniform vec4 uNieblaCol;    // su color
+uniform vec4 uGlitch;       // fase 19: x saturacion del modular 0-1, y tiempo (s)
 
 in Vertex {
     vec4 color;
@@ -678,6 +681,22 @@ void main()
     } else {
         // mineral: la obsidiana pulida tiene un reflejo de borde frio
         col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
+    }
+    // fase 19: saturacion del modular -> fracturas y glitch en los materiales
+    float gl = uGlitch.x;
+    if (gl > 0.001) {
+        float veta = abs(ruido(q * 0.9 + vec3(3.1)) - 0.5);
+        float grieta = 1.0 - smoothstep(0.0, 0.012 + 0.03 * gl, veta);
+        col *= 1.0 - 0.85 * grieta * gl;
+        float bloque = hash13(vec3(floor(gl_FragCoord.xy / vec2(48.0, 6.0)), floor(uGlitch.y * 12.0)));
+        if (bloque < 0.18 * gl)
+            col = col.gbr * 1.4 + vec3(0.04, 0.0, 0.06);
+    }
+    // fase 19: espacialidad del modular -> niebla de distancia
+    if (uNiebla.x > 0.001) {
+        float dist = length(cam - iVert.wPos);
+        float f = uNiebla.x * smoothstep(uNiebla.y, max(uNiebla.y + 0.01, uNiebla.z), dist);
+        col = mix(col, uNieblaCol.rgb, f);
     }
     oFragColor[0] = TDOutputSwizzle(vec4(col, 1.0));
     for (int i = 1; i < TD_NUM_COLOR_BUFFERS; i++)
@@ -803,6 +822,27 @@ def tiempo_al_dia(base):
     return hechos == 3
 
 
+# --- las senales del modular (comun v32, motor v41) ----------------------------
+NIEBLA_CAM = "parent().op('motor').module.niebla_camara('%s', absTime.frame)"
+
+
+def modular_al_dia(base):
+    """Desde la fase 19, la niebla de la camara sigue a la espacialidad del
+    modular (para los materiales Phong y constantes; la piel la calcula en su
+    shader)."""
+    if current_level(base) < 19:
+        return False
+    cam = base.op('camara')
+    if cam is None:
+        return False
+    bien = bool(setmenu(cam, ['fog'], ['linear'], 1))      # sin espacio, la niebla empieza lejisimos
+    bien = setexpr(cam, 'fognear', NIEBLA_CAM % 'cerca') and bien
+    bien = setexpr(cam, 'fogfar', NIEBLA_CAM % 'lejos') and bien
+    for ch, v in zip('rgb', (0.12, 0.13, 0.16)):
+        setp_any(cam, ['fogcolor' + ch], v)
+    return bien
+
+
 def reticula_giro(base):
     """Cada marca de la reticula gira con los canales rx ry rz del
     reticula_chop, como las demas geometrias. fase12_base.py usaba "rotar
@@ -859,6 +899,7 @@ def install_core(base, carpeta, fase):
     camara_al_dia(base)
     calibracion_al_dia(base)
     tiempo_al_dia(base)
+    modular_al_dia(base)
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
@@ -1438,6 +1479,7 @@ def color_luz_expr(luz, exprs):
     return usado
 
 
+MODULAR_U = "parent().op('motor').module.modular_uniforme('%s', %d, absTime.frame)"
 PIEL_UNIFORMES = [
     ('uFamilia', ('%d', '0', '0', '0')),
     ('uLuz0', ("parent().op('luz_principal').par.tx", "parent().op('luz_principal').par.ty",
@@ -1451,6 +1493,9 @@ PIEL_UNIFORMES = [
     ('uLuz2Col', tuple(LUZ_COL % ('luz_destello', k) for k in range(3)) + ('0',)),
     ('uAmbiente', ('0.16', '0.16', '0.18', '0')),
     ('uVentanas', ("parent().op('motor').module.ventanas_luz(absTime.frame)", '0', '0', '0')),  # fase 17
+    ('uNiebla', tuple(MODULAR_U % ('niebla', k) for k in range(4))),           # fase 19
+    ('uNieblaCol', tuple(MODULAR_U % ('nieblacol', k) for k in range(4))),
+    ('uGlitch', tuple(MODULAR_U % ('glitch', k) for k in range(4))),
 ]
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad']
 

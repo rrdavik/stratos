@@ -15,7 +15,8 @@
 #                 entierro tematico, registro y herencia; fase 16: lo que
 #                 ensenan los cortes y la union de cortes; fase 17: el tiempo
 #                 en el paisaje: pulso, transporte y frente; fase 18: escenas,
-#                 luz local y capas de diagnostico).
+#                 luz local y capas de diagnostico; fase 19: las senales del
+#                 modular).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -28,7 +29,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v40'
+MOTOR_VERSION = 'motor v41'
 
 import math
 
@@ -148,6 +149,9 @@ DEFAULT_CFG = dict(
     sway_max=6.0, trafico=2, pasos_frente=16, master_beat=None,
     # fase 18: escenas y direccion tematica
     diagnostico=0, luz_calida=0.0, actuacion=0,
+    # fase 19: las senales del modular
+    fuente_modular=1, rango_modular=0, suavizado=0.15, viento_max=12.0, respiracion=0.75,
+    smog=1.0, niebla=1.0, glitch=1.0, modular=None,
 )
 
 
@@ -493,6 +497,8 @@ def new_world():
         pattern_conocido=None,  # si la biblioteca lo reconocio al entrar
         estacion=dict(tinte=[1.0, 1.0, 1.0], ventanas=1),        # la del pattern que suena
         frente=None,            # frente en curso: {beat0, de, a, pattern, conocido}
+        # las senales del modular (fase 19), suavizadas, 0-1
+        modular=dict(lfo=0.5, ruido=0.0, espacio=0.0, saturacion=0.0, t=-99.0, crudo=None, activo=False),
         aviso='',
         ev={},
         t=None,
@@ -3171,6 +3177,10 @@ def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo, escala
         elif modo == 'semillas':        # fase 15: el banco de semillas, sobre el suelo
             g = 2 * math.pi * b
             r_, h_, s_ = 0.08 + 0.36 * c, 0.01 + 0.03 * ((tau / 4.0 + a) % 1.0), 0.03 * m
+        elif modo == 'smog':            # fase 19: bruma parda que deriva sobre la ciudad
+            f = (tau / 24.0 + a) % 1.0
+            g = 2 * math.pi * (b + f)
+            r_, h_, s_ = 0.2 + 0.35 * c, vh * (1.0 + 0.6 * c), 0.09 * m
         elif modo == 'ceniza':          # fase 14: copos grises que caen y derivan
             f = (tau / 7.0 + a) % 1.0
             g = 2 * math.pi * b + tau * 0.08
@@ -4463,6 +4473,7 @@ TINTE_C = 0.07              # croma del tinte de una estacion
 LUZ_BASE = (0.82, 0.90, 1.00)   # la luz cenital fria de la fase 10, sin tenir
 COL_FARO, COL_PILOTO = (1.0, 0.90, 0.68), (0.95, 0.22, 0.14)
 COL_ESPORA, COL_NUBE = (0.80, 0.86, 0.62), (0.80, 0.82, 0.86)
+COL_SMOG = (0.42, 0.39, 0.34)
 
 
 def pulso_tick(W, cfg, dt, tempo, playing):
@@ -4638,6 +4649,8 @@ def balanceo(W, cfg, i, bq):
     n = normal_i(i)
     lon = math.atan2(n[2], n[0])
     sw = cfg['sway_max'] * math.sin(2.0 * math.pi * bq / SWAY_BEATS + 0.5 * lon)
+    if cfg['nivel'] >= 19:              # fase 19: el LFO del modular es viento
+        sw += cfg['viento_max'] * (2.0 * W['modular']['lfo'] - 1.0)
     incl, rumbo = abs(sw), (0.0 if sw >= 0 else 180.0)
     q = progreso_frente(W, cfg)
     if q is not None and 0.0 < q < 1.0:
@@ -4701,8 +4714,21 @@ def build_tiempo(W, cfg, now, out):
             n = normal_i(i)
             base = base_radius(W, cfg, i)
             cw, cl_ = _cell_sizes(base, i)
-            _particulas(parts, n, _mul(n, base), cw, cl_, W['vh'][i], semilla_caos(i, 31), 3,
+            k_esp = 3 + int(round(9.0 * W['modular']['ruido'])) if cfg['nivel'] >= 19 else 3
+            _particulas(parts, n, _mul(n, base), cw, cl_, W['vh'][i], semilla_caos(i, 31), k_esp,
                         COL_ESPORA, now_p, 0.125, 'esporas')
+    if tema == 'ciudad' and cfg['nivel'] >= 19:     # fase 19: el ruido del modular es smog
+        k_smog = int(round(5.0 * W['modular']['ruido'] * cfg['smog']))
+        if k_smog > 0:
+            now_p = bq * max(1, int(cfg['steps_per_beat'])) * 0.125
+            for i in range(N):
+                if W['occ'][i] <= 0 or not W['own'][i] or W['vh'][i] <= 0.005:
+                    continue
+                n = normal_i(i)
+                base = base_radius(W, cfg, i)
+                cw, cl_ = _cell_sizes(base, i)
+                _particulas(parts, n, _mul(n, base), cw, cl_, max(W['vh'][i], 0.5 * lim),
+                            semilla_caos(i, 61), k_smog, COL_SMOG, now_p, 0.125, 'smog')
     q = progreso_frente(W, cfg)
     if q is not None and 0.0 < q < 1.0 and tema == 'naturaleza':
         lat = math.radians(lat_frente(q))
@@ -4886,6 +4912,92 @@ def build_diagnostico(W, cfg):
         out.append(_row(p, n, 0.06, 0.5 * lim * min(2.0, P / umbral), 0.06,
                         COL_DIAG_ALTA if P >= umbral else COL_DIAG_BAJA))
     return out
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - las senales del modular (fase 19)
+# -----------------------------------------------------------------------------
+# Cuatro senales de control del modular, convertidas a 0-1: no es analisis del
+# audio (el marco no lo quiere: volveria la pieza visualizacion reactiva), sino
+# el voltaje convertido. Llegan por OSC (UDP, por ethernet: /estratos/lfo,
+# /estratos/ruido, /estratos/espacio, /estratos/saturacion), desde cualquier
+# CHOP (una interfaz de audio acoplada en continua, CC de un conversor CV-MIDI),
+# a mano (Lfo, Ruido, Espacio, Saturacion) o de un generador de prueba sin
+# azar. Rangomodular dice en que rango llegan (0-1, -1..1, 0-10 V, -5..5 V) y
+# Suavizado las alisa. Son moduladores, como la velocidad y el gate (fase 12):
+# no cambian el mundo, solo como se ve.
+#   LFO          naturaleza: viento en el dosel (hasta Vientomax grados, a un
+#                lado y al otro); ciudad: las ventanas respiran (Respiracion).
+#   ruido        naturaleza: mas esporas; ciudad: smog sobre los edificios.
+#   espacialidad niebla de distancia: lo lejano se funde con la bruma.
+#   saturacion   fracturas y glitch en los materiales del shader de la piel.
+
+MODULAR = ['lfo', 'ruido', 'espacio', 'saturacion']
+FUENTES_MODULAR = ['manual', 'osc', 'chop', 'prueba']
+RANGOS_MODULAR = [('0..1', 0.0, 1.0), ('-1..1', -1.0, 1.0), ('0..10 V', 0.0, 10.0), ('-5..5 V', -5.0, 5.0)]
+NIEBLA_COL = (0.12, 0.13, 0.16)
+
+
+def normalizar(v, rango):
+    """Un valor del modular en 0-1 segun Rangomodular."""
+    _, lo, hi = RANGOS_MODULAR[int(rango) % len(RANGOS_MODULAR)]
+    return max(0.0, min(1.0, (float(v) - lo) / (hi - lo)))
+
+
+def generador_prueba(t):
+    """Las cuatro senales de prueba, sin azar: un LFO de 4 s, un ruido que salta
+    cada medio segundo por el mapa logistico, un espacio que va y viene en 20 s
+    y rafagas de saturacion de un segundo cada ocho."""
+    k = int(math.floor(t * 2.0))
+    return dict(lfo=0.5 + 0.5 * math.sin(2.0 * math.pi * t / 4.0),
+                ruido=logistica(semilla_caos(k, 7), 3.91, 1)[0],
+                espacio=0.5 - 0.5 * math.cos(2.0 * math.pi * t / 20.0),
+                saturacion=1.0 if (t % 8.0) < 1.0 else 0.0)
+
+
+REPOSO_MODULAR = dict(lfo=0.5, ruido=0.0, espacio=0.0, saturacion=0.0)   # sin senal: nada
+SIN_SENAL = 2.0             # segundos sin mensajes para volver al reposo
+
+
+def modular_tick(W, cfg, crudo, dt, now):
+    """Alisa las senales hacia lo que llega (crudo: {senal: 0-1}; None, nada
+    nuevo). Si no llega nada en SIN_SENAL segundos, vuelven al reposo: el LFO
+    al centro (sin viento) y lo demas a 0."""
+    md = W['modular']
+    if crudo is not None:
+        md['crudo'] = dict(crudo)
+        md['t'] = now
+    md['activo'] = md['t'] > -90.0 and now - md['t'] <= SIN_SENAL
+    destino = crudo if crudo is not None else (md.get('crudo') if md['activo'] else REPOSO_MODULAR)
+    tau = max(0.0, cfg['suavizado'])
+    a = 1.0 if tau <= 1e-6 else 1.0 - math.exp(-max(0.0, dt) / tau)
+    for k in MODULAR:
+        if destino and k in destino:
+            md[k] += (max(0.0, min(1.0, destino[k])) - md[k]) * a
+    return md
+
+
+def canal_de(nombres, senal, k):
+    """Indice del canal de una senal: el que termine en su nombre (lfo,
+    ruido...) o, si ninguno, el k-esimo (en el orden de MODULAR)."""
+    for j, nm in enumerate(nombres):
+        limpio = ''.join(ch for ch in nm.lower() if ch.isalpha())
+        if limpio.endswith(senal) or (senal == 'espacio' and limpio.endswith('espacialidad')):
+            return j
+    if not any(any(s_ in ''.join(ch for ch in nm.lower() if ch.isalpha()) for s_ in MODULAR)
+               for nm in nombres):
+        return k if k < len(nombres) else None
+    return None
+
+
+def niebla(W, cfg, d, R):
+    """(cantidad, cerca, lejos) de la niebla de distancia: empieza en la cara
+    del planeta que mira a la camara y, con espacio 1, lo de detras ya es
+    bruma."""
+    e = W['modular']['espacio'] * cfg['niebla'] if cfg['nivel'] >= 19 else 0.0
+    cerca = max(0.0, d - R)
+    lejos = d + R * (5.0 - 4.6 * min(1.0, e))
+    return min(1.0, e), cerca, lejos
 
 
 # =============================================================================
@@ -5111,6 +5223,14 @@ def cfg():
                  trafico=max(0, int(_p('Trafico', c['trafico']))),
                  pasos_frente=max(1, int(_p('Pasosfrente', c['pasos_frente']))),
                  master_beat=_master_beat())
+    if c['nivel'] >= 19:
+        c.update(fuente_modular=_menu('Fuentemodular', FUENTES_MODULAR, c['fuente_modular']),
+                 rango_modular=_menu('Rangomodular', [r[0] for r in RANGOS_MODULAR], 0),
+                 suavizado=max(0.0, _p('Suavizado', c['suavizado'])),
+                 viento_max=max(0.0, _p('Vientomax', c['viento_max'])),
+                 respiracion=max(0.0, min(1.0, _p('Respiracion', c['respiracion']))),
+                 smog=max(0.0, _p('Smog', c['smog'])), niebla=max(0.0, min(1.0, _p('Niebla', c['niebla']))),
+                 glitch=max(0.0, min(1.0, _p('Glitch', c['glitch']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -5338,8 +5458,15 @@ def frame_tick():
     now = absTime.seconds
     if c['nivel'] >= 15 and (W.get('tema') is None or not c['tema_en_ciclo']):
         W['tema'] = int(c['tema'])      # fase 15: el tema del mundo
+    if c['nivel'] >= 19:                # fase 19: las senales del modular, antes del mundo
+        md = W['modular']
+        dt = max(0.0, min(0.25, now - md.get('t_fotograma', now)))
+        md['t_fotograma'] = now
+        modular_tick(W, c, leer_modular(c, now), dt, now)
     res = tick(W, c, now, tempo(), playing())
     _CACHE['nivel'] = c['nivel']        # fase 17: para la luz y las ventanas del shader
+    _CACHE['modular'] = dict(W['modular']) if c['nivel'] >= 19 else None
+    _CACHE['ventanas'] = ventanas_luz_de(W, c)
     _CACHE['tinte'] = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
     _CACHE['luz_calida'] = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
     if res.get('burst'):
@@ -6094,6 +6221,8 @@ def _legend():
         lines.append(_legend_tiempo(W, c))
     if lvl >= 18:
         lines.append(_legend_escena(W, c))
+    if lvl >= 19:
+        lines.append(_legend_modular(W, c))
     return '\n'.join(lines)
 
 
@@ -6111,6 +6240,85 @@ def _legend_arqueo(W, c, k):
         txt += '   + %s %s (%d celdas)' % (UNION_NOMBRE[u['tipo']], '-'.join(str(x) for x in u['celdas']),
                                          len(u['celdas']))
     return txt
+
+
+def leer_modular(c, now):
+    """{senal: 0-1} de la fuente elegida (Fuentemodular), o None si no llega
+    nada (sin CHOP o sin canales)."""
+    fuente = FUENTES_MODULAR[int(c['fuente_modular']) % len(FUENTES_MODULAR)]
+    if fuente == 'manual':
+        return dict((k, max(0.0, min(1.0, _p(k.capitalize(), 0.0)))) for k in MODULAR)
+    if fuente == 'prueba':
+        return generador_prueba(now)
+    try:
+        if fuente == 'osc':
+            ch = parent().op('modular_osc')
+        else:
+            ruta = str(_p('Chopmodular', '') or '')
+            ch = (parent().op(ruta) or op(ruta)) if ruta else None
+    except Exception:
+        ch = None
+    if ch is None or not getattr(ch, 'numChans', 0):
+        return None
+    chans = list(ch.chans)
+    nombres = [x.name for x in chans]
+    out = {}
+    for k, senal in enumerate(MODULAR):
+        j = canal_de(nombres, senal, k)
+        if j is None:
+            continue
+        x = chans[j]
+        v = x.eval() if hasattr(x, 'eval') else (x[len(x) - 1] if len(x) else 0.0)
+        out[senal] = normalizar(v, c['rango_modular'])
+    return out or None
+
+
+def modular_uniforme(nombre, k, frame=None):
+    """Componente k de los uniformes de la fase 19 del shader de la piel:
+    uNiebla (cantidad, cerca, lejos), uNieblaCol y uGlitch (cantidad, tiempo)."""
+    try:
+        md = _CACHE.get('modular')
+        if md is None:
+            return 0.0 if nombre != 'nieblacol' else NIEBLA_COL[int(k)] if int(k) < 3 else 0.0
+        c = cfg()
+        if nombre == 'niebla':
+            cs = camera_state()
+            v = niebla(world(), c, cs['d'], cs['R'])
+            return v[int(k)] if int(k) < 3 else 0.0
+        if nombre == 'nieblacol':
+            return NIEBLA_COL[int(k)] if int(k) < 3 else 0.0
+        if nombre == 'glitch':
+            return (md['saturacion'] * c['glitch'], absTime.seconds, 0.0, 0.0)[int(k)]
+    except Exception:
+        pass
+    return 0.0
+
+
+def niebla_camara(cosa, frame=None):
+    """La niebla lineal de la camara (para los materiales Phong y constantes):
+    'cerca' y 'lejos'."""
+    try:
+        cs = camera_state()
+        e, cerca, lejos = niebla(world(), cfg(), cs['d'], cs['R'])
+        if e <= 0.01:                   # sin espacialidad, la niebla empieza lejisimos
+            return 1.0e5 if cosa == 'cerca' else 2.0e5
+        # la niebla lineal de la camara es total en 'lejos': se estira para que
+        # lo mas denso sea la cantidad (e), como en el shader de la piel
+        return cerca if cosa == 'cerca' else cerca + (lejos - cerca) / e
+    except Exception:
+        return 1.0e5 if cosa == 'cerca' else 2.0e5
+
+
+def _legend_modular(W, c):
+    """MODULAR (fase 19): la fuente y las cuatro senales."""
+    md = W['modular']
+    fuente = FUENTES_MODULAR[int(c['fuente_modular']) % len(FUENTES_MODULAR)]
+    if fuente == 'osc':
+        fuente = 'osc :%d' % int(_p('Puertoosc', 9000))
+    hace = absTime.seconds - md['t'] if md['t'] > -90 else None
+    return ('  MODULAR  %s   lfo %.2f   ruido %.2f   espacio %.2f   saturacion %.2f   %s'
+            % (fuente, md['lfo'], md['ruido'], md['espacio'], md['saturacion'],
+               'sin senal' if hace is None or hace > 2.0 else 'hace %.1f s' % hace))
 
 
 def _legend_escena(W, c):
@@ -6152,10 +6360,22 @@ def ventanas_luz(frame=None):
     """uVentanas.x del shader de la piel: las ventanas de la ciudad se ven
     desde la fase 17 (antes, apagadas)."""
     try:
-        nivel = _CACHE.get('nivel')
-        return 1.0 if (nivel if nivel is not None else cfg()['nivel']) >= 17 else 0.0
+        v = _CACHE.get('ventanas')
+        if v is None:
+            v = ventanas_luz_de(world(), cfg())
+        return v
     except Exception:
         return 0.0
+
+
+def ventanas_luz_de(W, c):
+    """Las ventanas se ven desde la fase 17; desde la 19, en la ciudad,
+    respiran con el LFO del modular (Respiracion)."""
+    if c['nivel'] < 17:
+        return 0.0
+    if c['nivel'] >= 19 and tema_de(c) == 'ciudad' and W['modular'].get('activo'):
+        return 1.0 - c['respiracion'] * (1.0 - W['modular']['lfo'])
+    return 1.0
 
 
 def luz_tiempo(k, frame=None):
