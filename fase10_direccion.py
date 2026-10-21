@@ -13,15 +13,14 @@ QUE HACE
                azulado muy tenue. Eje inclinado 20 grados (Tilt).
   CAMARA       (Modocamara)
      globo       por defecto: mira al centro y encuadra el planeta entero
-                 tan cerca como permite el cuadro (Encuadremargen de
-                 holgura, 1,02). Radio que se encuadra (motor v33) = radio
-                 nominal + Holguraaltura (0,4) x altura maxima de las
-                 formaciones: algo de sitio para las construcciones. Solo
-                 cambia con una concha nueva: crecer, erosionar o el latido
-                 no mueven la camara. Con cada concha se aleja en Camsuave s
-                 (amortiguado critico, travelling: el FOV no cambia); el
-                 planeta nunca se sale del cuadro. Fija en +Z: el giro y el
-                 balanceo del planeta ensenan todas sus caras.
+                 tan grande como dice Encuadre: el alto del planeta en la
+                 pantalla (0,85 por defecto: queda sitio arriba y abajo para
+                 lo que crece; 1 = de borde a borde). Solo cambia con una
+                 concha nueva: la camara se aleja en Camsuave s
+                 (amortiguado critico, travelling: el FOV no cambia) y el
+                 planeta nunca se sale del cuadro. Crecer, erosionar o el
+                 latido no la mueven. Fija en +Z: el giro y el balanceo del
+                 planeta ensenan todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
                  Planofinal la lleva en 20 s al encuadre de globo.
@@ -39,7 +38,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v9  (camara de globo cercana: el planeta y Holguraaltura; superficie como modo; paleta)'
+VERSION = 'fase10 v10  (camara de globo: Encuadre, el alto del planeta en pantalla; superficie como modo; paleta)'
 banner(VERSION)
 
 base = require_base(10)
@@ -48,11 +47,8 @@ motor = install_core(base, CARPETA, 10)
 page = get_page(base, 'Fase10')
 add_par(base, page, 'menu', 'Modocamara', 'Camara', 'globo', menu=['globo', 'superficie'],
         menu_labels=['Globo entero', 'Superficie'])
-add_par(base, page, 'float', 'Encuadremargen', 'Holgura alrededor del globo', 1.02, 1.0, 1.5, clamp=True)
-renew_default(base, 'Encuadremargen', 1.08, 1.02)    # motor v33: encuadre cercano
+add_encuadre(base)                      # motor v36: un solo parametro de encuadre
 add_par(base, page, 'float', 'Camsuave', 'Segundos para el encuadre nuevo', 3.0, 0.0, 20.0)
-add_par(base, page, 'float', 'Holguraaltura', 'Holgura para la altura de las construcciones (0 planeta, 1 todo)', 0.4, 0.0, 1.0,
-        clamp=True)
 add_par(base, page, 'toggle', 'Modoactuacion', 'Modo actuacion (sin diagnostico)', False)
 add_par(base, page, 'toggle', 'Planofinal', 'Plano final: el globo entero (en superficie)', False)
 add_par(base, page, 'float', 'Camaltura', 'Altura de camara sobre la superficie (superficie)', 4.0, 0.5, 20.0)
@@ -64,7 +60,7 @@ for nm, lb in (('Planofinal', 'Plano final: el globo entero (en superficie)'),
         getattr(base.par, nm).label = lb
     except Exception:
         pass
-ok('pagina Fase10: Modocamara (globo), Encuadremargen (1,02), Camsuave (3 s), Holguraaltura (0,4), Modoactuacion, '
+ok('pagina Fase10: Modocamara (globo), Encuadre (0,85), Camsuave (3 s), Modoactuacion, '
    'Planofinal, Camaltura, Camvel')
 
 # --- camara -------------------------------------------------------------------
@@ -122,9 +118,9 @@ ok('salida: con leyenda (diagnostico) o sin ella (Modoactuacion)')
 set_render(base)
 
 leeme(base, 10, """FASE 10 - DIRECCION VISUAL
-  Camara de globo (Modocamara): el planeta entero, centrado, tan cerca
-  como permite el cuadro (Encuadremargen), con Holguraaltura para las
-  construcciones; solo retrocede, en Camsuave s, a cada enterramiento. Superficie: a Camaltura, orbita a Camvel grados/s;
+  Camara de globo (Modocamara): el planeta entero y centrado; Encuadre es
+  su alto en la pantalla (1 = de borde a borde). Con cada concha nueva se
+  aleja en Camsuave s. Superficie: a Camaltura, orbita a Camvel grados/s;
   Planofinal la lleva al globo en 20 s.
   Modoactuacion: sin reticula ni leyenda; la luz de celda se ve.
   Luz cenital fria; nucleo negro; una concha de cada color; cian en cicatrices.""")
@@ -136,16 +132,15 @@ def prueba(t):
     import math
     m = t.m
     c = m.cfg()
-    # encuadre: el globo entero con su holgura en varios aspectos
+    # encuadre: el planeta ocupa Encuadre del lado mas estrecho, en varios aspectos
     enc = []
     for R in (6.0, 11.5, 43.0):
         for asp in (16 / 9.0, 4 / 3.0, 1.0, 9 / 16.0):
             for met in ('horzfov', 'vertfov'):
-                d, dmin, th = m.globe_distance(R, 45.0, asp, 1.08, met)
-                enc.append(abs(math.asin(R / d) - math.asin(1 / 1.08 * math.sin(th / 2))) < 1e-9
-                           and math.asin(R / dmin) <= th / 2 + 1e-9 and th <= math.radians(45) + 1e-9)
-    t.check('encuadre: el globo cabe entero con la holgura de Encuadremargen (16:9, 4:3, 1:1, 9:16)',
-            all(enc))
+                for k in (0.85, 1.0):
+                    d, th = m.distancia_encuadre(R, 45.0, asp, k, met)
+                    enc.append(abs(m.fraccion_cuadro(R, d, th) - k) < 1e-9 and th <= math.radians(45) + 1e-9)
+    t.check('Encuadre: el planeta ocupa esa fraccion del lado mas estrecho (16:9, 4:3, 1:1, 9:16)', all(enc))
     t.check('altura maxima de las formaciones', m.altura_max(c) > m.limit(c), '%.3f' % m.altura_max(c))
     # camara de globo por el camino real
     m.cam_reset()
@@ -155,10 +150,11 @@ def prueba(t):
     st = m.camera_state()
     p = st['pos']
     dist = (p[0] ** 2 + p[1] ** 2 + p[2] ** 2) ** 0.5
-    t.check('globo: mira al centro desde +Z y el globo cabe',
+    t.check('globo: mira al centro desde +Z y el planeta ocupa Encuadre del cuadro',
             abs(p[0]) < 1e-9 and abs(p[1]) < 1e-9 and max(abs(x) for x in st['tgt']) < 1e-9
-            and math.asin(st['Re'] / dist) <= st['theta'] / 2 + 1e-9,
-            'dist %.2f radio encuadre %.2f' % (dist, st['Re']))
+            and abs(m.fraccion_cuadro(st['Re'], dist, st['theta']) - st['encuadre']) < 1e-6,
+            'dist %.2f, planeta %.2f, %d%% del cuadro' % (dist, st['Re'],
+                                                         round(100 * m.fraccion_cuadro(st['Re'], dist, st['theta']))))
     t.check('planos de recorte', st['far'] >= dist + 2 * st['Re'] and 0 < st['near'] < dist - st['Re'])
     _encuadre_cercano(t, m)
     # superficie como modo (sin transicion, para medirla)
@@ -193,8 +189,8 @@ def prueba(t):
 
 
 def _encuadre_cercano(t, m):
-    """Encuadre cercano (motor v33): el planeta entero mas Holguraaltura de
-    la altura maxima; solo cambia con una concha nueva."""
+    """Encuadre (motor v36): el planeta ocupa Encuadre del cuadro; solo
+    cambia con una concha nueva, y entonces la camara se aleja."""
     import math
     t0 = absTime.seconds
 
@@ -205,7 +201,7 @@ def _encuadre_cercano(t, m):
         p_ = st_['pos']
         return st_, math.sqrt(p_[0] ** 2 + p_[1] ** 2 + p_[2] ** 2)
 
-    hol = float(base.par.Holguraaltura)
+    k0 = float(base.par.Encuadre)
     m.reset_world()
     base.par.Velprueba = 100
     base.par.Nota = 64
@@ -214,11 +210,10 @@ def _encuadre_cercano(t, m):
     m.cam_reset()
     st, d0 = paso(0.0)
     R = m.top_radius(W, c)
-    Re = R + hol * m.altura_max(c)
-    d_ok = m.globe_distance(Re, st['fov'], st['aspect'], st['margen'], st['metodo'])[0]
-    t.check('encuadre cercano: el planeta y Holguraaltura de la altura maxima, con Encuadremargen',
-            abs(d0 - d_ok) < 1e-6 and abs(st['Re'] - Re) < 1e-9 and Re < m.radio_encuadre(W, c, 1.0),
-            'radio %.2f (planeta %.2f; antes %.2f), dist %.2f' % (Re, R, m.radio_encuadre(W, c, 1.0), d0))
+    t.check('el planeta (con la reticula) ocupa Encuadre del cuadro',
+            abs(st['Re'] - (R + m.RETICULA_SOBRE)) < 1e-9
+            and abs(m.fraccion_cuadro(st['Re'], d0, st['theta']) - k0) < 1e-6,
+            'Encuadre %.2f, dist %.2f' % (k0, d0))
     # crecer y el latido no mueven la camara
     ds = []
     for k in range(6):
@@ -236,21 +231,24 @@ def _encuadre_cercano(t, m):
     for _ in range(int(4 * max(1.0, float(base.par.Camsuave)) / 0.25) + 8):
         st, d = paso(0.25)
         ds.append(d)
-        cabe = cabe and math.asin(min(1.0, (R2 + 0.2) / d)) <= st['theta'] / 2 + 1e-9
-    d_fin = m.globe_distance(R2 + hol * m.altura_max(c), st['fov'], st['aspect'], st['margen'], st['metodo'])[0]
-    t.check('concha nueva: la camara se aleja suave (Camsuave) y el planeta siempre cabe',
-            R2 > R and cabe and d0 < ds[0] < d0 + 0.5 * (d_fin - d0) and abs(ds[-1] - d_fin) < 0.02 * d_fin,
+        cabe = cabe and m.fraccion_cuadro(R2 + m.RETICULA_SOBRE, d, st['theta']) <= 1.0 + 1e-9
+    fin = m.fraccion_cuadro(R2 + m.RETICULA_SOBRE, ds[-1], st['theta'])
+    t.check('concha nueva: la camara se aleja (Camsuave) hasta el mismo Encuadre; el planeta siempre cabe',
+            R2 > R and cabe and d0 < ds[0] < ds[-1] and abs(fin - k0) < 0.01,
             'radio %.2f -> %.2f, dist %.2f -> %.2f -> %.2f' % (R, R2, d0, ds[0], ds[-1]))
-    base.par.Holguraaltura = 1.0
-    t.check('Holguraaltura 1: todo lo que podria crecer (el encuadre de antes)',
-            abs(m.radio_encuadre(W, c) - (R2 + m.altura_max(c))) < 1e-9)
-    base.par.Holguraaltura = hol
+    base.par.Encuadre = 1.0
+    m.cam_reset()
+    st, d1 = paso(0.0)
+    t.check('Encuadre 1: el planeta de borde a borde', abs(m.fraccion_cuadro(st['Re'], d1, st['theta']) - 1.0) < 1e-6)
+    base.par.Encuadre = k0
+    t.check('sin Encuadremargen ni Holguraaltura (un solo parametro)',
+            not has_par(base, 'Encuadremargen') and not has_par(base, 'Holguraaltura'))
     m.cam_reset()
 
 
 run_test(base, prueba)
 print('  Listo: el sistema completo.')
 print('  Para actuar: Modoactuacion. Para cerrar: Planofinal.')
-print('  Ajustes de encuadre: Encuadremargen, Camsuave y Tilt; en superficie,')
+print('  Ajustes de encuadre: Encuadre (alto del planeta), Camsuave y Tilt; en superficie,')
 print('  Camaltura y Camvel.')
 print('=' * 66)
