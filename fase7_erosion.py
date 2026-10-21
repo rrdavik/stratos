@@ -100,7 +100,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v10  (erosion en notas y con la velocidad, perfiles del usuario, el golpe se ve como una nota)'
+VERSION = 'fase7 v11  (erosion en notas y con la velocidad, perfiles del usuario, el golpe se ve como una nota)'
 banner(VERSION)
 
 base = require_base(7)
@@ -255,6 +255,7 @@ def prueba(t):
     m = t.m
     m.reset_world()
     c = m.cfg()
+    c['nivel'] = min(c['nivel'], 13)              # desde la fase 14 un aranazo es tambien un accidente
     for k in range(16):                           # limite + 2 desbordes
         t.midi(0x9C, 0x40, 0x64)
     W = m.world()
@@ -287,6 +288,7 @@ def prueba(t):
     t.check('perfiles leidos de la tabla', len(m.cfg()['perfiles']) == 8
             and len(m.cfg()['tipos']) == 8)
     cd = dict(m.cfg())
+    cd['nivel'] = min(cd['nivel'], 13)            # la erosion de la fase 7, sin los accidentes de la 14
     cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
     cd['target_mode'], cd['balizas_drum'], cd['luz_drum'] = 0, 1, 1.0
     cd['erosion_vel'] = 0               # las pruebas de siempre, sin velocidad

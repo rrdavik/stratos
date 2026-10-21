@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
+Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
 
 ---
 
@@ -15,20 +15,22 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo | `motor v33` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura` | `comun v24` |
-| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel) | `fase11 v3` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14 | `motor v34` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos | `comun v25` |
+| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun) | `fase11 v4` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
+| `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 | `fase14 v1` |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase11_piel.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase12_moduladores.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase13_tejido.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase14_destructores.py').read())
 ```
 
-Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v10`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11.
+Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v11`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11, y las de la erosión de la fase 7, en uno que ya está en la 14 (se miden con el nivel 13: desde la 14 un arañazo es también un accidente).
 
 ---
 
@@ -294,6 +296,90 @@ Comprueba:
 
 ---
 
+## FASE 14 · Destructores I: arañazos y escalada
+
+### Qué hace
+
+Los arañazos de la batería (fase 7) reciben forma temática, y la insistencia destructiva escala igual que la constructiva. **Un golpe es un accidente; varios golpes en la misma zona, una catástrofe.**
+
+| Especie | Un golpe | Escalada | Huella |
+|---|---|---|---|
+| Vegetación | Rayo que tala el árbol más alto | Incendio que avanza por los puentes del dosel | Claro de ceniza (`veg_claro`) |
+| Relieve | Desprendimiento de columnas | Derrumbe de la meseta | Pedregal (`rel_pedregal`) |
+| Informal | Se desploma un añadido | Derrumbe en cadena del barrio | Escombros (`inf_escombros`) |
+| Planificada | Caen las plantas altas | Demolición por implosión, con polvo | Solar vallado (`ciu_valla`) |
+
+- **Qué es un arañazo.** Un pad cuyo perfil no tiene profundidad, es decir, que no corta. El plan decía «pads 1–5», pero con los perfiles del usuario el bombo, la caja y el tom cortan (pads 1–3), así que los arañazos son los **pads 4–8**. Si cambias los perfiles, cambian con ellos. Los cortes siguen como en la fase 9; su forma temática es la fase 16.
+- **Un golpe: el accidente.** La erosión de la fase 7 se aplica como siempre (notas deshechas en anillos y luz del pad). Además, **la formación más alta de la vecindad del objetivo** (la celda objetivo y sus vecinas; en empate, la de índice menor) **baja un estado**, si la erosión no la ha bajado ya. Por ejemplo, de árbol a crecimiento o de crecimiento a semilla; una semilla se vacía. Deja una nube: brasas y ceniza el rayo, polvo los demás.
+- **Escalada.** Cuando caen `Golpesescalada` golpes en la misma vecindad dentro de `Ventanaescalada` pasos, **el golpe que escala es la catástrofe**, no otro accidente. Dos golpes son de la misma zona si el objetivo de uno está en la vecindad del otro, y cada golpe escala una sola vez. La catástrofe empieza en la formación más alta de la vecindad, con su cluster **tal como estaba antes de ese golpe**, para que el golpe no deshaga el bosque antes de que prenda.
+- **Incendio, derrumbe y derrumbe en cadena.** Es un autómata de Drossel–Schwabl acotado:
+  - en cada paso, cada celda activa puede saltar a sus vecinas del cluster de la misma especie (por los puentes del dosel, la meseta o las pasarelas);
+  - **el salto lo decide el mapa logístico**, sembrado con la velocidad del golpe, la celda y el paso: la misma historia da el mismo fuego, y otra velocidad, otro;
+  - cada celda activa **pierde 1 de ocupación por paso** y se apaga sin ocupación o a los `Pasosfuego` pasos;
+  - **nunca sale del cluster** (decisión del plan) y **como mucho `Maxfuego` celdas activas a la vez** entre todas las catástrofes;
+  - si su zona ya tiene una catástrofe en curso, no empieza otra.
+- **Implosión.** La torre (la planificada más alta de la vecindad) cae entera de golpe, con una nube grande de polvo.
+- **Presupuesto.** La escalada cuenta como erosión: lo que quema es ocupación que se pierde. Con la densidad por encima de `Umbraldensidad` (fase 7, 60 %), la catástrofe empieza **más grande**: en la celda y en sus vecinas del cluster, como la erosión con `Multradio`.
+- **Huellas.** Una celda que se vacía en una catástrofe deja la huella de su especie: un modelo bajo a ras del suelo. La quita la siguiente nota de construcción en esa celda. Un corte (fase 9) también la quita, y no se dibuja con el otro tema activo.
+- **Derribo.** Una obra a medias (cadena de fusión o de coronación sin terminar) que recibe un arañazo en su vecindad se derriba:
+  - toda la obra de su cluster retrocede ya una etapa y sigue hacia atrás, una etapa cada `Pasosetapa` pasos, hasta el principio;
+  - una nota en el cluster para el derribo, y la obra puede volver a avanzar.
+- **Partículas** (instancias del motor, geometría `particulas`):
+  - brasas ámbar que suben de lo que arde y ceniza gris que cae;
+  - polvo en los derrumbes;
+  - las nubes de los accidentes y de las celdas que se apagan encogen y desaparecen en `Pasospolvo` pasos.
+
+  Lo que arde se tiñe de brasa a saltos (stop-motion) y se carboniza con lo que ha ardido, también el dosel que tiene encima.
+- **Fin de ciclo.** Lo apaga todo de golpe: no quedan fuegos, polvo, huellas ni obras derribándose, y las obras se cierran como siempre.
+- Por debajo del nivel 14, un arañazo sigue siendo la erosión de la fase 7.
+
+### Parámetros (página Fase14)
+
+`Ventanaescalada` 8 (pasos) · `Golpesescalada` 2 · `Pasosfuego` 6 · `Maxfuego` 6 · `Pasospolvo` 8 · `Escalar` (botón de prueba)
+
+### Leyenda
+
+```
+EROSION  pad 5   aranazo   -2.0 notas   radio 1   celda 40   densidad 8%   · rayo celda 40
+ESCALADA INCENDIO 4 celdas paso 3/6   golpes 0/2 en la zona   huellas 2
+```
+
+`golpes` cuenta los arañazos que lleva la zona del último golpe, frente a `Golpesescalada`. `paso` es lo que lleva ardiendo la celda más antigua, frente a `Pasosfuego`. Una implosión reciente sale como `IMPLOSION celda N`.
+
+### Probar sin BeatStep
+
+1. `Tema` naturaleza. `Nota` 64: pulsa `Sembrarzona` cuatro veces y `Sembrar` ocho (un bosque denso).
+2. `Padprueba` 5 (un arañazo) y `Escalar`: da `Golpesescalada` arañazos seguidos. El fuego prende en el árbol más alto, salta por el cluster y deja claros de ceniza. También vale pulsar `Erosionar` dos veces seguidas: en menos de un segundo a 120 BPM.
+3. Un solo `Erosionar`: el rayo tala el árbol más alto (baja un estado).
+4. Con `Tema` ciudad y `Sembrarzona2` (planificada), `Escalar` hace una implosión.
+5. `Sembrar` sobre un claro lo borra y vuelve a crecer.
+
+Si `Padprueba` es un pad que corta (1–3), `Escalar` usa el primer pad de arañazo.
+
+### Autoprueba
+
+Comprueba:
+- los arañazos son los pads sin profundidad;
+- un golpe sobre cada especie hace su accidente en la formación más alta de la vecindad, y esta baja un estado;
+- dos golpes en la misma vecindad prenden el incendio, que salta por el cluster (solo vegetación, nunca fuera) y quita 1 de ocupación por paso;
+- se apaga sin combustible o a los `Pasosfuego` pasos, nunca con más de `Maxfuego` celdas, y deja claros de ceniza;
+- misma historia, mismo fuego; con otra velocidad, otro;
+- brasas mientras arde; la huella se dibuja; el polvo se disipa; una nota borra la huella;
+- fuera de la ventana o en otra zona no escala;
+- `Maxfuego` 2 nunca deja más de 2 celdas ardiendo;
+- con la densidad por encima de `Umbraldensidad` la catástrofe empieza más grande;
+- el derrumbe deja pedregal, el derrumbe en cadena escombros, y la implosión es inmediata y deja el solar vallado;
+- una obra a medias golpeada retrocede y llega al principio;
+- `Forzarciclo` con un incendio lo apaga todo, sin obras colgadas;
+- en el nivel 13 un arañazo sigue siendo la erosión de la fase 7;
+- las líneas `EROSION` y `ESCALADA` de la leyenda.
+
+### Rendimiento
+
+En el simulador, un fotograma del motor con un incendio en curso cuesta lo mismo que sin él (unos 2 ms con el mundo de prueba). Las catástrofes avanzan una vez por paso y sin nada en curso no hacen nada.
+
+---
+
 ### Decisiones tomadas en la fase 11
 
 | Pregunta | Decisión |
@@ -334,6 +420,20 @@ Comprueba:
 | ¿Distancia de Kruskal? | Saltos por la retícula (camino más corto) |
 | ¿Ríos en la ciudad o carreteras en la naturaleza? | No: cada tema tiene su tejido |
 
+### Decisiones tomadas en la fase 14
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Qué pads son arañazos? | Los que no cortan (perfil sin profundidad), no los números 1–5: con los perfiles del usuario, 4–8 |
+| ¿Qué es la vecindad? | La celda objetivo y sus vecinas. Dos golpes son de la misma zona si el objetivo de uno está en la vecindad del otro |
+| ¿Qué tala el rayo? | La formación más alta de la vecindad (en empate, la de índice menor) baja un estado, si la erosión no la ha bajado ya |
+| ¿El golpe que escala también es un accidente? | No: es la catástrofe, y el cluster de la catástrofe es el de antes de ese golpe |
+| ¿El fuego salta fuera del cluster? | No (decisión del plan). Solo por los enlaces del cluster de su especie |
+| ¿Cómo se propagan las otras catástrofes? | El derrumbe y el derrumbe en cadena, igual que el fuego; la implosión, de golpe y sin propagarse |
+| ¿Cuánto dura la huella? | Hasta la siguiente nota de construcción en su celda, un corte o el fin de ciclo |
+| ¿Qué es el presupuesto del 60 %? | Por encima de `Umbraldensidad`, la catástrofe empieza en la celda y sus vecinas del cluster |
+| ¿Qué para un derribo? | Una nota en el cluster, o que la obra llegue al principio |
+
 ---
 
 ### Cómo se ha probado
@@ -341,16 +441,17 @@ Comprueba:
 Sin TouchDesigner a mano, con un **TouchDesigner simulado** que ejecuta los scripts tal cual (`pruebas/td_simulado.py`): operadores y rutas, parámetros con expresiones, páginas propias, storage, el módulo de los Text DAT, Script CHOP, Table DAT y el tiempo del proyecto. Los COMP solo aceptan los parámetros que tienen en TouchDesigner.
 
 ```
-python3 pruebas/correr_fases.py        # base y fases 3 a 13 desde cero, sesión, relanzar y otra sesión
+python3 pruebas/correr_fases.py        # base y fases 3 a 14 desde cero, sesión, relanzar y otra sesión
 python3 pruebas/vista_previa.py        # hoja de contactos del catálogo (pruebas/catalogo.png)
 xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la piel con OpenGL (necesita moderngl)
 ```
 
-- **Desde cero**: `fase12_base.py` y las fases 3 a 13, todas con `AUTOPRUEBA OK`.
+- **Desde cero**: `fase12_base.py` y las fases 3 a 14, todas con `AUTOPRUEBA OK`.
 - **Sesión simulada** de 16 compases a 120 BPM con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
-- **Relanzar** las fases 3 a 13 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
+- **Relanzar** las fases 3 a 14 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
 - **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, y la vegetación (desde el motor v32) en dos verdes con los lados pardos.
 - **Catálogo**: una hoja de contactos dibujada con un rasterizador propio (`pruebas/vista_previa.py`) para ver cada modelo, y escenas de los dos temas con clusters, puentes, coronaciones e híbridos.
+- **Fase 14**: un incendio en un bosque denso, dibujado con el shader real: el dosel de lo que arde se tiñe de brasa y se carboniza, y lo que se vacía queda como claro de ceniza. La fase 14 añade sus tres modelos a un proyecto cuya fase 11 se hizo con un motor anterior (`modelos: 3 nuevos`).
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
 
 Lo que la simulación no puede comprobar: el aspecto real en el render, los nombres de los parámetros de los SOP (Tube, Transform, Select, Merge) y del GLSL MAT (Vertex/Pixel Shader, página Vectors), que TouchDesigner declare sus funciones de shader como las imitamos, y el tiempo real por fotograma.
@@ -365,6 +466,7 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 6. **El shader (fase 12)**: que `mat_piel_mineral`, `mat_piel_dosel` y `mat_piel_ciudad` compilan sin errores (clic derecho → Info) y que la página Vectors tiene `uFamilia`, `uLuz0`... con valores. Si no, `Materialrespaldo` y pegarme los errores.
 7. **Pulido y rugoso**: con la cámara de globo, que la obsidiana y la pómez (y el vidrio y el hormigón) se distinguen; si no, ajustar `Rugmin` y `Rugmax`.
 8. **Ríos y carreteras (fase 13)**: con varias conchas, que se leen desde la cámara de globo sobre los colores de las conchas; si no, subir `Grosorvia`.
+9. **Destructores (fase 14)**: con la batería, que un arañazo suelto se lee como accidente y dos seguidos en la misma zona como catástrofe; que el fuego se ve avanzar (brasas, dosel que se carboniza) y que las huellas se distinguen de las formaciones. Si el fuego se apaga demasiado pronto o arrasa demasiado, ajustar `Pasosfuego` y `Maxfuego`.
 
 ### Problemas frecuentes
 
@@ -384,6 +486,9 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | La naturaleza parece hilo de alambre (varillas oscuras, una red sobre el planeta) | Motor v31 o anterior: árboles de obsidiana y dosel de tiras | Relanza cualquier fase con motor v32 y comun v23: mira la línea `piel: N geometrias con el material de su familia` |
 | El planeta se ve lejos y pequeño | Motor v31 o anterior: encuadraba la altura máxima teórica entera | Relanza cualquier fase con motor v33 (`Holguraaltura` 0,4, `Encuadremargen` 1,02) |
 | La cámara se mueve todo el rato y el mundo se ve a ratos | Motor v32 | Relanza cualquier fase con motor v33: el encuadre solo cambia con una concha nueva |
+| Fase 14: un arañazo no hace nada temático | El pad corta (perfil con profundidad) o la vecindad del objetivo está vacía | Los arañazos son los pads sin profundidad (con los perfiles por defecto, 4–8); toca cerca de formaciones |
+| Fase 14: dos golpes no escalan | Más de `Ventanaescalada` pasos entre ellos, o zonas distintas | Sube `Ventanaescalada`, o usa `Escalar` |
+| Fase 14: no se ven las huellas | Proyecto con modelos de antes del motor v34 | Relanza `fase14_destructores.py`: la línea `modelos: 3 nuevos` las crea |
 | `midiout`: `Could not open the MIDI interface` | El mapeador MIDI de TouchDesigner (no es de los scripts) | Nada: la entrada MIDI funciona igual; si molesta, quita la salida en Dialogs → MIDI Device Mapper |
 | Fase 12: pulido y rugoso iguales | La geometría no lee el canal `a` | En la geometría `mod_...`: Instance 2 → Color A = `a`. El informe lo avisa con `FALLO ... no lee la rugosidad` |
 | Fase 12: el gate no cambia nada | Sin note off (el aparato no lo envía) o `Gateprueba` en los botones | Mira la línea `MOD`: sin `gate` es que no llega el note off |
