@@ -13,7 +13,8 @@
 #                 fase 13: rios y carreteras; fase 14: aranazos tematicos,
 #                 escalada, incendio y derrumbes; fase 15: el ciclo como era:
 #                 entierro tematico, registro y herencia; fase 16: lo que
-#                 ensenan los cortes y la union de cortes).
+#                 ensenan los cortes y la union de cortes; fase 17: el tiempo
+#                 en el paisaje: pulso, transporte y frente).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -26,7 +27,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v38'
+MOTOR_VERSION = 'motor v39'
 
 import math
 
@@ -142,6 +143,8 @@ DEFAULT_CFG = dict(
     peso_traza=0.5, rebrote=1, tema_en_ciclo=1,
     # fase 16: arqueologia tematica
     detalle_expuesto=6, unir_cortes=1,
+    # fase 17: el tiempo en el paisaje
+    sway_max=6.0, trafico=2, pasos_frente=16, master_beat=None,
 )
 
 
@@ -479,6 +482,14 @@ def new_world():
         cortes=[],              # cortes recientes: [t, celda objetivo, profundidad, radio]
         uniones=[],             # cortes unidos: {tipo: canon o galeria, celdas, t, prof}
         arqueo={},              # resumen de lo expuesto para la leyenda
+        # el tiempo en el paisaje (fase 17)
+        pulso=dict(beat=0.0, parado=False, mb=None, frac=0.0),   # beats acumulados en fase
+        oido=[],                # notas recientes de los SEQ: [beat, s, nota]
+        patrones=[],            # biblioteca: {nombre, firma, tinte, ventanas, visto}
+        pattern=None,           # nombre del pattern que suena (si se conoce)
+        pattern_conocido=None,  # si la biblioteca lo reconocio al entrar
+        estacion=dict(tinte=[1.0, 1.0, 1.0], ventanas=1),        # la del pattern que suena
+        frente=None,            # frente en curso: {beat0, de, a, pattern, conocido}
         aviso='',
         ev={},
         t=None,
@@ -843,6 +854,8 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['hit_t'][s] = now
     i = note_cell(note)
     W['clock']['last_note_t'] = now
+    if cfg['nivel'] >= 17 and s in (GEO, ARQ):     # fase 17: lo que suena, para la biblioteca
+        oir(W, s, note)
     if i is None:                       # fuera del rango, modo ignorar
         W['ev']['ultima'] = dict(s=s, celda=-1, occ=0, estado='fuera de rango', t=now)
         return dict(estado='fuera de rango', inc=0.0, celda=-1)
@@ -889,6 +902,10 @@ def cycle_bounds(cfg):
 
 def clock_start(W, now):
     W['clock']['start_t'] = now
+    if 'pulso' in W:                    # fase 17: el pulso se pone en fase con el START
+        W['pulso']['beat'] = 0.0
+        W['pulso']['mb'] = None
+        W['oido'] = []
 
 
 def clock_stop(W, now):
@@ -1526,6 +1543,11 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
     if cfg['nivel'] >= 6:
         out['burst'] = _resolve_burst(W, cfg, now, playing)
         out['ciclo'] = cycle_tick(W, cfg, now, dt, tempo, playing)
+    if cfg['nivel'] >= 17:              # fase 17: el pulso, el frente y la biblioteca
+        pulso_tick(W, cfg, dt, tempo, playing)
+        if out['burst'] == 'cambio':
+            out['frente'] = cambio_pattern(W, cfg)
+        frente_tick(W, cfg)
     if piel:
         tick_piel(W, cfg, now, W['paso'], playing)
     if cfg['nivel'] >= 14:
@@ -1749,6 +1771,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         build_destructores(W, cfg, now, out)
     if lvl >= 16:                   # fase 16: lo que ensenan los cortes
         build_arqueologia(W, cfg, now, out)
+    if lvl >= 17:                   # fase 17: trafico, esporas y el frente
+        build_tiempo(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -3170,12 +3194,14 @@ def build_piel(W, cfg, now, out):
     doce = cfg['nivel'] >= 12         # fase 12: una geometria por modelo, rugosidad en el alfa
     respaldo = doce and cfg.get('respaldo', 0)
     arde = celdas_ardiendo(W, cfg) if cfg['nivel'] >= 14 else {}
+    tiempo = cfg['nivel'] >= 17       # fase 17: el pulso balancea el dosel y enciende ventanas
+    bq = beat_stop(W, cfg) if tiempo else 0.0
 
-    def emit(modelo, pulido, p, marco, dims, col, rug=1.0):
+    def emit(modelo, pulido, p, marco, dims, col, rug=1.0, luces=0):
         nonlocal piezas
         fila = _fila_m(p, marco, dims[0], dims[1], dims[2], col)
-        if doce:
-            fila.append(1.0 if respaldo else rug)
+        if doce:                    # las ventanas (0-4) van en el alfa: rugosidad + 2 x nivel
+            fila.append(1.0 if respaldo else rug + 2.0 * luces)
         out.setdefault(geometria_de(modelo, pulido, not doce), []).append(fila)
         piezas += 1
 
@@ -3262,6 +3288,9 @@ def build_piel(W, cfg, now, out):
             if q > 0:
                 incl = INCLINAR * q
                 rumbo = round(_rumbo(n, _hacia(n, n, normal_i(cl['capital'][k_]))), 1)
+        if tiempo and esp == 'vegetacion' and incl == 0.0:     # fase 17: el dosel se balancea
+            incl, rumbo = balanceo(W, cfg, i, bq)
+        luces = ventanas_celda(W, cfg, i, bq) if tiempo and doce and tema == 'ciudad' and not respaldo else 0
         hund = 'hundir' in cf and k_ >= 0 and avance_etapa(W, i, 'et_f', cf.index('hundir') + 1,
                                                              now, paso)
         if len(comp) > 1:
@@ -3285,7 +3314,7 @@ def build_piel(W, cfg, now, out):
                 dims = _pie(mo, h_, cw * esc * esc_sat * kb, cl_ * esc * esc_sat * kb, ancho)
                 p = _add(_add(_add(p0, e, pz['x'] * cw * esc_sat), t, pz['z'] * cl_ * esc_sat), n, y * vh)
             ck = _tint(col, 0.88 + 0.24 * pz['var'])
-            emit(mo, pulido, p, ej, dims, ck, rug)
+            emit(mo, pulido, p, ej, dims, ck, rug, luces)
         # hibrido: la otra especie deja su rastro, con la planta de la principal
         if W['sp'][i] == HIB:
             hib = modelos_de(cfg, tema, esp, 'hibrido')
@@ -3296,7 +3325,7 @@ def build_piel(W, cfg, now, out):
                 dims = _pie(hib[0] if propio else modelo, vh * kb, cw * esc_sat * kb, cl_ * esc_sat * kb)
                 ch = material_tema(cfg, COL_ESPECIE[otra], familia_de(hib[0]), rug) if doce \
                     else _material_col(COL_ESPECIE[otra], pulido)
-                emit(hib[0], pulido, p0, ej, dims, ch, rug)
+                emit(hib[0], pulido, p0, ej, dims, ch, rug, luces)
         # remate y grua de la coronacion de la ciudad
         if not sat and 'aguja' in cc and q_c and q_c[0] > 0:
             top = _add(p0, n, vh * alto)
@@ -4394,6 +4423,297 @@ def build_arqueologia(W, cfg, now, out):
     W['arqueo'] = dict(piezas=n_piezas, celdas=n_celdas, galerias=galerias)
 
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - el tiempo en el paisaje (fase 17): pulso, transporte y frente
+# -----------------------------------------------------------------------------
+# Las senales de tiempo dejan de ser solo reloj y se ven en el paisaje.
+# PULSO: un contador de beats que avanza con el tempo y se pone a 0 con el START
+# del BeatStep (o sigue a master_beat, si Masterbeat lo senala). Todo lo que
+# respira va en fase con el: naturaleza, el dosel se balancea (Swaymax grados,
+# un vaiven cada dos beats) y las esporas derivan sobre los bosques; ciudad,
+# puntos de trafico por las carreteras de la fase 13 (Trafico por tramo, un
+# tramo cada dos beats: con mas BPM, mas deprisa) y ventanas que parpadean.
+# A saltos de stop-motion, como los transitos.
+# TRANSPORTE: con la linea de tiempo parada o tras un STOP, el pulso se congela:
+# el mundo queda quieto pero visible. PLAY (o START) lo reanuda.
+# FRENTE: un cambio de pattern (el aviso de la fase 6, o Frenteprueba) lanza
+# una banda de polo sur a polo norte en Pasosfrente pasos. Naturaleza: un
+# frente meteorologico, una banda de nubes que dobla los arboles a su paso y
+# tine la luz. Ciudad: una ola de ventanas que se encienden o se apagan.
+# BIBLIOTECA: cada pattern deja su firma (las notas de un compas de cada
+# secuenciador) y su estacion (tinte de la luz y ventanas). A mitad del frente,
+# lo que ya ha sonado del pattern nuevo se compara con la biblioteca: si lo
+# reconoce, el frente devuelve el tinte que tuvo la ultima vez (la estacion que
+# vuelve); si no, estrena uno. Sin azar: el tinte del pattern n sale del angulo
+# aureo, como la paleta de las conchas.
+
+SWAY_BEATS = 2.0            # un vaiven del dosel cada dos beats
+TRAFICO_BEATS = 2.0         # un tramo de carretera cada dos beats
+FRENTE_ANCHO = 22.0         # grados de latitud de la banda
+FRENTE_INCL = 24.0          # lo que dobla los arboles al pasar
+FRENTE_NUBES = 44           # nubes de la banda
+RECONOCER = 0.8             # parecido minimo (coseno) para reconocer un pattern
+TINTE_C = 0.07              # croma del tinte de una estacion
+LUZ_BASE = (0.82, 0.90, 1.00)   # la luz cenital fria de la fase 10, sin tenir
+COL_FARO, COL_PILOTO = (1.0, 0.90, 0.68), (0.95, 0.22, 0.14)
+COL_ESPORA, COL_NUBE = (0.80, 0.86, 0.62), (0.80, 0.82, 0.86)
+
+
+def pulso_tick(W, cfg, dt, tempo, playing):
+    """Avanza el pulso (en beats). Parado si la linea de tiempo no corre o si
+    el ultimo mensaje de transporte fue un STOP."""
+    p = W['pulso']
+    ck = W['clock']
+    p['parado'] = (not playing) or ck['stop_t'] > ck['start_t'] or not tempo or tempo <= 0
+    if p['parado']:
+        return
+    mb = cfg.get('master_beat')
+    if mb is None:
+        p['beat'] += dt * tempo / 60.0
+    elif abs(mb - round(mb)) > 1e-3:            # master_beat con fraccion: manda tal cual
+        p['beat'] = float(mb)
+    else:                                       # cuenta beats enteros: la fraccion, con el tempo
+        if mb != p.get('mb'):
+            p['mb'], p['frac'] = mb, 0.0
+        p['frac'] = min(0.999, p.get('frac', 0.0) + dt * tempo / 60.0)
+        p['beat'] = float(mb) + p['frac']
+
+
+def beat_stop(W, cfg):
+    """El pulso a saltos de stop-motion (FOTOS_PASO por paso)."""
+    k = max(1, int(cfg['steps_per_beat'])) * FOTOS_PASO
+    return math.floor(W['pulso']['beat'] * k) / k
+
+
+def oir(W, s, nota):
+    """Una nota de los SEQ, para la firma del pattern (los ultimos dos compases)."""
+    b = W['pulso']['beat']
+    W['oido'] = [x for x in W['oido'] if 0.0 <= b - x[0] <= 8.0] + [[b, int(s), int(nota)]]
+
+
+def firma(notas):
+    """{'s:nota': veces} de unas notas [beat, s, nota]."""
+    out = {}
+    for _, s, n in notas:
+        k = '%d:%d' % (s, n)
+        out[k] = out.get(k, 0) + 1
+    return out
+
+
+def parecido(a, b):
+    """Coseno entre dos firmas (0 si alguna esta vacia)."""
+    if not a or not b:
+        return 0.0
+    num = sum(v * b.get(k, 0) for k, v in a.items())
+    den = math.sqrt(sum(v * v for v in a.values()) * sum(v * v for v in b.values()))
+    return num / den if den > 0 else 0.0
+
+
+def nombre_pattern(n):
+    letras = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    return letras[n % 26] + ('' if n < 26 else str(n // 26))
+
+
+def tinte_estacion(n):
+    """El tinte de la luz del pattern n: el primero, ninguno; los demas, tonos
+    por el angulo aureo (los de la paleta), normalizados a 1."""
+    if n == 0:
+        return [1.0, 1.0, 1.0]
+    rgb = oklch_to_srgb(0.9, TINTE_C, palette_hue(n, 40.0))[0]
+    m = max(rgb) or 1.0
+    return [round(x / m, 4) for x in rgb]
+
+
+def _patron(W, nombre):
+    return next((p for p in W['patrones'] if p['nombre'] == nombre), None)
+
+
+def _bpb(cfg):
+    return max(1, int(cfg['beats_per_bar']))
+
+
+def cambio_pattern(W, cfg):
+    """Un cambio de pattern: la firma del que se va (su ultimo compas) queda en
+    la biblioteca con su estacion, y empieza el frente."""
+    b = W['pulso']['beat']
+    sale = firma([x for x in W['oido'] if 0 <= b - x[0] <= _bpb(cfg)])
+    viejo = _patron(W, W['pattern']) if W['pattern'] else None
+    if viejo is None and sale:                  # el primero que se oye: se aprende al irse
+        viejo = dict(nombre=nombre_pattern(len(W['patrones'])), firma={}, tinte=list(W['estacion']['tinte']),
+                     ventanas=int(W['estacion']['ventanas']), visto=b)
+        W['patrones'].append(viejo)
+    if viejo is not None:
+        if sale:
+            viejo['firma'] = sale
+        viejo['tinte'] = list(W['estacion']['tinte'])
+        viejo['ventanas'] = int(W['estacion']['ventanas'])
+        viejo['visto'] = b
+    de = W['frente']['a'] if W['frente'] and W['frente'].get('a') else W['estacion']
+    W['frente'] = dict(beat0=b, de=dict(tinte=list(de['tinte']), ventanas=int(de['ventanas'])), a=None,
+                       pattern=None, conocido=None, parecido=0.0)
+    W['oido'] = []
+    W['ev']['frente'] = dict(beat=b, sale=viejo['nombre'] if viejo else None)
+    return W['frente']
+
+
+def reconocer(W, cfg, f):
+    """Lo que ha sonado desde el cambio, contra la biblioteca: el pattern
+    conocido mas parecido (desde RECONOCER) o uno nuevo, con su estacion."""
+    entra = firma(W['oido'])
+    mejor, sim = None, 0.0
+    for p in W['patrones']:
+        q = parecido(entra, p['firma'])
+        if q > sim:
+            mejor, sim = p, q
+    if mejor is not None and sim >= RECONOCER:
+        f.update(pattern=mejor['nombre'], conocido=True, parecido=sim,
+                 a=dict(tinte=list(mejor['tinte']), ventanas=int(mejor['ventanas'])))
+    else:
+        n = len(W['patrones'])
+        nuevo = dict(nombre=nombre_pattern(n), firma=entra, tinte=tinte_estacion(n + 1),
+                     ventanas=1 - int(f['de']['ventanas']), visto=W['pulso']['beat'])
+        W['patrones'].append(nuevo)
+        f.update(pattern=nuevo['nombre'], conocido=False, parecido=sim,
+                 a=dict(tinte=list(nuevo['tinte']), ventanas=nuevo['ventanas']))
+    W['pattern'] = f['pattern']
+
+
+def progreso_frente(W, cfg):
+    """0-1 del frente en curso (None sin frente), a saltos de stop-motion."""
+    f = W['frente']
+    if not f:
+        return None
+    pasos = max(1, int(cfg['pasos_frente']))
+    u = (W['pulso']['beat'] - f['beat0']) * max(1, int(cfg['steps_per_beat']))
+    return max(0.0, min(1.0, math.floor(u * FOTOS_PASO) / (FOTOS_PASO * float(pasos))))
+
+
+def frente_tick(W, cfg):
+    """A mitad de camino se reconoce el pattern; al llegar al polo norte, su
+    estacion se queda."""
+    q = progreso_frente(W, cfg)
+    if q is None:
+        return
+    f = W['frente']
+    if f['a'] is None and q >= 0.5:
+        reconocer(W, cfg, f)
+    if q >= 1.0:
+        if f['a'] is None:
+            reconocer(W, cfg, f)
+        W['estacion'] = dict(tinte=list(f['a']['tinte']), ventanas=int(f['a']['ventanas']))
+        W['ev']['frente_fin'] = dict(pattern=f['pattern'], conocido=f['conocido'])
+        W['pattern_conocido'] = f['conocido']
+        W['frente'] = None
+
+
+def latitud(i):
+    """Latitud de la celda i en grados (-90 polo sur, 90 polo norte)."""
+    return math.degrees(math.asin(max(-1.0, min(1.0, normal_i(i)[1]))))
+
+
+def lat_frente(q):
+    return -90.0 - FRENTE_ANCHO + q * (180.0 + 2.0 * FRENTE_ANCHO)
+
+
+def tinte_actual(W, cfg):
+    """El tinte de la luz: el de la estacion, o el del frente a medio pasar."""
+    q = progreso_frente(W, cfg)
+    f = W['frente']
+    if q is None or not f:
+        return list(W['estacion']['tinte'])
+    a = f['a']['tinte'] if f['a'] else f['de']['tinte']
+    return [x + (y - x) * q for x, y in zip(f['de']['tinte'], a)]
+
+
+def balanceo(W, cfg, i, bq):
+    """(inclinacion, rumbo) del dosel de la celda i: el vaiven del pulso
+    (Swaymax, en fase con el beat, con una onda suave por longitud) y, si pasa
+    el frente, el empuje hacia el norte."""
+    n = normal_i(i)
+    lon = math.atan2(n[2], n[0])
+    sw = cfg['sway_max'] * math.sin(2.0 * math.pi * bq / SWAY_BEATS + 0.5 * lon)
+    incl, rumbo = abs(sw), (0.0 if sw >= 0 else 180.0)
+    q = progreso_frente(W, cfg)
+    if q is not None and 0.0 < q < 1.0:
+        d = abs(latitud(i) - lat_frente(q))
+        if d < FRENTE_ANCHO:
+            incl, rumbo = FRENTE_INCL * (1.0 - d / FRENTE_ANCHO) + 0.3 * incl, 270.0
+    return round(incl * 2.0) / 2.0, rumbo
+
+
+def ventanas_celda(W, cfg, i, bq):
+    """Nivel 0-4 de las ventanas del edificio de la celda i: el de la estacion
+    (o el nuevo, si el frente ya ha pasado por su latitud) y, en cada beat,
+    algunos edificios parpadean (mapa logistico, sin azar)."""
+    base = int(W['estacion']['ventanas'])
+    f = W['frente']
+    q = progreso_frente(W, cfg)
+    if f and q is not None:
+        base = int(f['de']['ventanas'])
+        if f['a'] is not None and latitud(i) <= lat_frente(q):
+            base = int(f['a']['ventanas'])
+    h = logistica(semilla_caos(int(math.floor(bq)) * 7 + 1, i), 3.91, 1)[0]
+    if base:
+        return 1 if h < 0.3 else 4
+    return 3 if h < 0.2 else 0
+
+
+def build_tiempo(W, cfg, now, out):
+    """Lo que el pulso mueve fuera de los modelos: el trafico de las
+    carreteras, las esporas sobre los bosques y las nubes del frente."""
+    tema = tema_de(cfg)
+    bq = beat_stop(W, cfg)
+    lim = limit(cfg)
+    parts = out.setdefault('particulas', [])
+    n_puntos = 0
+    if tema == 'ciudad' and cfg['nivel'] >= 13 and cfg.get('carreteras', 1):
+        k_tr = max(0, int(cfg['trafico']))
+        ancho = cfg['grosor_via']
+        for a, b in (W.get('tejido_vias') or []):
+            na, nb = normal_i(a), normal_i(b)
+            ra = base_radius(W, cfg, a) + TEJIDO_LIFT + TEJIDO_ALTO
+            rb = base_radius(W, cfg, b) + TEJIDO_LIFT + TEJIDO_ALTO
+            for k in range(k_tr):
+                f = (bq / TRAFICO_BEATS + k / float(max(1, k_tr)) + 0.37 * ((a * 7 + b) % 5)) % 1.0
+                ida = k % 2 == 0
+                g = f if ida else 1.0 - f
+                Y = _norm(_add(_mul(na, 1.0 - g), nb, g))
+                r = ra + (rb - ra) * g
+                Z = _hacia(Y, na, nb)
+                lado = _cross(Y, Z)
+                p = _add(_mul(Y, r), lado, (0.22 if ida else -0.22) * ancho)
+                s_ = 0.85 * ancho               # que se lean desde la camara de globo
+                parts.append(_row(p, Y, s_, 0.5 * s_, s_, COL_FARO if ida else COL_PILOTO))
+                n_puntos += 1
+    if tema == 'naturaleza':
+        now_p = bq * max(1, int(cfg['steps_per_beat'])) * 0.125     # el reloj de las esporas, en pasos
+        for i in range(N):
+            if W['occ'][i] <= 0 or W['own'][i] != GEO or W['vh'][i] <= 0.005:
+                continue
+            if estado_idx(cfg, W['occ'][i]) < 2:
+                continue
+            n = normal_i(i)
+            base = base_radius(W, cfg, i)
+            cw, cl_ = _cell_sizes(base, i)
+            _particulas(parts, n, _mul(n, base), cw, cl_, W['vh'][i], semilla_caos(i, 31), 3,
+                        COL_ESPORA, now_p, 0.125, 'esporas')
+    q = progreso_frente(W, cfg)
+    if q is not None and 0.0 < q < 1.0 and tema == 'naturaleza':
+        lat = math.radians(lat_frente(q))
+        R = top_radius(W, cfg) + 1.4 * lim
+        f = W['frente']
+        tin = f['a']['tinte'] if f['a'] else f['de']['tinte']
+        col = tuple(c * t for c, t in zip(COL_NUBE, tin))
+        for k in range(FRENTE_NUBES):
+            x0 = semilla_caos(k, 53)
+            lon = 2.0 * math.pi * (k + 0.5 * x0) / FRENTE_NUBES
+            la = lat + math.radians(FRENTE_ANCHO) * 0.35 * (x0 - 0.5)
+            n = (math.cos(la) * math.cos(lon), math.sin(la), math.cos(la) * math.sin(lon))
+            s_ = 0.18 + 0.22 * x0
+            parts.append(_row(_mul(n, R * (1.0 + 0.04 * x0)), n, s_ * 1.6, s_ * 0.5, s_, col))
+    W['tiempo'] = dict(trafico=n_puntos)
+
+
 # =============================================================================
 # 2. ADAPTADOR TOUCHDESIGNER
 # =============================================================================
@@ -4611,7 +4931,25 @@ def cfg():
     if c['nivel'] >= 16:
         c.update(detalle_expuesto=max(0, int(_p('Detalleexpuesto', c['detalle_expuesto']))),
                  unir_cortes=int(_p('Unircortes', True)))
+    if c['nivel'] >= 17:
+        c.update(sway_max=max(0.0, _p('Swaymax', c['sway_max'])),
+                 trafico=max(0, int(_p('Trafico', c['trafico']))),
+                 pasos_frente=max(1, int(_p('Pasosfrente', c['pasos_frente']))),
+                 master_beat=_master_beat())
     return c
+
+
+def _master_beat():
+    """El valor de master_beat (el primer canal del CHOP de Masterbeat), o
+    None si no hay ninguno: entonces el pulso lo cuenta el motor."""
+    try:
+        o = parent().par.Masterbeat.eval()
+        o = op(o) if isinstance(o, str) else o
+        if o is None or not getattr(o, 'numChans', 0):
+            return None
+        return float(o[0].eval())
+    except Exception:
+        return None
 
 
 def sync_grid():
@@ -4822,8 +5160,12 @@ def frame_tick():
     if c['nivel'] >= 15 and (W.get('tema') is None or not c['tema_en_ciclo']):
         W['tema'] = int(c['tema'])      # fase 15: el tema del mundo
     res = tick(W, c, now, tempo(), playing())
+    _CACHE['nivel'] = c['nivel']        # fase 17: para la luz y las ventanas del shader
+    _CACHE['tinte'] = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
     if res.get('burst'):
         print('AVISO  %s' % W['aviso'])
+    if res.get('frente'):
+        print('FRENTE  cambio de pattern: el frente recorre el planeta en %d pasos' % int(c['pasos_frente']))
     if res.get('ciclo'):
         registrar_ciclo(W, c, res['ciclo'])
     pk = palette_key(c)                 # cambiar la paleta recolorea todo lo enterrado
@@ -4937,6 +5279,11 @@ def on_pulse(name):
             print('UNIRPRUEBA  pad %d: cortes en %d y %d -> %s'
                   % (pad + 1, a, b, '%s por %s' % (UNION_NOMBRE[u['tipo']], '-'.join(str(x) for x in u['celdas']))
                      if u else 'sin union (Unircortes apagado o fuera de Ventanaescalada)'))
+    elif name == 'Frenteprueba':        # fase 17: un cambio de pattern de prueba
+        f = cambio_pattern(W, c)
+        W['aviso'] = 'Frenteprueba: cambio de pattern'
+        print('FRENTE  de polo a polo en %d pasos (pattern saliente %s)'
+              % (int(c['pasos_frente']), W['ev']['frente'].get('sale') or '-'))
     elif name in ('Sembrarzona', 'Sembrarzona2'):
         s = GEO if name == 'Sembrarzona' else ARQ
         note = _p('Nota' if s == GEO else 'Nota2', 60)
@@ -5474,6 +5821,8 @@ def _legend():
         lines.append(_legend_escalada(W, c))
     if lvl >= 15:
         lines.append(_legend_era(W, c))
+    if lvl >= 17:
+        lines.append(_legend_tiempo(W, c))
     return '\n'.join(lines)
 
 
@@ -5491,6 +5840,53 @@ def _legend_arqueo(W, c, k):
         txt += '   + %s %s (%d celdas)' % (UNION_NOMBRE[u['tipo']], '-'.join(str(x) for x in u['celdas']),
                                          len(u['celdas']))
     return txt
+
+
+def _legend_tiempo(W, c):
+    """TIEMPO (fase 17): tempo, el beat del compas, el pattern, el frente y
+    si el pulso esta parado."""
+    p = W['pulso']
+    bpb = _bpb(c)
+    beat = p['beat']
+    txt = '  TIEMPO   %d bpm   beat %d/%d' % (int(round(tempo())), int(math.floor(beat)) % bpb + 1, bpb)
+    f = W['frente']
+    q = progreso_frente(W, c)
+    pat = f['pattern'] if f and f.get('pattern') else W.get('pattern')
+    con = f.get('conocido') if f and f.get('pattern') else W.get('pattern_conocido')
+    if f and q is not None:
+        pasos = max(1, int(c['pasos_frente']))
+        txt += '   frente %d/%d' % (min(pasos, int(q * pasos)), pasos)
+    if pat:
+        txt += '   pattern %s%s' % (pat, '' if con is None else ' (conocido)' if con else ' (nuevo)')
+    txt += '   biblioteca %d' % len(W['patrones'])
+    if c.get('master_beat') is not None:
+        txt += '   master_beat'
+    if p.get('parado'):
+        txt += '   PARADO'
+    return txt
+
+
+def ventanas_luz(frame=None):
+    """uVentanas.x del shader de la piel: las ventanas de la ciudad se ven
+    desde la fase 17 (antes, apagadas)."""
+    try:
+        nivel = _CACHE.get('nivel')
+        return 1.0 if (nivel if nivel is not None else cfg()['nivel']) >= 17 else 0.0
+    except Exception:
+        return 0.0
+
+
+def luz_tiempo(k, frame=None):
+    """Componente k del color de luz_principal: la luz cenital fria de la
+    fase 10 tenida por la estacion del pattern (fase 17)."""
+    try:
+        t = _CACHE.get('tinte')
+        if t is None:
+            W, c = world(), cfg()
+            t = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
+        return LUZ_BASE[int(k)] * t[int(k)]
+    except Exception:
+        return LUZ_BASE[int(k) % 3]
 
 
 def _legend_era(W, c):
