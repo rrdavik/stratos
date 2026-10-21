@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v25'
+VERSION_COMUN = 'comun v26'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -797,6 +797,29 @@ def piel_al_dia(base, m):
                % cambiadas)
     except Exception as e:
         info('piel: no pude poner al dia los materiales (%s); relanza fase12_moduladores.py' % e)
+    conchas_al_dia(base, m)
+
+
+def conchas_al_dia(base, m):
+    """Desde la fase 15, las losetas de las conchas usan el shader de la piel
+    (familia mineral) con la rugosidad de cada loseta en el canal 'a': el
+    carbon brilla, el hormigon es mate. Materialrespaldo vuelve a un Phong."""
+    try:
+        if m.cfg()['nivel'] < 15:
+            return False
+        geo = base.op('estratos')
+        if geo is None or base.op('mat_piel_mineral') is None:
+            return False
+        bien = bool(setp_any(geo, ['instancea'], 'a'))
+        setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else 'mat_piel_mineral'")
+        if bien:
+            ok('conchas: shader de la piel (carbon brillante, basalto, hormigon mate; rugosidad en a)')
+        else:
+            fail('estratos no lee la rugosidad: Instance 2 -> Color A = a')
+        return bien
+    except Exception as e:
+        info('conchas: no pude ponerles el shader de la piel (%s)' % e)
+        return False
 
 
 BALIZAS_VIEJAS = ['baliza', 'baliza_chop', 'baliza_callbacks', 'mat_baliza',

@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
+Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes; desde la 15, cada ciclo se entierra con la materia de su tema y la herencia rebrota según su lógica. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
 
 ---
 
@@ -15,12 +15,13 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14 | `motor v34` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos | `comun v25` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15) | `motor v35` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`) | `comun v26` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun) | `fase11 v4` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
 | `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 | `fase14 v1` |
+| `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 | `fase15 v1` |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
 ```python
@@ -28,9 +29,10 @@ exec(open('C:/Users/DareDave/Downloads/est/fase11_piel.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase12_moduladores.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase13_tejido.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase14_destructores.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase15_era.py').read())
 ```
 
-Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v11`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11, y las de la erosión de la fase 7, en uno que ya está en la 14 (se miden con el nivel 13: desde la 14 un arañazo es también un accidente).
+Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v11`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11, y las de la erosión de la fase 7, en uno que ya está en la 14 (se miden con el nivel 13: desde la 14 un arañazo es también un accidente). Las de la paleta de la fase 8 (`fase8 v9`) se miden con el nivel 14: desde la 15 la concha lleva la materia de su tema.
 
 ---
 
@@ -380,6 +382,68 @@ En el simulador, un fotograma del motor con un incendio en curso cuesta lo mismo
 
 ---
 
+## FASE 15 · El ciclo como era: entierro temático y herencia
+
+### Qué hace
+
+Cada fin de ciclo entierra el mundo con la materia de su tema, y la herencia rebrota según su lógica. Cambiar de tema entre ciclos deja bosques fósiles bajo ciudades, o ciudades bajo bosques.
+
+- **Entierro.** Antes de hornear, los tránsitos se cierran en su estado final (como desde la fase 11) y los fuegos y derrumbes de la fase 14 se apagan. Las losetas de la concha nueva llevan la materia de lo que hubo en cada celda:
+  - naturaleza: **veta de carbón** (negro brillante) donde hubo bosque y **basalto** donde hubo relieve;
+  - ciudad: **hormigón gris**, también en las celdas vacías, con la **traza de sus calles**: las celdas por las que pasaban sus carreteras, más oscuras.
+
+  La materia se mezcla con el color de la generación (fase 8) sin taparlo del todo: el carbón un 85 %, el basalto y el hormigón un 60 %. Las celdas vacías de la naturaleza conservan su color de generación. Las conchas enterradas antes de la fase 15 no cambian.
+- **Las conchas usan el shader de la piel** (familia mineral), con la rugosidad de cada loseta en el canal `a`: el carbón brilla (0,06), el basalto es medio (0,5), el hormigón es mate (0,85), las calles 0,7, lo demás 0,7 y el zócalo 0,9. `Materialrespaldo` las vuelve a un Phong, como a los modelos. Lo pone `install_core` al relanzar cualquier fase (`conchas_al_dia`); la fase 8 lo vuelve a poner si se relanza.
+- **Registro.** Cada concha guarda:
+  - su `tema`;
+  - por celda, `esp` (especie: 1 vegetación, 2 relieve, 3 informal, 4 planificada; 0 vacía), `estado` (0 semilla a 4 coronación) y `cluster`;
+  - sus `vias` (tramos de carretera), `calles` (celdas por las que pasan) y `rios`.
+
+  Lo leerán los cortes de la fase 16. Mientras nada se exponga, no cuesta nada: solo se guarda.
+- **Herencia temática**, según el tema del mundo nuevo:
+  - **naturaleza: banco de semillas.** Lo heredado no aparece de golpe. Primero son semillas sobre el suelo (partículas pardas, sin modelo); luego brotes que crecen a saltos; luego la formación. Cada etapa dura 2 × `Pasosetapa` pasos. Una nota en la celda la hace brotar de golpe. Con `Rebrote` apagado, lo heredado brota como antes;
+  - **ciudad: trazas.** Si lo enterrado era una ciudad, sus carreteras quedan como trazas. La red nueva las prefiere: cada tramo de traza cuesta 1 − 0,9 × `Pesotraza` (con 0,5, 0,55) en lugar de 1, tanto para el árbol de expansión mínima (Kruskal) como para el camino de cada arista. Con `Pesotraza` 0 vuelve el camino más corto.
+- **Temaenciclo.** El mundo tiene su tema. Con `Temaenciclo` encendido, cambiar `Tema` no cambia el mundo en curso: espera al siguiente fin de ciclo, y así cada concha tiene un solo tema. La leyenda dice `(ciudad en el proximo ciclo)`. Apagado, el cambio es inmediato, como hasta ahora.
+- La paleta de generaciones de la fase 8 se mantiene: cada concha conserva su color.
+
+### Parámetros (página Fase15)
+
+`Pesotraza` 0,5 (0–1) · `Rebrote` (encendido) · `Temaenciclo` (encendido)
+
+### Leyenda
+
+```
+ERA      7   naturaleza -> carbon y basalto   herencia 25%   semillas 9   trazas 0 de 0
+ERA      8   ciudad -> hormigon   herencia 25%   semillas 0   trazas 4 de 6   (naturaleza en el proximo ciclo)
+```
+
+`semillas` son las celdas del banco que aún no han brotado. `trazas 4 de 6` son los tramos de la red actual que siguen una traza, de las trazas heredadas.
+
+### Probar sin BeatStep
+
+1. `Tema` naturaleza. `Sembrarzona` y `Sembrarzona2` (con `Nota` y `Nota2` distintas) y unos `Sembrar` en el centro, para que algo pase la herencia del 25 %.
+2. Pon `Tema` en ciudad: la leyenda `ERA` dice que espera. Pulsa `Forzarciclo`: la concha nueva es de carbón y basalto, y el mundo nuevo ya es ciudad.
+3. `Sembrarzona` en dos zonas separadas (las carreteras las unen) y `Forzarciclo`: la concha de hormigón con sus calles. Quedan dos conchas de temas distintos; un corte (fase 9) en el bosque enterrado deja ver el carbón.
+4. Otra ciudad en las mismas zonas: las carreteras siguen las trazas (`trazas N de M`).
+5. Vuelve a naturaleza y a un `Forzarciclo` con un bosque: lo heredado sale como semillas y brota.
+
+### Autoprueba
+
+Comprueba:
+- `Temaenciclo`: el cambio de `Tema` espera, la leyenda lo dice, y tras `Forzarciclo` manda el nuevo;
+- el registro (tema y, por celda, especie, estado y cluster);
+- la materia: carbón brillante y oscuro, basalto, y el color de generación en lo vacío;
+- del bosque a la ciudad no quedan semillas ni trazas;
+- la concha de ciudad con sus calles más oscuras que el hormigón;
+- dos conchas de temas distintos;
+- de una ciudad a otra, las trazas son sus carreteras, y con `Pesotraza` el camino sigue una traza aunque sea un tramo más largo (con 0, el más corto);
+- el banco de semillas (sin modelo, con semillas), la cadena semillas → brotes → formación, la nota que la completa y `Rebrote` apagado;
+- las losetas llevan la rugosidad en el canal `a` (con `Materialrespaldo`, 1);
+- `Temaenciclo` apagado: el cambio es inmediato;
+- la línea `ERA` de la leyenda.
+
+---
+
 ### Decisiones tomadas en la fase 11
 
 | Pregunta | Decisión |
@@ -434,6 +498,18 @@ En el simulador, un fotograma del motor con un incendio en curso cuesta lo mismo
 | ¿Qué es el presupuesto del 60 %? | Por encima de `Umbraldensidad`, la catástrofe empieza en la celda y sus vecinas del cluster |
 | ¿Qué para un derribo? | Una nota en el cluster, o que la obra llegue al principio |
 
+### Decisiones tomadas en la fase 15
+
+| Pregunta | Decisión |
+|---|---|
+| ¿El cambio de tema es inmediato o espera al fin de ciclo? | Espera (`Temaenciclo`, encendido por defecto); apagado, inmediato |
+| ¿Cómo convive la materia con la paleta de generaciones? | Se mezcla con el color de la generación (carbón 85 %, basalto y hormigón 60 %); lo vacío de la naturaleza queda con su color |
+| ¿Qué es la traza de las calles en la concha? | Las celdas por las que pasaban las carreteras, más oscuras |
+| ¿Cuándo hay banco de semillas? | Cuando el mundo nuevo es de naturaleza (venga de lo que venga) y `Rebrote` está encendido |
+| ¿Cuándo hay trazas? | Cuando el mundo nuevo es una ciudad y lo enterrado también lo era |
+| ¿Cuánto pesa una traza? | Coste 1 − 0,9 × `Pesotraza` por tramo, en el árbol y en el camino de cada arista |
+| ¿Brillo del carbón? | Las conchas pasan al shader de la piel (mineral), con la rugosidad de cada loseta |
+
 ---
 
 ### Cómo se ha probado
@@ -441,17 +517,18 @@ En el simulador, un fotograma del motor con un incendio en curso cuesta lo mismo
 Sin TouchDesigner a mano, con un **TouchDesigner simulado** que ejecuta los scripts tal cual (`pruebas/td_simulado.py`): operadores y rutas, parámetros con expresiones, páginas propias, storage, el módulo de los Text DAT, Script CHOP, Table DAT y el tiempo del proyecto. Los COMP solo aceptan los parámetros que tienen en TouchDesigner.
 
 ```
-python3 pruebas/correr_fases.py        # base y fases 3 a 14 desde cero, sesión, relanzar y otra sesión
+python3 pruebas/correr_fases.py        # base y fases 3 a 15 desde cero, sesión, relanzar y otra sesión
 python3 pruebas/vista_previa.py        # hoja de contactos del catálogo (pruebas/catalogo.png)
 xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la piel con OpenGL (necesita moderngl)
 ```
 
-- **Desde cero**: `fase12_base.py` y las fases 3 a 14, todas con `AUTOPRUEBA OK`.
+- **Desde cero**: `fase12_base.py` y las fases 3 a 15, todas con `AUTOPRUEBA OK`.
 - **Sesión simulada** de 16 compases a 120 BPM con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
-- **Relanzar** las fases 3 a 14 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
+- **Relanzar** las fases 3 a 15 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
 - **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, y la vegetación (desde el motor v32) en dos verdes con los lados pardos.
 - **Catálogo**: una hoja de contactos dibujada con un rasterizador propio (`pruebas/vista_previa.py`) para ver cada modelo, y escenas de los dos temas con clusters, puentes, coronaciones e híbridos.
 - **Fase 14**: un incendio en un bosque denso, dibujado con el shader real: el dosel de lo que arde se tiñe de brasa y se carboniza, y lo que se vacía queda como claro de ceniza. La fase 14 añade sus tres modelos a un proyecto cuya fase 11 se hizo con un motor anterior (`modelos: 3 nuevos`).
+- **Fase 15**: un mundo de naturaleza enterrado bajo una ciudad, dibujado con el shader real: un corte en el bosque deja ver las losetas de carbón, negras y con brillo, bajo el hormigón mate de la ciudad.
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
 
 Lo que la simulación no puede comprobar: el aspecto real en el render, los nombres de los parámetros de los SOP (Tube, Transform, Select, Merge) y del GLSL MAT (Vertex/Pixel Shader, página Vectors), que TouchDesigner declare sus funciones de shader como las imitamos, y el tiempo real por fotograma.
@@ -467,6 +544,7 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 7. **Pulido y rugoso**: con la cámara de globo, que la obsidiana y la pómez (y el vidrio y el hormigón) se distinguen; si no, ajustar `Rugmin` y `Rugmax`.
 8. **Ríos y carreteras (fase 13)**: con varias conchas, que se leen desde la cámara de globo sobre los colores de las conchas; si no, subir `Grosorvia`.
 9. **Destructores (fase 14)**: con la batería, que un arañazo suelto se lee como accidente y dos seguidos en la misma zona como catástrofe; que el fuego se ve avanzar (brasas, dosel que se carboniza) y que las huellas se distinguen de las formaciones. Si el fuego se apaga demasiado pronto o arrasa demasiado, ajustar `Pasosfuego` y `Maxfuego`.
+10. **El ciclo como era (fase 15)**: que las conchas con el shader de la piel se ven bien (si no, `Materialrespaldo`); que el carbón se distingue del basalto y el hormigón de sus calles; que el banco de semillas se lee como semillas y no como un fallo.
 
 ### Problemas frecuentes
 
@@ -489,6 +567,9 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | Fase 14: un arañazo no hace nada temático | El pad corta (perfil con profundidad) o la vecindad del objetivo está vacía | Los arañazos son los pads sin profundidad (con los perfiles por defecto, 4–8); toca cerca de formaciones |
 | Fase 14: dos golpes no escalan | Más de `Ventanaescalada` pasos entre ellos, o zonas distintas | Sube `Ventanaescalada`, o usa `Escalar` |
 | Fase 14: no se ven las huellas | Proyecto con modelos de antes del motor v34 | Relanza `fase14_destructores.py`: la línea `modelos: 3 nuevos` las crea |
+| Fase 15: cambio `Tema` y no pasa nada | `Temaenciclo`: espera al fin de ciclo (lo dice la leyenda `ERA`) | `Forzarciclo`, o apaga `Temaenciclo` |
+| Fase 15: las conchas salen blancas, negras o planas | El shader de la piel en `estratos` | `Materialrespaldo`, y pégame los errores de `mat_piel_mineral` |
+| Fase 15: lo heredado no aparece | Banco de semillas: brota en 4 × `Pasosetapa` pasos | Espera, toca una nota en la celda o apaga `Rebrote` |
 | `midiout`: `Could not open the MIDI interface` | El mapeador MIDI de TouchDesigner (no es de los scripts) | Nada: la entrada MIDI funciona igual; si molesta, quita la salida en Dialogs → MIDI Device Mapper |
 | Fase 12: pulido y rugoso iguales | La geometría no lee el canal `a` | En la geometría `mod_...`: Instance 2 → Color A = `a`. El informe lo avisa con `FALLO ... no lee la rugosidad` |
 | Fase 12: el gate no cambia nada | Sin note off (el aparato no lo envía) o `Gateprueba` en los botones | Mira la línea `MOD`: sin `gate` es que no llega el note off |

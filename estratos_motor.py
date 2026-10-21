@@ -11,7 +11,8 @@
 #                 catalogo de modelos, clusters, compuestos y transitos;
 #                 fase 12: material por la velocidad, vigor por el gate;
 #                 fase 13: rios y carreteras; fase 14: aranazos tematicos,
-#                 escalada, incendio y derrumbes).
+#                 escalada, incendio y derrumbes; fase 15: el ciclo como era:
+#                 entierro tematico, registro y herencia).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -24,7 +25,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v34'
+MOTOR_VERSION = 'motor v35'
 
 import math
 
@@ -135,6 +136,8 @@ DEFAULT_CFG = dict(
     rios=1, carreteras=1, min_via=2, grosor_via=0.18, max_rio=12,
     # fase 14: destructores
     ventana_escalada=8, golpes_escalada=2, pasos_fuego=6, max_fuego=6, pasos_polvo=8,
+    # fase 15: el ciclo como era
+    peso_traza=0.5, rebrote=1, tema_en_ciclo=1,
 )
 
 
@@ -463,6 +466,11 @@ def new_world():
         ruina=[0] * N,          # huella de una catastrofe (1 + indice de RUINA_ESP; 0 ninguna)
         t_ruina=[-99.0] * N,
         derribo=[0] * N,        # la obra de la celda se recorre hacia atras
+        # el ciclo como era (fase 15)
+        tema=None,              # tema del mundo (con Temaenciclo, cambia en el fin de ciclo)
+        rebrote=[0] * N,        # etapa del rebrote de lo heredado: 1 semillas, 2 brotes, 0 nada
+        t_rebrote=[-99.0] * N,
+        trazas=[],              # tramos de carretera de la ciudad enterrada: [[a, b], ...]
         aviso='',
         ev={},
         t=None,
@@ -833,6 +841,7 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
     W.setdefault('terr', {})[i] = W.get('bar_n', 0)
     W['ruina'][i] = 0                   # fase 14: construir sobre la huella la borra
+    W['rebrote'][i] = 0                 # fase 15: una nota completa el rebrote
     if cfg['nivel'] >= 12:              # fase 12: la velocidad da el material
         W['ev']['mod'] = dict(s=s, celda=i, vel=int(vel), rug=rugosidad(cfg, vel), gate=None, efecto='')
     res = grow(W, cfg, i, s, vel, now)
@@ -1040,6 +1049,8 @@ def close_cycle(W, cfg, now, motivo):
     W['cambio_pendiente'] = False
     W['ciclo_n'] += 1
     W['ciclo_t0'] = now
+    if cfg['nivel'] >= 15:              # fase 15: el tema pendiente entra con el mundo nuevo
+        W['tema'] = int(cfg.get('tema_pendiente', cfg['tema']))
     W['ev']['fin_de_ciclo'] = ev
     return ev
 
@@ -1350,7 +1361,8 @@ def zocalo_color(cfg):
 
 
 def palette_key(cfg):
-    return (cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'))
+    return (cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'),
+            cfg['nivel'] >= 15, cfg.get('respaldo', 0))
 
 
 def shell_grosor(cfg, bars=None):
@@ -1373,6 +1385,7 @@ def end_cycle(W, cfg, now, bars=None):
     if cfg['nivel'] < 8:
         return False
     cerrar_obras(W, cfg)                # los transitos se cierran antes de hornear
+    reg = registro_concha(W, cfg) if cfg['nivel'] >= 15 else None
     r_in = top_radius(W, cfg)
     g = shell_grosor(cfg, bars)
     # cada celda deposita su loseta sobre lo que le queda debajo: una
@@ -1386,6 +1399,8 @@ def end_cycle(W, cfg, now, bars=None):
     W['shells'].append(dict(gen=W['gen'], col=list(shell_color(W['gen'])),
                             occ=list(W['occ']), sp=list(W['sp']), rm=[0] * N,
                             grosor=g, r_in=r_in, r_out=r_in + g))
+    if reg:                             # fase 15: el registro de la concha
+        W['shells'][-1].update(reg)
     W['quitadas'] = [0] * N
     W['gen'] += 1
     her = cfg['herencia']
@@ -1407,6 +1422,8 @@ def end_cycle(W, cfg, now, bars=None):
         W['huella'][i] = 0.0
     W['pend'] = {}
     cerrar_obras(W, cfg)                # y lo heredado empieza sin obras a medias
+    if reg:
+        herencia_tematica(W, cfg, now, reg)
     W['dirty'] = True
     return True
 
@@ -1472,6 +1489,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         tick_piel(W, cfg, now, W['paso'], playing)
     if cfg['nivel'] >= 14:
         tick_destructores(W, cfg, now)
+    if cfg['nivel'] >= 15:
+        tick_rebrote(W, cfg, now)
     giro_step(W, cfg, dt, tempo)
     return out
 
@@ -1704,6 +1723,8 @@ def build_tiles(W, cfg, now):
     maxs = max(1, int(cfg['max_shells']))
     st = cfg['scar_time']
     core = cfg['core_radius']
+    era = cfg['nivel'] >= 15                # fase 15: la rugosidad de cada loseta (canal a)
+    respaldo = era and cfg.get('respaldo', 0)
     for c in range(N):
         col = column_radii(W, cfg, c)
         if not col:
@@ -1717,13 +1738,17 @@ def build_tiles(W, cfg, now):
                 cw, cl = cw * 1.25, cl * 1.25
             rows.append(_row(_mul(n, core), n, cw * 1.04, (top - core) * 0.98, cl * 1.04,
                              zocalo_color(cfg)))
+            if era:
+                rows[-1].append(1.0 if respaldo else RUG_ZOCALO)
         for s, r_in, r_out in col[first:]:
             sh = W['shells'][s]
-            colr = tile_color(cfg, sh, sh['occ'][c], s)
+            colr, rug = tile_material(cfg, sh, s, c)
             t0 = W['scars'].get(s * 1000 + c)
             if t0 is not None:
                 colr = _mix(COL_SCAR, colr, max(0.0, min(1.0, (now - t0) / st)))
             rows.append(_tile_row(c, n, r_in, r_out, colr))
+            if era:
+                rows[-1].append(1.0 if respaldo else rug)
     return rows
 
 
@@ -3023,6 +3048,9 @@ def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo, escala
             f = (tau / 3.0 + a) % 1.0
             g = 2 * math.pi * b + tau * 0.3
             r_, h_, s_ = 0.08 + 0.3 * c, vh * (0.3 + 1.1 * f), 0.03 * m * (1.0 - 0.6 * f)
+        elif modo == 'semillas':        # fase 15: el banco de semillas, sobre el suelo
+            g = 2 * math.pi * b
+            r_, h_, s_ = 0.08 + 0.36 * c, 0.01 + 0.03 * ((tau / 4.0 + a) % 1.0), 0.03 * m
         elif modo == 'ceniza':          # fase 14: copos grises que caen y derivan
             f = (tau / 7.0 + a) % 1.0
             g = 2 * math.pi * b + tau * 0.08
@@ -3071,6 +3099,13 @@ def build_piel(W, cfg, now, out):
         p0 = bases[i]
         base = base_radius(W, cfg, i)
         cw, cl_ = _cell_sizes(base, i)
+        rb = W['rebrote'][i] if cfg['nivel'] >= 15 else 0
+        if rb == 1:                                 # fase 15: banco de semillas
+            _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, vh, semilla_caos(i, 21), 7,
+                        COL_SEMILLA, now, paso, 'semillas')
+            continue
+        if rb == 2:                                 # y brota, a saltos
+            vh *= 0.25 + 0.75 * _stop((now - W['t_rebrote'][i]) / max(1e-6, rebrote_dur(cfg, paso)))
         esp = especie_de(tema, own)
         cf, cc = cadenas_de(cfg, tema, esp)
         sat = W['par'][i] >= 0
@@ -3365,6 +3400,33 @@ def camino_corto(a, b):
     return out[::-1]
 
 
+def camino_traza(a, b, trazas, peso):
+    """Camino de a a b que prefiere las trazas heredadas (fase 15): Dijkstra
+    con coste 1 por tramo y 1 - 0,9 x Pesotraza por tramo de traza; a
+    igualdad, el de menos tramos y luego el de celdas menores. Devuelve
+    (celdas, coste). Sin trazas o sin peso, el camino mas corto."""
+    if not trazas or peso <= 0:
+        c = camino_corto(a, b)
+        return c, float(len(c) - 1)
+    import heapq
+    barato = 1.0 - 0.9 * max(0.0, min(1.0, peso))
+    mejor = {a: (0.0, 0)}
+    cola = [(0.0, 0, [a])]
+    while cola:
+        coste, n, camino = heapq.heappop(cola)
+        c = camino[-1]
+        if c == b:
+            return camino, coste
+        if mejor.get(c, (1e18, 0)) < (coste, n):
+            continue
+        for j in sorted(NEIGH[c]):
+            k = coste + (barato if (min(c, j), max(c, j)) in trazas else 1.0)
+            if (k, n + 1) < mejor.get(j, (1e18, 0)):
+                mejor[j] = (k, n + 1)
+                heapq.heappush(cola, (k, n + 1, camino + [j]))
+    return [], -1.0
+
+
 def nodos_via(W, cfg, cl=None):
     """Capitales de cluster y formaciones sueltas (sin satelites) con ocupacion
     de Minvia o mas."""
@@ -3376,14 +3438,21 @@ def nodos_via(W, cfg, cl=None):
     return sorted(nodos)
 
 
-def carreteras(W, cfg, cl=None):
+def carreteras(W, cfg, cl=None, trazas=None):
     """(aristas del arbol [(a, b, distancia)], tramos [(c, d)]): Kruskal sobre
-    las distancias por la reticula entre los nodos."""
+    las distancias por la reticula entre los nodos. Con trazas (fase 15), la
+    distancia es el coste del camino que las prefiere (Pesotraza)."""
     nodos = nodos_via(W, cfg, cl)
+    peso = cfg.get('peso_traza', 0.0)
+    caminos = {}
     pares = []
     for k, a in enumerate(nodos):
         for b in nodos[k + 1:]:
-            pares.append((len(camino_corto(a, b)) - 1, a, b))
+            if trazas:
+                caminos[(a, b)], d = camino_traza(a, b, trazas, peso)
+            else:
+                d = len(camino_corto(a, b)) - 1
+            pares.append((d, a, b))
     padre = dict((x, x) for x in nodos)
 
     def raiz(x):
@@ -3398,7 +3467,7 @@ def carreteras(W, cfg, cl=None):
             continue
         padre[ra] = rb
         arbol.append((a, b, d))
-        camino = camino_corto(a, b)
+        camino = caminos[(a, b)] if trazas else camino_corto(a, b)
         for c, e in zip(camino, camino[1:]):
             if (c, e) not in tramos and (e, c) not in tramos:
                 tramos.append((c, e))
@@ -3409,9 +3478,12 @@ def tejido(W, cfg):
     """Topologia del tejido (se guarda: solo se recalcula si cambia la
     ocupacion). dict(rios, abajo, caudal, arbol, vias)."""
     tema = tema_de(cfg)
+    trazas = frozenset((min(a, b), max(a, b)) for a, b in W.get('trazas') or []) \
+        if cfg['nivel'] >= 15 else frozenset()
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), tema, cfg['rios'], cfg['carreteras'],
              cfg['min_via'], cfg['max_rio'], cfg['umbral_vecindad'], cfg['peso_vecina'],
-             cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'])
+             cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'], trazas,
+             cfg.get('peso_traza', 0.0))
     if _TEJIDO.get('clave') == clave:
         return _TEJIDO['t']
     t = dict(rios=[], abajo={}, caudal={}, arbol=[], vias=[])
@@ -3420,7 +3492,7 @@ def tejido(W, cfg):
         t['rios'], t['abajo'] = rios(W, cfg, cl)
         t['caudal'] = _caudal(t['rios'], t['abajo'])
     if tema == 'ciudad' and cfg['carreteras']:
-        t['arbol'], t['vias'] = carreteras(W, cfg, cl)
+        t['arbol'], t['vias'] = carreteras(W, cfg, cl, trazas)
     _TEJIDO['clave'], _TEJIDO['t'] = clave, t
     return t
 
@@ -3451,6 +3523,7 @@ def _tramo_suelo(W, cfg, a, b, ancho, col, rug, out):
 def build_tejido(W, cfg):
     """(filas de la geometria 'tejido', resumen para la leyenda)."""
     t = tejido(W, cfg)
+    W['tejido_vias'] = t['vias']
     filas = []
     w = cfg['grosor_via']
     for (a, b), q in sorted(t['caudal'].items()):
@@ -3831,6 +3904,115 @@ def build_destructores(W, cfg, now, out):
                     k, col, now, paso, modo, escala=1.0 - q)
 
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - el ciclo como era (fase 15): entierro tematico, registro y herencia
+# -----------------------------------------------------------------------------
+# Cada fin de ciclo entierra el mundo con la materia de su tema. En la concha
+# quedan las losetas de lo que hubo: veta de carbon (negro brillante) donde
+# hubo bosque y basalto donde hubo relieve; hormigon gris en la ciudad, con la
+# traza de sus calles (las celdas por las que pasaban sus carreteras, mas
+# oscuras). Las celdas vacias conservan el color de su generacion (fase 8), y
+# la materia se mezcla con el sin taparlo del todo.
+# Cada concha guarda su registro: tema, especie, estado y cluster de cada
+# celda, y sus carreteras, calles y rios. Lo leeran los cortes de la fase 16;
+# mientras nada se exponga, no cuesta nada.
+# La herencia rebrota segun su logica. Naturaleza: banco de semillas; lo
+# heredado espera como semillas sobre el suelo y brota a saltos (cadena de
+# rebrote: semillas -> brotes, 2 x Pasosetapa pasos por etapa), o de golpe con
+# una nota en su celda. Ciudad: trazas; la red de carreteras nueva prefiere
+# los tramos de la ciudad enterrada (Pesotraza).
+# Con Temaenciclo, un cambio de Tema espera al siguiente fin de ciclo: cada
+# concha tiene un solo tema, y cambiarlo entre ciclos deja bosques fosiles
+# bajo ciudades, o ciudades bajo bosques.
+
+COL_SEMILLA = (0.62, 0.50, 0.28)
+CARBON = (0.03, 0.03, 0.04)
+BASALTO = (0.19, 0.20, 0.23)
+HORMIGON = (0.56, 0.55, 0.52)
+CALLE = (0.11, 0.11, 0.12)
+# especie: (materia, rugosidad, cuanto pesa sobre el color de la generacion)
+MATERIA = dict(vegetacion=(CARBON, 0.06, 0.85), relieve=(BASALTO, 0.5, 0.6),
+               informal=(HORMIGON, 0.85, 0.6), planificada=(HORMIGON, 0.85, 0.6))
+MATERIA_TEMA = dict(naturaleza='carbon y basalto', ciudad='hormigon')
+RUG_LOSETA, RUG_ZOCALO = 0.7, 0.9
+
+
+def registro_concha(W, cfg):
+    """El registro de la concha que se entierra: tema, y por celda especie
+    (1 + indice en RUINA_ESP; 0 vacia), estado y cluster (-1 ninguno); y las
+    carreteras, las calles (celdas por las que pasan) y los rios."""
+    tema = tema_de(cfg)
+    cl = clusters(W, cfg)
+    esp, est, clu = [0] * N, [-1] * N, [-1] * N
+    for i in range(N):
+        if W['occ'][i] > 0 and W['own'][i]:
+            esp[i] = 1 + RUINA_ESP.index(especie_de(tema, W['own'][i]))
+            est[i] = estado_idx(cfg, W['occ'][i])
+            clu[i] = cl['de'][i]
+    t = tejido(W, cfg) if cfg['nivel'] >= 13 else {}
+    vias = sorted([min(a, b), max(a, b)] for a, b in t.get('vias', []))
+    return dict(tema=tema, esp=esp, estado=est, cluster=clu, vias=vias,
+                calles=sorted(set(x for v in vias for x in v)), rios=[list(r) for r in t.get('rios', [])])
+
+
+def herencia_tematica(W, cfg, now, reg):
+    """Lo heredado, segun el tema del mundo nuevo: en naturaleza, banco de
+    semillas (rebrote); en la ciudad, las trazas de la ciudad enterrada."""
+    nuevo = TEMAS[int(cfg.get('tema_pendiente', cfg['tema'])) % len(TEMAS)]
+    W['rebrote'] = [0] * N
+    W['t_rebrote'] = [-99.0] * N
+    W['trazas'] = []
+    if nuevo == 'naturaleza' and cfg.get('rebrote', 1):
+        for i in range(N):
+            if W['occ'][i] > 0:
+                W['rebrote'][i] = 1
+                W['t_rebrote'][i] = now
+    if nuevo == 'ciudad' and reg['tema'] == 'ciudad':
+        W['trazas'] = [list(v) for v in reg['vias']]
+
+
+def rebrote_dur(cfg, paso):
+    """Lo que dura cada etapa del rebrote."""
+    return 2.0 * max(1, int(cfg['pasos_etapa'])) * paso
+
+
+def tick_rebrote(W, cfg, now):
+    """Las semillas brotan y los brotes acaban de crecer, etapa a etapa."""
+    if not any(W['rebrote']):
+        return
+    dur = rebrote_dur(cfg, W.get('paso') or 0.125)
+    for i in range(N):
+        e = W['rebrote'][i]
+        if not e:
+            continue
+        if W['occ'][i] <= 0:
+            W['rebrote'][i] = 0
+        elif now - W['t_rebrote'][i] >= dur - 1e-9:
+            W['rebrote'][i] = 2 if e == 1 else 0
+            W['t_rebrote'][i] = now
+            W['dirty'] = True
+
+
+def tile_material(cfg, sh, s, c):
+    """(color, rugosidad) de la loseta de la celda c en la concha sh. Las
+    conchas con registro (fase 15) llevan la materia de su tema sobre el color
+    de su generacion; las demas, el color de la fase 8."""
+    col = tile_color(cfg, sh, sh['occ'][c], s)
+    tema = sh.get('tema')
+    if tema is None:
+        return col, RUG_LOSETA
+    rug = RUG_LOSETA
+    e = sh['esp'][c]
+    if e:
+        mat, rug, k = MATERIA[RUINA_ESP[e - 1]]
+        col = _mix(col, mat, k)
+    elif tema == 'ciudad':                  # el suelo de la ciudad tambien es hormigon
+        col, rug = _mix(col, HORMIGON, 0.3), MATERIA['informal'][1]
+    if tema == 'ciudad' and c in sh.get('calles', ()):
+        col, rug = _mix(col, CALLE, 0.7), 0.7
+    return col, rug
+
+
 # =============================================================================
 # 2. ADAPTADOR TOUCHDESIGNER
 # =============================================================================
@@ -4036,6 +4218,14 @@ def cfg():
                  pasos_fuego=max(1, int(_p('Pasosfuego', c['pasos_fuego']))),
                  max_fuego=max(1, int(_p('Maxfuego', c['max_fuego']))),
                  pasos_polvo=max(1, int(_p('Pasospolvo', c['pasos_polvo']))))
+    if c['nivel'] >= 15:
+        c.update(peso_traza=max(0.0, min(1.0, _p('Pesotraza', c['peso_traza']))),
+                 rebrote=int(_p('Rebrote', True)), tema_en_ciclo=int(_p('Temaenciclo', True)))
+        if c['tema_en_ciclo']:          # el tema del mundo manda; el del parametro espera
+            Wt = (me.fetch('W', None) or {}).get('tema')
+            if Wt is not None and int(Wt) != int(c['tema']):
+                c['tema_pendiente'] = c['tema']
+                c['tema'] = int(Wt)
     return c
 
 
@@ -4244,6 +4434,8 @@ def registrar_ciclo(W, c, ev):
 def frame_tick():
     W, c = world(), cfg()
     now = absTime.seconds
+    if c['nivel'] >= 15 and (W.get('tema') is None or not c['tema_en_ciclo']):
+        W['tema'] = int(c['tema'])      # fase 15: el tema del mundo
     res = tick(W, c, now, tempo(), playing())
     if res.get('burst'):
         print('AVISO  %s' % W['aviso'])
@@ -4851,7 +5043,22 @@ def _legend():
                      % (tj.get('rios', 0), tj.get('tramos_rio', 0), tj.get('tramos_via', 0)))
     if lvl >= 14:
         lines.append(_legend_escalada(W, c))
+    if lvl >= 15:
+        lines.append(_legend_era(W, c))
     return '\n'.join(lines)
+
+
+def _legend_era(W, c):
+    """ERA: el ciclo, su tema y la materia en la que se enterrara; la
+    herencia, las semillas que esperan y las trazas que se reutilizan."""
+    tema = tema_de(c)
+    pend = c.get('tema_pendiente')
+    pend = '   (%s en el proximo ciclo)' % TEMAS[int(pend) % len(TEMAS)] if pend is not None else ''
+    trazas = set((min(a, b), max(a, b)) for a, b in W.get('trazas') or [])
+    usadas = sum(1 for a, b in (W.get('tejido_vias') or []) if (min(a, b), max(a, b)) in trazas)
+    return ('  ERA      %d   %s -> %s   herencia %d%%   semillas %d   trazas %d de %d%s'
+            % (W.get('ciclo_n', 1), tema, MATERIA_TEMA[tema], int(c['herencia'] * 100),
+               sum(1 for x in W['rebrote'] if x == 1), usadas, len(trazas), pend))
 
 
 def _legend_escalada(W, c):

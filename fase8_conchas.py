@@ -68,7 +68,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v8  (cada concha de un color; columnas, Colmatacion, zocalo; luz en las conchas)'
+VERSION = 'fase8 v9  (cada concha de un color; columnas, Colmatacion, zocalo; luz en las conchas)'
 banner(VERSION)
 
 base = require_base(8)
@@ -94,6 +94,7 @@ ok('pagina Fase8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Gr
 
 make_phong(base, 'mat_estratos', 780, 620, spec=0.12, shin=8, diff=1.0)
 make_instanced(base, 'estratos', 520, 620, 'mat_estratos')
+conchas_al_dia(base, motor.module)     # desde la fase 15, las conchas con el shader de la piel
 set_render(base)
 
 esfera = base.op('nucleo').op('esfera')
@@ -203,7 +204,8 @@ def prueba(t):
     t.check('el nucleo no crece', abs(m.nucleo_radius() - c['core_radius']) < 1e-6)
     # paleta de generaciones
     cp = dict(c)
-    cp.update(paleta=0, paleta_tono=20.0, paleta_croma=0.09)
+    cp.update(paleta=0, paleta_tono=20.0, paleta_croma=0.09,
+              nivel=min(c['nivel'], 14))          # desde la fase 15 la concha lleva la materia de su tema
 
     def oklch(n, ocup):
         L = m.L_VACIA[n % 2] + (m.L_OCUPADA if ocup else 0.0)
