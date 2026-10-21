@@ -12,7 +12,8 @@
 #                 fase 12: material por la velocidad, vigor por el gate;
 #                 fase 13: rios y carreteras; fase 14: aranazos tematicos,
 #                 escalada, incendio y derrumbes; fase 15: el ciclo como era:
-#                 entierro tematico, registro y herencia).
+#                 entierro tematico, registro y herencia; fase 16: lo que
+#                 ensenan los cortes y la union de cortes).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -25,7 +26,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v37'
+MOTOR_VERSION = 'motor v38'
 
 import math
 
@@ -139,6 +140,8 @@ DEFAULT_CFG = dict(
     ventana_escalada=8, golpes_escalada=2, pasos_fuego=6, max_fuego=6, pasos_polvo=8,
     # fase 15: el ciclo como era
     peso_traza=0.5, rebrote=1, tema_en_ciclo=1,
+    # fase 16: arqueologia tematica
+    detalle_expuesto=6, unir_cortes=1,
 )
 
 
@@ -472,6 +475,10 @@ def new_world():
         rebrote=[0] * N,        # etapa del rebrote de lo heredado: 1 semillas, 2 brotes, 0 nada
         t_rebrote=[-99.0] * N,
         trazas=[],              # tramos de carretera de la ciudad enterrada: [[a, b], ...]
+        # arqueologia tematica (fase 16)
+        cortes=[],              # cortes recientes: [t, celda objetivo, profundidad, radio]
+        uniones=[],             # cortes unidos: {tipo: canon o galeria, celdas, t, prof}
+        arqueo={},              # resumen de lo expuesto para la leyenda
         aviso='',
         ev={},
         t=None,
@@ -1200,7 +1207,9 @@ def erosion(W, cfg, pad, vel, now):
     if tematico:                        # fase 14: el accidente y la escalada
         destructor(W, cfg, pad, vel, now, ev, antes)
     if cfg['nivel'] >= 9:
-        if depth > 0:
+        if depth > 0 and cfg['nivel'] >= 16:    # fase 16: los cortes se unen
+            ev['corte'], ev['union'] = corte_tematico(W, cfg, target, depth, rad, now)
+        elif depth > 0:
             ev['corte'] = cut(W, cfg, target, depth, rad, now)
         W['flash'] = dict(t=now, cell=target, k=1.0 if depth > 0 else 0.35, pad=pad)
     return ev
@@ -1253,7 +1262,7 @@ def cut(W, cfg, target, depth, rad, now):
                     W['scars'][s * 1000 + j] = now
     W['dirty'] = True
     fuera_t = next((f for c, f, _, _ in hechos if c == target), 0)
-    W['ev']['corte'] = dict(celda=target, conchas=fuera_t, celdas=len(hechos), t=now,
+    W['ev']['corte'] = dict(celda=target, conchas=fuera_t, celdas=len(hechos), t=now, radio=int(rad),
                             suelo=suelo(W, cfg, target), laguna=laguna(W, cfg, target),
                             nucleo=nucleo)
     if nucleo is not None:
@@ -1738,6 +1747,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         out['tejido'], W['tejido'] = build_tejido(W, cfg)
     if lvl >= 14:                   # fase 14: huellas y particulas de los destructores
         build_destructores(W, cfg, now, out)
+    if lvl >= 16:                   # fase 16: lo que ensenan los cortes
+        build_arqueologia(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -2352,6 +2363,44 @@ def _modelos():
                           _caja(0.05, 0.5, 0.15, 0.3, 0.25, 0.25, 15.0, 40.0, 20.0),
                           _caja(-0.25, 0.25, -0.25, 0.2, 0.4, 0.12, 0.0, 20.0, 30.0),
                           _caja(0.3, 0.5, 0.25, 0.25, 1.0, 0.06, 0.0, -30.0, 0.0)]
+    # ------------------------------------- lo que ensenan los cortes (fase 16)
+    # En la pared: X a lo largo de la pared, Y hacia arriba, Z hacia fuera.
+    # tronco fosil aplastado en horizontal, con su placa de raices y ramas rotas
+    M['fos_tronco'] = [_caja(0.04, 0.5, 0.0, 0.84, 0.36, 0.5), _caja(-0.42, 0.5, 0.0, 0.14, 0.86, 0.56),
+                       _caja(0.16, 0.7, 0.0, 0.34, 0.12, 0.36, 0.0, 0.0, 26.0),
+                       _caja(0.30, 0.32, 0.0, 0.28, 0.10, 0.36, 0.0, 0.0, -22.0),
+                       _caja(0.44, 0.5, 0.0, 0.12, 0.22, 0.4)]
+    # dos troncos cruzados, ya casi laminas
+    M['fos_tronco2'] = [_caja(-0.04, 0.32, 0.0, 0.88, 0.22, 0.46, 0.0, 0.0, 7.0),
+                        _caja(0.06, 0.66, 0.0, 0.78, 0.2, 0.42, 0.0, 0.0, -9.0),
+                        _caja(-0.4, 0.5, 0.0, 0.12, 0.6, 0.5)]
+    # disyuncion columnar: columnas de basalto de pie, una junto a otra
+    M['fos_basalto'] = [_hexa(-0.4 + 0.2 * k, 0.5, 0.0, 0.21, (1.0, 0.86, 0.94, 0.8, 0.92)[k])
+                        for k in range(5)]
+    # cimientos corridos de la ciudad informal: zapata, muros cortados y cascotes
+    M['arq_cimientos'] = [_losa(-0.5, 0.5, 0.0, 0.16, -0.42, 0.42),
+                          _losa(-0.46, -0.32, 0.16, 0.74, -0.24, 0.24),
+                          _losa(-0.06, 0.08, 0.16, 0.6, -0.24, 0.24),
+                          _losa(0.32, 0.46, 0.16, 0.84, -0.24, 0.24),
+                          _caja(0.16, 0.82, 0.0, 0.26, 0.1, 0.28, 0.0, 30.0, 16.0),
+                          _caja(-0.2, 0.88, 0.0, 0.28, 0.1, 0.32, 0.0, -20.0, -12.0)]
+    # sotano de la ciudad planificada, abierto hacia el corte: solera, forjado,
+    # muros y pilares
+    M['arq_sotano'] = [_losa(-0.5, 0.5, 0.0, 0.08, -0.5, 0.5), _losa(-0.5, 0.5, 0.92, 1.0, -0.5, 0.5),
+                       _losa(-0.5, 0.5, 0.08, 0.92, -0.5, -0.4), _losa(-0.5, -0.42, 0.08, 0.92, -0.4, 0.5),
+                       _losa(0.42, 0.5, 0.08, 0.92, -0.4, 0.5), _losa(-0.2, -0.12, 0.08, 0.92, 0.04, 0.12),
+                       _losa(0.12, 0.2, 0.08, 0.92, 0.04, 0.12)]
+    # tramo de calle en seccion: aceras, firme, zahorra y el colector
+    M['arq_calle'] = [_losa(-0.5, 0.5, 0.78, 0.9, -0.5, 0.5), _losa(-0.5, -0.36, 0.9, 1.0, -0.5, 0.5),
+                      _losa(0.36, 0.5, 0.9, 1.0, -0.5, 0.5), _losa(-0.46, 0.46, 0.62, 0.78, -0.5, 0.5),
+                      _hexa(0.0, 0.28, 0.0, 0.42, 1.0, 90.0, 0.0, 0.0)]
+    # galeria de metro a cielo abierto, de la celda a la vecina (Z de 0 a 1):
+    # solera, hastiales, boveda de dos faldones y carriles
+    M['arq_galeria'] = [_losa(-0.5, 0.5, 0.0, 0.08, 0.0, 1.0), _losa(-0.5, -0.4, 0.08, 0.6, 0.0, 1.0),
+                        _losa(0.4, 0.5, 0.08, 0.6, 0.0, 1.0),
+                        _caja(-0.25, 0.76, 0.5, 0.54, 0.08, 1.0, 0.0, 0.0, 35.0),
+                        _caja(0.25, 0.76, 0.5, 0.54, 0.08, 1.0, 0.0, 0.0, -35.0),
+                        _losa(-0.2, -0.16, 0.08, 0.13, 0.0, 1.0), _losa(0.16, 0.2, 0.08, 0.13, 0.0, 1.0)]
     for k, prims in M.items():          # ninguno pasa de alto 1 ni baja de 0
         b = _caja_modelo(prims)
         if b[2] < -1e-6 or b[3] > 1.0 + 1e-6:
@@ -2431,6 +2480,15 @@ def _catalogo_defecto():
         add(tema, esp, 'huella', [mo])     # fase 14: lo que deja una catastrofe
     for obra in ('valla', 'foso', 'andamio', 'grua'):
         add('ciudad', 'obra', obra, ['ciu_' + obra])
+    # fase 16: lo que ensenan los cortes, en la pared (expuesto) y en el fondo
+    for tema, esp, pared, fondo in (('naturaleza', 'vegetacion', ['fos_tronco', 'fos_tronco2'], ['fos_tronco']),
+                                    ('naturaleza', 'relieve', ['fos_basalto'], ['fos_basalto']),
+                                    ('ciudad', 'informal', ['arq_cimientos'], ['arq_cimientos']),
+                                    ('ciudad', 'planificada', ['arq_sotano'], ['arq_cimientos']),
+                                    ('ciudad', 'calle', ['arq_calle'], ['arq_calle'])):
+        add(tema, esp, 'expuesto', pared)
+        add(tema, esp, 'fondo', fondo)
+    add('ciudad', 'galeria', 'union', ['arq_galeria'])
     cadenas = {('naturaleza', 'vegetacion'): (['inclinar', 'puentes', 'hundir', 'esporas'], ['emerger']),
                ('naturaleza', 'relieve'): (['soldadura', 'relleno'], ['soldadura', 'relleno']),
                ('ciudad', 'informal'): (['soldadura', 'relleno'], ['soldadura', 'relleno']),
@@ -2854,7 +2912,7 @@ def familia_de(modelo):
         return 'mineral'
     if modelo.startswith('veg_'):
         return 'dosel'
-    return 'ciudad' if modelo[:3] in ('inf', 'pla') else 'mineral'
+    return 'ciudad' if modelo[:3] in ('inf', 'pla', 'arq') else 'mineral'
 
 
 def material_tema(cfg, col, familia, rug):
@@ -3863,6 +3921,8 @@ def apagar_destructores(W):
     W['polvo'] = []
     W['ruina'] = [0] * N
     W['derribo'] = [0] * N
+    W['cortes'] = []                    # fase 16: la galeria de metro queda enterrada
+    W['uniones'] = []
 
 
 def _quemar(col, q, chispa):
@@ -4043,6 +4103,295 @@ def tile_material(cfg, sh, s, c):
     if tema == 'ciudad' and c in sh.get('calles', ()):
         col, rug = _mix(col, CALLE, 0.7), 0.7
     return col, rug
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - arqueologia tematica (fase 16): lo que ensenan los cortes
+# -----------------------------------------------------------------------------
+# Los cortes de la fase 9 dejan de ensenar solo bandas de color: en el fondo y
+# en las paredes de cada corte aparece lo que hubo en cada concha, leido de su
+# registro (fase 15). Naturaleza: en la veta de carbon, troncos fosiles
+# aplastados en horizontal (donde hubo bosque) y columnas de basalto (donde
+# hubo relieve). Ciudad: cimientos (informal), sotanos (planificada) y tramos
+# de calle con su colector (las celdas por las que pasaban sus carreteras).
+# Solo dentro del corte: las celdas con el suelo por debajo del radio nominal
+# (el corte y su anfiteatro), en su fondo y en las paredes de sus vecinas mas
+# altas; como mucho Detalleexpuesto piezas por celda, una por era antes de
+# repetir. La cicatriz manda: lo recien expuesto sale cian, en los dos temas.
+# Una concha sin registro (enterrada antes de la fase 15) solo ensena su color.
+# Escalada: dos cortes en la misma vecindad (el objetivo del segundo dentro del
+# primero o en su borde) dentro de Ventanaescalada pasos se unen por el camino
+# mas corto (Unircortes). En naturaleza, un canon: las celdas del camino se
+# cortan con la profundidad del menor de los dos. En la ciudad, una galeria de
+# metro a cielo abierto (falso tunel): una zanja de una loseta con la boveda de
+# la galeria dentro. Cada corte se une una vez; la galeria se entierra con su
+# mundo y el canon queda como hondonada.
+
+COL_EXPUESTO = dict(vegetacion=(0.62, 0.55, 0.44),      # fosil: piedra clara sobre el carbon
+                    relieve=(0.27, 0.28, 0.32),          # columnas de basalto
+                    informal=(0.60, 0.58, 0.54), planificada=(0.52, 0.52, 0.50),
+                    calle=(0.24, 0.24, 0.25))
+RUG_EXPUESTO = dict(vegetacion=0.35, relieve=0.4, informal=0.85, planificada=0.8, calle=0.7)
+COL_GALERIA, RUG_GALERIA = (0.58, 0.57, 0.53), 0.8
+NOMBRE_ERA = dict(vegetacion='carbon', relieve='basalto', informal='ruinas', planificada='ruinas',
+                  calle='calles')
+PRIORIDAD_ERA = ['vegetacion', 'planificada', 'informal', 'relieve', 'calle']
+UNION_NOMBRE = dict(canon='canon', galeria='galeria de metro')
+
+
+def contenido(sh, c):
+    """Lo que guarda la concha sh en la celda c: su especie, 'calle' (una
+    celda de la ciudad por la que pasaba una carretera) o None."""
+    if sh.get('tema') is None:
+        return None
+    e = sh['esp'][c]
+    if e:
+        return RUINA_ESP[e - 1]
+    if sh['tema'] == 'ciudad' and c in sh.get('calles', ()):
+        return 'calle'
+    return None
+
+
+def en_corte(W, cfg, c, R=None):
+    """La celda c esta dentro de un corte: su suelo, por debajo del radio nominal."""
+    R = top_radius(W, cfg) if R is None else R
+    return R - suelo(W, cfg, c) > 1e-6
+
+
+def exposicion(W, cfg, c):
+    """Lo que deja ver el corte en la celda c: [(concha, celda de la loseta,
+    vecina, r0, r1)]. Primero el fondo (vecina -1: la loseta superior de su
+    columna); despues las paredes, las losetas de las vecinas mas altas entre
+    su suelo y el de c (r0-r1, la banda que queda al aire), de arriba abajo."""
+    s0 = suelo(W, cfg, c)
+    out = []
+    col = column_radii(W, cfg, c)
+    if col:
+        s, r_in, r_out = col[-1]
+        out.append((s, c, -1, r_in, r_out))
+    paredes = []
+    for j in sorted(NEIGH[c]):
+        sj = suelo(W, cfg, j)
+        if sj <= s0 + 1e-6:
+            continue
+        for s, r_in, r_out in column_radii(W, cfg, j):
+            a, b = max(r_in, s0), min(r_out, sj)
+            if b - a > 1e-6:
+                paredes.append((s, j, j, a, b))
+    paredes.sort(key=lambda x: (-x[4], x[2]))
+    return out + paredes
+
+
+def piezas_expuestas(W, cfg, c):
+    """Las piezas del corte en la celda c, hasta Detalleexpuesto: lo de la
+    exposicion que tiene contenido, el fondo primero y una por era antes de
+    repetir. [(concha, celda, vecina, r0, r1, contenido)]."""
+    tope = max(0, int(cfg['detalle_expuesto']))
+    if tope <= 0:
+        return []
+    cand = []
+    for s, x, j, a, b in exposicion(W, cfg, c):
+        if 0 <= s < len(W['shells']):
+            q = contenido(W['shells'][s], x)
+            if q:
+                cand.append((s, x, j, a, b, q))
+    fondo = [p for p in cand if p[2] < 0]
+    vistas = {}
+    paredes = []
+    for p in cand:
+        if p[2] >= 0:
+            k = vistas.get(p[0], 0)
+            vistas[p[0]] = k + 1
+            paredes.append((k, len(paredes), p))
+    paredes.sort(key=lambda x: (x[0], x[1]))
+    return (fondo + [p for _, _, p in paredes])[:tope]
+
+
+def eras_expuestas(W, cfg, celdas):
+    """[(concha, nombre)] de las eras que ensena el corte en esas celdas, de
+    arriba abajo: carbon, basalto, ruinas o calles (lo que mas pesa de lo
+    expuesto), o estrato si no guarda nada."""
+    expo = [p for c in celdas if en_corte(W, cfg, c) for p in exposicion(W, cfg, c)]
+    por_concha = {}
+    orden = []
+    for s, x, j, a, b in sorted(expo, key=lambda p: (-p[4], p[0])):
+        if not 0 <= s < len(W['shells']):
+            continue
+        if s not in por_concha:
+            por_concha[s] = set()
+            orden.append(s)
+        q = contenido(W['shells'][s], x)
+        if q:
+            por_concha[s].add(q)
+    out = []
+    for s in orden:
+        q = next((k for k in PRIORIDAD_ERA if k in por_concha[s]), None)
+        out.append((s, NOMBRE_ERA[q] if q else 'estrato'))
+    return out
+
+
+def zona_corte(objetivo, rad):
+    """El corte y su borde: las celdas a distancia <= radio + 1 del objetivo."""
+    return set(c for c, _ in rings(objetivo, int(rad) + 1))
+
+
+def unir_cortes(W, cfg, objetivo, depth, rad, now):
+    """La escalada de los cortes: si un corte reciente (dentro de
+    Ventanaescalada pasos) tiene este objetivo en su zona, los dos se unen.
+    Devuelve la union o None."""
+    paso = W.get('paso') or 0.125
+    ventana = max(1, int(cfg['ventana_escalada'])) * paso
+    recientes = [k for k in W['cortes'] if 0 <= now - k[0] <= ventana]
+    union = None
+    if cfg.get('unir_cortes', 1):
+        for k in reversed(recientes):
+            t0, a, d0, r0 = k
+            if a != objetivo and objetivo in zona_corte(a, r0):
+                union = abrir_union(W, cfg, a, objetivo, min(int(d0), int(depth)), now)
+                recientes.remove(k)                 # cada corte se une una vez
+                break
+    W['cortes'] = recientes if union else recientes + [[now, int(objetivo), int(depth), int(rad)]]
+    return union
+
+
+def abrir_union(W, cfg, a, b, depth, now):
+    """Une los cortes de a y b por el camino mas corto: canon en naturaleza
+    (el camino se corta con la profundidad del menor), galeria de metro en la
+    ciudad (una zanja de una loseta con su boveda)."""
+    galeria = tema_de(cfg) == 'ciudad'
+    camino = camino_corto(a, b)
+    prof = 1 if galeria else max(1, int(depth))
+    for c in camino[1:-1]:
+        cut(W, cfg, c, prof, 0, now)
+    u = dict(tipo='galeria' if galeria else 'canon', celdas=camino, t=now, prof=prof)
+    W['uniones'] = (W['uniones'] + [u])[-8:]
+    W['ev']['union'] = u
+    return u
+
+
+def corte_tematico(W, cfg, objetivo, depth, rad, now):
+    """El corte de la fase 9 y, desde la 16, su union con un corte reciente.
+    La leyenda CORTE sigue hablando del corte del golpe."""
+    fuera = cut(W, cfg, objetivo, depth, rad, now)
+    ev = W['ev'].get('corte')
+    union = unir_cortes(W, cfg, objetivo, depth, rad, now)
+    if ev is not None:
+        ev['union'] = union
+        W['ev']['corte'] = ev
+    return fuera, union
+
+
+def _marco_pared(c, j):
+    """(desplazamiento, marco) de una pieza en la pared de la columna de j que
+    da a la celda c: el desplazamiento, del eje de j a la cara (a radio 1,
+    se escala con el radio); el marco, Y la normal de j, Z hacia fuera de la
+    pared y X a lo largo. Tambien el ancho de la cara (a radio 1)."""
+    clave = (GRID['lo'], GRID['hi'], c, 'pared', j)
+    v = _MARCOS.get(clave)
+    if v is None:
+        nj = normal_i(j)
+        cw, cl = _cell_sizes(1.0, j)
+        if is_pole(j):
+            cw, cl = cw * 1.25, cl * 1.25
+        hw, hl = 0.52 * cw, 0.52 * cl               # la loseta mide 1,04 x la celda
+        e, t = tangents(nj)
+        d = _hacia(nj, nj, normal_i(c))
+        dx, dz = _dot(d, e), _dot(d, t)
+        kx = hw / abs(dx) if abs(dx) > 1e-9 else 1e9
+        kz = hl / abs(dz) if abs(dz) > 1e-9 else 1e9
+        if kx <= kz:
+            off, Z, ancho = _mul(d, kx), _mul(e, 1.0 if dx > 0 else -1.0), 2.0 * hl
+        else:
+            off, Z, ancho = _mul(d, kz), _mul(t, 1.0 if dz > 0 else -1.0), 2.0 * hw
+        X = _cross(nj, Z)
+        v = _MARCOS[clave] = (off, (X, nj, Z, _euler_xyz(X, nj, Z)), ancho)
+    return v
+
+
+def _variante(lista, s, x, j):
+    """Una variante del catalogo, del mapa logistico sembrado con la concha y
+    la celda (sin azar)."""
+    if not lista:
+        return None, 0.0
+    v = logistica(semilla_caos(s + 1, x * 7 + j + 1), 3.91, 1)[0]
+    return lista[int(v * len(lista)) % len(lista)], v
+
+
+def build_arqueologia(W, cfg, now, out):
+    """Las piezas expuestas en los cortes y las galerias de metro."""
+    doce = cfg['nivel'] >= 12
+    respaldo = doce and cfg.get('respaldo', 0)
+    st = max(1e-6, cfg['scar_time'])
+    R = top_radius(W, cfg)
+    n_piezas = n_celdas = 0
+
+    def emit(mo, p, marco, dims, col, rug):
+        fila = _fila_m(p, marco, dims[0], dims[1], dims[2], col)
+        if doce:
+            fila.append(1.0 if respaldo else rug)
+        out.setdefault(geometria_de(mo, False, not doce), []).append(fila)
+
+    for c in range(N):
+        if not en_corte(W, cfg, c, R):
+            continue
+        piezas = piezas_expuestas(W, cfg, c)
+        if piezas:
+            n_celdas += 1
+        for s, x, j, a, b, q in piezas:
+            sh = W['shells'][s]
+            tema = sh['tema']
+            col = COL_EXPUESTO[q]
+            t0 = W['scars'].get(s * 1000 + x)
+            if t0 is not None:                  # la cicatriz manda
+                col = _mix(COL_SCAR, col, max(0.0, min(1.0, (now - t0) / st)))
+            th = b - a
+            if j < 0:                           # en el fondo: medio enterrada
+                mo, v = _variante(modelos_de(cfg, tema, q, 'fondo'), s, x, -1)
+                if mo is None:
+                    continue
+                n = normal_i(c)
+                cw, cl_ = _cell_sizes(b, c)
+                h = 0.5 * min(th, 0.8)
+                giro = 30.0 * int(v * 6)
+                emit(mo, _mul(n, b - 0.5 * h), _marco(c, giro), (0.55 * cw, h, 0.55 * cl_), col,
+                     RUG_EXPUESTO[q])
+            else:                               # en la pared, asomando al corte
+                mo, v = _variante(modelos_de(cfg, tema, q, 'expuesto'), s, x, j)
+                if mo is None:
+                    continue
+                cols = column_radii(W, cfg, j)
+                r_mid = next((0.5 * (ri + ro) for s_, ri, ro in cols if s_ == s), 0.5 * (a + b))
+                off, marco, ancho = _marco_pared(c, j)
+                ancho *= r_mid
+                prof = min(0.3, 0.25 * ancho)
+                y0 = a + 0.1 * th
+                p = _add(_add(_mul(marco[1], y0), off, r_mid), marco[2], 0.1 * prof)
+                emit(mo, p, marco, (0.7 * ancho, 0.8 * th, prof), col, RUG_EXPUESTO[q])
+            n_piezas += 1
+    galerias = 0
+    for u in W['uniones']:
+        if u['tipo'] != 'galeria':
+            continue
+        cam = u['celdas']
+        medio = cam[1:-1]
+        g_r = min(suelo(W, cfg, x) for x in medio) if medio else max(suelo(W, cfg, x) for x in cam)
+        alto = max(0.05, 0.9 * (R - g_r)) if R - g_r > 0.05 else 0.05
+        mo = (modelos_de(cfg, 'ciudad', 'galeria', 'union') or [None])[0]
+        if mo is None:
+            continue
+        for k in range(len(cam) - 1):
+            i, j = cam[k], cam[k + 1]
+            fin_i, fin_j = k == 0 and medio, k == len(cam) - 2 and medio
+            if fin_i:                           # media galeria, de la zanja a la excavacion
+                i, j = j, i
+            pi, pj = _mul(normal_i(i), g_r), _mul(normal_i(j), g_r)
+            largo = math.sqrt(sum((pi[q] - pj[q]) ** 2 for q in range(3)))
+            if fin_i or fin_j:
+                largo *= 0.5
+            cw, cl_ = _cell_sizes(g_r, i)
+            emit(mo, pi, _marco_puente(i, j), (0.4 * min(cw, cl_), alto, largo), COL_GALERIA, RUG_GALERIA)
+            galerias += 1
+    W['arqueo'] = dict(piezas=n_piezas, celdas=n_celdas, galerias=galerias)
 
 
 # =============================================================================
@@ -4259,6 +4608,9 @@ def cfg():
             if Wt is not None and int(Wt) != int(c['tema']):
                 c['tema_pendiente'] = c['tema']
                 c['tema'] = int(Wt)
+    if c['nivel'] >= 16:
+        c.update(detalle_expuesto=max(0, int(_p('Detalleexpuesto', c['detalle_expuesto']))),
+                 unir_cortes=int(_p('Unircortes', True)))
     return c
 
 
@@ -4565,6 +4917,26 @@ def on_pulse(name):
             ev = erosion(W, c, pad, _p('Velprueba', 100), now)
         print('ESCALADA  pad %d x%d -> celda %d%s'
               % (pad + 1, max(1, int(c['golpes_escalada'])), ev['celda'], _texto_destructor(ev)))
+    elif name == 'Unirprueba':          # fase 16: dos cortes vecinos seguidos
+        cortes = pads_corte(c)
+        pad = _p('Padprueba', 1) - 1
+        if pad not in cortes:
+            pad = cortes[0] if cortes else pad
+        red, rad, depth = c['perfiles'][pad]
+        a = note_cell(_p('Nota', 60))
+        if a is None or depth <= 0:
+            print('UNIRPRUEBA  sin pad que corte o Nota fuera de rango')
+        else:
+            lejos = [x for x, d in rings(a, int(rad) + 1) if d == int(rad) + 1]
+            b = lejos[0] if lejos else a
+            for x in (a, b):
+                W['ev']['erosion'] = dict(pad=pad, red=red, notas=0, rad=rad, prof=depth, celda=x,
+                                          dens=0.0, doble=False, quitado=0, t=now, tipo='corte')
+                fuera, u = corte_tematico(W, c, x, depth, rad, now)
+            W['flash'] = dict(t=now, cell=b, k=1.0, pad=pad)
+            print('UNIRPRUEBA  pad %d: cortes en %d y %d -> %s'
+                  % (pad + 1, a, b, '%s por %s' % (UNION_NOMBRE[u['tipo']], '-'.join(str(x) for x in u['celdas']))
+                     if u else 'sin union (Unircortes apagado o fuera de Ventanaescalada)'))
     elif name in ('Sembrarzona', 'Sembrarzona2'):
         s = GEO if name == 'Sembrarzona' else ARQ
         note = _p('Nota' if s == GEO else 'Nota2', 60)
@@ -5076,6 +5448,8 @@ def _legend():
             left = max(0.0, c['scar_time'] - (absTime.seconds - k['t']))
             lines.append('  CORTE    celda %d   %d losetas   suelo %.2f   laguna %.2f   cicatriz %.1f s'
                          % (k['celda'], k['conchas'], k.get('suelo', 0.0), k.get('laguna', 0.0), left))
+            if lvl >= 16:
+                lines.append(_legend_arqueo(W, c, k))
             if k.get('nucleo') is not None:
                 lines.append('  CORTE    celda %d   nucleo alcanzado' % k['nucleo'])
     if lvl >= 11:
@@ -5101,6 +5475,22 @@ def _legend():
     if lvl >= 15:
         lines.append(_legend_era(W, c))
     return '\n'.join(lines)
+
+
+def _legend_arqueo(W, c, k):
+    """CORTE (fase 16): las eras que ensena el corte del ultimo golpe, las
+    piezas expuestas y la union de cortes."""
+    zona = [x for x, _ in rings(k['celda'], int(k.get('radio', 1)) + 1)] if 0 <= k['celda'] < N else []
+    eras = eras_expuestas(W, c, zona)
+    az = W.get('arqueo') or {}
+    txt = '  CORTE    celda %d   %d era%s expuesta%s%s   piezas %d en %d celdas' % (
+        k['celda'], len(eras), '' if len(eras) == 1 else 's', '' if len(eras) == 1 else 's',
+        ': ' + ', '.join(nm for _, nm in eras) if eras else '', az.get('piezas', 0), az.get('celdas', 0))
+    u = k.get('union')
+    if u:
+        txt += '   + %s %s (%d celdas)' % (UNION_NOMBRE[u['tipo']], '-'.join(str(x) for x in u['celdas']),
+                                         len(u['celdas']))
+    return txt
 
 
 def _legend_era(W, c):
