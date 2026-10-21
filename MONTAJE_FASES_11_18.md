@@ -15,13 +15,14 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`) | `motor v36` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`) | `comun v28` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*) | `motor v37` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto) | `comun v29` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun) | `fase11 v4` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
 | `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 | `fase14 v1` |
 | `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 (v2: la autoprueba no depende de la `Herencia` del proyecto) | `fase15 v2` |
+| `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v1` |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
 ```python
@@ -441,6 +442,54 @@ Comprueba:
 - las losetas llevan la rugosidad en el canal `a` (con `Materialrespaldo`, 1);
 - `Temaenciclo` apagado: el cambio es inmediato;
 - la línea `ERA` de la leyenda.
+
+---
+
+## Calibración de la vista (motor v37, comun v29)
+
+### Qué pasaba
+
+Medido con el motor en una sesión simulada de 20 minutos a 120 BPM (SEQ1 de 16 pasos, SEQ2 cada 3 pasos; con y sin batería, que erosiona a negras 16 compases sí y 16 no):
+
+- **Eras de 20 segundos.** Con los valores del proyecto (`Umbralnovedad` 0,378, `Herencia` 0,125, `Growstep` 0,04) y `Ciclomin` 8, sin batería, el mundo se enterraba cada 9 o 10 compases, en cuanto llegaba al límite: 61 conchas en 20 minutos. Tres causas juntas: el umbral de novedad alto da el mundo por quieto enseguida; con poca herencia el mundo nuevo arranca casi vacío y madura en cuanto el pattern llena sus celdas; y con `Growstep` pequeño la formación se queda baja, y como el coste de cada escalón sube con la altura, madura con pocas notas.
+- **Un planeta que no paraba de crecer.** El radio era el tiempo: `Shellthick` por cada `Ciclomin` compases. A los 20 minutos, radio 25 con los valores del proyecto y 42 con los de por defecto, sobre un núcleo de 6. La cámara se alejaba con cada concha y las formaciones (límite ~2) acababan siendo motas.
+- **Un salto de altura.** Con `Growstep` 0,04, `Semillafrac` 0,18 y `Umbralram` 6, la formación iba del 18 al 34 % y al ramificarse saltaba al límite de golpe.
+
+### Qué cambia
+
+| Parámetro | Antes | Ahora | Por qué |
+|---|---|---|---|
+| `Ciclomin` (Fase6) | 8 | 16 | Una era dura al menos 32 s a 120 BPM |
+| `Compasesquietos` (Fase6) | 2 | 3 | El mundo tiene que estar quieto 3 compases para enterrarse |
+| `Grosormax` (Fase8) | 2,0 | 1,5 | La concha de un mundo largo no domina el corte (48 compases o más) |
+| `Cortezamax` (Fase8, nuevo) | — | 4 | **Compactación:** la concha nueva aplasta las viejas; la corteza tiende a 4 y el planeta deja de engordar (ver fase 8 en `MONTAJE_FASES_3_10.md`) |
+| `Umbralnovedad`, `Ciclomax`, `Herencia` | 0,15 · 64 · 0,25 | igual | Los valores por defecto ya eran buenos; `ajuste_vista.py` los devuelve ahí |
+| `Growstep` | — | (1 − `Semillafrac`) / (`Umbralram` − 1) | Escalones iguales de la semilla al límite; con los valores por defecto ya lo es (0,2) |
+
+**Cómo llega a un proyecto en marcha.** Relanzar cualquier fase (comun v29) cambia `Ciclomin`, `Compasesquietos` y `Grosormax` solo si seguían en el valor por defecto viejo, crea `Cortezamax` en la página Fase8 y avisa con `..` si la altura salta al límite. Lo ajustado a mano no se toca. Para ponerlo todo en los valores calibrados, incluido lo tocado a mano, está `ajuste_vista.py`:
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/ajuste_vista.py').read())
+```
+
+No cambia el nivel ni el mundo. Pone `Ciclomin` 16, `Compasesquietos` 3, `Umbralnovedad` 0,15, `Ciclomax` 64, `Herencia` 0,25, `Cortezamax` 4, `Grosormax` 1,5 y el `Growstep` sin salto. Dice qué ha cambiado (`antes -> ahora`) y escribe la línea para volver a lo de antes. No toca `Shellthick`, `Alturafactor`, los umbrales de la fase 4, la cámara ni el tema. Lo ya enterrado no adelgaza de golpe, porque el radio nunca baja; para verlo desde el principio, `Resetmundo` (página Fase3).
+
+### Resultado (simulación, 20 minutos)
+
+| Caso | Sin batería: eras · compases de media · radio a 2/5/10/20 min | Con batería: eras · compases · radio |
+|---|---|---|
+| Proyecto, antes | 61 · 9,7 · 8,0 / 10,8 / 15,5 / 25,2 | 23 · 25,4 · 7,8 / 10,4 / 15,5 / 24,5 |
+| Por defecto, antes | 12 · 47,9 · 8,9 / 11,9 / 15,9 / 25,9 | 19 · 30,9 · 8,8 / 14,7 / 22,6 / 42,2 |
+| Por defecto, ahora | 12 · 48,5 · 7,5 / 8,7 / 9,8 / 10,8 | 13 · 45,3 · 7,3 / 8,4 / 9,7 / 10,8 |
+| Proyecto + `ajuste_vista.py` | 11 · 50,8 · 6,6 / 7,5 / 8,8 / 10,1 | 5 · 118 · 6,4 / 7,4 / 8,1 / 9,1 |
+
+Las conchas visibles, de la más nueva a la más vieja, con los valores por defecto: 1,5 · 1,06 · 0,74 · 0,51 · 0,35 · 0,24 · 0,17 · 0,11: las recientes se leen como bandas y las viejas como vetas.
+
+Con `Umbralram` 6 (el del proyecto) y una batería que erosiona sin parar, el mundo tarda más en madurar: eras de ~4 minutos. Es lo esperado (*el breakdown entierra el mundo*); con `Umbralram` 5 bajan a ~50 compases.
+
+### Autoprueba
+
+La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sube al menos un 10 % de cada concha; que 40 conchas de 0,5 dejan una corteza de menos de 6 (sin compactar, 20); que la concha nueva conserva su grosor y las viejas son más finas cuanto más hondas; que compactada, cada columna sigue en el radio nominal; y que la laguna de un corte se compacta como sus conchas. Las demás comprobaciones de las fases 8 y 9 se miden sin compactar.
 
 ---
 

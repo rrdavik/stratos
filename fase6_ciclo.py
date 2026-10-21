@@ -56,7 +56,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase6 v4  (la edad maxima solo entierra un mundo con el territorio ocupado)'
+VERSION = 'fase6 v5  (eras mas largas: Ciclomin 16, Compasesquietos 3)'
 banner(VERSION)
 
 base = require_base(6)
@@ -71,10 +71,10 @@ if quitados:
 page = get_page(base, 'Fase6')
 add_par(base, page, 'float', 'Umbralmadurez', 'Madurez minima para enterrar', 0.6, 0.0, 1.0)
 add_par(base, page, 'float', 'Umbralnovedad', 'Novedad maxima de un compas quieto', 0.15, 0.0, 1.0)
-add_par(base, page, 'int', 'Compasesquietos', 'Compases quietos para enterrar', 2, 1, 64, clamp=True)
+add_par(base, page, 'int', 'Compasesquietos', 'Compases quietos para enterrar', 3, 1, 64, clamp=True)
 renew_default(base, 'Umbralnovedad', 0.05, 0.15)
-renew_default(base, 'Compasesquietos', 4, 2)
-add_par(base, page, 'int', 'Ciclomin', 'Duracion minima (compases)', 8, 1, 256, clamp=True)
+renew_default(base, 'Compasesquietos', 4, 3)
+add_par(base, page, 'int', 'Ciclomin', 'Duracion minima (compases)', 16, 1, 256, clamp=True)
 add_par(base, page, 'int', 'Ciclomax', 'Edad maxima (si el territorio esta lleno)', 64, 1, 1024,
         clamp=True)
 renew_default(base, 'Ciclomax', 32, 64)

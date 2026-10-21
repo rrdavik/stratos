@@ -18,3 +18,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase12_moduladores.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase13_tejido.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase14_destructores.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase15_era.py').read())
+
+
+# ajuste de la vista (opcional): pone los valores calibrados aunque los hayas tocado a mano
+exec(open('C:/Users/DareDave/Downloads/est/ajuste_vista.py').read())

@@ -24,17 +24,24 @@ Al terminar cada ciclo de ecosistema (fase 6: lo cierra el mundo):
   2. El planeta engorda el GROSOR de la concha. Con Grosortiempo es
      proporcional a lo que duro su mundo:
          grosor = Shellthick x compases / Ciclomin
-     entre 0,25x y Ciclomax / Ciclomin, y nunca mas de Grosormax (2,0):
-     con los valores por defecto, de 0,5 (8 compases) a 2,0 (32 o mas).
+     entre 0,25x y Ciclomax / Ciclomin, y nunca mas de Grosormax (1,5):
+     con los valores por defecto, de 0,5 (16 compases) a 1,5 (48 o mas).
      El grosor de cada estrato registra cuanto tardo su mundo en
      agotarse. Sin Grosortiempo, siempre Shellthick.
+     COMPACTACION (v10, motor v37): la concha nueva aplasta las de
+     debajo. Todas pierden la misma fraccion, 1 - e^(-grosor / Cortezamax),
+     asi que la corteza tiende a Cortezamax (4) y el planeta deja de
+     engordar: las conchas recientes se leen gruesas y las viejas se
+     aprietan en vetas finas. El radio sube siempre al menos un 10 % de
+     la concha nueva y nunca baja. Cortezamax 0: sin compactar.
   3. El 25 % de la ocupacion de cada celda pasa a la capa nueva (la
      fraccion que no llega a 1 se acumula para el ciclo siguiente). Lo
      heredado vuelve a brotar desde la nueva superficie.
 
-El radio NOMINAL del cuerpo ES el tiempo transcurrido: radio del nucleo +
-suma de los grosores de todas las conchas (la colmatacion no cuenta). El
-suelo de cada celda es el nucleo + su columna; la laguna, lo que falta.
+El radio NOMINAL del cuerpo es el tiempo transcurrido, comprimido por la
+compactacion: radio del nucleo + suma de los grosores de todas las conchas
+(la colmatacion no cuenta). El suelo de cada celda es el nucleo + su
+columna; la laguna, lo que falta.
 
 EL HORNEADO (decision tomada)
 -----------------------------
@@ -68,7 +75,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v9  (cada concha de un color; columnas, Colmatacion, zocalo; luz en las conchas)'
+VERSION = 'fase8 v10  (la corteza se compacta: Cortezamax; Grosormax 1,5)'
 banner(VERSION)
 
 base = require_base(8)
@@ -78,7 +85,8 @@ page = get_page(base, 'Fase8')
 add_par(base, page, 'float', 'Herencia', 'Herencia entre conchas', 0.25, 0.0, 1.0)
 add_par(base, page, 'int', 'Maxconchas', 'Conchas visibles', 24, 1, 96, clamp=True)
 add_par(base, page, 'toggle', 'Grosortiempo', 'Grosor proporcional al ciclo', True)
-add_par(base, page, 'float', 'Grosormax', 'Grosor maximo de concha (0: sin limite)', 2.0, 0.0, 8.0)
+add_par(base, page, 'float', 'Grosormax', 'Grosor maximo de concha (0: sin limite)', 1.5, 0.0, 8.0)
+add_corteza(base)
 add_par(base, page, 'float', 'Colmatacion', 'Relleno de las hondonadas al enterrar', 0.0, 0.0, 1.0,
         clamp=True)
 add_par(base, page, 'menu', 'Paleta', 'Paleta de las conchas', 'generaciones',
@@ -89,7 +97,8 @@ try:
     base.par.Maxconchas.label = 'Losetas visibles por columna'
 except Exception:
     pass
-ok('pagina Fase8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Grosormax (2), '
+ok('pagina Fase8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Grosormax (1,5), '
+   'Cortezamax (4), '
    'Colmatacion (0), Paleta (generaciones), Paletatono (20), Paletacroma (0,09)')
 
 make_phong(base, 'mat_estratos', 780, 620, spec=0.12, shin=8, diff=1.0)
@@ -110,7 +119,9 @@ leeme(base, 8, """FASE 8 - CONCHAS
   En cada fin de ciclo cada celda deposita una loseta sobre su columna,
   con el color de su generacion (Paleta: uno distinto por concha): las hondonadas se tapizan (Colmatacion
   las rellena). Grosor: Shellthick x compases / Ciclomin (Grosortiempo),
-  entre 0,25x y Ciclomax/Ciclomin, como mucho Grosormax (2).
+  entre 0,25x y Ciclomax/Ciclomin, como mucho Grosormax (1,5).
+  Cortezamax (4): la concha nueva compacta las viejas; la corteza tiende
+  a ese grosor y el planeta deja de engordar (0: sin compactar).
   Radio nominal = nucleo + suma de grosores; suelo = nucleo + columna.
   Herencia (25 %) pasa a la capa nueva. Maxconchas losetas por columna;
   debajo, un zocalo hasta el nucleo, que ya no crece.
@@ -122,7 +133,8 @@ print_report()
 def prueba(t):
     import math
     m = t.m
-    c = m.cfg()
+    c = dict(m.cfg())
+    c['corteza_max'] = 0.0              # sin compactar: el radio es el tiempo
     W = m.new_world()
     for g in range(4):
         for k in range(16):
@@ -202,6 +214,33 @@ def prueba(t):
             len(tz) == m.N * 5 and len(zoc) == m.N and len(tz) <= m.N * (c8['max_shells'] + 1),
             '%d instancias, %d zocalos' % (len(tz), len(zoc)))
     t.check('el nucleo no crece', abs(m.nucleo_radius() - c['core_radius']) < 1e-6)
+    # compactacion (v10, motor v37): la corteza tiende a Cortezamax
+    cz = dict(c)
+    cz.update(nivel=max(9, c['nivel']), grosor_tiempo=0, colmatacion=0.0, corteza_max=4.0)
+    Wk = m.new_world()
+    radios = [cz['core_radius']]
+    for g in range(40):
+        m.end_cycle(Wk, cz, float(g))
+        radios.append(m.top_radius(Wk, cz))
+    gk = [m.shell_th(sh, cz) for sh in Wk['shells']]
+    sube = all(b - a >= m.COMPACTA_CRECE * th - 1e-9 for a, b in zip(radios, radios[1:]))
+    t.check('Cortezamax 4: el radio nunca baja y sube al menos un 10 % de cada concha', sube)
+    t.check('Cortezamax 4: 40 conchas de %.2f dejan una corteza de menos de 6 (sin compactar, %.0f)'
+            % (th, 40 * th), radios[-1] - cz['core_radius'] < 6.0, '%.2f' % (radios[-1] - cz['core_radius']))
+    t.check('la concha nueva conserva su grosor; las viejas, mas finas cuanto mas hondas',
+            abs(gk[-1] - th) < 1e-9 and all(a <= b + 1e-12 for a, b in zip(gk, gk[1:])) and gk[0] < 0.2 * th,
+            '%.3f ... %.3f' % (gk[0], gk[-1]))
+    t.check('compactada, cada columna sigue en el radio nominal',
+            all(abs(m.suelo(Wk, cz, x) - m.top_radius(Wk, cz)) < 1e-6 for x in range(m.N)))
+    Wq = m.new_world()
+    for g in range(5):
+        m.end_cycle(Wq, cz, float(g))
+    m.cut(Wq, cz, i, 3, 0, 10.0)
+    lq0 = m.laguna(Wq, cz, i)
+    m.end_cycle(Wq, cz, 11.0)
+    t.check('la laguna de un corte se compacta como sus conchas',
+            0 < Wq['compacta'] < 1 and abs(m.laguna(Wq, cz, i) - lq0 * Wq['compacta']) < 1e-6,
+            '%.3f -> %.3f (x%.3f)' % (lq0, m.laguna(Wq, cz, i), Wq['compacta']))
     # paleta de generaciones
     cp = dict(c)
     cp.update(paleta=0, paleta_tono=20.0, paleta_croma=0.09,
@@ -342,5 +381,6 @@ run_test(base, prueba)
 print('  Ahora: deja sonar varios ciclos (o pulsa Forzarciclo en la pagina')
 print('  Fase6). El planeta engorda una capa por ciclo, mas gruesa cuanto')
 print('  mas tardo su mundo en agotarse.')
-print('  Si engorda demasiado rapido: sube Ciclomin o baja Shellthick.')
+print('  Las conchas viejas se compactan: el planeta tiende a nucleo + Cortezamax.')
+print('  Si engorda demasiado: baja Cortezamax; si las eras son cortas, sube Ciclomin.')
 print('=' * 66)

@@ -18,15 +18,15 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`) | `motor v36` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar | `comun v28` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`, ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`) | `motor v37` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar; la v29, la calibración de la vista (`Ciclomin` 16, `Compasesquietos` 3, `Grosormax` 1,5 si seguían por defecto, y `Cortezamax`) | `comun v29` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11) | `fase3 v12` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
-| `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo | `fase6 v4` |
+| `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11) | `fase7 v10` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel | `fase8 v9` |
-| `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo) | `fase9 v8` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5 | `fase8 v10` |
+| `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar) | `fase9 v9` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v10: `Encuadre`, el alto del planeta en la pantalla) | `fase10 v10` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
@@ -280,7 +280,7 @@ ocupación  = celdas del territorio con ocupación > 0 / celdas del territorio  
 - La batería no crea territorio: solo lo vacía. Con batería constante, el territorio no se llena y el mundo sigue pasado `Ciclomax`. La leyenda lo dice con `esperando territorio`.
 - **No hay tope de seguridad.** Si el territorio no se llena, el mundo no se entierra por edad máxima; lo enterrarán el estancamiento al quitar la batería, `Cambioentierra` o `Forzarciclo`.
 - En cuanto el territorio llega a `Umbralterritorio`, el ciclo se cierra en ese mismo compás.
-- El grosor de la concha (fase 8) ya está acotado en `Ciclomax` / `Ciclomin` × `Shellthick` y en `Grosormax`: un ciclo de 200 compases da la misma concha que uno de 64.
+- El grosor de la concha (fase 8) ya está acotado en `Ciclomax` / `Ciclomin` × `Shellthick` y en `Grosormax`: un ciclo de 200 compases da la misma concha que uno de 48 (con los valores por defecto de la fase 8 v10).
 
 **Cierre del ciclo.** Va por orden; nunca antes de `Ciclomin`, salvo con `Forzarciclo`:
 
@@ -308,9 +308,9 @@ El planeta se frena a medida que el mundo deja de cambiar (justo antes de enterr
 
 **Tabla `ciclos`.** Una fila por ciclo cerrado: `ciclo`, `compases`, `segundos`, `motivo`, `madurez`, `novedad`, `grosor` (desde la fase 8) y `territorio` (fase 6 v4: la ocupación del territorio al cerrar). Guarda las últimas 200. Al relanzar la fase 6, una tabla antigua gana las columnas que le faltan sin perder filas. Sirve para afinar los umbrales con el aparato.
 
-**Página Fase6:** `Umbralmadurez` 0,6 · `Umbralnovedad` 0,15 · `Compasesquietos` 2 · `Ciclomin` 8 · `Ciclomax` 64 (*Edad maxima (si el territorio esta lleno)*) · `Umbralterritorio` 0,8 (*Territorio ocupado para la edad maxima*) · `Compasesterritorio` 8 (*Compases de memoria del territorio*) · `Negrasporcompas` 4 · `Cambioentierra` (apagado) · `Girovivo` (encendido) · `Giromin` 0,25 · `Forzarciclo`
+**Página Fase6:** `Umbralmadurez` 0,6 · `Umbralnovedad` 0,15 · `Compasesquietos` 3 · `Ciclomin` 16 · `Ciclomax` 64 (*Edad maxima (si el territorio esta lleno)*) · `Umbralterritorio` 0,8 (*Territorio ocupado para la edad maxima*) · `Compasesterritorio` 8 (*Compases de memoria del territorio*) · `Negrasporcompas` 4 · `Cambioentierra` (apagado) · `Girovivo` (encendido) · `Giromin` 0,25 · `Forzarciclo`
 
-Al relanzar la fase 6 v4, `Umbralnovedad` pasa de 0,05 a 0,15 y `Compasesquietos` de 4 a 2 solo si seguían en el valor anterior por defecto; `Umbralmadurez` sigue en 0,6. La fase 6 v2 quita los parámetros obsoletos: `Repsporciclo`, `Modociclo`, `Turnauto`, `Longmanual`, `Longfija`, `Longmin`, `Pasosporcompas`, `Pasospornegra` y `Resetpatterns`.
+Al relanzar la fase 6 v4, `Umbralnovedad` pasa de 0,05 a 0,15 y `Compasesquietos` de 4 a 2 solo si seguían en el valor anterior por defecto (desde la fase 6 v5 y comun v29, `Ciclomin` pasa de 8 a 16 y `Compasesquietos` de 2 a 3, también solo si seguían por defecto, al relanzar cualquier fase); `Umbralmadurez` sigue en 0,6. La fase 6 v2 quita los parámetros obsoletos: `Repsporciclo`, `Modociclo`, `Turnauto`, `Longmanual`, `Longfija`, `Longmin`, `Pasosporcompas`, `Pasospornegra` y `Resetpatterns`.
 
 **Leyenda:**
 
@@ -454,7 +454,15 @@ En cada fin de ciclo:
    grosor = min(Grosormax, Shellthick × clamp(compases / Ciclomin, 0,25, Ciclomax / Ciclomin))
    ```
 
-   Con los valores por defecto va de 0,5 (ciclo mínimo, 8 compases) a 2,0 (32 compases o más: `Grosormax`). Sin ese tope, una concha de edad máxima (64 compases) mediría 4,0, más del doble que una formación en su límite (1,875). `Grosormax` 0 quita el tope. y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
+   Con los valores por defecto (fase 6 v5, fase 8 v10) va de 0,5 (ciclo mínimo, 16 compases) a 1,5 (48 compases o más: `Grosormax`). Sin ese tope, una concha de edad máxima (64 compases) mediría 2,0. `Grosormax` 0 quita el tope, y un `Forzarciclo` temprano da como mínimo 0,125. Sin `Grosortiempo`, siempre `Shellthick`. El grosor de cada estrato registra cuánto tardó su mundo en agotarse.
+   **Compactación** (fase 8 v10, motor v37). La concha nueva aplasta las de debajo: todas pierden la misma fracción de su grosor,
+
+   ```
+   pérdida = min(corteza × (1 − e^(−grosor nuevo / Cortezamax)), 0,9 × grosor nuevo)
+   corteza = radio nominal − núcleo
+   ```
+
+   así que la corteza tiende a `Cortezamax` (4) y el planeta deja de engordar. Las conchas recientes se leen gruesas y las viejas se aprietan en vetas finas, como en un corte geológico. El radio sube siempre al menos un 10 % de la concha nueva y nunca baja. Las losetas de cada columna se aplastan igual, así que cortes, hondonadas y lagunas conservan su forma (la laguna se compacta con sus conchas). `Cortezamax` 0: sin compactar (el radio es el tiempo, como hasta la fase 8 v9).
 3. **Herencia:** el 25 % de la ocupación de cada celda pasa a la capa nueva. La fracción que no llega a 1 se acumula para el ciclo siguiente: una celda con ocupación 2 en ciclos seguidos acaba heredando. Lo heredado vuelve a brotar desde la nueva superficie.
 
 **Columnas y radio nominal** (motor v23). Cada celda guarda su **columna**: la pila de losetas que le quedan, de abajo arriba. Cada loseta lleva su concha (generación: color y ocupación) y su grosor; sus radios salen de su posición en la columna, y el radio exterior de una es el interior de la siguiente, sin huecos ni solapes.
@@ -516,17 +524,17 @@ Con `Paletatono` 20 y `Paletacroma` 0,09. Cambiar `Paletatono` entre sesiones da
 
 **Cámara:** la de globo (la misma de la fase 10, sin modos): el planeta entero, centrado y tan cerca como permite el cuadro; retrocede a cada enterramiento. Desde comun v15 la pone `estratos_comun.py` en todas las fases que cargan el motor (de la 3 en adelante).
 
-**Página Fase8:** `Paleta` generaciones (*Paleta de las conchas*: generaciones o mineral) · `Paletatono` 20 (*Tono de la primera concha*, 0–360) · `Paletacroma` 0,09 (*Saturación de las conchas*, 0–0,15) · `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 2,0 · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
+**Página Fase8:** `Paleta` generaciones (*Paleta de las conchas*: generaciones o mineral) · `Paletatono` 20 (*Tono de la primera concha*, 0–360) · `Paletacroma` 0,09 (*Saturación de las conchas*, 0–0,15) · `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 1,5 · `Cortezamax` 4 (*Corteza máxima: compacta las conchas viejas*, 0–12; 0 = el radio es el tiempo) · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
 
 **Leyenda:**
 
 ```
-CONCHAS  11   radio 11.50   ultima 0.75   laguna max 2.25 (celda 41)   colmatacion 0%   herencia 25%   continentes 3
+CONCHAS  11   radio 10.12   ultima 0.75   corteza 4.12 de 4 (x0.86)   laguna max 1.25 (celda 41)   colmatacion 0%   herencia 25%   continentes 3
 ```
 
-`radio` es el radio nominal; `laguna max`, la celda más honda.
+`radio` es el radio nominal; `corteza`, lo que hay sobre el núcleo, de `Cortezamax`, y el factor de la última compactación; `laguna max`, la celda más honda.
 
-**Ritmo de engorde:** de media, `Shellthick` por cada `Ciclomin` compases: 0,5 cada 16 s a 120 BPM, unas 37 unidades en 20 minutos sobre un núcleo de 6. El radio es el tiempo transcurrido, salvo en los ciclos de más de 32 compases, que el tope de `Grosormax` recorta. Para frenar el engorde, sube `Ciclomin` o baja `Shellthick`.
+**Ritmo de engorde:** cada concha deposita `Shellthick` por cada `Ciclomin` compases, y la compactación se come casi todo cuando la corteza se acerca a `Cortezamax`. En una sesión simulada de 20 minutos a 120 BPM (SEQ1, SEQ2 y batería), el radio pasa de 6 a ~7,3 (2 min), ~8,4 (5 min), ~9,7 (10 min) y ~10,8 (20 min). Sin compactar (`Cortezamax` 0) y con los valores de antes (`Ciclomin` 8, `Grosormax` 2) llegaba a 42: las formaciones, de 1,875, eran motas. Para un planeta más pequeño, baja `Cortezamax`.
 
 **Relanzar** (fase 8 v5 y fase 9 v6). En un proyecto en la fase 10: `fase8_conchas.py`, `fase9_arqueologia.py` y `fase10_direccion.py`. No baja `Nivel` ni borra el mundo: las columnas se construyen solas a partir de las conchas y las celdas cortadas quedan como hondonadas.
 
@@ -635,7 +643,7 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | El mundo nunca se entierra por estancamiento | El bombo está sonando: cada temblor genera novedad | Es lo esperado; quita el bombo para que el mundo se asiente |
 | El mundo no se entierra nunca (la leyenda dice `esperando territorio`) | La batería no deja que se llene el territorio: cada golpe lo vacía, y la edad máxima solo entierra un mundo con el territorio ocupado | Quita la batería (el mundo se asienta y se entierra por estancamiento) o baja `Umbralterritorio`. Mira la columna `territorio` de la tabla `ciclos` |
 | Los ciclos siempre acaban por edad máxima | Umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
-| Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas) | Sube `Ciclomin` o `Compasesquietos` |
+| Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas), `Umbralnovedad` alto, `Herencia` baja (el mundo nuevo arranca casi vacío) o `Growstep` pequeño (los escalones bajos cuestan pocas notas) | `ajuste_vista.py` (ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`), o sube `Ciclomin` o `Compasesquietos` |
 | Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota (la leyenda pone `parado`) |
 | El globo se acerca al borde un instante al enterrar | La concha nueva es gruesa y la transición tarda (nunca se sale) | Baja `Camsuave` o `Encuadre` (Fase10) |
 | El planeta se ve pequeño | `Encuadre` bajo, o motor anterior al v36 | Sube `Encuadre` (1 = de borde a borde); relanza cualquier fase con motor v36 |
@@ -644,7 +652,8 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | No entiendo `Encuadremargen` ni `Holguraaltura` | Parámetros de los motores v33 a v35 | Relanza cualquier fase con motor v36: se quitan y queda `Encuadre` |
 | La cámara se mueve todo el rato y el mundo se ve a ratos | Motor v32 (encuadraba lo que se dibujaba en cada fotograma) | Relanza cualquier fase con motor v33 |
 | Hondonadas que bajan sin parar | Un pad con profundidad cae en cada mundo sobre las mismas celdas: pierde N losetas y recibe 1 | Sube `Colmatacion` (Fase8) o baja su profundidad en `perfiles_erosion` |
-| El planeta engorda demasiado rápido | Engorde = `Shellthick` por cada `Ciclomin` compases | Sube `Ciclomin` o baja `Shellthick` |
+| El planeta engorda demasiado rápido | Sin compactación (`Cortezamax` 0, o motor anterior al v37), el engorde es `Shellthick` por cada `Ciclomin` compases | Relanza cualquier fase con comun v29 (crea `Cortezamax` 4) y baja `Cortezamax` si aún es mucho. Lo ya enterrado no adelgaza de golpe: `Resetmundo` para empezar de cero |
+| La formación se queda baja y salta al límite de golpe | `Growstep` pequeño para `Semillafrac` y `Umbralram`: no llega al límite antes de la ramificación (el informe lo avisa con `..`) | `Growstep` = (1 − `Semillafrac`) / (`Umbralram` − 1), o `ajuste_vista.py` |
 | `Cambioentierra` no hace nada | El BeatStep no envía All Notes Off al cambiar de pattern | Prueba pendiente con el aparato |
 | El planeta no frena aunque el mundo esté quieto | `ritmo` sin el giro vivo, o `Girovivo` apagado | Relanza la última fase aplicada (parchea `ritmo`); mira que salga `ritmo: el giro se multiplica…` |
 | La retícula no sube con las conchas | `reticula_chop` no se recocina | Se recocina sola en cada cambio de radio; si no, relanza la fase 8 |
@@ -686,7 +695,7 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 3–9 | Cámara antes de la fase 10 | La misma de globo, puesta por `estratos_comun.py` en todas las fases con motor; en las fases 1 y 2, `fase12_base.py` encuadra el núcleo con la misma fórmula |
 | 8 | Paleta de las conchas | Un color por concha: ángulo áureo sobre el arco que dejan el cian y el ámbar, croma de mineral, claro y oscuro alternos, calculado de la generación. `Paleta` mineral para la anterior |
 | 8 | Horneado a textura | Capa de losetas instanciadas |
-| 8 | Grosor de concha | Proporcional a la duración del ciclo (`Grosortiempo`), entre 0,25× y `Ciclomax`/`Ciclomin` × `Shellthick` (0,5; límite de altura 1,875), con un tope de `Grosormax` (2,0) |
+| 8 | Grosor de concha | Proporcional a la duración del ciclo (`Grosortiempo`), entre 0,25× y `Ciclomax`/`Ciclomin` × `Shellthick` (0,5; límite de altura 1,875), con un tope de `Grosormax` (1,5). Las conchas viejas se compactan (`Cortezamax` 4): el radio es el tiempo comprimido |
 | 3–4 | ¿Cuántas notas por trigger? | De 1 a `Costemax` (5) según la altura, con frenada; 5 desde el límite. La presión suma carga |
 | 3 | ¿Cómo se reparten las notas? | `Notapolosur` y `Notapolonorte` (entre do1 y do8) son los polos; en medio, un anillo por octava; el rango decide el número de celdas; `Fuerarango` para las de fuera |
 
