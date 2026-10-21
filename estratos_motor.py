@@ -10,7 +10,8 @@
 #                 erosion, conchas, cortes y la piel tematica (fase 11:
 #                 catalogo de modelos, clusters, compuestos y transitos;
 #                 fase 12: material por la velocidad, vigor por el gate;
-#                 fase 13: rios y carreteras).
+#                 fase 13: rios y carreteras; fase 14: aranazos tematicos,
+#                 escalada, incendio y derrumbes).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -23,7 +24,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v33'
+MOTOR_VERSION = 'motor v34'
 
 import math
 
@@ -132,6 +133,8 @@ DEFAULT_CFG = dict(
     gate_prueba=0.5, respaldo=0,
     # fase 13: tejido conectivo
     rios=1, carreteras=1, min_via=2, grosor_via=0.18, max_rio=12,
+    # fase 14: destructores
+    ventana_escalada=8, golpes_escalada=2, pasos_fuego=6, max_fuego=6, pasos_polvo=8,
 )
 
 
@@ -453,6 +456,13 @@ def new_world():
         tejido={},              # resumen de rios y carreteras para la leyenda
         vig=[1.0] * N,          # vigor de cada formacion (fase 12: duracion del gate)
         gate_sim=[],            # note off simulados de los botones: [t, s, nota]
+        # destructores (fase 14)
+        golpes=[],              # aranazos recientes: [t, celda objetivo]
+        cats=[],                # catastrofes en curso (incendio, derrumbes)
+        polvo=[],               # nubes de particulas: [t0, celda, modo, cuantas]
+        ruina=[0] * N,          # huella de una catastrofe (1 + indice de RUINA_ESP; 0 ninguna)
+        t_ruina=[-99.0] * N,
+        derribo=[0] * N,        # la obra de la celda se recorre hacia atras
         aviso='',
         ev={},
         t=None,
@@ -822,6 +832,7 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
         return dict(estado='fuera de rango', inc=0.0, celda=-1)
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
     W.setdefault('terr', {})[i] = W.get('bar_n', 0)
+    W['ruina'][i] = 0                   # fase 14: construir sobre la huella la borra
     if cfg['nivel'] >= 12:              # fase 12: la velocidad da el material
         W['ev']['mod'] = dict(s=s, celda=i, vel=int(vel), rug=rugosidad(cfg, vel), gate=None, efecto='')
     res = grow(W, cfg, i, s, vel, now)
@@ -1018,6 +1029,7 @@ def close_cycle(W, cfg, now, motivo):
               segundos=max(0.0, now - t0) if t0 is not None else 0.0,
               motivo=motivo, madurez=W['madurez'], novedad=W['novedad'],
               territorio=W.get('territorio', 0.0), t=now)
+    apagar_destructores(W)              # fase 14: el fin de ciclo lo cierra de golpe
     if end_cycle(W, cfg, now, bars):
         ev['grosor'] = shell_th(W['shells'][-1], cfg)
         W['foto_anterior'] = snapshot(W, cfg)
@@ -1157,6 +1169,8 @@ def erosion(W, cfg, pad, vel, now):
     W['t'] = W['t'] if W['t'] is not None else now
     resto = W['ero_resto']
     notas = erosion_notes(cfg, red, vel)
+    tematico = cfg['nivel'] >= 14 and es_aranazo(cfg, pad)
+    antes = antes_del_golpe(W, cfg, target, now) if tematico else None
     for c, d in rings(target, rad_eff):
         w = ATENUACION ** d             # 1 en la celda, 1/2 el primer anillo, 1/4...
         x = notas * w + resto[c]
@@ -1171,6 +1185,8 @@ def erosion(W, cfg, pad, vel, now):
     ev = dict(pad=pad, red=red, notas=notas, rad=rad_eff, prof=depth, celda=target, dens=dens,
               doble=over, quitado=removed, t=now, tipo=tipo)
     W['ev']['erosion'] = ev
+    if tematico:                        # fase 14: el accidente y la escalada
+        destructor(W, cfg, pad, vel, now, ev, antes)
     if cfg['nivel'] >= 9:
         if depth > 0:
             ev['corte'] = cut(W, cfg, target, depth, rad, now)
@@ -1206,6 +1222,7 @@ def cut(W, cfg, target, depth, rad, now):
             nucleo = c if nucleo is None or c == target else nucleo
         _clear_cell(W, c)
         W['huella'][c] = 0.0
+        W['ruina'][c] = 0
         for j in NEIGH[c]:
             if W['par'][j] == c:
                 W['par'][j] = -1
@@ -1453,6 +1470,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         out['ciclo'] = cycle_tick(W, cfg, now, dt, tempo, playing)
     if piel:
         tick_piel(W, cfg, now, W['paso'], playing)
+    if cfg['nivel'] >= 14:
+        tick_destructores(W, cfg, now)
     giro_step(W, cfg, dt, tempo)
     return out
 
@@ -1666,6 +1685,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
         W['piel'] = build_piel(W, cfg, now, out)
     if lvl >= 13:                   # fase 13: rios y carreteras
         out['tejido'], W['tejido'] = build_tejido(W, cfg)
+    if lvl >= 14:                   # fase 14: huellas y particulas de los destructores
+        build_destructores(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -2252,6 +2273,28 @@ def _modelos():
                            for y in (0.33, 0.66, 0.97) for z in (-0.48, 0.48)])
     M['ciu_grua'] = [_losa(-0.04, 0.04, 0.0, 1.0, -0.04, 0.04), _losa(-0.25, 0.85, 0.94, 0.98, -0.03, 0.03),
                      _losa(-0.25, -0.14, 0.86, 0.94, -0.05, 0.05), _losa(0.6, 0.61, 0.72, 0.94, -0.005, 0.005)]
+    # ------------------------------------------- huellas de las catastrofes (fase 14)
+    # claro de ceniza: el suelo quemado, tocones carbonizados y un tronco caido
+    M['veg_claro'] = [_hexa(-0.16, 0.03, 0.1, 0.62, 0.06), _hexa(0.18, 0.04, -0.12, 0.56, 0.08, 0.0, 30.0, 0.0),
+                      _hexa(0.1, 0.025, 0.24, 0.4, 0.05, 0.0, 12.0, 0.0),
+                      _caja(-0.22, 0.47, 0.12, 0.08, 0.9, 0.08, 6.0, 0.0, -8.0),
+                      _caja(0.24, 0.32, -0.18, 0.07, 0.6, 0.07, -10.0, 0.0, 5.0),
+                      _caja(0.04, 0.23, 0.28, 0.07, 0.42, 0.07),
+                      _caja(-0.04, 0.13, -0.26, 0.62, 0.08, 0.09, 0.0, 30.0, 0.0)]
+    # pedregal: trozos de columna y bloques sueltos, uno tumbado
+    M['rel_pedregal'] = [_hexa(-0.22, 0.2, -0.12, 0.34, 0.4), _hexa(0.2, 0.15, 0.2, 0.3, 0.3, 0.0, 30.0, 0.0),
+                         _caja(0.26, 0.12, -0.22, 0.24, 0.24, 0.2, 0.0, 25.0, 0.0),
+                         _caja(-0.16, 0.1, 0.26, 0.2, 0.2, 0.26, 0.0, -20.0, 0.0),
+                         _hexa(0.02, 0.5, 0.02, 0.28, 1.0),
+                         _hexa(-0.12, 0.12, -0.24, 0.22, 0.46, 90.0, 0.0, 0.0),
+                         _caja(0.38, 0.08, 0.06, 0.16, 0.16, 0.16, 0.0, 40.0, 0.0)]
+    # escombros: losas inclinadas, un bloque roto, una viga y un trozo de muro
+    M['inf_escombros'] = [_losa(-0.42, 0.42, 0.0, 0.16, -0.38, 0.38),
+                          _caja(-0.15, 0.36, 0.05, 0.5, 0.06, 0.4, 25.0, 30.0, 0.0),
+                          _caja(0.2, 0.3, -0.1, 0.4, 0.06, 0.35, -20.0, -15.0, 10.0),
+                          _caja(0.05, 0.5, 0.15, 0.3, 0.25, 0.25, 15.0, 40.0, 20.0),
+                          _caja(-0.25, 0.25, -0.25, 0.2, 0.4, 0.12, 0.0, 20.0, 30.0),
+                          _caja(0.3, 0.5, 0.25, 0.25, 1.0, 0.06, 0.0, -30.0, 0.0)]
     for k, prims in M.items():          # ninguno pasa de alto 1 ni baja de 0
         b = _caja_modelo(prims)
         if b[2] < -1e-6 or b[3] > 1.0 + 1e-6:
@@ -2272,7 +2315,8 @@ for _m in MODELOS:
     PIE[_m] = ('esbelto', 0.9)
 for _m in ('veg_hib', 'rel_mesetas', 'rel_meseta', 'rel_cumbre', 'rel_prot1', 'rel_prot2',
            'rel_prot3', 'inf_barrio', 'inf_prot1', 'inf_prot2', 'inf_prot3', 'inf_hib',
-           'pla_manzana', 'pla_podio', 'pla_prot1', 'pla_prot2', 'pla_prot3', 'ciu_valla'):
+           'pla_manzana', 'pla_podio', 'pla_prot1', 'pla_prot2', 'pla_prot3', 'ciu_valla',
+           'veg_claro', 'rel_pedregal', 'inf_escombros'):
     PIE[_m] = ('celda', 0.85)
 PIE.update(rel_hib=('celda', 0.6), inf_torre=('celda', 0.6), pla_bloque=('celda', 0.75),
            pla_bloque2=('celda', 0.75), pla_plantas=('celda', 0.6), pla_rascacielos=('celda', 0.55),
@@ -2325,6 +2369,9 @@ def _catalogo_defecto():
         add(tema, esp, 'protagonista', [p + '_prot1', p + '_prot2', p + '_prot3'])
         add(tema, esp, 'hibrido', [p + '_hib'])
     add('ciudad', 'planificada', 'remate', ['pla_aguja'])
+    for tema, esp, mo in (('naturaleza', 'vegetacion', 'veg_claro'), ('naturaleza', 'relieve', 'rel_pedregal'),
+                          ('ciudad', 'informal', 'inf_escombros'), ('ciudad', 'planificada', 'ciu_valla')):
+        add(tema, esp, 'huella', [mo])     # fase 14: lo que deja una catastrofe
     for obra in ('valla', 'foso', 'andamio', 'grua'):
         add('ciudad', 'obra', obra, ['ciu_' + obra])
     cadenas = {('naturaleza', 'vegetacion'): (['inclinar', 'puentes', 'hundir', 'esporas'], ['emerger']),
@@ -2590,6 +2637,8 @@ def objetivos(W, cfg, cl=None):
     for i in range(N):
         if W['occ'][i] <= 0 or not W['own'][i]:
             continue
+        if cfg['nivel'] >= 14 and W['derribo'][i]:
+            continue                    # fase 14: la obra se derriba, hacia atras
         cf, cc = cadenas_de(cfg, tema, especie_de(tema, W['own'][i]))
         if cl['de'][i] >= 0:
             tf[i] = len(cf)
@@ -2613,6 +2662,11 @@ def gate_piel(W, cfg, i, now):
     if cfg['nivel'] < 11 or i is None or not 0 <= i < N:
         return
     W['t_gate'][i] = now
+    if cfg['nivel'] >= 14 and W['derribo'][i]:   # fase 14: una nota para el derribo
+        cl0 = clusters(W, cfg)
+        k0 = cl0['de'][i]
+        for c in (cl0['celdas'][k0] if k0 >= 0 else [i]):
+            W['derribo'][c] = 0
     if int(cfg.get('avance', 0)) != 0:
         return
     cl = clusters(W, cfg)
@@ -2636,7 +2690,10 @@ def tick_piel(W, cfg, now, paso, playing=True):
     for i in range(N):
         if W['occ'][i] <= 0:
             W['et_f'][i] = W['et_c'][i] = 0
+            W['derribo'][i] = 0
             continue
+        if W['derribo'][i] and W['et_f'][i] == 0 and W['et_c'][i] == 0:
+            W['derribo'][i] = 0         # fase 14: derribada; la obra puede volver a empezar
         for clave, obj in (('et_f', tf[i]), ('et_c', tc[i])):
             e = W[clave][i]
             if now - W['t_' + clave][i] < espera:
@@ -2736,6 +2793,8 @@ def familia_de(modelo):
     son de obsidiana: se veian como alambre."""
     if modelo.startswith('ciu_'):
         return 'obra'
+    if modelo == 'veg_claro':           # fase 14: el claro es ceniza, no hoja
+        return 'mineral'
     if modelo.startswith('veg_'):
         return 'dosel'
     return 'ciudad' if modelo[:3] in ('inf', 'pla') else 'mineral'
@@ -2941,8 +3000,9 @@ def _rumbo(n, d):
     return math.degrees(math.atan2(_dot(d, t), _dot(d, e)))
 
 
-def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo):
-    """Instancias de particulas (cajas del motor) de una celda."""
+def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo, escala=1.0):
+    """Instancias de particulas (cajas del motor) de una celda. 'escala'
+    las encoge (una nube que se disipa)."""
     e, t = tangents(n)
     xs = _COMPUESTOS.get(('particulas', semilla, k))
     if xs is None:
@@ -2959,10 +3019,19 @@ def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo):
             f = (tau / 6.0 + a) % 1.0
             g = 2 * math.pi * b
             r_, h_, s_ = 0.1 + 0.4 * f, 0.05 + 0.25 * f * vh, (0.04 + 0.05 * f) * m
+        elif modo == 'brasas':          # fase 14: suben deprisa desde lo que arde y se apagan
+            f = (tau / 3.0 + a) % 1.0
+            g = 2 * math.pi * b + tau * 0.3
+            r_, h_, s_ = 0.08 + 0.3 * c, vh * (0.3 + 1.1 * f), 0.03 * m * (1.0 - 0.6 * f)
+        elif modo == 'ceniza':          # fase 14: copos grises que caen y derivan
+            f = (tau / 7.0 + a) % 1.0
+            g = 2 * math.pi * b + tau * 0.08
+            r_, h_, s_ = 0.15 + 0.35 * c, 0.05 + vh * (1.1 - f), 0.028 * m
         else:                           # obreros: puntos que dan vueltas a la obra
             g = 2 * math.pi * b + tau * (0.4 + 0.4 * c) * (1 if a > 0.5 else -1)
             r_, h_, s_ = 0.25 + 0.15 * a, 0.0, 0.03 * m
         p = _add(_add(_add(p0, e, math.cos(g) * r_ * cw), t, math.sin(g) * r_ * cl), n, h_)
+        s_ *= escala
         out.append(_row(p, n, s_, s_ * (2.0 if modo == 'obreros' else 1.0), s_, col))
 
 
@@ -2982,6 +3051,7 @@ def build_piel(W, cfg, now, out):
 
     doce = cfg['nivel'] >= 12         # fase 12: una geometria por modelo, rugosidad en el alfa
     respaldo = doce and cfg.get('respaldo', 0)
+    arde = celdas_ardiendo(W, cfg) if cfg['nivel'] >= 14 else {}
 
     def emit(modelo, pulido, p, marco, dims, col, rug=1.0):
         nonlocal piezas
@@ -3028,6 +3098,10 @@ def build_piel(W, cfg, now, out):
             col = _mix(col, (1.0, 1.0, 1.0), 0.6 * fl)
         if sat:
             col = _tint(col, 0.85)
+        if i in arde:                               # fase 14: brasa a saltos y carbon
+            q_a = arde[i]
+            chispa = int(now / paso * FOTOS_PASO + i) % 2
+            col = _quemar(col, q_a, chispa)
         k_ = cl['de'][i]
         capital = k_ >= 0 and cl['capital'][k_] == i
         comp = compuesto(cfg, own, W['vel'][i], i, o, sat)
@@ -3140,6 +3214,8 @@ def build_piel(W, cfg, now, out):
                     alto_p = max(0.01, gr * vmin * k_alto * (1.0 + 0.04 * (q % 3)))
                     cp = material_tema(cfg, COL_PUENTE[esp], familia_de(pm[0]), rug) if doce \
                         else _material_col(COL_PUENTE[esp], pulido)
+                    if i in arde:                   # fase 14: el dosel de lo que arde, tambien
+                        cp = _quemar(cp, arde[i], int(now / paso * FOTOS_PASO + i) % 2)
                     emit(pm[0], pulido, _add(p0, n, y0 * vmin), ej, (kw * min(cw, cl_) * k_ancho, alto_p, largo),
                          cp, rug)
                 if esp == 'vegetacion':             # el dosel se cierra: una copa en cada hueco
@@ -3387,6 +3463,374 @@ def build_tejido(W, cfg):
     return filas, dict(rios=len(t['rios']), tramos_rio=len(t['caudal']), tramos_via=len(t['vias']))
 
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - destructores I (fase 14): aranazos tematicos y escalada
+# -----------------------------------------------------------------------------
+# Los aranazos de la bateria (los pads cuyo perfil no tiene profundidad: los
+# que no cortan) toman forma tematica. Un golpe es un accidente: la formacion
+# mas alta de la vecindad del objetivo (el objetivo y sus vecinas) baja un
+# estado, si la erosion no la ha bajado ya: rayo que tala el arbol,
+# desprendimiento de columnas, se desploma un anadido, caen las plantas altas.
+# Golpesescalada golpes o mas en la misma vecindad (el objetivo de uno en la
+# vecindad del otro) dentro de Ventanaescalada pasos son una catastrofe en la
+# formacion mas alta de la vecindad:
+#   incendio (vegetacion)    arde y salta por los puentes del dosel a las
+#                            celdas del cluster con vegetacion
+#   derrumbe (relieve) y derrumbe en cadena (informal): lo mismo, con polvo
+#   implosion (planificada)  la torre cae entera de golpe, con polvo
+# Cada celda activa pierde 1 de ocupacion por paso y se apaga sin ocupacion o
+# a los Pasosfuego pasos. El salto lo decide el mapa logistico sembrado con la
+# velocidad del golpe y la celda (sin azar): la misma historia da el mismo
+# fuego. Nunca sale de su cluster, y Maxfuego limita las celdas activas a la
+# vez. Con la densidad por encima de Umbraldensidad empieza mas grande (la
+# celda y sus vecinas del cluster), como la erosion con Multradio. Lo que se
+# vacia deja su huella (claro de ceniza, pedregal, escombros, solar vallado)
+# hasta que una nota vuelve a construir. Una obra a medias que recibe un
+# aranazo se derriba: su cadena se recorre hacia atras hasta que una nota del
+# cluster la retome. El fin de ciclo lo apaga todo de golpe.
+
+RUINA_ESP = ['vegetacion', 'relieve', 'informal', 'planificada']
+ACCIDENTE = dict(vegetacion='rayo', relieve='desprendimiento', informal='se desploma un anadido',
+                 planificada='caen las plantas altas')
+CATASTROFE = dict(vegetacion='incendio', relieve='derrumbe', informal='derrumbe en cadena',
+                  planificada='implosion')
+RUINA_ALTO = dict(vegetacion=0.30, relieve=0.22, informal=0.26, planificada=0.12)    # x limite
+COL_CENIZA = (0.44, 0.43, 0.41)           # copos de ceniza
+COL_CARBON = (0.10, 0.09, 0.08)           # lo que arde se carboniza
+COL_BRASA = (1.00, 0.46, 0.10)
+COL_RUINA = dict(vegetacion=(0.25, 0.23, 0.21), relieve=(0.38, 0.37, 0.40), informal=(0.46, 0.44, 0.41),
+                 planificada=COL_OBRA['valla'])
+SALTO = 0.5                 # el fuego salta a una vecina si el mapa logistico pasa de aqui
+POLVO_MAX = 48              # nubes de particulas a la vez
+
+
+def es_aranazo(cfg, pad):
+    """Un pad sin profundidad (no corta): los de la fase 14."""
+    return int(pad) not in pads_corte(cfg)
+
+
+def vecindad(i):
+    return [i] + list(NEIGH[i])
+
+
+def victima(W, cfg, objetivo):
+    """(celda, estado) de la formacion mas alta de la vecindad del objetivo
+    (empate: la de indice menor), o None si la vecindad esta vacia."""
+    mejor = None
+    for c in vecindad(objetivo):
+        if W['occ'][c] > 0 and W['own'][c]:
+            k = (-W['h'][c], c)
+            if mejor is None or k < mejor[0]:
+                mejor = (k, c)
+    if mejor is None:
+        return None
+    return mejor[1], estado_idx(cfg, W['occ'][mejor[1]])
+
+
+def bajar_ocupacion(W, cfg, i):
+    """Quita a la celda i un escalon de ocupacion (las notas que hagan
+    falta). Devuelve las notas quitadas."""
+    o = W['occ'][i]
+    k = 0
+    while o > 0 and W['occ'][i] >= o and k < 64:
+        if not _undo_note(W, cfg, i):
+            break
+        k += 1
+    return k
+
+
+def bajar_estado(W, cfg, i, e0=None):
+    """La formacion de la celda i baja de su estado e0 al anterior (una
+    semilla se vacia). Devuelve las notas quitadas."""
+    e0 = estado_idx(cfg, W['occ'][i]) if e0 is None else e0
+    k = 0
+    while W['occ'][i] > 0 and estado_idx(cfg, W['occ'][i]) >= e0:
+        q = bajar_ocupacion(W, cfg, i)
+        if q <= 0:
+            break
+        k += q
+    return k
+
+
+def _polvo(W, now, celda, modo, k):
+    W['polvo'].append([now, int(celda), modo, int(k)])
+    if len(W['polvo']) > POLVO_MAX:
+        W['polvo'] = W['polvo'][-POLVO_MAX:]
+
+
+def derribar(W, cfg, objetivo, now):
+    """Las obras a medias de la vecindad del objetivo (la obra es de todo su
+    cluster) se derriban: retroceden ya una etapa y siguen hacia atras.
+    Devuelve las celdas que empiezan a derribarse."""
+    cl = clusters(W, cfg)
+    tf, tc = objetivos(W, cfg, cl)
+    celdas = set()
+    for c in vecindad(objetivo):
+        if W['occ'][c] > 0 and (0 < W['et_f'][c] < tf[c] or 0 < W['et_c'][c] < tc[c]):
+            k = cl['de'][c]
+            celdas.update(cl['celdas'][k] if k >= 0 else [c])
+    nuevas = 0
+    for x in sorted(celdas):
+        nuevas += 0 if W['derribo'][x] else 1
+        W['derribo'][x] = 1
+        for clave in ('et_f', 'et_c'):
+            if W[clave][x] > 0:
+                _etapa(W, x, clave, W[clave][x] - 1, now)
+    return nuevas
+
+
+def foco_catastrofe(W, cfg, i):
+    """Donde seria la catastrofe de la celda i: su cluster y sus enlaces de
+    la misma especie, tal como estan ahora."""
+    cl = clusters(W, cfg)
+    k = cl['de'][i]
+    zona = sorted(cl['celdas'][k]) if k >= 0 else [i]
+    enlaces = dict((c, [j for j in cl['mascara'][c] if W['own'][j] == W['own'][i]]) for c in zona)
+    return dict(celda=i, own=W['own'][i], especie=especie_de(tema_de(cfg), W['own'][i]),
+                zona=zona, enlaces=enlaces)
+
+
+def antes_del_golpe(W, cfg, objetivo, now):
+    """Lo que ve un aranazo antes de hacer dano (fase 14): la victima, si el
+    golpe escala (Golpesescalada golpes en la misma vecindad dentro de
+    Ventanaescalada pasos; cada golpe escala una vez) y donde seria la
+    catastrofe, con el cluster de antes del golpe. Y derriba ya las obras a
+    medias que toca."""
+    paso = W.get('paso') or 0.125
+    ventana = max(1, int(cfg['ventana_escalada'])) * paso
+    golpes = [g for g in W['golpes'] if 0 <= now - g[0] <= ventana] + [[now, objetivo]]
+    zona = set(vecindad(objetivo))
+    n_zona = sum(1 for g in golpes if g[1] in zona)
+    escala = n_zona >= max(1, int(cfg['golpes_escalada']))
+    W['golpes'] = [g for g in golpes if g[1] not in zona] if escala else golpes
+    v = victima(W, cfg, objetivo)
+    foco = foco_catastrofe(W, cfg, v[0]) if escala and v is not None else None
+    return dict(victima=v, escala=escala, n_zona=n_zona, foco=foco,
+                derribo=derribar(W, cfg, objetivo, now))
+
+
+def destructor(W, cfg, pad, vel, now, ev, antes):
+    """Tras la erosion de un aranazo (fase 14): el golpe que escala es la
+    catastrofe; los demas, un accidente. 'antes' es lo que vio el golpe
+    antes de hacer dano (antes_del_golpe)."""
+    acc = None
+    ev['escalada'] = None
+    if antes['escala']:
+        cat = iniciar_catastrofe(W, cfg, antes['foco'], vel, now) if antes['foco'] else None
+        ev['escalada'] = cat['tipo'] if cat else None
+    elif antes['victima'] is not None and W['own'][antes['victima'][0]]:
+        v, e0 = antes['victima']
+        esp = especie_de(tema_de(cfg), W['own'][v])
+        if W['occ'][v] > 0 and estado_idx(cfg, W['occ'][v]) >= e0:
+            ev['quitado'] += bajar_estado(W, cfg, v, e0)
+        acc = dict(tipo=ACCIDENTE[esp], especie=esp, celda=v, t=now)
+        if esp == 'vegetacion':
+            _polvo(W, now, v, 'brasas', 6)
+            _polvo(W, now, v, 'ceniza', 4)
+        else:
+            _polvo(W, now, v, 'polvo', 8)
+    ev['accidente'] = acc
+    ev['derribo'] = antes['derribo']
+    W['ev']['destructor'] = dict(accidente=acc, escalada=ev['escalada'], celda=ev['celda'], t=now,
+                                 golpes=0 if antes['escala'] else antes['n_zona'])
+    W['dirty'] = True
+
+
+def _activas(W):
+    return sum(len(c['activas']) for c in W['cats'])
+
+
+def _ruina(W, cat, c, now):
+    W['ruina'][c] = 1 + RUINA_ESP.index(cat['especie'])
+    W['t_ruina'][c] = now
+
+
+def iniciar_catastrofe(W, cfg, foco, vel, now):
+    """La catastrofe en el foco (foco_catastrofe). Empieza en su celda o, si
+    el golpe la ha vaciado, en la mas alta que quede de su zona. Devuelve la
+    catastrofe, o None si su zona ya tiene una en curso, no queda nada en
+    pie o no queda sitio (Maxfuego)."""
+    vivas = [c for c in foco['zona'] if W['occ'][c] > 0 and W['own'][c] == foco['own']]
+    if not vivas:
+        return None
+    i = foco['celda'] if foco['celda'] in vivas else min(vivas, key=lambda c: (-W['h'][c], c))
+    for c in W['cats']:
+        if i in c['zona'] and c['activas']:
+            return None
+    tope = max(1, int(cfg['max_fuego']))
+    if _activas(W) >= tope:
+        return None
+    esp, zona, enlaces = foco['especie'], foco['zona'], foco['enlaces']
+    cat = dict(tipo=CATASTROFE[esp], especie=esp, own=foco['own'], origen=i, zona=zona,
+               enlaces=enlaces, semilla=semilla_caos(vel, i), t=now, t0=now, k=0,
+               activas={}, hechas=[], vacias=0, quitado=0, grande=False)
+    inicio = [i]
+    if occupied(W) / float(N) > cfg['dens_umbral']:   # presupuesto: el mundo lleno arde mas
+        cat['grande'] = True
+        inicio += [j for j in enlaces.get(i, []) if W['occ'][j] > 0]
+    inicio = inicio[:max(1, tope - _activas(W))]
+    W['ev']['catastrofe'] = dict(tipo=cat['tipo'], celda=i, celdas=len(inicio), grande=cat['grande'], t=now)
+    W['dirty'] = True
+    if cat['tipo'] == 'implosion':                 # cae entera de golpe, con polvo
+        for c in inicio:
+            while W['occ'][c] > 0 and bajar_ocupacion(W, cfg, c) > 0:
+                pass
+            _ruina(W, cat, c, now)
+            _polvo(W, now, c, 'polvo', 14)
+        cat['hechas'], cat['vacias'] = list(inicio), len(inicio)
+        return cat
+    for c in inicio:
+        cat['activas'][c] = 0
+    W['cats'].append(cat)
+    return cat
+
+
+def _salto(cfg, cat, b, j):
+    """El mapa logistico decide si el fuego salta de b a j en este paso."""
+    x0 = (cat['semilla'] + 0.6180339887 * cat['k'] + 0.3819660113 * j + 0.2134 * b) % 1.0
+    return logistica(0.05 + 0.9 * x0, cfg['caos'], 1)[0]
+
+
+def paso_catastrofe(W, cfg, cat, now):
+    """Un paso: cada celda activa salta a sus vecinas del cluster (si el
+    mapa logistico lo dice y queda sitio) y pierde 1 de ocupacion; se apaga
+    sin ocupacion (y deja su huella) o a los Pasosfuego pasos."""
+    cat['k'] += 1
+    tope = max(1, int(cfg['max_fuego']))
+    nuevas = []
+    for b in sorted(cat['activas']):
+        for j in cat['enlaces'].get(b, []):
+            if j in cat['activas'] or j in cat['hechas'] or j in nuevas:
+                continue
+            if W['occ'][j] <= 0 or W['own'][j] != cat['own']:
+                continue
+            if _activas(W) + len(nuevas) >= tope:
+                break
+            if _salto(cfg, cat, b, j) > SALTO:
+                nuevas.append(j)
+    pasos = max(1, int(cfg['pasos_fuego']))
+    fuego = cat['tipo'] == 'incendio'
+    for b in sorted(cat['activas']):
+        cat['quitado'] += bajar_ocupacion(W, cfg, b)
+        cat['activas'][b] += 1
+        if W['occ'][b] <= 0 or cat['activas'][b] >= pasos:
+            del cat['activas'][b]
+            cat['hechas'].append(b)
+            if W['occ'][b] <= 0:
+                _ruina(W, cat, b, now)
+                cat['vacias'] += 1
+            _polvo(W, now, b, 'ceniza' if fuego else 'polvo', 5 if fuego else 8)
+    for j in nuevas:
+        cat['activas'][j] = 0
+    W['dirty'] = True
+
+
+def tick_destructores(W, cfg, now):
+    """Avanza las catastrofes un paso cada paso y olvida lo que ya paso."""
+    paso = W.get('paso') or 0.125
+    if W['cats']:
+        for cat in W['cats']:
+            n = 0
+            while cat['activas'] and now - cat['t'] >= paso - 1e-9 and n < 32:
+                cat['t'] += paso
+                paso_catastrofe(W, cfg, cat, now)
+                n += 1
+            if now - cat['t'] >= paso or now < cat['t'] - paso:    # el tiempo ha saltado
+                cat['t'] = now
+        fin = [c for c in W['cats'] if not c['activas']]
+        if fin:
+            W['ev']['catastrofe_fin'] = dict(tipo=fin[-1]['tipo'], celdas=len(fin[-1]['hechas']),
+                                             vacias=fin[-1]['vacias'], t=now)
+            W['cats'] = [c for c in W['cats'] if c['activas']]
+    if W['polvo']:
+        vida = max(1, int(cfg['pasos_polvo'])) * paso
+        W['polvo'] = [p for p in W['polvo'] if now - p[0] < vida]
+    if W['golpes']:
+        ventana = max(1, int(cfg['ventana_escalada'])) * paso
+        W['golpes'] = [g for g in W['golpes'] if now - g[0] <= ventana]
+
+
+def apagar_destructores(W):
+    """Fin de ciclo: se apagan los fuegos, se asienta el polvo, no queda
+    ninguna obra derribandose y las huellas quedan enterradas con el mundo."""
+    W['cats'] = []
+    W['golpes'] = []
+    W['polvo'] = []
+    W['ruina'] = [0] * N
+    W['derribo'] = [0] * N
+
+
+def _quemar(col, q, chispa):
+    """Color de lo que arde: se carboniza con lo que ha ardido (q, 0-1) y
+    brilla de brasa a saltos (chispa, 0 o 1)."""
+    return _mix(_mix(col, COL_CARBON, 0.6 * q), COL_BRASA, 0.18 + 0.22 * chispa)
+
+
+def celdas_ardiendo(W, cfg):
+    """{celda: cuanto ha ardido (0-1)} de los incendios en curso."""
+    out = {}
+    pasos = float(max(1, int(cfg['pasos_fuego'])))
+    for cat in W['cats']:
+        if cat['tipo'] == 'incendio':
+            for c, q in cat['activas'].items():
+                out[c] = min(1.0, (q + 1) / pasos)
+    return out
+
+
+def _sitio(W, cfg, c):
+    base = base_radius(W, cfg, c)
+    n = normal_i(c)
+    cw, cl_ = _cell_sizes(base, c)
+    return n, _mul(n, base), cw, cl_
+
+
+def build_destructores(W, cfg, now, out):
+    """Las huellas (el modelo de huella de su especie en cada celda vacia que
+    la tiene) y las particulas: brasas y ceniza de lo que arde, polvo de los
+    derrumbes, y las nubes de los accidentes, que se disipan en Pasospolvo."""
+    tema = tema_de(cfg)
+    lim = limit(cfg)
+    paso = W.get('paso') or 0.125
+    doce = cfg['nivel'] >= 12
+    respaldo = doce and cfg.get('respaldo', 0)
+    for i in range(N):
+        r = W['ruina'][i]
+        if not r or W['occ'][i] > 0:
+            continue
+        esp = RUINA_ESP[r - 1]
+        if (esp in ('vegetacion', 'relieve')) != (tema == 'naturaleza'):
+            continue                        # los modelos del otro tema no se dibujan
+        mo = (modelos_de(cfg, tema, esp, 'huella') or [None])[0]
+        if mo is None:
+            continue
+        n, p0, cw, cl_ = _sitio(W, cfg, i)
+        dims = _pie(mo, RUINA_ALTO[esp] * lim, cw, cl_)
+        fila = _fila_m(p0, _marco(i), dims[0], dims[1], dims[2], COL_RUINA[esp])
+        if doce:
+            fila.append(1.0 if respaldo else 0.95)
+        out.setdefault(geometria_de(mo, False, not doce), []).append(fila)
+    parts = out.setdefault('particulas', [])
+    for cat in W['cats']:
+        fuego = cat['tipo'] == 'incendio'
+        for c in sorted(cat['activas']):
+            n, p0, cw, cl_ = _sitio(W, cfg, c)
+            vh = max(W['vh'][c], 0.3 * lim)
+            if fuego:
+                _particulas(parts, n, p0, cw, cl_, vh, semilla_caos(c, 5), 6, COL_BRASA, now, paso, 'brasas')
+                _particulas(parts, n, p0, cw, cl_, vh, semilla_caos(c, 9), 4, COL_CENIZA, now, paso, 'ceniza')
+            else:
+                _particulas(parts, n, p0, cw, cl_, vh, semilla_caos(c, 13), 8, COL_POLVO, now, paso, 'polvo')
+    vida = max(1, int(cfg['pasos_polvo'])) * paso
+    for t0, c, modo, k in W['polvo']:
+        q = (now - t0) / vida
+        if not 0.0 <= q < 1.0 or not 0 <= c < N:
+            continue
+        n, p0, cw, cl_ = _sitio(W, cfg, c)
+        col = COL_BRASA if modo == 'brasas' else COL_CENIZA if modo == 'ceniza' else COL_POLVO
+        _particulas(parts, n, p0, cw, cl_, max(W['vh'][c], 0.3 * lim), semilla_caos(c + int(t0 * 7.0), 17),
+                    k, col, now, paso, modo, escala=1.0 - q)
+
+
 # =============================================================================
 # 2. ADAPTADOR TOUCHDESIGNER
 # =============================================================================
@@ -3586,6 +4030,12 @@ def cfg():
                  min_via=max(1, int(_p('Minvia', c['min_via']))),
                  grosor_via=max(0.01, _p('Grosorvia', c['grosor_via'])),
                  max_rio=max(1, int(_p('Maxrio', c['max_rio']))))
+    if c['nivel'] >= 14:
+        c.update(ventana_escalada=max(1, int(_p('Ventanaescalada', c['ventana_escalada']))),
+                 golpes_escalada=max(1, int(_p('Golpesescalada', c['golpes_escalada']))),
+                 pasos_fuego=max(1, int(_p('Pasosfuego', c['pasos_fuego']))),
+                 max_fuego=max(1, int(_p('Maxfuego', c['max_fuego']))),
+                 pasos_polvo=max(1, int(_p('Pasospolvo', c['pasos_polvo']))))
     return c
 
 
@@ -3846,6 +4296,18 @@ def _gate_prueba(W, c, s, note, now):
         W.setdefault('gate_sim', []).append([now + c['gate_prueba'] * step_dur(c, tempo()), s, int(note)])
 
 
+def _texto_destructor(ev):
+    """Lo que hizo un aranazo de la fase 14, para el Textport."""
+    out = ''
+    if ev.get('accidente'):
+        out += '   %s celda %d' % (ev['accidente']['tipo'], ev['accidente']['celda'])
+    if ev.get('derribo'):
+        out += '   derribo %d celdas' % ev['derribo']
+    if ev.get('escalada'):
+        out += '   ESCALADA: %s' % ev['escalada']
+    return out
+
+
 def on_pulse(name):
     W, c = world(), cfg()
     now = absTime.seconds
@@ -3868,8 +4330,16 @@ def on_pulse(name):
                  cost(c, W['occ'][ci]) if ci >= 0 else 0, r['estado']))
     elif name == 'Erosionar':
         ev = erosion(W, c, _p('Padprueba', 1) - 1, _p('Velprueba', 100), now)
-        print('EROSION  pad %d (%s) -> celda %d, radio %d, notas deshechas %d'
-              % (ev['pad'] + 1, ev['tipo'], ev['celda'], ev['rad'], ev['quitado']))
+        print('EROSION  pad %d (%s) -> celda %d, radio %d, notas deshechas %d%s'
+              % (ev['pad'] + 1, ev['tipo'], ev['celda'], ev['rad'], ev['quitado'], _texto_destructor(ev)))
+    elif name == 'Escalar':             # fase 14: Golpesescalada aranazos seguidos
+        pad = _p('Padprueba', 1) - 1
+        if not es_aranazo(c, pad):      # el pad de prueba corta: el primer pad de aranazo
+            pad = next((k for k in range(len(c['perfiles'])) if es_aranazo(c, k)), pad)
+        for _ in range(max(1, int(c['golpes_escalada']))):
+            ev = erosion(W, c, pad, _p('Velprueba', 100), now)
+        print('ESCALADA  pad %d x%d -> celda %d%s'
+              % (pad + 1, max(1, int(c['golpes_escalada'])), ev['celda'], _texto_destructor(ev)))
     elif name in ('Sembrarzona', 'Sembrarzona2'):
         s = GEO if name == 'Sembrarzona' else ARQ
         note = _p('Nota' if s == GEO else 'Nota2', 60)
@@ -4324,9 +4794,11 @@ def _legend():
         dens = occupied(W) / float(N)
         flag = '  x%g' % c['rad_mult'] if dens > c['dens_umbral'] else ''
         if e:
-            lines.append('  EROSION  pad %d   %s   -%.1f notas   radio %d   celda %d   densidad %d%%%s'
+            acc = e.get('accidente') if lvl >= 14 else None
+            lines.append('  EROSION  pad %d   %s   -%.1f notas   radio %d   celda %d   densidad %d%%%s%s'
                          % (e['pad'] + 1, e.get('tipo', '-'), e.get('notas', e['red']), e['rad'],
-                            e['celda'], int(dens * 100), flag))
+                            e['celda'], int(dens * 100), flag,
+                            '   · %s celda %d' % (acc['tipo'], acc['celda']) if acc else ''))
         else:
             lines.append('  EROSION  -   densidad %d%%%s' % (int(dens * 100), flag))
     if lvl >= 8:
@@ -4377,4 +4849,27 @@ def _legend():
         tj = W.get('tejido') or {}
         lines.append('  TEJIDO   rios %d (%d tramos)   carreteras %d tramos'
                      % (tj.get('rios', 0), tj.get('tramos_rio', 0), tj.get('tramos_via', 0)))
+    if lvl >= 14:
+        lines.append(_legend_escalada(W, c))
     return '\n'.join(lines)
+
+
+def _legend_escalada(W, c):
+    """ESCALADA: las catastrofes en curso, los golpes de la zona del ultimo
+    aranazo y las huellas."""
+    pasos = max(1, int(c['pasos_fuego']))
+    partes = []
+    for cat in W['cats']:
+        q = max(cat['activas'].values()) if cat['activas'] else 0
+        n = len(cat['activas'])
+        partes.append('%s %d celda%s paso %d/%d%s' % (cat['tipo'].upper(), n, '' if n == 1 else 's',
+                                                    min(pasos, q + 1), pasos, ' (grande)' if cat['grande'] else ''))
+    ev = W['ev'].get('catastrofe') or {}
+    t = W['t'] or 0.0
+    if ev.get('tipo') == 'implosion' and t - ev.get('t', -99.0) < c['pasos_polvo'] * (W.get('paso') or 0.125):
+        partes.append('IMPLOSION celda %d' % ev['celda'])
+    d = W['ev'].get('destructor') or {}
+    zona = set(vecindad(d['celda'])) if d.get('celda') is not None and 0 <= d['celda'] < N else set()
+    g = sum(1 for x in W['golpes'] if x[1] in zona)
+    return ('  ESCALADA %s   golpes %d/%d en la zona   huellas %d'
+            % (' · '.join(partes) or '-', g, int(c['golpes_escalada']), sum(1 for x in W['ruina'] if x)))

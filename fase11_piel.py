@@ -59,7 +59,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v3  (la piel: catalogo de modelos, clusters, puentes, compuestos y transitos; dosel cerrado)'
+VERSION = 'fase11 v4  (la piel: catalogo de modelos, clusters, puentes, compuestos y transitos; dosel cerrado)'
 banner(VERSION)
 
 base = require_base(11)
@@ -91,124 +91,22 @@ ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Minclust
 # CATALOGO (tabla editable: tema especie estado variante modelo)
 # -----------------------------------------------------------------------------
 
-filas_def = [list(m.CATALOGO_COLS)] + [[str(x) for x in f] for f in m.CATALOGO_FILAS]
-cat = get_or_make(base, 'tableDAT', 'catalogo', -440, -480)
-actual = [[cell.val for cell in cat.row(r)] for r in range(cat.numRows)]
-if not actual or actual[0][:5] != list(m.CATALOGO_COLS) or actual == cat.fetch('defecto', None):
-    cat.clear()
-    for f in filas_def:
-        cat.appendRow(f)
-    cat.store('defecto', filas_def)
-    ok('catalogo: %d filas (modelos de los dos temas y cadenas de transito)' % (len(filas_def) - 1))
-elif actual != filas_def:
+n_cat = catalogo_al_dia(base, m)
+if n_cat is not None:
+    ok('catalogo: %d filas (modelos de los dos temas y cadenas de transito)' % n_cat)
+else:
     info('catalogo editado a mano: se conserva. Para volver al de por defecto, borralo y relanza')
-    for r in actual[1:]:
-        if len(r) > 4 and r[4] not in m.MODELOS and r[4] not in m.ETAPAS:
-            fail('catalogo: el modelo o etapa %r no existe; se ignora' % r[4])
 
 # -----------------------------------------------------------------------------
-# MODELOS: los SOP de cada modelo, dentro de 'modelos'
+# MODELOS: los SOP de cada modelo, dentro de 'modelos' (construir_modelos, en
+# estratos_comun.py: la fase 14 anade los suyos)
 # -----------------------------------------------------------------------------
-# Cada pieza es un Transform SOP sobre una caja o un prisma hexagonal unidad
-# (centrados en el origen, de lado 1); el modelo es su Merge, y su salida el
-# Null 'salida'. Las geometrias instanciadas lo traen con un Select SOP.
 
-def unir(src, dst, k):
-    try:
-        src.outputConnectors[0].connect(dst)
-        return True
-    except Exception:
-        return connect(dst, src, k)
-
-
-def medir(sop):
-    """(xmin, xmax, ymin, ymax, zmin, zmax) de los puntos de un SOP, o None
-    si no se pueden leer."""
-    try:
-        pts = list(sop.points)
-        if not pts:
-            return None
-        xs, ys, zs = [p.x for p in pts], [p.y for p in pts], [p.z for p in pts]
-        return min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
-    except Exception:
-        return None
-
-
-AJUSTADAS = []
-
-
-def a_la_unidad(comp, sop, nombre):
-    """Un Transform SOP que deja el SOP en el cubo unidad centrado, midiendo
-    sus puntos: si algun parametro de la caja o del prisma no se fijo (radio,
-    alto, centro), las piezas no se deforman."""
-    aj = mk(comp, 'transformSOP', sop.name + '_unidad', 100, sop.nodeY)
-    connect(aj, sop, 0)
-    b = medir(sop)
-    if b is not None:                # el hexagono no mide lo mismo en x y en z: escala comun
-        kxz = 1.0 / max(1e-6, b[1] - b[0], b[5] - b[4])
-        k = [kxz, 1.0 / max(1e-6, b[3] - b[2]), kxz]
-        c = [(b[0] + b[1]) / 2.0, (b[2] + b[3]) / 2.0, (b[4] + b[5]) / 2.0]
-        if max(abs(v - 1.0) for v in k) > 1e-3 or max(abs(v) for v in c) > 1e-3:
-            AJUSTADAS.append('%s/%s' % (nombre, sop.name))
-        setmenu(aj, ['xord'], ['srt'], 0)
-        for q, ax in enumerate('xyz'):
-            setp(aj, 's' + ax, k[q])
-            setp(aj, 't' + ax, -c[q] * k[q])
-    return aj
-
-
-def construir_modelo(modelos, nombre, prims, x, y):
-    comp = fresh(modelos, 'baseCOMP', nombre, x, y)
-    fuentes = {}
-    if any(p[0] == 'caja' for p in prims):
-        caja = mk(comp, 'boxSOP', 'caja', 0, 0)
-        for ax in ('sizex', 'sizey', 'sizez'):
-            setp(caja, ax, 1.0)
-        for ax in ('tx', 'ty', 'tz'):
-            setp(caja, ax, 0.0)
-        fuentes['caja'] = a_la_unidad(comp, caja, nombre)
-    if any(p[0] == 'hexa' for p in prims):
-        hexa = mk(comp, 'tubeSOP', 'hexa', 0, -120)
-        bien = all([setp_any(hexa, ['rad1'], 0.5), setp_any(hexa, ['rad2'], 0.5),
-                    setp(hexa, 'height', 1.0), setp_any(hexa, ['cols', 'columns'], 6)])
-        setp_any(hexa, ['rows'], 2)
-        setp_any(hexa, ['caps', 'endcaps', 'capends'], True)
-        setmenu(hexa, ['orient', 'orientation'], ['y'], 1)
-        for ax in ('tx', 'ty', 'tz'):
-            setp(hexa, ax, 0.0)
-        if not bien:
-            info('%s: no pude fijar el prisma hexagonal (Tube SOP: radio 0,5, alto 1, 6 columnas, '
-                 'eje Y, con tapas); ponlo a mano en modelos/%s/hexa' % (nombre, nombre))
-        fuentes['hexa'] = a_la_unidad(comp, hexa, nombre)
-    todo = mk(comp, 'mergeSOP', 'todo', 400, 0)
-    for k, p in enumerate(prims):
-        xf = mk(comp, 'transformSOP', 'p%d' % k, 200, -60 * k)
-        connect(xf, fuentes[p[0]], 0)
-        for ax, v in zip(('tx', 'ty', 'tz', 'sx', 'sy', 'sz', 'rx', 'ry', 'rz'), p[1:10]):
-            setp(xf, ax, float(v))
-        setmenu(xf, ['xord'], ['srt'], 0)
-        setmenu(xf, ['rord'], ['xyz'], 0)
-        unir(xf, todo, k)
-    out = mk(comp, 'nullSOP', 'salida', 600, 0)
-    connect(out, todo, 0)
-    for attr in ('render', 'display'):
-        try:
-            setattr(out, attr, True)
-        except Exception:
-            pass
-    return comp
-
-
-modelos = fresh(base, 'baseCOMP', 'modelos', 1100, 900)
-nombres = sorted(m.MODELOS)
-n_piezas = 0
-for k, nm in enumerate(nombres):
-    construir_modelo(modelos, nm, m.MODELOS[nm], (k % 8) * 220, -(k // 8) * 160)
-    n_piezas += len(m.MODELOS[nm])
-ok('modelos: %d modelos (%d piezas) generados en %s' % (len(nombres), n_piezas, modelos.path))
-if AJUSTADAS:
+modelos, n_modelos, n_piezas, ajustadas = construir_modelos(base, m)
+ok('modelos: %d modelos (%d piezas) generados en %s' % (n_modelos, n_piezas, modelos.path))
+if ajustadas:
     info('la caja o el prisma unidad no salian de lado 1 y centrados (%d, p. ej. %s): se han llevado '
-         'a la unidad midiendo sus puntos' % (len(AJUSTADAS), AJUSTADAS[0]))
+         'a la unidad midiendo sus puntos' % (len(ajustadas), ajustadas[0]))
 
 # -----------------------------------------------------------------------------
 # GEOMETRIAS: una por modelo (pulida y porosa; desde la fase 12, una sola con

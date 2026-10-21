@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v24'
+VERSION_COMUN = 'comun v25'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1333,6 +1333,137 @@ def materiales_piel(base):
         ok('shader de la piel: mat_piel_mineral, mat_piel_dosel y mat_piel_ciudad (GLSL), '
            'mat_respaldo (Phong)')
     return not malos
+
+
+# -----------------------------------------------------------------------------
+# MODELOS DE LA PIEL (fase 11): los SOP de cada modelo, dentro de 'modelos'
+# -----------------------------------------------------------------------------
+# Cada pieza es un Transform SOP sobre una caja o un prisma hexagonal unidad
+# (centrados en el origen, de lado 1); el modelo es su Merge, y su salida el
+# Null 'salida'. Las geometrias instanciadas lo traen con un Select SOP.
+
+def unir(src, dst, k):
+    try:
+        src.outputConnectors[0].connect(dst)
+        return True
+    except Exception:
+        return connect(dst, src, k)
+
+
+def medir(sop):
+    """(xmin, xmax, ymin, ymax, zmin, zmax) de los puntos de un SOP, o None
+    si no se pueden leer."""
+    try:
+        pts = list(sop.points)
+        if not pts:
+            return None
+        xs, ys, zs = [p.x for p in pts], [p.y for p in pts], [p.z for p in pts]
+        return min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
+    except Exception:
+        return None
+
+
+def a_la_unidad(comp, sop, nombre, ajustadas):
+    """Un Transform SOP que deja el SOP en el cubo unidad centrado, midiendo
+    sus puntos: si algun parametro de la caja o del prisma no se fijo (radio,
+    alto, centro), las piezas no se deforman."""
+    aj = mk(comp, 'transformSOP', sop.name + '_unidad', 100, sop.nodeY)
+    connect(aj, sop, 0)
+    b = medir(sop)
+    if b is not None:                # el hexagono no mide lo mismo en x y en z: escala comun
+        kxz = 1.0 / max(1e-6, b[1] - b[0], b[5] - b[4])
+        k = [kxz, 1.0 / max(1e-6, b[3] - b[2]), kxz]
+        c = [(b[0] + b[1]) / 2.0, (b[2] + b[3]) / 2.0, (b[4] + b[5]) / 2.0]
+        if max(abs(v - 1.0) for v in k) > 1e-3 or max(abs(v) for v in c) > 1e-3:
+            ajustadas.append('%s/%s' % (nombre, sop.name))
+        setmenu(aj, ['xord'], ['srt'], 0)
+        for q, ax in enumerate('xyz'):
+            setp(aj, 's' + ax, k[q])
+            setp(aj, 't' + ax, -c[q] * k[q])
+    return aj
+
+
+def construir_modelo(modelos, nombre, prims, x, y, ajustadas):
+    comp = fresh(modelos, 'baseCOMP', nombre, x, y)
+    fuentes = {}
+    if any(p[0] == 'caja' for p in prims):
+        caja = mk(comp, 'boxSOP', 'caja', 0, 0)
+        for ax in ('sizex', 'sizey', 'sizez'):
+            setp(caja, ax, 1.0)
+        for ax in ('tx', 'ty', 'tz'):
+            setp(caja, ax, 0.0)
+        fuentes['caja'] = a_la_unidad(comp, caja, nombre, ajustadas)
+    if any(p[0] == 'hexa' for p in prims):
+        hexa = mk(comp, 'tubeSOP', 'hexa', 0, -120)
+        bien = all([setp_any(hexa, ['rad1'], 0.5), setp_any(hexa, ['rad2'], 0.5),
+                    setp(hexa, 'height', 1.0), setp_any(hexa, ['cols', 'columns'], 6)])
+        setp_any(hexa, ['rows'], 2)
+        setp_any(hexa, ['caps', 'endcaps', 'capends'], True)
+        setmenu(hexa, ['orient', 'orientation'], ['y'], 1)
+        for ax in ('tx', 'ty', 'tz'):
+            setp(hexa, ax, 0.0)
+        if not bien:
+            info('%s: no pude fijar el prisma hexagonal (Tube SOP: radio 0,5, alto 1, 6 columnas, '
+                 'eje Y, con tapas); ponlo a mano en modelos/%s/hexa' % (nombre, nombre))
+        fuentes['hexa'] = a_la_unidad(comp, hexa, nombre, ajustadas)
+    todo = mk(comp, 'mergeSOP', 'todo', 400, 0)
+    for k, p in enumerate(prims):
+        xf = mk(comp, 'transformSOP', 'p%d' % k, 200, -60 * k)
+        connect(xf, fuentes[p[0]], 0)
+        for ax, v in zip(('tx', 'ty', 'tz', 'sx', 'sy', 'sz', 'rx', 'ry', 'rz'), p[1:10]):
+            setp(xf, ax, float(v))
+        setmenu(xf, ['xord'], ['srt'], 0)
+        setmenu(xf, ['rord'], ['xyz'], 0)
+        unir(xf, todo, k)
+    out = mk(comp, 'nullSOP', 'salida', 600, 0)
+    connect(out, todo, 0)
+    for attr in ('render', 'display'):
+        try:
+            setattr(out, attr, True)
+        except Exception:
+            pass
+    return comp
+
+
+def construir_modelos(base, m, solo_nuevos=False):
+    """Los SOP de cada modelo del motor, dentro de 'modelos' (fase 11). Con
+    solo_nuevos conserva los que ya estan y anade los que falten (los de una
+    fase posterior). Devuelve (modelos, modelos hechos, piezas, ajustadas)."""
+    modelos = base.op('modelos')
+    if modelos is None or not solo_nuevos:
+        modelos = fresh(base, 'baseCOMP', 'modelos', 1100, 900)
+    ajustadas = []
+    hechos = piezas = 0
+    for k, nm in enumerate(sorted(m.MODELOS)):
+        if solo_nuevos and modelos.op(nm) is not None:
+            continue
+        construir_modelo(modelos, nm, m.MODELOS[nm], (k % 8) * 220, -(k // 8) * 160, ajustadas)
+        hechos += 1
+        piezas += len(m.MODELOS[nm])
+    return modelos, hechos, piezas, ajustadas
+
+
+def catalogo_al_dia(base, m):
+    """La tabla 'catalogo' con las filas por defecto del motor, salvo que se
+    haya editado a mano (entonces se conserva y se avisa de lo que no existe).
+    Devuelve el numero de filas o None si se conserva la editada."""
+    filas_def = [list(m.CATALOGO_COLS)] + [[str(x) for x in f] for f in m.CATALOGO_FILAS]
+    cat = get_or_make(base, 'tableDAT', 'catalogo', -440, -480)
+    actual = [[cell.val for cell in cat.row(r)] for r in range(cat.numRows)]
+    if not actual or actual[0][:5] != list(m.CATALOGO_COLS) or actual == cat.fetch('defecto', None):
+        cat.clear()
+        for f in filas_def:
+            cat.appendRow(f)
+        cat.store('defecto', filas_def)
+        return len(filas_def) - 1
+    if actual == filas_def:
+        cat.store('defecto', filas_def)
+        return len(filas_def) - 1
+    if actual != filas_def:
+        for r in actual[1:]:
+            if len(r) > 4 and r[4] not in m.MODELOS and r[4] not in m.ETAPAS:
+                fail('catalogo: el modelo o etapa %r no existe; se ignora' % r[4])
+    return None
 
 
 def instanciar_modelos(base, m):

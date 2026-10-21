@@ -1,5 +1,7 @@
 # Requerimiento · Fase 14 — Destructores I: arañazos y escalada
 
+> **Implementado** en `fase14_destructores.py` (`fase14 v1`, `motor v34`, `comun v25`). Lo que se decidió en cada punto abierto está en `MONTAJE_FASES_11_18.md`, sección *Decisiones tomadas en la fase 14*. Este documento queda como referencia de lo que se pidió.
+
 *Para una sesión de Claude Code en la nube sobre el repositorio `rrdavik/stratos`. Es autosuficiente: lee esto entero antes de tocar nada y después `MONTAJE_FASES_11_18.md` (fases 11 a 13). El plan completo de las fases 11 a 18 está en el doc «Estratos · Plan de fases 11–18»; lo que importa de la fase 14 está copiado aquí.*
 
 ---
