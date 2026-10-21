@@ -20,6 +20,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase14_destructores.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase15_era.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase16_cortes.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase17_tiempo.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase18_escenas.py').read())
 
 
 # ajuste de la vista (opcional): pone los valores calibrados aunque los hayas tocado a mano
