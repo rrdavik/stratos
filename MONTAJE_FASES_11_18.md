@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes; desde la 15, cada ciclo se entierra con la materia de su tema y la herencia rebrota según su lógica. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
+Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes; desde la 15, cada ciclo se entierra con la materia de su tema y la herencia rebrota según su lógica; desde la 16, los cortes enseñan lo que hubo en cada concha (troncos fósiles, basalto, cimientos, sótanos y calles) y dos cortes vecinos se unen en un cañón o una galería de metro. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
 
 ---
 
@@ -15,13 +15,14 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*) | `motor v37` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16 | `motor v38` |
 | `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto) | `comun v29` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun) | `fase11 v4` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
 | `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 | `fase14 v1` |
 | `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 (v2: la autoprueba no depende de la `Herencia` del proyecto) | `fase15 v2` |
+| `fase16_cortes.py` | Arqueología temática: lo que enseñan los cortes (fondo y paredes), unión de cortes (cañón y galería de metro), página Fase16 | `fase16 v1` |
 | `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v1` |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
@@ -31,6 +32,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase12_moduladores.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase13_tejido.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase14_destructores.py').read())
 exec(open('C:/Users/DareDave/Downloads/est/fase15_era.py').read())
+exec(open('C:/Users/DareDave/Downloads/est/fase16_cortes.py').read())
 ```
 
 Requiere la fase 10. Las fases 3, 4 y 7 cambian solo su autoprueba (`fase3 v12`, `fase4 v7`, `fase7 v11`): sus comprobaciones de cajas siguen valiendo relanzadas en un proyecto que ya está en la fase 11, y las de la erosión de la fase 7, en uno que ya está en la 14 (se miden con el nivel 13: desde la 14 un arañazo es también un accidente). Las de la paleta de la fase 8 (`fase8 v9`) se miden con el nivel 14: desde la 15 la concha lleva la materia de su tema.
@@ -445,6 +447,57 @@ Comprueba:
 
 ---
 
+## FASE 16 · Arqueología temática: cortes
+
+### Qué hace
+
+Los cortes de la fase 9 dejan de enseñar solo bandas de color: enseñan lo que había en cada concha, leído de su registro (fase 15).
+
+- **Qué es un corte.** Un pad cuyo perfil tiene profundidad. El plan decía «pads 6–8», pero con los perfiles del usuario cortan el bombo, la caja y el tom (**pads 1–3**), como en la fase 14. Si cambias los perfiles, cambian con ellos.
+- **Naturaleza: sima.** En la veta de carbón, **troncos fósiles** aplastados en horizontal, de piedra clara (donde hubo bosque), y **columnas de basalto** de pie, una junto a otra (donde hubo relieve).
+- **Ciudad: excavación.** **Cimientos** corridos con muros cortados y cascotes (ciudad informal), **sótanos** con solera, forjado y pilares, abiertos hacia el corte (planificada) y **tramos de calle** en sección, con aceras, firme y colector (las celdas por las que pasaban sus carreteras).
+- **Solo dentro del corte.** Una celda está en el corte si su suelo queda por debajo del radio nominal: el corte y su anfiteatro, y también las hondonadas de cortes de mundos anteriores. Las piezas van:
+  - en el **fondo**, medio enterradas en la loseta de arriba de su columna: lo que hubo en esa celda en esa era;
+  - en las **paredes**: las losetas de las vecinas más altas que quedan al aire, entre el suelo de la celda y el de la vecina. La pieza asoma de la pared hacia el corte, con el ancho de la cara y el alto de la banda.
+
+  Como mucho `Detalleexpuesto` piezas por celda: primero el fondo, y en las paredes **una por era antes de repetir**, de arriba abajo. Cada concha enseña lo suyo, sea del tema que sea: bajo una ciudad puede salir un bosque fósil. Una concha enterrada antes de la fase 15 no tiene registro y solo enseña su color. La variante sale del mapa logístico, sembrado con la concha y la celda.
+- **Cicatriz.** El cian sigue reservado a lo recién expuesto, en los dos temas: las piezas de una loseta recién abierta salen cian y toman su color en `Cicatriz` segundos, como las losetas.
+- **Escalada: cortes que se unen.** Dos cortes en la misma vecindad dentro de `Ventanaescalada` pasos (página Fase14) se unen por el camino más corto (`Unircortes`). Están en la misma vecindad si el objetivo del segundo cae dentro del primero o en su borde (a radio + 1). Cada corte se une una vez.
+  - **Naturaleza: cañón.** Las celdas del camino se cortan con la profundidad del menor de los dos cortes. El cañón queda como hondonada, también en los mundos siguientes.
+  - **Ciudad: galería de metro** a cielo abierto (falso túnel). Las celdas del camino se excavan una loseta y la galería va dentro de la zanja: solera, hastiales, bóveda de dos faldones y carriles; medio tramo hacia cada excavación. La galería se entierra con su mundo.
+
+### Parámetros (página Fase16)
+
+`Detalleexpuesto` 6 (*Piezas expuestas por celda del corte*, 0–24; 0 = solo bandas de color) · `Unircortes` (encendido) · `Unirprueba` (dos cortes vecinos seguidos alrededor de `Nota`, con el pad de prueba o el primero que corte)
+
+### Leyenda
+
+```
+CORTE    celda 40   3 losetas   suelo 7.04   laguna 1.80   cicatriz 2.1 s
+CORTE    celda 40   4 eras expuestas: basalto, ruinas, carbon, ruinas   piezas 21 en 7 celdas   + galeria de metro 40-28-27 (3 celdas)
+```
+
+Las eras expuestas son las del corte entero (el objetivo y su anfiteatro), de arriba abajo: `carbon` (bosque), `basalto` (relieve), `ruinas` (ciudad), `calles` o `estrato` (nada que enseñar). `piezas` cuenta las de todos los cortes del planeta.
+
+### Probar sin BeatStep
+
+1. Cinco `Forzarciclo` alternando `Tema` (con `Temaenciclo` el cambio espera al fin de ciclo), con `Sembrarzona` y `Sembrarzona2` antes de cada uno: quedan cinco conchas de temas alternos.
+2. `Padprueba` en un pad que corte (2, la caja; 1 el bombo; 3 el tom) y `Erosionar`: el corte enseña troncos fósiles, basalto, cimientos y sótanos, primero en cian.
+3. `Unirprueba`: dos cortes vecinos seguidos. En naturaleza, un cañón; en ciudad, una galería de metro.
+
+### Autoprueba
+
+Comprueba que los cortes son los pads con profundidad y, con cinco eras de temas alternos:
+- que un corte enseña varias eras de los dos temas, con troncos fósiles y piezas de ciudad;
+- que las piezas solo están dentro del corte;
+- `Detalleexpuesto` (6, 2 y 0) y una pieza por era antes de repetir;
+- la cicatriz (cian y después su color) y que una concha sin registro no enseña piezas;
+- la línea `CORTE` con las eras y con la unión;
+- la galería de metro en la ciudad, que se entierra con su mundo, y el cañón en naturaleza;
+- `Unircortes` apagado y pasada `Ventanaescalada`: no se unen.
+
+---
+
 ## Calibración de la vista (motor v37, comun v29)
 
 ### Qué pasaba
@@ -559,6 +612,17 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | ¿Cuánto pesa una traza? | Coste 1 − 0,9 × `Pesotraza` por tramo, en el árbol y en el camino de cada arista |
 | ¿Brillo del carbón? | Las conchas pasan al shader de la piel (mineral), con la rugosidad de cada loseta |
 
+### Decisiones tomadas en la fase 16
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Qué pads cortan? | Los que tienen profundidad en su perfil (con los del usuario, 1–3), no «6–8» |
+| ¿Dónde se ven las piezas? | En el fondo de cada celda del corte y en las paredes de sus vecinas más altas, asomando hacia el corte |
+| ¿Qué cuenta como corte? | Toda celda con el suelo por debajo del radio nominal: también las hondonadas de mundos anteriores |
+| ¿Qué es «la misma vecindad» de dos cortes? | El objetivo del segundo dentro del primero o en su borde (radio + 1) |
+| ¿Cómo se ve una galería de metro? | Falso túnel: una zanja de una loseta con la bóveda dentro; se entierra con su mundo |
+| ¿Hasta dónde baja el cañón? | La profundidad del menor de los dos cortes, con el tope por mundo de la fase 9 |
+
 ---
 
 ### Cómo se ha probado
@@ -566,18 +630,19 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 Sin TouchDesigner a mano, con un **TouchDesigner simulado** que ejecuta los scripts tal cual (`pruebas/td_simulado.py`): operadores y rutas, parámetros con expresiones, páginas propias, storage, el módulo de los Text DAT, Script CHOP, Table DAT y el tiempo del proyecto. Los COMP solo aceptan los parámetros que tienen en TouchDesigner.
 
 ```
-python3 pruebas/correr_fases.py        # base y fases 3 a 15 desde cero, sesión, relanzar y otra sesión
+python3 pruebas/correr_fases.py        # base y fases 3 a 16 desde cero, sesión, relanzar y otra sesión
 python3 pruebas/vista_previa.py        # hoja de contactos del catálogo (pruebas/catalogo.png)
 xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la piel con OpenGL (necesita moderngl)
 ```
 
-- **Desde cero**: `fase12_base.py` y las fases 3 a 15, todas con `AUTOPRUEBA OK`.
-- **Sesión simulada** de 16 compases a 120 BPM con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
-- **Relanzar** las fases 3 a 15 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
+- **Desde cero**: `fase12_base.py` y las fases 3 a 16, todas con `AUTOPRUEBA OK`.
+- **Sesión simulada** de 48 compases a 120 BPM (entierra un mundo) con SEQ1, SEQ2 y batería por los bytes MIDI, fotograma a fotograma: todas las expresiones de todos los nodos se evalúan sin error.
+- **Relanzar** las fases 3 a 16 sobre el proyecto ya en la última (también la 11, que crea las geometrías del nivel en que esté): todas OK, el mundo se conserva y otra sesión corre sin errores.
 - **El shader de la piel** (fase 12): se compila con un OpenGL 4.5 de verdad (Mesa, sin pantalla, con Xvfb), sustituyendo las funciones de TouchDesigner (`TDDeform`, `TDInstanceColor`, `uTDMats`...) por otras equivalentes. Se dibuja con las instancias reales del motor: obsidiana y vidrio negro pulidos a velocidad alta, pómez y hormigón con poros a velocidad baja, y la vegetación (desde el motor v32) en dos verdes con los lados pardos.
 - **Catálogo**: una hoja de contactos dibujada con un rasterizador propio (`pruebas/vista_previa.py`) para ver cada modelo, y escenas de los dos temas con clusters, puentes, coronaciones e híbridos.
 - **Fase 14**: un incendio en un bosque denso, dibujado con el shader real: el dosel de lo que arde se tiñe de brasa y se carboniza, y lo que se vacía queda como claro de ceniza. La fase 14 añade sus tres modelos a un proyecto cuya fase 11 se hizo con un motor anterior (`modelos: 3 nuevos`).
 - **Fase 15**: un mundo de naturaleza enterrado bajo una ciudad, dibujado con el shader real: un corte en el bosque deja ver las losetas de carbón, negras y con brillo, bajo el hormigón mate de la ciudad.
+- **Fase 16**: cinco eras de temas alternos y un corte con la caja, dibujados con el shader real: troncos fósiles claros en las paredes de carbón, cimientos en el fondo y, con dos cortes vecinos en la ciudad, la bóveda de la galería en su zanja. La fase 16 añade sus siete modelos a un proyecto cuya fase 15 se hizo con el motor anterior (`modelos: 7 nuevos`).
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
 
 Lo que la simulación no puede comprobar: el aspecto real en el render, los nombres de los parámetros de los SOP (Tube, Transform, Select, Merge) y del GLSL MAT (Vertex/Pixel Shader, página Vectors), que TouchDesigner declare sus funciones de shader como las imitamos, y el tiempo real por fotograma.
@@ -594,6 +659,7 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 8. **Ríos y carreteras (fase 13)**: con varias conchas, que se leen desde la cámara de globo sobre los colores de las conchas; si no, subir `Grosorvia`.
 9. **Destructores (fase 14)**: con la batería, que un arañazo suelto se lee como accidente y dos seguidos en la misma zona como catástrofe; que el fuego se ve avanzar (brasas, dosel que se carboniza) y que las huellas se distinguen de las formaciones. Si el fuego se apaga demasiado pronto o arrasa demasiado, ajustar `Pasosfuego` y `Maxfuego`.
 10. **El ciclo como era (fase 15)**: que las conchas con el shader de la piel se ven bien (si no, `Materialrespaldo`); que el carbón se distingue del basalto y el hormigón de sus calles; que el banco de semillas se lee como semillas y no como un fallo.
+11. **Cortes temáticos (fase 16)**: con varias conchas de temas distintos y la caja, que desde la cámara de globo se ven las piezas de las paredes y del fondo (si quedan pequeñas o tapadas, dímelo y ajusto su tamaño); que la galería de metro se lee como galería y el cañón como cañón.
 
 ### Problemas frecuentes
 
@@ -619,6 +685,8 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | Fase 15: cambio `Tema` y no pasa nada | `Temaenciclo`: espera al fin de ciclo (lo dice la leyenda `ERA`) | `Forzarciclo`, o apaga `Temaenciclo` |
 | Fase 15: las conchas salen blancas, negras o planas | El shader de la piel en `estratos` | `Materialrespaldo`, y pégame los errores de `mat_piel_mineral` |
 | Fase 15: lo heredado no aparece | Banco de semillas: brota en 4 × `Pasosetapa` pasos | Espera, toca una nota en la celda o apaga `Rebrote` |
+| Fase 16: el corte solo enseña bandas de color | Las conchas se enterraron antes de la fase 15 (sin registro), o estaban vacías, o `Detalleexpuesto` es 0 | Deja enterrar unos ciclos con la fase 15 o la 16 y vuelve a cortar |
+| Fase 16: dos cortes no se unen | Mismo objetivo, demasiado lejos (más allá de radio + 1) o más tarde que `Ventanaescalada` pasos; o `Unircortes` apagado | Prueba con `Unirprueba`; sube `Ventanaescalada` (página Fase14) |
 | Pantalla negra (solo la leyenda) tras relanzar una fase | Giro y pivote guardados en `camara` al navegar en su visor | Relanza cualquier fase con comun v28 (los pone a cero); mira el planeta en el visor del render |
 | `midiout`: `Could not open the MIDI interface` | El mapeador MIDI de TouchDesigner (no es de los scripts) | Nada: la entrada MIDI funciona igual; si molesta, quita la salida en Dialogs → MIDI Device Mapper |
 | Fase 12: pulido y rugoso iguales | La geometría no lee el canal `a` | En la geometría `mod_...`: Instance 2 → Color A = `a`. El informe lo avisa con `FALLO ... no lee la rugosidad` |
