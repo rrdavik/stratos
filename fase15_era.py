@@ -42,7 +42,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase15 v1  (el ciclo como era: entierro tematico, registro y herencia)'
+VERSION = 'fase15 v2  (el ciclo como era: entierro tematico, registro y herencia)'
 banner(VERSION)
 
 base = require_base(15)
@@ -84,7 +84,8 @@ print_report()
 def prueba(t):
     m = t.m
     guarda = {}
-    for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Pesotraza', 'Rebrote', 'Temaenciclo', 'Materialrespaldo'):
+    for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Pesotraza', 'Rebrote', 'Temaenciclo', 'Materialrespaldo',
+               'Herencia'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -104,6 +105,7 @@ def _prueba(t, m):
     base.par.Velprueba = 100
     base.par.Temaenciclo = True
     base.par.Rebrote = True
+    base.par.Herencia = 0.5                     # que algo se herede, sea cual sea la del proyecto
 
     def tema_mundo(nombre):
         """Mundo vacio con ese tema (el parametro y el del mundo)."""
@@ -252,7 +254,12 @@ def _prueba(t, m):
     base.par.Materialrespaldo = False
     t.check('las losetas llevan la rugosidad en el canal a (Materialrespaldo: 1)',
             filas and all(len(f) == 13 for f in filas) and all(f[12] == 1.0 for f in filas_r)
-            and min(f[12] for f in filas) < 0.15)
+            and min(f[12] for f in filas) < 0.15,
+            '%d losetas, columnas %s, rugosidad min %s, con respaldo %s, conchas %s' % (
+                len(filas), sorted(set(len(f) for f in filas)),
+                round(min(f[12] for f in filas), 2) if filas and len(filas[0]) > 12 else '-',
+                sorted(set(round(f[12], 2) for f in filas_r if len(f) > 12)),
+                [(x.get('tema'), sum(1 for e in x.get('esp', []) if e)) for x in W['shells']]))
     # 9. Temaenciclo apagado: el cambio es inmediato
     base.par.Temaenciclo = False
     tema_mundo('naturaleza')

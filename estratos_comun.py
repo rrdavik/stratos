@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v27'
+VERSION_COMUN = 'comun v28'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -983,10 +983,44 @@ def patch_ritmo(base):
 CAM_EXPR = "parent().op('motor').module.cam('%s', %d, absTime.frame)"
 
 
+# Lo que el motor no mueve de la camara: giro, pivote y escala en su valor
+# neutro. Navegar en el visor de la camara (girar, acercar) los cambia; con un
+# giro alrededor de un pivote lejano la camara mira a otra parte y no se ve
+# nada (comun v28).
+CAM_NEUTRO = (('rx', 0.0), ('ry', 0.0), ('rz', 0.0), ('px', 0.0), ('py', 0.0), ('pz', 0.0),
+              ('sx', 1.0), ('sy', 1.0), ('sz', 1.0), ('scale', 1.0))
+
+
+def camara_neutra(cam):
+    """Pone giro, pivote y escala de la camara en su valor neutro. Devuelve
+    los parametros que estaban movidos."""
+    movidos = []
+    for ax, v in CAM_NEUTRO:
+        p = getattr(cam.par, ax, None)
+        if p is None:
+            continue
+        try:
+            if abs(float(p.eval()) - v) > 1e-6:
+                movidos.append(ax)
+        except Exception:
+            pass
+        try:
+            p.expr = ''
+        except Exception:
+            pass
+        try:
+            p.mode = ParMode.CONSTANT
+        except Exception:
+            pass
+        setp(cam, ax, v)
+    return movidos
+
+
 def set_camera(base):
     """Camara de globo (motor v24): el planeta entero, centrado y tan cerca
     como permite el cuadro. Posicion y planos de recorte los da el motor.
-    Si existe 'objetivo' (fase 10) mira a el; si no, mira al centro desde +Z."""
+    Si existe 'objetivo' (fase 10) mira a el; si no, mira al centro desde +Z.
+    Giro, pivote y escala vuelven a su valor neutro (camara_neutra)."""
     cam = base.op('camara')
     if cam is None:
         fail('no encuentro la camara')
@@ -995,13 +1029,10 @@ def set_camera(base):
     obj = base.op('objetivo')
     if obj is not None:
         setp(cam, 'lookat', 'objetivo')
-    else:
-        for ax in ('rx', 'ry', 'rz'):
-            try:
-                getattr(cam.par, ax).expr = ''
-            except Exception:
-                pass
-            setp(cam, ax, 0.0)
+    movidos = camara_neutra(cam)
+    if movidos:
+        info('camara: %s estaban movidos (se navego en su visor); vuelven a cero. Para mirar '
+             'el planeta usa el visor del render, no el de la camara' % ' '.join(movidos))
     setexpr(cam, 'near', CAM_EXPR % ('near', 0))
     setexpr(cam, 'far', CAM_EXPR % ('far', 0))
     if good:
