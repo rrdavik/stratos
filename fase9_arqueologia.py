@@ -44,7 +44,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v8  (cortes en la columna de cada celda, tope por mundo, cicatriz que se funde con su concha)'
+VERSION = 'fase9 v9  (cortes en la columna de cada celda, tope por mundo, cicatriz que se funde con su concha)'
 banner(VERSION)
 
 base = require_base(9)
@@ -82,7 +82,8 @@ print_report()
 
 def prueba(t):
     m = t.m
-    c = m.cfg()
+    c = dict(m.cfg())
+    c['corteza_max'] = 0.0              # sin compactar (fase 8 v10): la laguna se mide en grosores
     W = m.new_world()
     for g in range(5):
         m.note_on(W, c, 1, 64, 100, g)

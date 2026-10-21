@@ -21,7 +21,7 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v28'
+VERSION_COMUN = 'comun v29'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -719,6 +719,56 @@ def camara_al_dia(base):
     return True
 
 
+# --- calibracion de la vista (comun v29, motor v37) ---------------------------
+# Los mundos duraban 8 compases (16 s a 120 BPM) y el radio crecia sin tope:
+# a los 20 minutos el planeta media 7 veces el nucleo y las formaciones eran
+# motas. Ciclomin 16 y Compasesquietos 3 alargan las eras; Cortezamax compacta
+# las conchas viejas y Grosormax 1,5 acota la concha de un mundo largo.
+
+CORTEZA_DEF = 4.0
+CALIBRACION = [('Ciclomin', 8, 16), ('Compasesquietos', 2, 3), ('Grosormax', 2.0, 1.5)]
+
+
+def add_corteza(base):
+    """Fase 8: la corteza se compacta (motor v37)."""
+    return add_par(base, get_page(base, 'Fase8'), 'float', 'Cortezamax',
+                   'Corteza maxima: compacta las conchas viejas (0: el radio es el tiempo)',
+                   CORTEZA_DEF, 0.0, 12.0)
+
+
+def growstep_coherente(semilla, umbral_ram):
+    """Growstep con el que la formacion sube a escalones iguales de la
+    semilla al limite: (1 - Semillafrac) / (Umbralram - 1)."""
+    return (1.0 - semilla) / max(1, int(umbral_ram) - 1)
+
+
+def alturas_coherentes(base):
+    """Avisa si la formacion salta al limite de golpe: con Growstep pequeno
+    se queda baja hasta Umbralram y entonces sube del tiron."""
+    if not all(has_par(base, n) for n in ('Semillafrac', 'Growstep', 'Umbralram')):
+        return True
+    sf, gs, tb = float(base.par.Semillafrac), float(base.par.Growstep), int(base.par.Umbralram)
+    ideal = growstep_coherente(sf, tb)
+    antes = min(1.0, sf + max(0, tb - 2) * gs)
+    if 1.0 - antes > 2.0 * ideal + 1e-6:
+        info('alturas: con Growstep %.2f la formacion va del %d %% al limite de golpe al llegar a '
+             'Umbralram %d; sin salto: Growstep %.2f (lo pone ajuste_vista.py)'
+             % (gs, int(round(antes * 100)), tb, ideal))
+        return False
+    return True
+
+
+def calibracion_al_dia(base):
+    """Los valores nuevos de la calibracion, solo donde seguian en el defecto
+    viejo (lo ajustado a mano se respeta), y Cortezamax en la pagina Fase8."""
+    for nombre, viejo, nuevo in CALIBRACION:
+        renew_default(base, nombre, viejo, nuevo)
+    if has_par(base, 'Grosormax') and add_corteza(base):
+        ok('conchas: Cortezamax %s (las conchas viejas se compactan; el planeta deja de engordar)'
+           % str(CORTEZA_DEF).replace('.', ','))
+    alturas_coherentes(base)
+
+
 def reticula_giro(base):
     """Cada marca de la reticula gira con los canales rx ry rz del
     reticula_chop, como las demas geometrias. fase12_base.py usaba "rotar
@@ -773,6 +823,7 @@ def install_core(base, carpeta, fase):
     ok('reticula: sigue la superficie que da el motor')
     reticula_giro(base)
     camara_al_dia(base)
+    calibracion_al_dia(base)
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB

@@ -57,7 +57,7 @@ def correr(sim, archivo, verbose=False):
     return bien, out
 
 
-def sesion(sim, compases=16, fps=30.0):
+def sesion(sim, compases=48, fps=30.0):
     """SEQ1 en semicorcheas, SEQ2 cada 3 pasos y bateria en negras, por los
     bytes MIDI, fotograma a fotograma a 120 BPM."""
     base = sim.op('/project1/FASE1')

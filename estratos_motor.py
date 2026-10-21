@@ -25,7 +25,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v36'
+MOTOR_VERSION = 'motor v37'
 
 import math
 
@@ -109,14 +109,15 @@ DEFAULT_CFG = dict(
     th_branch=5, th_fusion=7, th_crown=9, th_cumbre=11, cumbre_tramos=4,
     sat_size=0.6, sat_limit=0.6, neigh_mode=1,
     # fase 6: el ciclo lo cierra el mundo
-    beats_per_bar=4, umbral_madurez=0.6, umbral_novedad=0.15, compases_quietos=2,
+    beats_per_bar=4, umbral_madurez=0.6, umbral_novedad=0.15, compases_quietos=3,
     umbral_territorio=0.8, compases_territorio=8,
-    ciclo_min=8, ciclo_max=64, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
+    ciclo_min=16, ciclo_max=64, cambio_entierra=0, giro_vivo=1, giro_min=0.25,
     # fase 7
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
     perfiles=PERFILES_DEFECTO, tipos=TIPOS_DEFECTO,
     # fase 8
-    herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=2.0, colmatacion=0.0,
+    herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=1.5, colmatacion=0.0,
+    corteza_max=4.0,                                    # motor v37: compactacion
     paleta=0, paleta_tono=20.0, paleta_croma=0.09,     # 0 generaciones, 1 mineral
     # fase 9
     scar_time=4.0, flash=3.0,
@@ -1378,6 +1379,36 @@ def shell_grosor(cfg, bars=None):
     return min(g, gmax) if gmax > 0 else g
 
 
+COMPACTA_CRECE = 0.10       # el radio sube al menos un 10 % de cada concha nueva
+
+
+def compactar(W, cfg, g):
+    """La concha nueva (grosor g) aplasta las de debajo (motor v37). Todas
+    pierden la misma fraccion, 1 - e^(-g / Cortezamax), asi que la corteza
+    (lo que hay sobre el nucleo) tiende a Cortezamax y el planeta deja de
+    engordar: las conchas recientes se leen gruesas y las viejas se aprietan
+    en vetas finas, como en un corte geologico. El radio sube siempre al
+    menos COMPACTA_CRECE x g; nunca baja. Cortezamax 0: sin compactar (el
+    radio es el tiempo). Las losetas de cada columna se aplastan igual, asi
+    que cortes, hondonadas y lagunas conservan su forma. Devuelve el factor."""
+    D = cfg.get('corteza_max', 0.0)
+    C = top_radius(W, cfg) - cfg['core_radius']
+    if D <= 0 or C <= 1e-9 or g <= 0:
+        return 1.0
+    perdida = min(C * (1.0 - math.exp(-g / D)), (1.0 - COMPACTA_CRECE) * g)
+    k = 1.0 - perdida / C
+    r = cfg['core_radius']
+    for sh in W['shells']:
+        sh['grosor'] = shell_th(sh, cfg) * k
+        if 'r_in' in sh:
+            sh['r_in'], sh['r_out'] = r, r + sh['grosor']
+        r += sh['grosor']
+    for col in W['cols']:
+        for los in col:
+            los[1] *= k
+    return k
+
+
 def end_cycle(W, cfg, now, bars=None):
     """Entierra el mundo (desde el nivel 8). bars: compases que duro; sin
     ellos, la concha tiene Shellthick."""
@@ -1386,8 +1417,9 @@ def end_cycle(W, cfg, now, bars=None):
         return False
     cerrar_obras(W, cfg)                # los transitos se cierran antes de hornear
     reg = registro_concha(W, cfg) if cfg['nivel'] >= 15 else None
-    r_in = top_radius(W, cfg)
     g = shell_grosor(cfg, bars)
+    W['compacta'] = compactar(W, cfg, g)
+    r_in = top_radius(W, cfg)
     # cada celda deposita su loseta sobre lo que le queda debajo: una
     # hondonada se tapiza y sigue siendo hondonada, salvo lo que rellene
     # Colmatacion. El radio nominal solo crece g (la colmatacion no es tiempo).
@@ -4176,6 +4208,7 @@ def cfg():
         max_shells=_p('Maxconchas', c['max_shells']),
         grosor_tiempo=int(_p('Grosortiempo', True)),
         grosor_max=_p('Grosormax', c['grosor_max']),
+        corteza_max=max(0.0, _p('Cortezamax', c['corteza_max'])),
         colmatacion=max(0.0, min(1.0, _p('Colmatacion', c['colmatacion']))),
         scar_time=max(0.1, _p('Cicatriz', c['scar_time'])),
         flash=_p('Destello', c['flash']),
@@ -5013,9 +5046,12 @@ def _legend():
         ult = '%.2f' % shell_th(W['shells'][-1], c) if W['shells'] else '-'
         lg, lc = max_laguna(W, c)
         lag = '%.2f (celda %d)' % (lg, lc) if lc >= 0 else '0.00'
-        lines.append('  CONCHAS  %d   radio %.2f   ultima %s   laguna max %s   colmatacion %d%%'
+        cz = c.get('corteza_max', 0.0)
+        comp = ('   corteza %.2f de %g (x%.2f)' % (top_radius(W, c) - c['core_radius'], cz,
+                                                  W.get('compacta', 1.0)) if cz > 0 else '')
+        lines.append('  CONCHAS  %d   radio %.2f   ultima %s%s   laguna max %s   colmatacion %d%%'
                      '   herencia %d%%   continentes %d'
-                     % (n_shells(W), top_radius(W, c), ult, lag, int(round(c['colmatacion'] * 100)),
+                     % (n_shells(W), top_radius(W, c), ult, comp, lag, int(round(c['colmatacion'] * 100)),
                         int(c['herencia'] * 100), continents(W)))
     if lvl >= 8:
         try:
