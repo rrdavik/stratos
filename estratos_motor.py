@@ -29,7 +29,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v41'
+MOTOR_VERSION = 'motor v42'
 
 import math
 
@@ -4923,7 +4923,8 @@ def build_diagnostico(W, cfg):
 # /estratos/ruido, /estratos/espacio, /estratos/saturacion), desde cualquier
 # CHOP (una interfaz de audio acoplada en continua, CC de un conversor CV-MIDI),
 # a mano (Lfo, Ruido, Espacio, Saturacion) o de un generador de prueba sin
-# azar. Rangomodular dice en que rango llegan (0-1, -1..1, 0-10 V, -5..5 V) y
+# azar. Rangomodular dice en que rango llegan (0-1, -1..1, 0-10 V, -5..5 V,
+# -10..10 V) y
 # Suavizado las alisa. Son moduladores, como la velocidad y el gate (fase 12):
 # no cambian el mundo, solo como se ve.
 #   LFO          naturaleza: viento en el dosel (hasta Vientomax grados, a un
@@ -4934,7 +4935,8 @@ def build_diagnostico(W, cfg):
 
 MODULAR = ['lfo', 'ruido', 'espacio', 'saturacion']
 FUENTES_MODULAR = ['manual', 'osc', 'chop', 'prueba']
-RANGOS_MODULAR = [('0..1', 0.0, 1.0), ('-1..1', -1.0, 1.0), ('0..10 V', 0.0, 10.0), ('-5..5 V', -5.0, 5.0)]
+RANGOS_MODULAR = [('0..1', 0.0, 1.0), ('-1..1', -1.0, 1.0), ('0..10 V', 0.0, 10.0), ('-5..5 V', -5.0, 5.0),
+                  ('-10..10 V', -10.0, 10.0)]
 NIEBLA_COL = (0.12, 0.13, 0.16)
 
 
