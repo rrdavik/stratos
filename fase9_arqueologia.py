@@ -47,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v10  (cortes en la columna de cada celda, tope por mundo, cicatriz; el impulso no corta)'
+VERSION = 'fase9 v11  (cortes en la columna de cada celda, tope por mundo, cicatriz; el impulso no corta)'
 banner(VERSION)
 
 base = require_base(9)
@@ -178,8 +178,7 @@ def prueba(t):
     t.check('destello encendido', Wr['flash'] is not None)
     t.midi(0x90 + chd - 1, nb, 0x64)                     # el bombo: impulso
     f = Wr['flash'] or {}
-    a_, r_ = m._tiempos_bomba(Wr, cr)
-    v, pico = m.bomba_nivel(Wr, cr, f.get('cell', 0), f.get('t', 0.0) + a_)
+    v, pico = m.bomba_nivel(Wr, cr, f.get('cell', 0), f.get('t', 0.0))     # el pico, al instante
     t.check('el bombo no corta: destello suave que sigue el pumping',
             f.get('bomba') and f.get('k') == m.BOMBA_DESTELLO and Wr['ev']['erosion']['modo'] == 'impulso'
             and 'corte' not in Wr['ev']['erosion'] and pico > 0 and abs(v - pico) < 1e-9)

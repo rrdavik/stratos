@@ -18,15 +18,15 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`, ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`); la v38, la fase 16; la v39, la fase 17; la v40, la fase 18; la v41, la fase 19; la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12) | `motor v43` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`, ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`); la v38, la fase 16; la v39, la fase 17; la v40, la fase 18; la v41, la fase 19; la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12); la v44, el pumping en seco (fase 7 v13) | `motor v44` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar; la v29, la calibración de la vista (`Ciclomin` 16, `Compasesquietos` 3, `Grosormax` 1,5 si seguían por defecto, y `Cortezamax`); la v30, la fase 17 (ventanas por edificio, color de la luz desde el motor); la v31, la fase 18; la v32, la fase 19 (niebla y glitch en el shader) | `comun v32` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11) | `fase3 v12` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
-| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación: capacidad de la celda y pumping) | `fase7 v12` |
+| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación: capacidad de la celda y pumping; v13: pumping en seco, pico al instante) | `fase7 v13` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5 | `fase8 v10` |
-| `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar; v10: el bombo y el tom ya no cortan, su destello es suave y sigue el pumping) | `fase9 v10` |
+| `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar; v10: el bombo y el tom ya no cortan, su destello es suave y sigue el pumping; v11: la autoprueba, con el pumping en seco) | `fase9 v11` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v10: `Encuadre`, el alto del planeta en la pantalla) | `fase10 v10` |
 
 Se ejecutan en orden desde el Textport (Alt+T), cada uno después de comprobar el anterior. `fase12_base.py` sustituye a `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py` y `fix_render_fase2.py`, que ya no hacen falta:
@@ -332,7 +332,7 @@ AVISO    fin de ciclo 4: estancado a los 19 compases
 
 ## FASE 7 · Erosión superficial
 
-*fase 7 v9 (motor v21): erosión en notas y con la velocidad, perfiles del usuario; el golpe se ve como una nota. fase 7 v12 (motor v43): el bombo y el tom dejan de destruir; ver «El bombo y el tom: impulso de creación».*
+*fase 7 v9 (motor v21): erosión en notas y con la velocidad, perfiles del usuario; el golpe se ve como una nota. fase 7 v12 (motor v43): el bombo y el tom dejan de destruir; fase 7 v13 (motor v44): su pumping es un golpe seco; ver «El bombo y el tom: impulso de creación».*
 
 Las 8 pistas de batería son las 8 señales de la batería. Cada pad tiene un **perfil de tres números** en la tabla `perfiles_erosion`, editable a mano, y desde la v12 un **modo** (erosión o impulso) y una **capacidad**:
 
@@ -366,8 +366,8 @@ Las 8 pistas de batería son las 8 señales de la batería. Cada pad tiene un **
 - **Corta la caja** desde la fase 9 (profundidad 3). Hasta la v11 cortaban también el bombo (2) y el tom (1). Las etiquetas de tipo son del usuario; el comportamiento lo deciden el modo y la tripleta.
 - **Escala de referencia:** llegar al límite cuesta 11 notas. La caja (15) deja en semilla una formación en el límite.
 - **El tipo es una etiqueta** que sale en la leyenda: lo que decide el comportamiento es el modo y, en erosión, la profundidad.
-- **Columnas de la tabla:** `pad`, `reduccion`, `radio`, `profundidad`, `modo` (`erosion` / `impulso`), `capacidad` (solo cuenta en impulso), `tipo` y `rol`. El motor las lee por nombre; `rol` es solo una nota. Sin las columnas `modo` y `capacidad`, el motor usa las de por defecto. El pad 7 es el charles y el 8 el platillo: la columna `rol` de `perfiles_erosion` y de `colores_drum` se corrige al relanzar aunque la tabla esté editada, sin tocar el resto.
-- **Al relanzar la fase 7:** si la tabla tiene los valores de la v1, la v3, la v5 o la v6–v11 sin editar, se sustituye por la nueva. Si se editó a mano antes de la v12, se conserva y se le añaden `modo` y `capacidad` con los valores por defecto (bombo ×3 y tom ×2 en impulso, el resto en erosión); el informe lo avisa con `..`. Si ya tiene `modo` y está editada, se conserva tal cual.
+- **Columnas de la tabla:** `pad`, `reduccion`, `radio`, `profundidad`, `modo` (`erosion` / `impulso`), `capacidad` (solo cuenta en impulso), `pump_rel` (segundos de caída del pumping, solo en impulso; v13), `tipo` y `rol`. El motor las lee por nombre; `rol` es solo una nota. Sin las columnas `modo`, `capacidad` o `pump_rel`, el motor usa las de por defecto. El pad 7 es el charles y el 8 el platillo: la columna `rol` de `perfiles_erosion` y de `colores_drum` se corrige al relanzar aunque la tabla esté editada, sin tocar el resto.
+- **Al relanzar la fase 7:** si la tabla tiene los valores de la v1, la v3, la v5, la v6–v11 o la v12 sin editar, se sustituye por la nueva. Si se editó a mano antes de la v12 o de la v13, se conserva y se le añaden las columnas que le falten (`modo`, `capacidad`, `pump_rel`) con los valores por defecto (bombo ×3 y 0,20 s, tom ×2 y 0,12 s, en impulso; el resto en erosión); el informe lo avisa con `..`. Si ya las tiene y está editada, se conserva tal cual.
 
 **El golpe se ve como una nota** (v9, motor v21). Sin balizas ni sectores: cada golpe ilumina, igual que una nota de un secuenciador, el centro de las celdas que erosiona (la loseta de `luz_celda`) y su formación, que se hincha un 12 % y se tiñe un 75 % del color de su pad. Desaparecen los 8 sectores del borde de la v6.
 
@@ -463,21 +463,30 @@ Al enterrar (en cada fin de ciclo), la capa nueva empieza con `cap` 1.
 
 **Celda vacía.** El golpe fija igualmente su `cap` (la celda queda preparada) y se ve su color de pad; no hay nada que hinchar.
 
-**Velocidad.** Con `Erosionvel`, la velocidad escala el pumping (× velocidad / `Velref`), no la capacidad, que es fija por pad.
+**Velocidad.** Escala el pumping (ver abajo), no la capacidad, que es fija por pad.
 
-**2 · Pumping.** En el golpe, todo lo dibujado en la celda (formación, satélite si la celda lo es, corona, piezas de fusión, puentes y obras de la piel) se escala:
+**2 · Pumping: un golpe seco** (v13, motor v44). En la v12 el hinchado llegaba en 0,02 s y se disolvía en dos pasos con una exponencial: se leía como una respiración y apenas se notaba. Un bombo real es otra cosa: el pico es instantáneo y se va casi tan rápido como llegó. Al golpe, la celda salta de golpe a su tamaño máximo y vuelve al normal en una fracción de segundo. Todo lo dibujado en la celda (formación, satélite si la celda lo es, corona, piezas de fusión, puentes y obras de la piel) se escala:
 
 - **anclado en la base,** sobre la normal de la celda: crece hacia fuera, no se hunde en el planeta;
-- **escala vertical** objetivo = 1 + (capacidad del pad − 1) × `Pumpamt`. Con `Pumpamt` 1, el bombo hincha ×3 y el tom ×2;
-- **escala horizontal** = 1 + (escala vertical − 1) × `Pumphorz`, recortada para que ninguna pieza pase del ancho de su celda (la misma regla que en los anillos polares). Si alguna pieza ya llega al borde (un puente del cluster, una planta que ocupa la celda), la celda no se ensancha;
-- **envolvente:** sube en `Pumpataque` segundos (casi instantáneo) y vuelve exactamente a 1 en `Pumprelease` pasos, con una caída exponencial que llega a 0 (sensación de sidechain). La duración va en pasos para que siga al tempo;
-- **retrigger:** un golpe durante la caída vuelve a subir desde la escala actual, sin salto. Si llega en pleno ataque de otro más fuerte (bombo y tom a la vez), no lo rebaja;
-- **es un factor visual** encima de la altura visible (la que se acerca a la real en ~0,1 s, o a saltos de stop-motion desde la fase 11): no cambia la altura real. El pumping no va a saltos: es continuo;
+- **pico vertical** = 1 + (capacidad del pad − 1) × `Pumpamt` × la velocidad. Con `Pumpamt` 1, el bombo hincha ×3 y el tom ×2;
+- **escala horizontal** = 1 + (escala vertical − 1) × `Pumphorz` (0,30; en la v12, 0,15), recortada para que ninguna pieza pase del ancho de su celda (la misma regla que en los anillos polares). Si alguna pieza ya llega al borde (un puente del cluster, una planta que ocupa la celda), la celda no se ensancha;
+- **ataque instantáneo:** el pico se ve en el primer fotograma tras el golpe, sin rampa ni suavizado;
+- **pico sostenido:** `Pumphold` (0,04 s), y como mínimo **2 fotogramas dibujados** aunque el proyecto vaya a 30 fps. Los fotogramas los cuenta el motor uno a uno;
+- **caída en segundos** por pad (columna `pump_rel`: el bombo 0,20 s, el tom 0,12 s), deprisa al principio y plana al final, y llega a 1 justo al acabar (la exponencial de la v12 no llegaba nunca):
+  ```
+  escala(t) = 1 + (pico − 1) · (1 − t / pump_rel)^3
+  ```
+- **tope por el ritmo:** el golpe entero (pico sostenido y caída) cabe en 0,8 × el tiempo desde el golpe anterior de impulso en esa celda, así que la celda vuelve a 1 antes del siguiente y los golpes se ven separados. En una ráfaga de semicorcheas eso es 0,8 × el paso. Ver «Decisiones» para la diferencia con el encargo;
+- **retrigger en seco:** un golpe durante la caída salta otra vez al pico de inmediato, sin partir de la escala actual. Dos golpes en el mismo fotograma (bombo y tom a la vez) dan el pico mayor;
+- **velocidad:** escala el pico entre `Pumpvelmin` (0,6, a velocidad 1) y 1 (a 127). Un golpe flojo se nota, pero menos, y nunca desaparece. No depende de `Erosionvel`;
+- **es la transformación final** sobre la formación ya suavizada (la altura visible se acerca a la real en ~0,1 s, o a saltos de stop-motion desde la fase 11). El pumping no pasa por ningún filtro: se evalúa en cada fotograma del render y no cambia la altura real;
 - con `Pumpon` apagado no hay pumping (la capacidad sigue funcionando).
+
+Con el bombo a negras a 120 BPM y 30 fps: dos fotogramas en ×3 y luego 2,16, 1,59, 1,25, 1,07, 1,01 y 1. La celda pasa un cuarto de segundo hinchada y otro cuarto en reposo.
 
 **3 · Luz.** El color del pad se ve sobre la celda como el de cualquier golpe, pero **sin tapar al secuenciador**: si su nota acaba de sonar en la celda, el centro se parte en los dos colores y la formación conserva el tinte del secuenciador. El hinchado del 12 % del latido no se suma: lo hace el pumping. El destello de `luz_destello` (fase 9) es suave (0,35) y acompaña la curva del pumping.
 
-**Parámetros nuevos (página Fase7):** `Capmodo` (decae) · `Capdur` 16 · `Pumpamt` 1,0 · `Pumphorz` 0,15 · `Pumpataque` 0,02 · `Pumprelease` 2 · `Pumpon` (encendido)
+**Parámetros nuevos (página Fase7):** `Capmodo` (decae) · `Capdur` 16 · `Pumpamt` 1,0 · `Pumphorz` 0,30 · `Pumphold` 0,04 s · `Pumpvelmin` 0,6 · `Pumpon` (encendido) · y la columna `pump_rel` de `perfiles_erosion` (bombo 0,20 s, tom 0,12 s; los demás pads, 0,15 si pasan a impulso). Al relanzar la fase 7 v13 se quitan `Pumpataque` y `Pumprelease` (en pasos) de la v12, y `Pumphorz` pasa de 0,15 a 0,30 si seguía en 0,15.
 
 **Leyenda:** la línea `IMPULSO` sustituye a la de `EROSION` cuando el golpe es de impulso, y `MUNDO` cuenta las celdas con capacidad:
 
@@ -507,12 +516,22 @@ IMPULSO  pad 1 x3 celda 40 cap 3 (16 pasos)
 3. bombo + tom en la misma celda dan `cap` 3, ni 6 ni 2, en cualquier orden; dos bombos, 3;
 4. `decae`: tras `Capdur` pasos sin golpes, `cap` vuelve a 1 y la altura no baja; la siguiente nota que dispara se desborda; con `sostenido` se queda; cada golpe renueva la duración;
 5. un golpe en una celda vacía fija `cap` sin error y se ve su color;
-6. pumping: el bombo hincha ×3 y la escala vuelve exactamente a 1 (las filas, idénticas a las de antes del golpe); retrigger sin salto; ninguna pieza pasa del ancho de su celda (en la naturaleza y en la ciudad); `Pumpon` apagado lo quita; la luz del impulso no tapa al SEQ1;
+6. pumping en seco (v13), las 8 del encargo:
+   1. el pico (×3 el bombo) en el primer fotograma tras el golpe, sin valores intermedios;
+   2. el pico dura al menos 2 fotogramas (a 30, 60 y 120 fps; a 120, los 0,04 s de `Pumphold`);
+   3. la caída sigue la cúbica, llega a 1 justo en `pump_rel` (0,20 s) y nunca baja de 1;
+   4. un golpe durante la caída salta otra vez al pico en el fotograma siguiente;
+   5. en una ráfaga de semicorcheas a 200 BPM, desde el segundo golpe la caída se recorta a 0,8 × el paso menos el pico, y la celda vuelve a 1 antes del siguiente golpe; el primero ya ha bajado cuando llega el segundo;
+   6. a velocidad 1 el pico es 1 + (pico − 1) × 0,6; el tom, ×2 y con 0,12 s;
+   7. la altura real no cambia;
+   8. con `Pumphorz` 0,30, ninguna pieza pasa del ancho de su celda (en la naturaleza y en la ciudad) y crece ×3 en altura.
+
+   Además, acabado el pumping lo dibujado queda idéntico a antes del golpe, `Pumpon` apagado lo quita y la luz del impulso no tapa al SEQ1;
 7. el entierro reinicia `cap` a 1.
 
-Además: el pad 1 por MIDI da `cap` 3 y el 2 erosiona; la tabla se lee con modo y capacidad; una tabla de la v6–v11 se sustituye, una editada antes de la v12 gana las dos columnas conservando sus números, y una editada después se conserva; solo corta la caja; la leyenda dice `IMPULSO` tras el pad 1 y `EROSION` tras el 4.
+Además: el pad 1 por MIDI da `cap` 3 y el 2 erosiona; la tabla se lee con modo y capacidad; una tabla de la v6–v12 se sustituye, una editada antes de la v12 o de la v13 gana las columnas que le faltan conservando sus números, y una editada después se conserva; solo corta la caja; la leyenda dice `IMPULSO` tras el pad 1 y `EROSION` tras el 4.
 
-**Probar sin BeatStep:** `Padprueba` 1 + `Erosionar` sobre una formación del SEQ1 (`Objetivo` seq1): la celda se hincha ×3 y se asienta en dos pasos, y la leyenda dice `IMPULSO pad 1 x3 ... cap 3 (16 pasos)`. Luego `Sembrar` 15 veces en esa nota antes de un compás: la formación sube hasta 3 veces el límite sin satélites. Espera un compás sin golpes: `cap+` baja y la altura se queda.
+**Probar sin BeatStep:** `Padprueba` 1 + `Erosionar` sobre una formación del SEQ1 (`Objetivo` seq1): la celda salta a ×3 y vuelve en una quinta parte de segundo, y la leyenda dice `IMPULSO pad 1 x3 ... cap 3 (16 pasos)`. Luego `Sembrar` 15 veces en esa nota antes de un compás: la formación sube hasta 3 veces el límite sin satélites. Espera un compás sin golpes: `cap+` baja y la altura se queda.
 
 ---
 
@@ -770,7 +789,9 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 7 | ¿Qué hacen el bombo y el tom? (v12) | Impulso: capacidad ×3 y ×2 para la celda y pumping al golpe; no destruyen |
 | 7 | ¿Dónde vive la capacidad? (v12) | El encargo hablaba de una columna `cap` en la tabla de ocupación: es la del estado del mundo, junto a la ocupación de cada celda (en TouchDesigner no hay tabla `ocupacion`) |
 | 7 | ¿Umbrales × cap? (v12) | Ramificación, fusión, coronación y cumbre; con los actuales, 15, 21, 27 y 33 con ×3 |
-| 7 | ¿Pumping a saltos de stop-motion? (v12) | No: continuo, como un sidechain |
+| 7 | ¿Pumping a saltos de stop-motion? (v12) | No: continuo. Desde la v13, un golpe seco (pico al instante, sostenido y caída cúbica en segundos) |
+| 7 | ¿Tope de la caída por tempo? (v13) | El encargo pedía 0,8 × el paso. A 120 BPM eso es 0,1 s y dejaría el bombo (0,20) y el tom (0,12) iguales, cuando tienen que verse distintos. Además, con el pico sostenido la celda no llegaría a 1 antes del paso siguiente. Decisión: el golpe entero (pico y caída) cabe en 0,8 × el tiempo desde el golpe anterior de impulso en esa celda. En una ráfaga de semicorcheas es el tope por paso; con el bombo a negras, no recorta. El primer golpe de una ráfaga no sabe que viene otro: cae con su `pump_rel` y el segundo lo pilla a medio camino y salta otra vez al pico |
+| 7 | ¿La velocidad y `Erosionvel`? (v13) | La velocidad escala siempre el pico del pumping (de `Pumpvelmin` a 1); `Erosionvel` sigue siendo solo de la erosión |
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | ¿Dónde se deposita el mundo enterrado? | Sobre la columna de cada celda: las hondonadas se tapizan. `Colmatacion` 0 (1 reproduce lo anterior) |
@@ -891,7 +912,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 8. **Cámara de globo:** comprobar en el proyector real que el planeta ocupa el alto que dice `Encuadre` (la leyenda `CAMARA` lo dice) y que se aleja cuando crece una concha. Si la pantalla o la ventana de salida no es 16:9 y recorta la imagen, el planeta puede salirse aunque el render lo encuadre: pon la ventana con la misma proporción que el render (1280 × 720).
 9. **Luz en las conchas:** con la cámara de globo y 10 conchas o más, comprobar que se ve dónde cae cada nota, y ajustar `Luzconchaspulso` y `Luzconchasreposo` con la luz real del proyector.
 10. **Paleta:** con 10 conchas o más y un corte de 4, comprobar desde la cámara de globo que las bandas se distinguen una a una, y que los pads 7 y 8 no se confunden con las conchas.
-11. **Impulso (fase 7 v12):** con el bombo a negras sobre el SEQ1, mirar si el pumping se lee como respiración (ajustar `Pumpamt`, `Pumprelease` y `Pumphorz`), cuántas celdas tienen capacidad (`cap+`) y si las formaciones altas que deja se distinguen a distancia de cámara. Copiar la tabla `ciclos` de 20 minutos con y sin bombo para ver si los mundos duran más.
+11. **Impulso (fase 7 v12–v13):** con el bombo a negras sobre el SEQ1, mirar si cada golpe se ve como un golpe y la celda vuelve a su tamaño entre golpe y golpe; con bombo y tom alternando, si el bombo se nota más grande y algo más largo (ajustar `Pumpamt`, `Pumphold`, `pump_rel` y `Pumphorz`), cuántas celdas tienen capacidad (`cap+`) y si las formaciones altas que deja se distinguen a distancia de cámara. Copiar la tabla `ciclos` de 20 minutos con y sin bombo para ver si los mundos duran más.
 
 ---
 

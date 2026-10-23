@@ -29,7 +29,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v43'
+MOTOR_VERSION = 'motor v44'
 
 import math
 
@@ -82,6 +82,9 @@ MODOS_PAD = ['erosion', 'impulso']
 MODOS_DEFECTO = ['impulso', 'erosion', 'impulso', 'erosion',
                  'erosion', 'erosion', 'erosion', 'erosion']
 CAPACIDAD_DEFECTO = [3.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+# Fase 7 v13: segundos de caida del pumping de cada pad (columna pump_rel):
+# el bombo, 0,20; el tom, 0,12; los demas, 0,15 si pasan a impulso.
+PUMP_REL_DEFECTO = [0.20, 0.15, 0.12, 0.15, 0.15, 0.15, 0.15, 0.15]
 ROLES_DEFECTO = ['bombo', 'caja', 'tom', 'palmas, aro', '-', '-', 'charles', 'platillo']
 # Los de la fase 7 v1 (para reconocer una tabla sin editar al relanzar)
 PERFILES_V1 = [
@@ -150,8 +153,8 @@ DEFAULT_CFG = dict(
     perfiles=PERFILES_DEFECTO, tipos=TIPOS_DEFECTO,
     # fase 7 v12: impulso (capacidad de la celda y pumping)
     modos=MODOS_DEFECTO, capacidades=CAPACIDAD_DEFECTO,
-    cap_modo=0, cap_dur=16, pump_amt=1.0, pump_horz=0.15, pump_ataque=0.02, pump_release=2.0,
-    pump_on=1,
+    cap_modo=0, cap_dur=16, pump_amt=1.0, pump_horz=0.30, pump_hold=0.04, pump_velmin=0.6,
+    pump_rels=PUMP_REL_DEFECTO, pump_on=1,
     # fase 8
     herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=1.5, colmatacion=0.0,
     corteza_max=4.0,                                    # motor v37: compactacion
@@ -476,7 +479,8 @@ def new_world():
         # impulso (fase 7 v12)
         cap=[1.0] * N,          # capacidad de cada celda (1: la normal)
         cap_t=[-99.0] * N,      # ultimo golpe de impulso en la celda
-        bomba={},               # celda -> [t0, v0, pico]: el pumping en curso
+        bomba={},               # celda -> {t0, pico, rel, hold, n, t2, tope}: el pumping en curso
+        foto_dt=0.0,            # lo que dura un fotograma (el ultimo medido)
         # ciclo (fase 6): lo cierra el mundo
         ciclo_n=1,              # ciclo en curso
         compases_ciclo=0,       # compases que lleva el mundo actual
@@ -568,6 +572,8 @@ def ensure(W):
             W[k] = v
     if len(W['cap']) != len(W['occ']):  # la reticula cambio: capacidades normales
         W['cap'], W['cap_t'], W['bomba'] = [1.0] * len(W['occ']), [-99.0] * len(W['occ']), {}
+    if any(not isinstance(b, dict) for b in W['bomba'].values()):
+        W['bomba'] = {}                 # pumping del motor v43 (otra envolvente)
     for k, v in base['seq_off'].items():
         W['seq_off'].setdefault(k, v)
     for k, v in base['clock'].items():
@@ -1326,43 +1332,54 @@ def erosion(W, cfg, pad, vel, now):
 #     que tenga y la del pad: un tom no rebaja un x3 del bombo y dos bombos no
 #     dan x9. Cada golpe renueva la duracion (Capmodo: decae tras Capdur pasos
 #     sin golpes; sostenido, hasta el entierro). Lo construido no se recorta.
-#   - hincha lo que hay en la celda (pumping): ataque de Pumpataque s y caida
-#     de Pumprelease pasos, como un sidechain. Un golpe durante la caida sube
-#     desde donde este. Es un factor visual: no cambia la altura real.
+#   - hincha lo que hay en la celda (pumping), en seco (motor v44): salta al
+#     pico con el golpe, lo sostiene Pumphold s (y al menos BOMBA_FOTOS
+#     fotogramas) y vuelve a 1 en los segundos de su pad (pump_rel), deprisa
+#     al principio y plana al final. Un golpe durante la caida salta otra vez
+#     al pico. Es un factor visual: no cambia la altura real.
 #   - no resta ocupacion, no deja huella, no corta y no entra en el
 #     presupuesto de densidad. La luz de su pad se ve en la celda sin tapar
 #     la del secuenciador, y el destello sigue la curva del pumping.
 CAP_MODOS = ['decae', 'sostenido']
-BOMBA_K = 4.0               # curvatura de la caida (exponencial que llega a 0 en Pumprelease)
 BOMBA_DESTELLO = 0.35       # el destello de un impulso, suave
-
-
-def _env_bomba(b, now, ataque, caida):
-    """Valor (>= 0) del pumping [t0, v0, pico] en now: sube de v0 al pico en
-    'ataque' s y baja a 0 en 'caida' s con una exponencial que llega a 0."""
-    dt = now - b[0]
-    if dt <= 0.0:
-        return b[1]
-    if dt < ataque:
-        return b[1] + (b[2] - b[1]) * dt / ataque
-    x = (dt - ataque) / max(1e-6, caida)
-    if x >= 1.0:
-        return 0.0
-    z = math.exp(-BOMBA_K)
-    return b[2] * (math.exp(-BOMBA_K * x) - z) / (1.0 - z)
-
-
-def _tiempos_bomba(W, cfg):
-    return max(0.0, cfg['pump_ataque']), max(1e-3, cfg['pump_release'] * (W.get('paso') or 0.125))
+BOMBA_FOTOS = 2             # fotogramas completos en el pico, como minimo
+BOMBA_TOPE = 0.8            # pico + caida <= 0,8 x el tiempo desde el golpe anterior en la celda
+FOTO_DEF = 1.0 / 60.0       # un fotograma, hasta medirlo (TouchDesigner va a 60 fps)
 
 
 def bomba_nivel(W, cfg, i, now):
-    """(valor, pico) del pumping de la celda i: la escala vertical es 1 + valor."""
+    """(valor, pico) del pumping de la celda i en now: la escala vertical es
+    1 + valor. En seco: el pico desde el golpe, sin rampa; se sostiene
+    Pumphold s y al menos BOMBA_FOTOS fotogramas dibujados; luego cae a 0
+    en 'rel' s, deprisa al principio y plano al final:
+        valor = pico x (1 - t / rel)^3
+    y llega a 0 justo en rel."""
     b = W.get('bomba', {}).get(i)
     if not b:
         return 0.0, 0.0
-    a, r = _tiempos_bomba(W, cfg)
-    return _env_bomba(b, now, a, r), b[2]
+    if b['t2'] is None:                 # aun no se han dibujado dos fotogramas
+        return b['pico'], b['pico']
+    fin = max(b['t0'] + b['hold'], b['t2'])
+    if now <= fin:
+        return b['pico'], b['pico']
+    x = (now - fin) / max(1e-9, b['rel'])
+    if x >= 1.0:
+        return 0.0, b['pico']
+    return b['pico'] * (1.0 - x) ** 3, b['pico']
+
+
+def vel_bomba(cfg, vel):
+    """La velocidad escala el pico entre Pumpvelmin (0,6, a velocidad 1) y 1
+    (a 127): un golpe flojo se nota, pero menos."""
+    vmin = max(0.0, min(1.0, cfg.get('pump_velmin', 0.6)))
+    v = max(1.0, min(127.0, float(vel)))
+    return vmin + (1.0 - vmin) * (v - 1.0) / 126.0
+
+
+def pump_rel_pad(cfg, pad):
+    """Segundos de caida del pumping del pad (columna pump_rel)."""
+    rels = cfg.get('pump_rels') or PUMP_REL_DEFECTO
+    return max(0.0, float(rels[int(pad) % len(rels)]))
 
 
 def impulso(W, cfg, pad, vel, now):
@@ -1370,25 +1387,31 @@ def impulso(W, cfg, pad, vel, now):
     k = capacidad_pad(cfg, pad)
     target = pick_target(W, cfg, pad, vel)
     W['t'] = W['t'] if W['t'] is not None else now
+    # el pumping: pico (vertical - 1) por la capacidad y la velocidad, y caida
+    # del pad con un tope por el ritmo: el golpe entero (pico sostenido y
+    # caida) cabe en 0,8 x el tiempo desde el golpe anterior en la celda, para
+    # que vuelva a 1 antes del siguiente (en una rafaga, 0,8 x el paso)
+    pico = (k - 1.0) * max(0.0, cfg['pump_amt']) * vel_bomba(cfg, vel)
+    rel = pump_rel_pad(cfg, pad)
+    hold = max(0.0, cfg['pump_hold'])
+    b = W['bomba'].get(target)
+    if b and b['n'] == 0:               # en el mismo fotograma (bombo y tom a la vez): el mayor
+        b['pico'] = max(b['pico'], pico)
+        b['rel'] = max(b['rel'], min(rel, b['tope']))
+    elif pico > 0.0:                    # retrigger en seco: otra vez al pico
+        sostiene = max(hold, BOMBA_FOTOS * (W.get('foto_dt') or FOTO_DEF))
+        tope = max(0.0, BOMBA_TOPE * (now - W['cap_t'][target]) - sostiene)
+        W['bomba'][target] = dict(t0=now, pico=pico, rel=min(rel, tope), hold=hold, n=0, t2=None,
+                                  tope=tope)
     W['cap'][target] = max(W['cap'][target], k)
     W['cap_t'][target] = now
-    f = 1.0
-    if cfg.get('erosion_vel', 0):       # la velocidad escala el pumping (no la capacidad)
-        f = max(0.0, float(vel)) / max(1.0, float(cfg.get('vel_ref', 100)))
-    amp = (k - 1.0) * max(0.0, cfg['pump_amt']) * f
-    v0, pico0 = bomba_nivel(W, cfg, target, now)
-    pico = max(amp, v0)
-    b = W['bomba'].get(target)
-    if b and now - b[0] < _tiempos_bomba(W, cfg)[0]:
-        pico = max(pico, pico0)         # en pleno ataque, el golpe mas flojo no lo rebaja
-    if pico > 0.0:                      # retrigger: desde la escala actual, sin salto
-        W['bomba'][target] = [now, v0, pico]
     light_cell(W, cfg, target, pad, 1.0, now)
     W['hits'][3] = W['hits'].get(3, 0) + 1
     W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
     modo = int(cfg.get('cap_modo', 0))
     ev = dict(pad=pad, modo='impulso', tipo='impulso', capacidad=k, cap=W['cap'][target],
-              celda=target, pasos=int(cfg['cap_dur']) if modo == 0 else None, bomba=amp,
+              celda=target, pasos=int(cfg['cap_dur']) if modo == 0 else None, bomba=pico,
+              caida=W['bomba'][target]['rel'] if target in W['bomba'] else 0.0,
               vacia=W['occ'][target] <= 0, red=0, notas=0.0, rad=0, prof=0, quitado=0,
               dens=occupied(W) / float(N), doble=False, t=now)
     W['ev']['erosion'] = ev
@@ -1408,9 +1431,12 @@ def impulso_tick(W, cfg, now):
             if caps[i] > 1.0 and now - ts[i] >= dur - 1e-9:
                 caps[i] = 1.0
     bomba = W.get('bomba')
-    if bomba:
-        a, r = _tiempos_bomba(W, cfg)
-        for i in [i for i, b in bomba.items() if now - b[0] >= a + r]:
+    for i in list(bomba or {}):         # cada fotograma: cuenta los del pico y quita los acabados
+        b = bomba[i]
+        b['n'] += 1
+        if b['n'] == BOMBA_FOTOS:
+            b['t2'] = now
+        if b['t2'] is not None and now >= max(b['t0'] + b['hold'], b['t2']) + b['rel']:
             del bomba[i]
 
 
@@ -1745,6 +1771,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
     if cfg['nivel'] >= 15:
         tick_rebrote(W, cfg, now)
     if cfg['nivel'] >= 7:               # fase 7 v12: la capacidad decae y el pumping acaba
+        if dt > 0:
+            W['foto_dt'] = dt
         impulso_tick(W, cfg, now)
     giro_step(W, cfg, dt, tempo)
     return out
@@ -5341,14 +5369,16 @@ def _menu(name, options, default):
 
 
 def _perfiles():
-    """(perfiles, tipos, modos, capacidades) de la tabla perfiles_erosion,
-    leidos por nombre de columna (la columna rol es solo para leer). Sin las
-    columnas modo y capacidad (una tabla de antes de la fase 7 v12), las de
-    por defecto: bombo x3 y tom x2 en impulso."""
+    """(perfiles, tipos, modos, capacidades, caidas del pumping) de la tabla
+    perfiles_erosion, leidos por nombre de columna (la columna rol es solo
+    para leer). Sin las columnas modo y capacidad (una tabla de antes de la
+    fase 7 v12), las de por defecto: bombo x3 y tom x2 en impulso; sin
+    pump_rel (antes de la v13), 0,20 s el bombo y 0,12 el tom."""
     t = parent().op('perfiles_erosion')
     if t is None or t.numRows < 2:
-        return list(PERFILES_DEFECTO), list(TIPOS_DEFECTO), list(MODOS_DEFECTO), list(CAPACIDAD_DEFECTO)
-    out, tipos, modos, caps = [], [], [], []
+        return (list(PERFILES_DEFECTO), list(TIPOS_DEFECTO), list(MODOS_DEFECTO), list(CAPACIDAD_DEFECTO),
+                list(PUMP_REL_DEFECTO))
+    out, tipos, modos, caps, rels = [], [], [], [], []
     for r in range(1, min(t.numRows, 9)):
         try:
             p = (int(float(t[r, 'reduccion'].val)), int(float(t[r, 'radio'].val)),
@@ -5366,6 +5396,10 @@ def _perfiles():
         except Exception:
             caps.append(CAPACIDAD_DEFECTO[r - 1])
         try:
+            rels.append(max(0.0, float(t[r, 'pump_rel'].val)))
+        except Exception:
+            rels.append(PUMP_REL_DEFECTO[r - 1])
+        try:
             tp = t[r, 'tipo'].val.strip()
         except Exception:
             tp = ''
@@ -5375,7 +5409,8 @@ def _perfiles():
         tipos.append(TIPOS_DEFECTO[len(tipos)])
         modos.append(MODOS_DEFECTO[len(modos)])
         caps.append(CAPACIDAD_DEFECTO[len(caps)])
-    return out, tipos, modos, caps
+        rels.append(PUMP_REL_DEFECTO[len(rels)])
+    return out, tipos, modos, caps, rels
 
 
 def _catalogo():
@@ -5469,7 +5504,7 @@ def cfg():
         flash=_p('Destello', c['flash']),
     )
     if c['nivel'] >= 7:
-        c['perfiles'], c['tipos'], c['modos'], c['capacidades'] = _perfiles()
+        c['perfiles'], c['tipos'], c['modos'], c['capacidades'], c['pump_rels'] = _perfiles()
         c['colores_drum'] = _colores_drum()
         c.update(balizas_drum=int(_p('Balizasdrum', True)),
                  luz_drum=_p('Luzdrum', c['luz_drum']),
@@ -5481,8 +5516,8 @@ def cfg():
                  cap_dur=max(1, int(_p('Capdur', c['cap_dur']))),
                  pump_amt=max(0.0, _p('Pumpamt', c['pump_amt'])),
                  pump_horz=max(0.0, _p('Pumphorz', c['pump_horz'])),
-                 pump_ataque=max(0.0, _p('Pumpataque', c['pump_ataque'])),
-                 pump_release=max(0.05, _p('Pumprelease', c['pump_release'])),
+                 pump_hold=max(0.0, _p('Pumphold', c['pump_hold'])),       # v13: golpe seco
+                 pump_velmin=max(0.0, min(1.0, _p('Pumpvelmin', c['pump_velmin']))),
                  pump_on=int(_p('Pumpon', True)))
     if c['nivel'] >= 11:
         c.update(tema=_menu('Tema', TEMAS, 0),
