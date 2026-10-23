@@ -6,7 +6,8 @@ Requiere la fase 8.
 
 QUE HACE
 --------
-Los pads con profundidad > 0 (por defecto el 2, caja, y el 3, tom) abren un CORTE: quitan
+Los pads de erosion con profundidad > 0 (por defecto el 2, la caja: desde la
+fase 7 v12 el bombo y el tom son impulso y no cortan) abren un CORTE: quitan
 las N losetas superiores de la COLUMNA de la celda golpeada, en forma de
 anfiteatro (N en el centro, un escalon menos por anillo). Sobre relieve,
 el corte sigue la forma del suelo.
@@ -25,7 +26,9 @@ color de su generacion: bandas que son la historia cromatica de la sesion.
              concha siguiente lo tapiza sin rellenarlo (salvo lo que
              rellene Colmatacion, fase 8). Enterrar no enciende cicatrices.
   DESTELLO   cada destruccion dispara un golpe de luz sobre la celda;
-             los cortes, mas fuerte. Del color del pad (aclarado).
+             los cortes, mas fuerte. Del color del pad (aclarado). El de
+             un impulso (bombo y tom, fase 7 v12) es suave y sigue la
+             curva del pumping.
   LUZ SEQ1   el cian queda reservado a lo recien expuesto: la luz del
              SEQ1 en el centro de la celda pasa a blanca.
 
@@ -44,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v9  (cortes en la columna de cada celda, tope por mundo, cicatriz que se funde con su concha)'
+VERSION = 'fase9 v10  (cortes en la columna de cada celda, tope por mundo, cicatriz; el impulso no corta)'
 banner(VERSION)
 
 base = require_base(9)
@@ -166,13 +169,20 @@ def prueba(t):
     t.midi(0x9C, 0x40, 0x64)
     chd = int(base.par.Canaldrum)
     nb = int(base.par.Notabase)
-    cortes = m.pads_corte(cr)                            # por defecto, caja y tom
+    cortes = m.pads_corte(cr)                            # por defecto, la caja
     hondo = max(cortes, key=lambda k: cr['perfiles'][k][2]) if cortes else 0
     t.midi(0x90 + chd - 1, nb + hondo, 0x64)
     ev = Wr['ev'].get('erosion', {})
     t.check('pad %d por MIDI abre un corte' % (hondo + 1), ev.get('corte', 0) >= 1,
             str(ev.get('corte')))
     t.check('destello encendido', Wr['flash'] is not None)
+    t.midi(0x90 + chd - 1, nb, 0x64)                     # el bombo: impulso
+    f = Wr['flash'] or {}
+    a_, r_ = m._tiempos_bomba(Wr, cr)
+    v, pico = m.bomba_nivel(Wr, cr, f.get('cell', 0), f.get('t', 0.0) + a_)
+    t.check('el bombo no corta: destello suave que sigue el pumping',
+            f.get('bomba') and f.get('k') == m.BOMBA_DESTELLO and Wr['ev']['erosion']['modo'] == 'impulso'
+            and 'corte' not in Wr['ev']['erosion'] and pico > 0 and abs(v - pico) < 1e-9)
     t.check('leyenda CORTE', 'CORTE' in m.legend())
     c9 = dict(m.cfg())
     c9['nivel'] = max(9, c9['nivel'])
@@ -185,7 +195,7 @@ def prueba(t):
 
 
 run_test(base, prueba)
-print('  Ahora: con varias conchas ya enterradas, golpea la caja (pad 2) y el')
-print('  tom (pad 3).')
+print('  Ahora: con varias conchas ya enterradas, golpea la caja (pad 2). El bombo')
+print('  y el tom (pads 1 y 3) no cortan: hinchan la celda, con un destello suave.')
 print('  El corte deja ver las capas; el cian se apaga en Cicatriz segundos.')
 print('=' * 66)

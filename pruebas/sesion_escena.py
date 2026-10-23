@@ -6,7 +6,7 @@ Sesion de 20 minutos por escena (fase 18), sobre el motor sin TouchDesigner.
 
 A 120 BPM y 30 fotogramas por segundo: SEQ1 en semicorcheas (cambia de
 pattern cada 4 minutos con una rafaga de All Notes Off: A, B, A, C, A),
-SEQ2 cada 3 pasos, y bateria: el bombo a negras 16 compases si y 16 no, la
+SEQ2 cada 3 pasos, y bateria: el bombo (impulso) a negras 16 compases si y 16 no, la
 caja (corte) cada 8 compases y un aranazo cada 4. Cada medio segundo dibuja
 las instancias y mide la densidad, las piezas y lo que tarda en Python
 build_instances (no son los fotogramas de TouchDesigner, pero crecen con
@@ -83,7 +83,7 @@ def sesion(nombre, minutos=20.0, fps=30.0, tempo=120.0, muestra=0.5):
                 m.note_on(W, c, m.ARQ, n2, 70, t, tempo)
                 pend.append((m.ARQ, n2))
             if (bar // 16) % 2 == 1 and p % 4 == 0:
-                m.erosion(W, c, 0, 100, t)       # bombo
+                m.erosion(W, c, 0, 100, t)       # bombo (desde la fase 7 v12, impulso)
             if p % 128 == 64:
                 m.erosion(W, c, caja, 100, t)    # caja: corte cada 8 compases
             if p % 64 == 40:

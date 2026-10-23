@@ -34,7 +34,8 @@ DE DONDE LLEGAN (Fuentemodular)
   manual   los deslizadores Lfo, Ruido, Espacio y Saturacion.
   prueba   un generador sin azar: LFO de 4 s, ruido que salta cada medio
            segundo, espacio que va y viene en 20 s, rafagas de saturacion.
-  Rangomodular: en que rango llegan (0..1, -1..1, 0..10 V, -5..5 V).
+  Rangomodular: en que rango llegan (0..1, -1..1, 0..10 V, -5..5 V,
+  -10..10 V).
   Suavizado: segundos para alisarlas (0,15).
   LEYENDA  MODULAR  osc :9000   lfo 0.62   ruido 0.10   espacio 0.40
            saturacion 0.00   hace 0.1 s
@@ -54,7 +55,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase19 v1  (senales del modular: viento, respiracion, esporas, smog, niebla y glitch)'
+VERSION = 'fase19 v2  (senales del modular: viento, respiracion, esporas, smog, niebla y glitch; rango -10..10 V)'
 banner(VERSION)
 
 base = require_base(19)
@@ -71,6 +72,15 @@ add_par(base, page, 'menu', 'Fuentemodular', 'De donde llegan las senales del mo
 add_par(base, page, 'int', 'Puertoosc', 'Puerto OSC (UDP)', 9000, 1, 65535, clamp=True)
 add_par(base, page, 'str', 'Chopmodular', 'CHOP con las senales (Fuentemodular = chop)', '')
 add_par(base, page, 'menu', 'Rangomodular', 'Rango en que llegan', '0..1', menu=[r[0] for r in m.RANGOS_MODULAR])
+try:                                    # v2: el menu de un proyecto en la v1 gana -10..10 V
+    rp = base.par.Rangomodular
+    if list(rp.menuNames) != [r[0] for r in m.RANGOS_MODULAR]:
+        actual = rp.eval()
+        rp.menuNames = rp.menuLabels = [r[0] for r in m.RANGOS_MODULAR]
+        rp.val = actual
+        ok('Rangomodular: nuevo rango -10..10 V')
+except Exception:
+    pass
 add_par(base, page, 'float', 'Suavizado', 'Suavizado (s)', 0.15, 0.0, 2.0)
 for nm, et, v0 in (('Lfo', 'LFO (0,5: sin viento)', 0.5), ('Ruido', 'Ruido', 0.0),
                   ('Espacio', 'Espacialidad', 0.0), ('Saturacion', 'Saturacion', 0.0)):
@@ -155,9 +165,11 @@ def _prueba(t, m):
         return W, c
 
     # 1. rangos y canales
-    t.check('Rangomodular: 0..10 V, -5..5 V y -1..1 pasan a 0-1',
+    t.check('Rangomodular: 0..10 V, -5..5 V, -10..10 V y -1..1 pasan a 0-1',
             abs(m.normalizar(5.0, 2) - 0.5) < 1e-9 and abs(m.normalizar(0.0, 3) - 0.5) < 1e-9
-            and m.normalizar(-1.0, 1) == 0.0 and m.normalizar(12.0, 2) == 1.0)
+            and m.normalizar(-1.0, 1) == 0.0 and m.normalizar(12.0, 2) == 1.0
+            and abs(m.normalizar(-5.0, 4) - 0.25) < 1e-9
+            and '-10..10 V' in list(base.par.Rangomodular.menuNames))
     t.check('canales: por nombre (/estratos/ruido...) o, si no, los cuatro primeros en orden',
             m.canal_de(['estratos/lfo', 'estratos/ruido'], 'ruido', 1) == 1
             and m.canal_de(['chan1', 'chan2', 'chan3', 'chan4'], 'saturacion', 3) == 3
