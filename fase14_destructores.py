@@ -8,9 +8,10 @@ golpe es un accidente; varios golpes en la misma zona, una catastrofe.
 
 QUE HACE
 --------
-  ARANAZOS     los pads cuyo perfil no tiene profundidad (con los perfiles
-               por defecto, del 4 al 8: bombo, caja y tom cortan). Los cortes
-               no cambian (su version tematica es la fase 16).
+  ARANAZOS     los pads de erosion cuyo perfil no tiene profundidad (con
+               los perfiles por defecto, del 4 al 8: la caja corta y, desde
+               la fase 7 v12, el bombo y el tom son impulso y no destruyen).
+               Los cortes no cambian (su version tematica es la fase 16).
   UN GOLPE     la formacion mas alta de la vecindad del objetivo (el objetivo
                y sus vecinas) baja un estado: rayo que tala el arbol
                (vegetacion), desprendimiento de columnas (relieve), se
@@ -49,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase14 v1  (destructores: aranazos tematicos, escalada, incendio y derrumbes)'
+VERSION = 'fase14 v2  (destructores: aranazos tematicos, escalada, incendio y derrumbes; el impulso no es aranazo)'
 banner(VERSION)
 
 base = require_base(14)
@@ -127,8 +128,10 @@ def _prueba(t, m):
     base.par.Umbraldensidad = 0.95             # sin presupuesto hasta su comprobacion
     c = m.cfg()
     pads = [k for k in range(len(c['perfiles'])) if m.es_aranazo(c, k)]
-    t.check('aranazos: los pads sin profundidad (%s)' % ' '.join(str(k + 1) for k in pads),
-            pads and all(k not in m.pads_corte(c) for k in pads) and len(pads) + len(m.pads_corte(c)) == 8)
+    t.check('aranazos: los pads de erosion sin profundidad (%s); ni los cortes ni los impulsos'
+            % ' '.join(str(k + 1) for k in pads),
+            pads and all(k not in m.pads_corte(c) and k not in m.pads_impulso(c) for k in pads)
+            and len(pads) + len(m.pads_corte(c)) + len(m.pads_impulso(c)) == 8)
     pad = pads[0]
 
     def zona(tema, s, nota, veces=2, centro=0):

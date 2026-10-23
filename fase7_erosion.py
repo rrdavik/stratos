@@ -43,21 +43,71 @@ Apagado, la reduccion es la de la tabla, sin mas.
     Erosionvel   la velocidad escala la erosion (encendido)
     Velref       velocidad a la que valen los numeros de la tabla (100)
 
-PERFILES POR DEFECTO (v6, elegidos por el usuario)
---------------------------------------------------
-    pad 1  bombo        temblor          -4 notas   radio 2  profundidad 2
+PERFILES POR DEFECTO (v6, elegidos por el usuario; v12, bombo y tom impulso)
+----------------------------------------------------------------------------
+    pad 1  bombo        IMPULSO x3       (la tripleta se guarda: -4, 2, 2)
     pad 2  caja         corte           -15 notas   radio 1  profundidad 3
-    pad 3  tom          corte profundo   -4 notas   radio 1  profundidad 1
+    pad 3  tom          IMPULSO x2       (la tripleta se guarda: -4, 1, 1)
     pad 4  palmas, aro  aranazo          -3 notas   radio 1
     pad 5               aranazo          -2 notas   radio 1
     pad 6               aranazo          -2 notas
     pad 7  charles      aranazo          -1 nota
     pad 8  platillo     aranazo          -1 nota    radio 1
-Cortan tres pads desde la fase 9: bombo, caja y tom. Las etiquetas de tipo
-son del usuario; el comportamiento lo decide la tripleta.
-Mientras suena el bombo el mundo no deja de cambiar, y los ciclos (fase 6)
-acaban por edad maxima; al quitarlo, el mundo se asienta y se entierra por
-estancamiento: el breakdown entierra el mundo.
+Desde la fase 9 corta la caja. Las etiquetas de tipo son del usuario; el
+comportamiento lo deciden el modo y la tripleta.
+
+EL BOMBO Y EL TOM, IMPULSO DE CREACION (v12)
+--------------------------------------------
+El bombo y la caja/toms en los pads mas destructivos no dejaban un mundo
+equilibrado entre creacion y destruccion. Ahora el bombo es la respiracion
+del planeta: cada golpe empuja la corteza desde dentro; el tom, un latido
+mas corto. El mundo no se rompe al ritmo: se infla y se asienta.
+La tabla perfiles_erosion tiene dos columnas mas, para cambiar cualquier pad
+a mano:
+    modo         erosion (defecto) / impulso
+    capacidad    multiplicador de capacidad (solo en impulso): 3 el bombo, 2 el tom
+Un pad en impulso ignora reduccion, radio y profundidad: no resta ocupacion,
+no deja huella, no corta ni deja cicatriz y no entra en el presupuesto de
+densidad. Cae donde caeria la erosion (Objetivo; con alterna, bombo y tom,
+impares, caen donde esta el SEQ1) y:
+  1. CAPACIDAD. La celda se porta como si fuera 'cap' veces mas grande: el
+     limite de altura y los umbrales de ramificacion, fusion, coronacion y
+     cumbre, x cap (con cap 3: satelites desde 15, fusion desde 21, corona
+     desde 27). Cada senal sigue subiendo Growstep x el limite de siempre,
+     hasta el limite nuevo: donde antes se desbordaba en satelites, sigue
+     subiendo (montana mas alta, edificio que se vuelve rascacielos).
+     cap = max(cap, capacidad del pad): un tom no rebaja un x3 del bombo y
+     dos bombos no dan x9. Cada golpe renueva la duracion (Capmodo):
+       decae      vuelve a 1 tras Capdur pasos (16 = un compas) sin golpes de
+                  impulso en la celda. Lo construido no se recorta: si la
+                  ocupacion ya supera el umbral normal, la siguiente nota que
+                  dispare un trigger se desborda.
+       sostenido  hasta el entierro. La capa nueva empieza con cap 1.
+     En una celda vacia el golpe fija igualmente su cap y se ve su color.
+  2. PUMPING. En el golpe, lo dibujado en la celda (formacion, satelite,
+     corona, piezas de fusion) se hincha anclado en su base: vertical
+     1 + (cap del pad - 1) x Pumpamt (el bombo, x3; el tom, x2), horizontal
+     1 + (vertical - 1) x Pumphorz, sin pasar del ancho de la celda. Sube en
+     Pumpataque s y vuelve a 1 en Pumprelease pasos con caida exponencial
+     (sidechain; en pasos, sigue al tempo). Un golpe durante la caida sube
+     desde donde este, sin salto. Es un factor visual sobre la altura que se
+     ve: no cambia la altura real. Con Erosionvel, la velocidad escala el
+     pumping (no la capacidad, fija por pad).
+  3. LUZ. El color del pad sobre la celda, sin tapar el del secuenciador
+     (si suena en la celda, el centro se parte). El destello (fase 9) es
+     suave y sigue la curva del pumping.
+    Capmodo      decae / sostenido (decae)
+    Capdur       pasos sin golpes hasta que la capacidad vuelve a 1 (16)
+    Pumpamt      cuanto hincha el golpe (1: el bombo x3, el tom x2)
+    Pumphorz     cuanto se ensancha (0,15 de lo que crece en altura)
+    Pumpataque   segundos de subida (0,02)
+    Pumprelease  pasos de caida (2)
+    Pumpon       pumping encendido
+Leyenda: IMPULSO pad 1 x3 celda 40 cap 3 (16 pasos) en lugar de la linea
+EROSION, y MUNDO cuenta las celdas con capacidad: cap+ 7.
+A vigilar (sin compensar todavia): con mas capacidad se desborda mas tarde,
+asi que el territorio tarda mas en llenarse y los mundos pueden durar mas;
+y las celdas con cap alto acumulan mas ocupacion y heredan mas (25 %).
 
 EL GOLPE SE VE COMO UNA NOTA (v9)
 ---------------------------------
@@ -100,7 +150,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v11  (erosion en notas y con la velocidad, perfiles del usuario, el golpe se ve como una nota)'
+VERSION = 'fase7 v12  (bombo y tom: impulso de creacion, capacidad de la celda y pumping)'
 banner(VERSION)
 
 base = require_base(7)
@@ -125,10 +175,21 @@ add_par(base, page, 'toggle', 'Erosionvel', 'La velocidad escala la erosion', Tr
 add_par(base, page, 'int', 'Velref', 'Velocidad a la que vale la tabla', 100, 1, 127, clamp=True)
 renew_default(base, 'Vidabalizadrum', 0.6, 0.8)
 renew_default(base, 'Vidabalizadrum', 1.0, 0.8)
+add_par(base, page, 'menu', 'Capmodo', 'Capacidad del impulso', 'decae',
+        menu=['decae', 'sostenido'], menu_labels=['Decae tras Capdur pasos', 'Sostenida hasta el entierro'])
+add_par(base, page, 'int', 'Capdur', 'Pasos hasta que la capacidad decae', 16, 1, 128, clamp=True)
+add_par(base, page, 'float', 'Pumpamt', 'Pumping: cuanto hincha', 1.0, 0.0, 2.0)
+add_par(base, page, 'float', 'Pumphorz', 'Pumping: cuanto ensancha', 0.15, 0.0, 1.0)
+add_par(base, page, 'float', 'Pumpataque', 'Pumping: subida (s)', 0.02, 0.0, 0.5)
+add_par(base, page, 'float', 'Pumprelease', 'Pumping: caida (pasos)', 2.0, 0.25, 16.0)
+add_par(base, page, 'toggle', 'Pumpon', 'Pumping encendido', True)
 ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
    'Multradio, Padprueba, Erosionar, Balizasdrum, Luzdrum, Vidabalizadrum, Erosionvel, Velref')
+ok('pagina Fase7 (v12, impulso): Capmodo (decae), Capdur (16), Pumpamt (1), Pumphorz (0,15), '
+   'Pumpataque (0,02), Pumprelease (2), Pumpon')
 
-COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'tipo', 'rol']
+COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'modo', 'capacidad', 'tipo', 'rol']
+COLS_V11 = ['pad', 'reduccion', 'radio', 'profundidad', 'tipo', 'rol']   # sin modo ni capacidad
 
 
 def filas_tabla(t):
@@ -137,9 +198,10 @@ def filas_tabla(t):
 
 
 def clasificar_perfiles(filas, mm):
-    """'v1' / 'v3' si la tabla sigue con los valores de esas versiones (sin
-    editar), 'nueva' si ya tiene los de la v5 (reduccion en notas) y
-    'editada' si alguien la ha cambiado a mano."""
+    """'v1' / 'v3' / 'v5' / 'v11' si la tabla sigue con los valores de esas
+    versiones (sin editar), 'nueva' si ya tiene los de la v12 (con modo y
+    capacidad), 'sin_modo' si alguien la edito a mano antes de la v12 (le
+    faltan las columnas modo y capacidad) y 'editada' si la edito despues."""
     if not filas:
         return 'v1'
     cab = [str(x).strip() for x in filas[0]]
@@ -148,24 +210,33 @@ def clasificar_perfiles(filas, mm):
     except ValueError:
         return 'editada'
     it = cab.index('tipo') if 'tipo' in cab else None
+    con_modo = 'modo' in cab and 'capacidad' in cab
     if len(filas) != 9:
-        return 'editada'
-    perf, tipos = [], []
+        return 'editada' if con_modo else 'sin_modo'
+    perf, tipos, modos, caps = [], [], [], []
     try:
         for f in filas[1:9]:
             perf.append(tuple(int(float(f[k])) for k in ix))
             tipos.append(str(f[it]).strip() if it is not None else '')
+            if con_modo:
+                modos.append(str(f[cab.index('modo')]).strip())
+                caps.append(float(f[cab.index('capacidad')]))
     except Exception:
+        return 'editada' if con_modo else 'sin_modo'
+    if con_modo:
+        if perf == list(mm.PERFILES_DEFECTO) and tipos == list(mm.TIPOS_DEFECTO) \
+                and modos == list(mm.MODOS_DEFECTO) and caps == list(mm.CAPACIDAD_DEFECTO):
+            return 'nueva'
         return 'editada'
     if perf == list(mm.PERFILES_V1) and tipos == list(mm.TIPOS_V1):
         return 'v1'
-    if perf == list(mm.PERFILES_V3) and tipos == list(mm.TIPOS_DEFECTO):
+    if perf == list(mm.PERFILES_V3) and tipos == list(mm.TIPOS_V11):
         return 'v3'
-    if perf == list(mm.PERFILES_V5) and tipos == list(mm.TIPOS_DEFECTO):
+    if perf == list(mm.PERFILES_V5) and tipos == list(mm.TIPOS_V11):
         return 'v5'
-    if perf == list(mm.PERFILES_DEFECTO) and tipos == list(mm.TIPOS_DEFECTO):
-        return 'nueva'
-    return 'editada'
+    if perf == list(mm.PERFILES_DEFECTO) and tipos == list(mm.TIPOS_V11):
+        return 'v11'
+    return 'sin_modo'
 
 
 def poner_roles(t, mm):
@@ -191,21 +262,49 @@ def escribir_perfiles(t, mm):
     t.appendRow(COLS)
     for k in range(8):
         red, rad, prof = mm.PERFILES_DEFECTO[k]
-        t.appendRow([k + 1, red, rad, prof, mm.TIPOS_DEFECTO[k], mm.ROLES_DEFECTO[k]])
+        t.appendRow([k + 1, red, rad, prof, mm.MODOS_DEFECTO[k], '%g' % mm.CAPACIDAD_DEFECTO[k],
+                     mm.TIPOS_DEFECTO[k], mm.ROLES_DEFECTO[k]])
+
+
+def anadir_modo(t, mm):
+    """Una tabla editada a mano antes de la v12: se conserva todo y se le
+    anaden las columnas modo y capacidad con los valores por defecto (bombo
+    x3 y tom x2 en impulso), detras de profundidad."""
+    filas = filas_tabla(t)
+    cab = [str(x).strip() for x in filas[0]]
+    ip = cab.index('pad') if 'pad' in cab else None
+    donde = cab.index('profundidad') + 1 if 'profundidad' in cab else len(cab)
+    t.clear()
+    t.appendRow(cab[:donde] + ['modo', 'capacidad'] + cab[donde:])
+    for f in filas[1:]:
+        f = list(f) + [''] * (len(cab) - len(f))
+        try:
+            k = int(float(f[ip])) - 1 if ip is not None else -1
+        except Exception:
+            k = -1
+        md, cp = (mm.MODOS_DEFECTO[k], '%g' % mm.CAPACIDAD_DEFECTO[k]) if 0 <= k < 8 else ('erosion', '1')
+        t.appendRow(f[:donde] + [md, cp] + f[donde:])
 
 
 tabla = base.op('perfiles_erosion')
 if tabla is None:
     tabla = mk(base, 'tableDAT', 'perfiles_erosion', -660, 80)
     escribir_perfiles(tabla, motor.module)
-    ok('perfiles_erosion: reduccion en notas; bombo tiembla, caja y tom cortan. Editala a mano')
+    ok('perfiles_erosion: reduccion en notas; bombo x3 y tom x2 en impulso, la caja corta. Editala a mano')
 else:
     estado = clasificar_perfiles(filas_tabla(tabla), motor.module)
-    if estado in ('v1', 'v3', 'v5'):
+    if estado in ('v1', 'v3', 'v5', 'v11'):
         escribir_perfiles(tabla, motor.module)
-        ok('perfiles_erosion: tenia los valores de la %s, sustituidos (reduccion en notas)' % estado)
+        ok('perfiles_erosion: tenia los valores de la %s, sustituidos (bombo x3 y tom x2 en '
+           'impulso; columnas modo y capacidad)' % estado)
     elif estado == 'nueva':
         ok('perfiles_erosion: ya tiene los valores nuevos')
+    elif estado == 'sin_modo':
+        anadir_modo(tabla, motor.module)
+        poner_roles(tabla, motor.module)
+        info('perfiles_erosion editada a mano: se conserva y se le anaden las columnas modo y '
+             'capacidad (bombo x3 y tom x2 en impulso; el resto, erosion). Para que un pad vuelva '
+             'a erosionar, pon erosion en su modo')
     else:
         info('perfiles_erosion editada a mano: se conserva. OJO: la columna reduccion '
              'ahora cuenta NOTAS, no escalones (un 3 de antes es mucho mas que un 3 de '
@@ -228,19 +327,26 @@ else:
 
 set_render(base)
 
-leeme(base, 7, """FASE 7 - EROSION
+leeme(base, 7, """FASE 7 - EROSION E IMPULSO
   8 pads de bateria (Canaldrum 16, desde Notabase) = 8 perfiles editables
   en perfiles_erosion:
     reduccion    notas de construccion que deshace en la celda
     radio        anillos de vecinas (cada anillo, la mitad)
     profundidad  conchas que corta (fase 9)
+    modo         erosion / impulso (v12)
+    capacidad    multiplicador de capacidad de un impulso
+  IMPULSO (bombo x3 y tom x2): no destruye. La celda golpeada se porta como
+  si fuera cap veces mas grande (limite de altura y umbrales x cap) y se
+  hincha al golpe (pumping: Pumpamt, Pumphorz, Pumpataque s, Pumprelease
+  pasos; Pumpon). Capmodo decae (vuelve a 1 tras Capdur pasos sin golpes;
+  lo construido se queda) o sostenido (hasta el entierro).
   Erosionvel: la tabla vale a velocidad Velref (100) y escala con la del
   golpe; como minimo, una nota por golpe.
   Una nota de erosion deshace lo que hizo una nota del SEQ: baja la carga
   y la altura; al agotarse la carga, baja un escalon. Orden: satelites,
   altura, huella.
-  Perfiles del usuario: 1 bombo (-4, radio 2, corta 2), 2 caja (-15,
-  radio 1, corta 3), 3 tom (-4, radio 1, corta 1), 4-8 aranazos.
+  Perfiles del usuario: 1 bombo impulso x3, 2 caja (-15, radio 1, corta 3),
+  3 tom impulso x2, 4-8 aranazos.
   El golpe se ve como una nota: el centro de la celda y la formacion con
   el color de su pad (colores_drum), en las celdas que erosiona; se apaga
   en Vidabalizadrum s. Luzdrum: intensidad.
@@ -263,6 +369,7 @@ def prueba(t):
     sats0 = sum(W['occ'][j] for j in m.satellites_of(W, i))
     occ0 = W['occ'][i]
     c['perfiles'] = [(1, 0, 0)] * 8
+    c['modos'] = ['erosion'] * 8                   # todos erosionan (v12: el bombo es impulso)
     c['target_mode'], c['erosion_vel'] = 0, 0
     m.erosion(W, c, 0, 1, 0.0)                    # velocidad 1: sin desplazar
     sats1 = sum(W['occ'][j] for j in m.satellites_of(W, i))
@@ -284,21 +391,46 @@ def prueba(t):
     nb = int(base.par.Notabase)
     t.midi(0x90 + chd - 1, nb, 0x64)
     W = m.world()
-    t.check('pad 1 por MIDI -> erosion', W['hits'].get(3, 0) == 1 and 'erosion' in W['ev'])
-    t.check('perfiles leidos de la tabla', len(m.cfg()['perfiles']) == 8
-            and len(m.cfg()['tipos']) == 8)
+    e1 = W['ev'].get('erosion', {})
+    t.check('pad 1 (bombo) por MIDI -> impulso: la celda queda con capacidad 3',
+            W['hits'].get(3, 0) == 1 and e1.get('modo') == 'impulso'
+            and W['cap'][e1['celda']] == 3.0, str(e1.get('modo')))
+    t.midi(0x90 + chd - 1, nb + 1, 0x64)
+    t.check('pad 2 (caja) por MIDI -> erosion',
+            W['hits'].get(3, 0) == 2 and W['ev']['erosion'].get('modo') == 'erosion')
+    cf = m.cfg()
+    t.check('perfiles leidos de la tabla, con modo y capacidad',
+            len(cf['perfiles']) == 8 and len(cf['tipos']) == 8
+            and cf['modos'] == list(m.MODOS_DEFECTO) and cf['capacidades'] == list(m.CAPACIDAD_DEFECTO),
+            '%s %s' % (cf['modos'], cf['capacidades']))
     cd = dict(m.cfg())
     cd['nivel'] = min(cd['nivel'], 13)            # la erosion de la fase 7, sin los accidentes de la 14
     cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
     cd['target_mode'], cd['balizas_drum'], cd['luz_drum'] = 0, 1, 1.0
     cd['erosion_vel'] = 0               # las pruebas de siempre, sin velocidad
-    v1 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V1[k]) + [m.TIPOS_V1[k]] for k in range(8)]
-    v3 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V3[k]) + [m.TIPOS_DEFECTO[k]] for k in range(8)]
-    ed = [COLS[:5]] + [[k + 1, 2, 2, 0, 'aranazo'] for k in range(8)]
-    v5 = [COLS[:5]] + [[k + 1] + list(m.PERFILES_V5[k]) + [m.TIPOS_DEFECTO[k]] for k in range(8)]
-    t.check('tabla v1, v3 o v5 sin editar -> se sustituye; editada -> se conserva',
+    v1 = [COLS_V11[:5]] + [[k + 1] + list(m.PERFILES_V1[k]) + [m.TIPOS_V1[k]] for k in range(8)]
+    v3 = [COLS_V11[:5]] + [[k + 1] + list(m.PERFILES_V3[k]) + [m.TIPOS_V11[k]] for k in range(8)]
+    ed = [COLS_V11[:5]] + [[k + 1, 2, 2, 0, 'aranazo'] for k in range(8)]
+    v5 = [COLS_V11[:5]] + [[k + 1] + list(m.PERFILES_V5[k]) + [m.TIPOS_V11[k]] for k in range(8)]
+    v11 = [COLS_V11] + [[k + 1] + list(m.PERFILES_DEFECTO[k]) + [m.TIPOS_V11[k], m.ROLES_DEFECTO[k]]
+                        for k in range(8)]
+    nueva = [COLS] + [[k + 1] + list(m.PERFILES_DEFECTO[k]) + [m.MODOS_DEFECTO[k], m.CAPACIDAD_DEFECTO[k],
+                                                                m.TIPOS_DEFECTO[k], m.ROLES_DEFECTO[k]]
+                      for k in range(8)]
+    ed12 = [list(f) for f in nueva]
+    ed12[1][4] = 'erosion'                          # el bombo vuelve a erosionar, a mano
+    t.check('tabla v1, v3, v5 o v11 sin editar -> se sustituye; editada antes de la v12 -> se le '
+            'anaden modo y capacidad; editada despues -> se conserva',
             clasificar_perfiles(v1, m) == 'v1' and clasificar_perfiles(v3, m) == 'v3'
-            and clasificar_perfiles(v5, m) == 'v5' and clasificar_perfiles(ed, m) == 'editada')
+            and clasificar_perfiles(v5, m) == 'v5' and clasificar_perfiles(v11, m) == 'v11'
+            and clasificar_perfiles(ed, m) == 'sin_modo' and clasificar_perfiles(nueva, m) == 'nueva'
+            and clasificar_perfiles(ed12, m) == 'editada')
+    ft = FakeTabla(ed)
+    anadir_modo(ft, m)
+    t.check('tabla editada antes de la v12: conserva sus numeros y gana modo y capacidad',
+            ft.filas[0][:6] == ['pad', 'reduccion', 'radio', 'profundidad', 'modo', 'capacidad']
+            and [f[4] for f in ft.filas[1:]] == list(m.MODOS_DEFECTO)
+            and all(f[1:4] == ['2', '2', '0'] for f in ft.filas[1:]), str(ft.filas[:2]))
     # luz de celda: colores dibujados en el centro de una celda
     def centro_de(Wx, cx, now, celda):
         nn = m.normal_i(celda)
@@ -362,8 +494,9 @@ def prueba(t):
     # 3. un golpe: la celda a plena luz, el radio mas tenue, y se apaga
     W3b = m.new_world()
     m.note_on(W3b, cd, 1, 64, 100, 0.0)
-    ev = m.erosion(W3b, cd, 0, 1, 2.0)              # bombo: radio 2
-    nivel = {c_: m.drum_light(W3b, cd, c_, 2.05)[0] for c_ in W3b['luz']}
+    cd_e = dict(cd, modos=['erosion'] * 8)          # el bombo en modo erosion: radio 2
+    ev = m.erosion(W3b, cd_e, 0, 1, 2.0)
+    nivel = {c_: m.drum_light(W3b, cd_e, c_, 2.05)[0] for c_ in W3b['luz']}
     anillos = dict(m.rings(ev['celda'], 2))
     a1 = [nivel[x] for x, d in anillos.items() if d == 1 and x in nivel]
     a2 = [nivel[x] for x, d in anillos.items() if d == 2 and x in nivel]
@@ -387,7 +520,9 @@ def prueba(t):
         cc = centro_de(W5, cd, 4.01, celda)
         vis = vis and len(cc) == 1 and acerca(cc[0]) < 0.1
     t.check('la luz se ve con formacion, vacia y con huella', vis and W5['huella'][hu] > 0)
-    t.check('los pads 1, 2 y 3 cortan; ningun otro', m.pads_corte(cd) == [0, 1, 2])
+    t.check('corta la caja (pad 2); el bombo y el tom (1 y 3) son impulso',
+            m.pads_corte(cd) == [1] and m.pads_impulso(cd) == [0, 2]
+            and not m.es_aranazo(cd, 0) and not m.es_aranazo(cd, 2) and m.es_aranazo(cd, 3))
     # 4. pad 7 repetido sobre una celda en crecimiento, con el SEQ1 tocando
     W6 = m.new_world()
     for k in range(3):
@@ -482,6 +617,11 @@ def prueba(t):
     W = m.world()
     k = int(base.par.Padprueba) - 1
     t.check('Padprueba + Erosionar iluminan la celda', k in W['drum'] and W['luz'])
+    t.check('leyenda IMPULSO (pad 1) y MUNDO con cap+',
+            'IMPULSO  pad 1 x3 celda' in m.legend() and 'cap+ 1' in m.legend(), m.legend()[:200])
+    base.par.Padprueba = 4
+    m.on_pulse('Erosionar')
+    base.par.Padprueba = 1
     cian, ambar, blanco = (0.10, 0.90, 1.00), (1.0, 0.7, 0.3), (0.95, 0.95, 0.92)
     t.check('ningun color es cian, ambar ni blanco',
             all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
@@ -490,13 +630,249 @@ def prueba(t):
     t.check('luz_celda gira y se balancea con el planeta',
             geo is not None and 'rotation(' in (geo.par.ry.expr or '')
             and 'wobble(' in (geo.par.rx.expr or ''))
-    t.check('leyenda EROSION', 'EROSION' in m.legend())
+    t.check('leyenda EROSION (pad 4)', 'EROSION' in m.legend() and 'IMPULSO' not in m.legend())
+    prueba_impulso(t, m, cd)
+
+
+class FakeTabla(object):
+    """Lo justo de una tableDAT para probar anadir_modo."""
+
+    def __init__(self, filas):
+        self.filas = [[str(x) for x in f] for f in filas]
+
+    @property
+    def numRows(self):
+        return len(self.filas)
+
+    @property
+    def numCols(self):
+        return max(len(f) for f in self.filas)
+
+    def __getitem__(self, rc):
+        r, c = rc
+        f = self.filas[r]
+        if c >= len(f):
+            return None
+
+        class _C(object):
+            val = f[c]
+        return _C()
+
+    def clear(self):
+        self.filas = []
+
+    def appendRow(self, f):
+        self.filas.append([str(x) for x in f])
+
+
+def prueba_impulso(t, m, cd):
+    """Las pruebas del impulso (v12): bombo y tom amplian la capacidad de
+    la celda y la hinchan al golpe."""
+    import math
+    c = dict(cd)
+    c.update(target_mode=0, erosion_vel=0, cap_modo=0, cap_dur=16, pump_amt=1.0, pump_horz=0.15,
+             pump_ataque=0.02, pump_release=2.0, pump_on=1)
+    paso = m.step_dur(c, 120.0)
+    i = m.note_cell(64)
+    lim = m.limit(c)
+
+    def mundo(notas=0, t0=0.0):
+        Wx = m.new_world()
+        Wx['paso'] = paso
+        for k in range(notas):
+            m.note_on(Wx, c, 1, 64, 100, t0)
+        return Wx
+    # 1. no resta ocupacion, no deja huella ni corte (ni con conchas, en la fase 9)
+    c9 = dict(c, nivel=9)
+    W1 = mundo()
+    for g in range(2):
+        m.note_on(W1, c9, 1, 64, 100, 0.0)
+        m.end_cycle(W1, c9, 0.5 + g)
+    for k in range(8):
+        m.note_on(W1, c9, 1, 64, 100, 3.0)
+    antes = (list(W1['occ']), list(W1['carga']), list(W1['h']), list(W1['huella']),
+             [len(x) for x in W1['cols']], dict(W1['scars']))
+    ev = m.erosion(W1, c9, 0, 100, 4.0)
+    ev3 = m.erosion(W1, c9, 2, 100, 4.1)
+    despues = (list(W1['occ']), list(W1['carga']), list(W1['h']), list(W1['huella']),
+               [len(x) for x in W1['cols']], dict(W1['scars']))
+    t.check('impulso: no resta ocupacion, no deja huella ni corte',
+            antes == despues and ev['modo'] == ev3['modo'] == 'impulso' and ev['quitado'] == 0
+            and 'corte' not in ev and ev['celda'] == i)
+    Wl = mundo()
+    for n in range(96):
+        m.note_on(Wl, c, 1, n, 100, 0.0)
+    occ0 = list(Wl['occ'])
+    evl = m.erosion(Wl, c, 0, 100, 1.0)
+    t.check('impulso: no entra en el presupuesto de densidad (radio 0, Multradio no le afecta)',
+            not evl['doble'] and evl['rad'] == 0 and list(Wl['occ']) == occ0
+            and list(Wl['luz']) == [evl['celda']])
+    # 2. con cap 3 sube hasta 3 veces el limite y no se desborda antes de ocupacion 12
+    W2 = mundo(1)
+    m.erosion(W2, c, 0, 100, 0.0)
+    primero, hmax = None, 0.0
+    for k in range(120):
+        r = m.note_on(W2, c, 1, 64, 100, 0.01)
+        hmax = max(hmax, W2['h'][i])
+        if r.get('desborde') is not None and primero is None:
+            primero = W2['occ'][i]
+    t.check('cap 3: la formacion sube hasta 3 x el limite y no se desborda antes de ocupacion 12',
+            primero is not None and primero >= 12 and abs(hmax - 3.0 * lim) < 1e-6,
+            'primer desborde con ocupacion %s, altura %.2f de %.2f' % (primero, hmax, 3.0 * lim))
+    W2b = mundo(1)
+    hb = 0.0
+    for k in range(40):
+        m.note_on(W2b, c, 1, 64, 100, 0.01)
+        hb = max(hb, W2b['h'][i])
+    t.check('... sin impulso, la de siempre: limite x 1 y desborde desde %d' % c['th_branch'],
+            abs(hb - lim) < 1e-6 and m.satellites_of(W2b, i))
+    # 3. bombo + tom en la misma celda: cap 3, no 6 ni 2
+    caps = []
+    for orden in ((0, 2), (2, 0), (0, 0)):
+        W3 = mundo(1)
+        for k, pad in enumerate(orden):
+            m.erosion(W3, c, pad, 100, 0.1 * k)
+        caps.append(W3['cap'][i])
+    t.check('bombo + tom en la misma celda -> cap 3 (ni 6 ni 2); dos bombos, 3', caps == [3.0, 3.0, 3.0],
+            str(caps))
+    # 4. decae: tras Capdur pasos sin golpes, cap 1 y la altura no baja
+    W4 = mundo(1)
+    m.erosion(W4, c, 0, 100, 0.0)
+    for k in range(30):
+        m.note_on(W4, c, 1, 64, 100, 0.01)
+    o4, h4 = W4['occ'][i], W4['h'][i]
+    t_fin = c['cap_dur'] * paso
+    m.tick(W4, c, t_fin - 0.05, 120.0, True)
+    sigue = W4['cap'][i]
+    m.tick(W4, c, t_fin + 0.01, 120.0, True)
+    h4b = W4['h'][i]
+    des = None
+    for k in range(12):
+        r = m.note_on(W4, c, 1, 64, 100, t_fin + 0.02)
+        des = des or r.get('desborde')
+    t.check('decae: tras Capdur pasos sin golpes la capacidad vuelve a 1 y la altura no baja; '
+            'la siguiente nota que dispara se desborda',
+            sigue == 3.0 and W4['cap'][i] == 1.0 and o4 > c['th_branch'] and h4 > lim
+            and abs(h4b - h4) < 1e-9 and W4['h'][i] >= h4 - 1e-9 and des is not None,
+            'ocupacion %d, altura %.2f -> %.2f -> %.2f (limite %.2f)' % (o4, h4, h4b, W4['h'][i], lim))
+    cs = dict(c, cap_modo=1)
+    W4s = mundo(1)
+    m.erosion(W4s, cs, 0, 100, 0.0)
+    m.tick(W4s, cs, 10 * t_fin, 120.0, True)
+    t.check('sostenido: la capacidad se queda', W4s['cap'][i] == 3.0)
+    W4r = mundo(1)
+    m.erosion(W4r, c, 0, 100, 0.0)
+    m.erosion(W4r, c, 2, 100, t_fin * 0.75)         # el tom renueva la duracion
+    m.tick(W4r, c, t_fin + 0.01, 120.0, True)
+    t.check('cada golpe renueva la duracion', W4r['cap'][i] == 3.0)
+    # 5. golpe en una celda vacia
+    W5 = mundo()
+    W5['last'][1] = dict(note=64, cell=i, t=0.0, vel=100)
+    try:
+        ev5 = m.erosion(W5, c, 0, 100, 0.0)
+        bien5 = ev5['vacia'] and W5['cap'][i] == 3.0 and W5['occ'][i] == 0 and i in W5['luz']
+        m.build_instances(W5, dict(c, nivel=10), 0.01)
+    except Exception as e_:
+        bien5 = False
+        ev5 = e_
+    t.check('golpe en celda vacia: fija cap sin error y se ve su color', bien5, str(ev5)[:80])
+    # 6. pumping
+    c10 = dict(c, nivel=10)
+    W6 = mundo(6)
+    W6['vh'] = list(W6['h'])
+    sin = m.build_instances(W6, c10, 1.0)
+    m.erosion(W6, c10, 0, 100, 1.0)
+    a_, r_ = m._tiempos_bomba(W6, c10)
+    pico = m.escalas_bomba(W6, c10, i, 1.0 + a_)[0]
+    fin = m.escalas_bomba(W6, c10, i, 1.0 + a_ + r_)
+    W6['luz'] = {}                                  # sin la luz del pad, solo el pumping
+    tras = m.build_instances(W6, c10, 1.0 + a_ + r_)
+    claves = ('formas_pulidas', 'formas_porosas', 'coronas')
+    igual = all([[round(x, 9) for x in f] for f in sin[k]] == [[round(x, 9) for x in f] for f in tras[k]]
+                for k in claves)
+    t.check('pumping: el bombo hincha x3 y la escala vuelve exactamente a 1',
+            abs(pico - 3.0) < 1e-9 and fin == (1.0, 1.0) and igual, 'pico %.3f, fin %s' % (pico, fin))
+    W6r = mundo(6)
+    m.erosion(W6r, c10, 0, 100, 0.0)
+    t2 = a_ + 0.4 * r_
+    v_antes = m.bomba_nivel(W6r, c10, i, t2 - 1e-6)[0]
+    m.erosion(W6r, c10, 2, 100, t2)                 # el tom, durante la caida del bombo
+    v_en = m.bomba_nivel(W6r, c10, i, t2)[0]
+    v_luego = m.bomba_nivel(W6r, c10, i, t2 + 1e-4)[0]
+    t.check('retrigger: un golpe durante la caida sube desde la escala actual, sin salto',
+            abs(v_en - v_antes) < 1e-3 and v_luego >= v_en - 1e-9 and 0 < v_en < 2.0,
+            '%.4f -> %.4f -> %.4f' % (v_antes, v_en, v_luego))
+
+    def filas_celda(inst, celda):
+        out = []
+        for k in claves:
+            for f in inst[k]:
+                p = f[:3]
+                if max(range(m.N), key=lambda x: sum(p[q] * m.normal_i(x)[q] for q in range(3))) == celda:
+                    out.append(f)
+        return out
+
+    def extension(f, celda, Wx):
+        n = m.normal_i(celda)
+        e, tt = m.tangents(n)
+        b = m.base_radius(Wx, c10, celda)
+        p0 = [n[q] * b for q in range(3)]
+        rel = [f[q] - p0[q] for q in range(3)]
+        lado = max(0.5 * abs(f[6]), 0.5 * abs(f[8]))
+        cw, cl = m._cell_sizes(b, celda)
+        return (abs(sum(rel[q] * e[q] for q in range(3))) + lado) / (0.5 * cw), \
+            (abs(sum(rel[q] * tt[q] for q in range(3))) + lado) / (0.5 * cl)
+    peor = []
+    for tema_arq in (False, True):
+        Wp = mundo()
+        for k in range(10):
+            m.note_on(Wp, c10, 2 if tema_arq else 1, 64, 100, 0.0)
+        Wp['vh'] = list(Wp['h'])
+        Wp['lat'] = [-99.0] * m.N
+        Wp['pend'] = {}
+        base_f = filas_celda(m.build_instances(Wp, c10, 5.0), i)
+        m.erosion(Wp, c10, 0, 100, 5.0)
+        Wp['luz'] = {}
+        hin = filas_celda(m.build_instances(Wp, c10, 5.0 + a_), i)
+        for f0, f1 in zip(base_f, hin):
+            x0, x1 = extension(f0, i, Wp), extension(f1, i, Wp)
+            peor.append(max(x1[0] - max(1.0, x0[0]), x1[1] - max(1.0, x0[1])))
+        alto0 = max(abs(f[7]) for f in base_f)
+        alto1 = max(abs(f[7]) for f in hin)
+        peor.append(0.0 if abs(alto1 - 3.0 * alto0) < 1e-6 else 9.0)
+    t.check('pumping: ninguna pieza pasa del ancho de su celda; crece x3 en altura',
+            peor and max(peor) <= 1e-6, 'exceso %.4f' % max(peor or [9]))
+    c_off = dict(c10, pump_on=0)
+    t.check('Pumpon apagado: sin pumping', m.escalas_bomba(W6r, c_off, i, t2) == (1.0, 1.0))
+    # la luz: el color del pad sin tapar el del secuenciador
+    W8 = mundo(3)
+    W8['vh'] = list(W8['h'])
+    m.note_on(W8, c10, 1, 64, 100, 6.0)
+    m.erosion(W8, c10, 0, 100, 6.0)
+    cent = [f for f in m.cell_lights(W8, c10, 6.01)
+            if sum(f[q] * m.normal_i(i)[q] for q in range(3)) > 0.0
+            and max(range(m.N), key=lambda x: sum(f[q] * m.normal_i(x)[q] for q in range(3))) == i]
+    cols = sorted(tuple(round(v, 2) for v in f[9:12]) for f in cent)
+    t.check('la luz del impulso no tapa la del SEQ1: el centro se parte en los dos colores',
+            len(cent) == 2, str(cols))
+    # 7. el entierro reinicia la capacidad
+    c8 = dict(c, nivel=8)
+    W7 = mundo(4)
+    m.erosion(W7, c8, 0, 100, 0.0)
+    m.erosion(W7, c8, 2, 100, 0.0)
+    W7['last'][1]['cell'] = m.note_cell(70)
+    m.erosion(W7, c8, 0, 100, 0.1)
+    n_cap = m.celdas_cap(W7)
+    m.end_cycle(W7, c8, 1.0)
+    t.check('entierro: la capa nueva empieza con cap 1', n_cap == 2 and m.celdas_cap(W7) == 0
+            and not W7['bomba'])
 
 
 run_test(base, prueba)
 print('  Ahora: anade la bateria del BeatStep (canal 16). Cada golpe ilumina las')
-print('  celdas que erosiona con el color de su pad; el bombo hace temblar el')
-print('  paisaje; caja y tom abriran cortes en la fase 9.')
+print('  celdas que golpea con el color de su pad. El bombo y el tom no destruyen:')
+print('  hinchan la celda al golpe y le dan capacidad (x3 y x2), asi que sus')
+print('  formaciones suben mas antes de desbordarse; la caja abrira cortes en la fase 9.')
 print('  Si los golpes salen como "pad fuera de 1-8", ajusta Notabase.')
 print('  Ajusta el equilibrio crecimiento / erosion antes de pasar a la fase 8.')
 print('=' * 66)

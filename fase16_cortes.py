@@ -8,9 +8,10 @@ de color: ensenan lo que habia en cada concha, leido de su registro (fase
 
 QUE HACE
 --------
-  CORTES       los pads cuyo perfil tiene profundidad (con los perfiles por
-               defecto, bombo, caja y tom: pads 1-3; el plan decia 6-8). Si
-               cambias los perfiles, cambian con ellos.
+  CORTES       los pads de erosion cuyo perfil tiene profundidad (con los
+               perfiles por defecto, la caja, pad 2: desde la fase 7 v12 el
+               bombo y el tom son impulso; el plan decia 6-8). Si cambias los
+               perfiles, cambian con ellos.
   NATURALEZA   sima: en la veta de carbon, troncos fosiles aplastados en
                horizontal (donde hubo bosque) y columnas de basalto (donde
                hubo relieve).
@@ -48,7 +49,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase16 v1  (arqueologia tematica: lo que ensenan los cortes, canon y galeria de metro)'
+VERSION = 'fase16 v2  (arqueologia tematica: lo que ensenan los cortes, canon y galeria de metro)'
 banner(VERSION)
 
 base = require_base(16)

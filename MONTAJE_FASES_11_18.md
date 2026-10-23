@@ -15,14 +15,14 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V | `motor v42` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12, ver `MONTAJE_FASES_3_10.md`) | `motor v43` |
 | `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`) | `comun v32` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun) | `fase11 v4` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
-| `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 | `fase14 v1` |
+| `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 (v2: un pad de impulso no es arañazo) | `fase14 v2` |
 | `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 (v2: la autoprueba no depende de la `Herencia` del proyecto) | `fase15 v2` |
-| `fase16_cortes.py` | Arqueología temática: lo que enseñan los cortes (fondo y paredes), unión de cortes (cañón y galería de metro), página Fase16 | `fase16 v1` |
+| `fase16_cortes.py` | Arqueología temática: lo que enseñan los cortes (fondo y paredes), unión de cortes (cañón y galería de metro), página Fase16 (v2: solo cambia el texto; corta la caja) | `fase16 v2` |
 | `fase17_tiempo.py` | Tiempo: pulso en fase con el beat (dosel, esporas, tráfico, ventanas), transporte, frente de cambio de pattern y biblioteca de patterns, página Fase17 | `fase17 v1` |
 | `fase18_escenas.py` | Escenas por tema (tabla `escenas`, `Escena`, `Guardarescena`, `Cargarescena`), luz local (`luz_local`), capas de diagnóstico (`diagnostico`), página Fase18 | `fase18 v1` |
 | `fase19_modular.py` | Señales del modular (OSC, un CHOP, a mano o de prueba): viento, respiración de las ventanas, esporas, smog, niebla y glitch; página Fase19 y OSC In CHOP `modular_osc` (v2: rango -10..10 V) | `fase19 v2` |
@@ -321,7 +321,7 @@ Los arañazos de la batería (fase 7) reciben forma temática, y la insistencia 
 | Informal | Se desploma un añadido | Derrumbe en cadena del barrio | Escombros (`inf_escombros`) |
 | Planificada | Caen las plantas altas | Demolición por implosión, con polvo | Solar vallado (`ciu_valla`) |
 
-- **Qué es un arañazo.** Un pad cuyo perfil no tiene profundidad, es decir, que no corta. El plan decía «pads 1–5», pero con los perfiles del usuario el bombo, la caja y el tom cortan (pads 1–3), así que los arañazos son los **pads 4–8**. Si cambias los perfiles, cambian con ellos. Los cortes siguen como en la fase 9; su forma temática es la fase 16.
+- **Qué es un arañazo.** Un pad de erosión cuyo perfil no tiene profundidad, es decir, que no corta. El plan decía «pads 1–5», pero con los perfiles del usuario la caja corta (pad 2) y, desde la fase 7 v12, el bombo y el tom (pads 1 y 3) son impulso y no destruyen, así que los arañazos son los **pads 4–8**. Si cambias los perfiles, cambian con ellos. Los cortes siguen como en la fase 9; su forma temática es la fase 16.
 - **Un golpe: el accidente.** La erosión de la fase 7 se aplica como siempre (notas deshechas en anillos y luz del pad). Además, **la formación más alta de la vecindad del objetivo** (la celda objetivo y sus vecinas; en empate, la de índice menor) **baja un estado**, si la erosión no la ha bajado ya. Por ejemplo, de árbol a crecimiento o de crecimiento a semilla; una semilla se vacía. Deja una nube: brasas y ceniza el rayo, polvo los demás.
 - **Escalada.** Cuando caen `Golpesescalada` golpes en la misma vecindad dentro de `Ventanaescalada` pasos, **el golpe que escala es la catástrofe**, no otro accidente. Dos golpes son de la misma zona si el objetivo de uno está en la vecindad del otro, y cada golpe escala una sola vez. La catástrofe empieza en la formación más alta de la vecindad, con su cluster **tal como estaba antes de ese golpe**, para que el golpe no deshaga el bosque antes de que prenda.
 - **Incendio, derrumbe y derrumbe en cadena.** Es un autómata de Drossel–Schwabl acotado:
@@ -460,7 +460,7 @@ Comprueba:
 
 Los cortes de la fase 9 dejan de enseñar solo bandas de color: enseñan lo que había en cada concha, leído de su registro (fase 15).
 
-- **Qué es un corte.** Un pad cuyo perfil tiene profundidad. El plan decía «pads 6–8», pero con los perfiles del usuario cortan el bombo, la caja y el tom (**pads 1–3**), como en la fase 14. Si cambias los perfiles, cambian con ellos.
+- **Qué es un corte.** Un pad de erosión cuyo perfil tiene profundidad. El plan decía «pads 6–8»; con los perfiles del usuario corta la caja (**pad 2**). Hasta la fase 7 v11 cortaban también el bombo y el tom, que ahora son impulso. Si cambias los perfiles, cambian con ellos.
 - **Naturaleza: sima.** En la veta de carbón, **troncos fósiles** aplastados en horizontal, de piedra clara (donde hubo bosque), y **columnas de basalto** de pie, una junto a otra (donde hubo relieve).
 - **Ciudad: excavación.** **Cimientos** corridos con muros cortados y cascotes (ciudad informal), **sótanos** con solera, forjado y pilares, abiertos hacia el corte (planificada) y **tramos de calle** en sección, con aceras, firme y colector (las celdas por las que pasaban sus carreteras).
 - **Solo dentro del corte.** Una celda está en el corte si su suelo queda por debajo del radio nominal: el corte y su anfiteatro, y también las hondonadas de cortes de mundos anteriores. Las piezas van:
@@ -489,7 +489,7 @@ Las eras expuestas son las del corte entero (el objetivo y su anfiteatro), de ar
 ### Probar sin BeatStep
 
 1. Cinco `Forzarciclo` alternando `Tema` (con `Temaenciclo` el cambio espera al fin de ciclo), con `Sembrarzona` y `Sembrarzona2` antes de cada uno: quedan cinco conchas de temas alternos.
-2. `Padprueba` en un pad que corte (2, la caja; 1 el bombo; 3 el tom) y `Erosionar`: el corte enseña troncos fósiles, basalto, cimientos y sótanos, primero en cian.
+2. `Padprueba` en un pad que corte (2, la caja) y `Erosionar`: el corte enseña troncos fósiles, basalto, cimientos y sótanos, primero en cian.
 3. `Unirprueba`: dos cortes vecinos seguidos. En naturaleza, un cañón; en ciudad, una galería de metro.
 
 ### Autoprueba
@@ -599,16 +599,20 @@ Cierra las dos escenas acotadas, naturaleza y ciudad, como presets listos para a
 `python3 pruebas/sesion_escena.py` hace, sobre el motor y sin TouchDesigner, una sesión de 20 minutos por escena a 120 BPM y 30 fotogramas por segundo:
 - **SEQ1** en semicorcheas, con un cambio de pattern cada 4 minutos (A, B, A, C, A) por una ráfaga de All Notes Off;
 - **SEQ2** cada 3 pasos;
-- **batería:** el bombo a negras 16 compases sí y 16 no, la caja (corte) cada 8 compases y un arañazo cada 4.
+- **batería:** el bombo a negras 16 compases sí y 16 no (desde la fase 7 v12, impulso), la caja (corte) cada 8 compases y un arañazo cada 4.
 
 Cada medio segundo dibuja las instancias y mide la densidad, las piezas y lo que tarda `build_instances` en Python. No son los fotogramas de TouchDesigner, pero crecen con ellos.
 
-| Escena | Eras | Frentes | Radio final | Piezas máx. | Densidad máx. | Semilla / coronación | build_instances (mediana, p95) |
-|---|---|---|---|---|---|---|---|
-| naturaleza | 5 | 4 | 9,9 | 263 | 42 % | 11 / 99 px | 2,3 / 3,5 ms |
-| ciudad | 2 | 4 | 8,5 | 319 | 54 % | 13 / 115 px | 3,4 / 5,4 ms |
+| Escena | Bombo | Eras (compases) | Frentes | Radio final | Piezas máx. | Densidad máx. | Semilla / coronación | build_instances (mediana, p95) |
+|---|---|---|---|---|---|---|---|---|
+| naturaleza | erosión (motor v42) | 5 (27–188) | 4 | 9,9 | 263 | 42 % | 11 / 99 px | 2,4 / 4,3 ms |
+| naturaleza | impulso (motor v43) | 8 (27–112) | 4 | 10,5 | 469 | 58 % | 11 / 94 px | 4,9 / 7,5 ms |
+| ciudad | erosión (motor v42) | 2 (74 y 209) | 4 | 8,5 | 319 | 54 % | 13 / 115 px | 3,6 / 6,0 ms |
+| ciudad | impulso (motor v43) | 11 (34–81) | 4 | 11,0 | 485 | 64 % (1 % del tiempo) | 10 / 90 px | 5,5 / 9,4 ms |
 
-Las dos cumplen los cuatro criterios. Con esta batería, que corta cada 8 compases, las eras de la ciudad duran unos 10 minutos: la batería no deja madurar el mundo (*el breakdown entierra el mundo*).
+Las cuatro cumplen los cuatro criterios. Con el bombo erosionando, las eras de la ciudad duraban unos 10 minutos: la batería no dejaba madurar el mundo (*el breakdown entierra el mundo*).
+
+**Con el bombo en impulso (fase 7 v12) las eras se acortan,** al revés de lo que esperaba el encargo. Todas las de la naturaleza y 8 de las 11 de la ciudad se cierran por estancamiento (las otras 3, por edad máxima). El bombo era la principal fuente de novedad mientras sonaba; ahora hincha la celda y le da capacidad, pero no cambia su forma, así que el mundo madura y se asienta antes. La capacidad retrasa el desborde, pero en esta sesión pesa más la novedad que se pierde. Hay casi el doble de piezas y más densidad (la ciudad pasa del 60 % un 1 % del tiempo, dentro del criterio del 5 %), y `build_instances` tarda el doble, con fotogramas estables. Sin compensar, como pide el encargo: a vigilar con el aparato (prueba pendiente 11 de `MONTAJE_FASES_3_10.md`).
 
 ### Parámetros (página Fase18)
 
