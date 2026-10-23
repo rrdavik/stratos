@@ -26,6 +26,7 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 | `fase17_tiempo.py` | Tiempo: pulso en fase con el beat (dosel, esporas, tráfico, ventanas), transporte, frente de cambio de pattern y biblioteca de patterns, página Fase17 | `fase17 v1` |
 | `fase18_escenas.py` | Escenas por tema (tabla `escenas`, `Escena`, `Guardarescena`, `Cargarescena`), luz local (`luz_local`), capas de diagnóstico (`diagnostico`), página Fase18 | `fase18 v1` |
 | `fase19_modular.py` | Señales del modular (OSC, un CHOP, a mano o de prueba): viento, respiración de las ventanas, esporas, smog, niebla y glitch; página Fase19 y OSC In CHOP `modular_osc` (v2: rango -10..10 V) | `fase19 v2` |
+| `modular/` | El conversor CV → OSC para la fase 19: circuito (`esquema.svg`), firmware para ESP32 o Arduino (`cv_osc/cv_osc.ino`) y puente USB → UDP (`puente_osc.py`); ver `modular/README.md` | — |
 | `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v1` |
 | `pruebas/sesion_escena.py` | La sesión de 20 minutos por escena de la fase 18, sobre el motor: densidad, piezas, coste por fotograma y criterios de cierre | — |
 | `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
@@ -672,6 +673,11 @@ La decisión del plan seguía abierta (*¿Cómo llegan los voltajes del modular 
 
 `Rangomodular` dice en qué rango llegan (0..1, -1..1, 0..10 V, -5..5 V, -10..10 V) y `Suavizado` (0,15 s) las alisa.
 
+**El conversor del proyecto** (`modular/`, ver `modular/README.md`):
+- el Doepfer A-180-9 lleva las tensiones por un cable de red apantallado (es un multicore analógico, no Ethernet) hasta una ESP32-S3 (o ESP32 o Arduino Nano) con una red de tres resistencias y dos diodos por canal;
+- el firmware manda las 8 tensiones en voltios como OSC por USB (SLIP), 100 veces por segundo;
+- `puente_osc.py` las pasa a UDP para `modular_osc`.
+
 ### Parámetros (página Fase19)
 
 `Fuentemodular` (osc / chop / manual / prueba) · `Puertoosc` 9000 · `Chopmodular` · `Rangomodular` (0..1; también -1..1, 0..10 V, -5..5 V, -10..10 V) · `Suavizado` 0,15 · `Lfo` 0,5 · `Ruido` 0 · `Espacio` 0 · `Saturacion` 0 · `Vientomax` 12 · `Respiracion` 0,75 · `Smog` 1 · `Niebla` 1 · `Glitch` 1
@@ -853,7 +859,7 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 
 | Pregunta | Decisión |
 |---|---|
-| ¿Cómo llegan los voltajes del modular? | Sigue abierta en el plan. La fase acepta OSC por UDP (lo previsto), cualquier CHOP (interfaz acoplada en continua, CV a MIDI), deslizadores y un generador de prueba |
+| ¿Cómo llegan los voltajes del modular? | Por el Doepfer A-180-9 (cable de red con las tensiones, no Ethernet) a una ESP32 o un Arduino que las manda como OSC por USB; un puente las pasa a UDP (`modular/`). La fase acepta además cualquier CHOP, deslizadores y un generador de prueba |
 | ¿Análisis del audio? | No: solo valores de control |
 | ¿Qué pasa sin señal? | A los 2 s vuelven al reposo (LFO al centro, lo demás a 0): un proyecto sin modular se ve igual |
 | ¿Dónde se calcula la niebla? | En el shader de la piel (`uNiebla`) y, para lo demás, en la niebla lineal de la cámara |
@@ -867,6 +873,7 @@ Sin TouchDesigner a mano, con un **TouchDesigner simulado** que ejecuta los scri
 ```
 python3 pruebas/correr_fases.py        # base y fases 3 a 19 desde cero, sesión, relanzar y otra sesión
 python3 pruebas/sesion_escena.py       # 20 minutos por escena y los criterios de cierre de la fase 18
+python3 pruebas/prueba_cv_osc.py       # el firmware del conversor CV -> OSC (modular/), sin placa
 python3 pruebas/vista_previa.py        # hoja de contactos del catálogo (pruebas/catalogo.png)
 xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la piel con OpenGL (necesita moderngl)
 ```
