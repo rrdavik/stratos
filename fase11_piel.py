@@ -11,13 +11,24 @@ malla ortogonal.
     SEQ1             vegetacion                  ciudad informal
     SEQ2             relieve (basalto)           ciudad planificada
 
-    ocupacion  1     brote                       caseta / bloque
-               2+    arbol (frondosa o conifera) anadidos / plantas
-               5+    arboleda (5 a 12 copas)     pasarelas / manzana
-               7+    bosque (dosel continuo)     barrio / podio
+    ocupacion  1     brote (tronco y un piso)    caseta / bloque
+               2+    el tronco sube, mas pisos   anadidos / plantas
+               5+    el arbol y jovenes alrededor pasarelas / manzana
+               7+    bosque (los pisos se tocan) barrio / podio
                8+    monte boscoso (Umbralmonte) torre de antenas / rascacielos
+               9+    el emergente, en punta
     (los umbrales son los de la fase 4: Umbralram, Umbralfusion, Umbralcorona;
     el del monte, Umbralmonte)
+
+ARBOLES DE PISOS (v6)
+---------------------
+  Cada arbol son piezas instanciadas, sin esferas: tronco fino y oscuro que
+  se ve por debajo de la copa (Troncofrac), 2 a 4 ramas que salen del tronco
+  a Angulorama grados y sostienen los pisos, y 1 a Pisoscopa pisos planos que
+  se estrechan hacia arriba (el de abajo, Anchocopa x el alto), cada uno
+  girado; pino en el piso montano, acacia en el basal. 9 piezas como mucho.
+  El tronco y las ramas, siempre mates; la copa, con el material de la
+  velocidad.
 
 NATURALEZA LEGIBLE (v5)
 -----------------------
@@ -31,16 +42,17 @@ NATURALEZA LEGIBLE (v5)
                con el mapa de alturas del motor. Celda suelta: cono con ruido
                de crestas; cluster de 3+: cordillera con la cresta por su eje.
                Las columnas de basalto, solo en las laderas bajas (estado 1-3).
-  DOSEL        clusters de 4+ celdas y bosques: una copa por colonizacion del
-               espacio; se ven las copas del borde (bolas abajo, conos arriba).
+  DOSEL        clusters de 4+ celdas y bosques: el piso de abajo de cada
+               arbol llega a las vecinas (v6; en la v5, colonizacion del
+               espacio con bolas).
   PISOS        color por la altura sobre el suelo local (Ramp TOP
                'rampa_hipso'): basal, montano, limite del bosque
                (Limitebosque), roca y nieve (Limitenieve).
   COLOR        la naturaleza no toma el color de la concha ni el tinte del
                secuenciador: el tinte va al borde (fresnel, Tintebordenat) y a
                la loseta de la celda.
-  LOD          de lejos, las copas del borde; cerca (Lodnat px por celda o la
-               camara de superficie), tambien los troncos.
+  LOD          de lejos, los arboles jovenes sin ramas; cerca (Lodnat px por
+               celda o la camara de superficie), con ellas.
 
 QUE ANADE
 ---------
@@ -84,7 +96,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v5  (naturaleza legible: monte boscoso, relieve en una malla, dosel por colonizacion, pisos de color, tinte al borde)'
+VERSION = 'fase11 v6  (arboles de pisos: tronco, ramas y copa en pisos; sin bolas)'
 banner(VERSION)
 
 base = require_base(11)
@@ -116,9 +128,14 @@ add_par(base, page, 'float', 'Limitenieve', 'Limite de la nieve (altura relativa
 add_par(base, page, 'float', 'Alturamonte', 'Crecimiento maximo del suelo (x el limite)', 1.0, 0.0, 3.0)
 add_par(base, page, 'float', 'Lodnat', 'Detalle de la naturaleza desde (px por celda)', 80.0, 0.0, 400.0)
 add_par(base, page, 'float', 'Tintebordenat', 'Tinte del secuenciador en el borde (fresnel)', 0.8, 0.0, 3.0)
+add_par(base, page, 'int', 'Pisoscopa', 'Pisos maximos de la copa', 3, 1, 4, clamp=True)
+add_par(base, page, 'float', 'Anchocopa', 'Ancho del piso inferior (x la altura)', 0.6, 0.2, 1.5)
+add_par(base, page, 'float', 'Angulorama', 'Angulo de las ramas con el tronco (grados)', 40.0, 30.0, 50.0)
+add_par(base, page, 'float', 'Troncofrac', 'Fraccion de la altura que es tronco visible', 0.35, 0.1, 0.7)
 ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
    'Maxpiezas 6, Avance (gates), Pasosetapa 2, Rebote 0,2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
-   'Maxcaosnat 5, Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8')
+   'Maxcaosnat 5, Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v6: '
+   'Pisoscopa 3, Anchocopa 0,6, Angulorama 40, Troncofrac 0,35')
 
 # -----------------------------------------------------------------------------
 # CATALOGO (tabla editable: tema especie estado variante modelo)
@@ -166,7 +183,9 @@ leeme(base, 11, """FASE 11 - LA PIEL
   boscoso); el relieve es una sola malla ('terreno', mapa de alturas
   'alturas'); clusters de 4+ y bosques, un dosel por colonizacion del
   espacio; pisos de color (rampa_hipso: Limitebosque, Limitenieve); el
-  tinte del secuenciador al borde (Tintebordenat); Lodnat.""")
+  tinte del secuenciador al borde (Tintebordenat); Lodnat.
+  v6, arboles de pisos: tronco (Troncofrac), ramas (Angulorama) y copa
+  en pisos (Pisoscopa, Anchocopa); 9 piezas como mucho por arbol.""")
 
 print_report()
 
@@ -259,12 +278,13 @@ def _prueba(t, m):
                                for c_ in mk_[a] if c_ > b and c_ in mk_[b])
             otro = [g for g, mo, _ in m.geometrias_piel(c) if inst.get(g)
                     and (mo[:3] in ('veg', 'rel')) != (tema == 'naturaleza')]
-            if esp == 'vegetacion':         # v5: un dosel por colonizacion del espacio, sin puentes
-                copas = sum(len(inst.get(g, [])) for g in geos['veg_copa'] | geos['veg_cono'])
-                t.check('naturaleza, vegetacion: Sembrarzona x2 -> cluster de %d celdas con un dosel de %d copas '
-                        '(colonizacion del espacio), sin puentes ni protagonista' % (n_cl, copas),
-                        n_cl == 1 + len(m.NEIGH[i]) and copas >= 2 * n_cl and puentes == 0 and n_prot == 0
-                        and not otro, 'copas %d, puentes %d, protagonista %d' % (copas, puentes, n_prot))
+            if esp == 'vegetacion':         # v6: un arbol de pisos por celda; los de abajo se tocan
+                troncos = sum(len(inst.get(g, [])) for g in geos['veg_tronco'])
+                pisos = sum(len(inst.get(g, [])) for g in geos['veg_piso'])
+                t.check('naturaleza, vegetacion: Sembrarzona x2 -> cluster de %d celdas, un arbol de pisos por '
+                        'celda (%d troncos, %d pisos), sin puentes ni protagonista' % (n_cl, troncos, pisos),
+                        n_cl == 1 + len(m.NEIGH[i]) and troncos == n_cl and pisos >= 2 * n_cl and puentes == 0
+                        and n_prot == 0 and not otro, 'puentes %d, protagonista %d' % (puentes, n_prot))
             elif esp == 'relieve':          # v5: una cordillera en el mapa de alturas, sin piezas de puente
                 ter = m.terreno(W, c)
                 altos = sum(1 for x in cl['celdas'][k] if ter['centro'][x] > 0.1 * m.limit(c)) if k >= 0 else 0
@@ -469,23 +489,51 @@ def _prueba_natural(t, m):
     for o in range(1, 13):
         W = mundo([i], m.GEO, o)
         inst = m.build_instances(W, c, absTime.seconds + 10.0)
-        ps = [g[4:] for g, f in piezas(inst, 'veg_') if celda_de(f) == i]
+        ps = [(g[4:], f) for g, f in piezas(inst, 'veg_') if celda_de(f) == i]
         montes.append(m.terreno(W, c)['centro'][i])
         serie.append((o, ps))
     def es(o, cond):
         return cond(dict(serie)[o])
     u = int(c['umbral_monte'])
-    escalera = (es(1, lambda p: len(p) == 1 and p[0].startswith('veg_brote'))
-                and es(3, lambda p: p and p[0] in ('veg_arbol', 'veg_conifera'))
-                and es(int(c['th_branch']), lambda p: 5 <= len(p) <= 12 and set(p) <= {'veg_arbol', 'veg_conifera'})
-                and es(int(c['th_fusion']), lambda p: len(p) >= 5 and set(p) <= {'veg_copa', 'veg_cono', 'veg_tronco'})
-                and all(not set(dict(serie)[o]) - {'veg_copa', 'veg_cono', 'veg_tronco'} for o in range(u, 13)))
+    piezas_arbol = {'veg_tronco', 'veg_rama', 'veg_piso', 'veg_cono'}
+    cuenta = lambda p, mo: sum(1 for g, _ in p if g == mo)
+    ancho_piso = lambda p: max([f[6] for g, f in p if g == 'veg_piso'] or [0.0])
+    cw_ = min(m._cell_sizes(m.base_radius(m.world(), c, i), i))
+    alto = lambda p: max(math.sqrt(sum(v * v for v in f[:3])) for _, f in p)
+    escalera = (es(1, lambda p: cuenta(p, 'veg_tronco') == 1 and cuenta(p, 'veg_piso') == 1 and len(p) == 2)
+                and es(3, lambda p: cuenta(p, 'veg_tronco') == 1 and cuenta(p, 'veg_piso') == min(3, c['pisos_copa'])
+                       and cuenta(p, 'veg_rama') >= 2)
+                and es(int(c['th_branch']), lambda p: cuenta(p, 'veg_tronco') >= 3)
+                and es(int(c['th_fusion']), lambda p: cuenta(p, 'veg_tronco') == 1 and ancho_piso(p) >= 0.6 * cw_)
+                and es(int(c['th_crown']), lambda p: cuenta(p, 'veg_cono') == 1)
+                and alto(dict(serie)[int(c['th_crown'])]) > alto(dict(serie)[int(c['th_crown']) - 1])
+                and all(set(g for g, _ in p) <= piezas_arbol for _, p in serie))
     sube = all(montes[o - 1] == 0.0 for o in range(1, u)) and \
         all(montes[o] > montes[o - 1] for o in range(u, min(12, u + m.PASOS_MONTE - 1)))
     t.check('ocupacion 1 -> 12 en una celda: brote, arbol, arboleda, bosque y, desde Umbralmonte, un monte '
             'que sube con el bosque encima (sin arbol madre ni amasijo)',
             escalera and sube and 'veg_madre' not in m.MODELOS,
             ' / '.join('%d:%s' % (o, len(p)) for o, p in serie) + '   monte %.2f' % montes[-1])
+    # 1b. la forma del arbol (v6): tronco que se ve, ramas a Angulorama, pisos que se estrechan, <= 9 piezas
+    forma = m.forma_arbol(c, 2.0, 4, 4)
+    tronco = [x for x in forma if x[5] == -1]
+    pisos = [x for x in forma if x[5] >= 0]
+    ramas = [x for x in forma if x[5] == -2]
+    bolas = [mo for mo, prims in m.MODELOS.items() if mo.startswith('veg_') and any(p_[0] == 'bola' for p_ in prims)]
+    t.check('el arbol: tronco visible (%.2f del alto), %d ramas a %.0f grados, %d pisos que se estrechan, '
+            '%d piezas (<= 9), ningun modelo vegetal con esferas' % (pisos[0][1] / 2.0, len(ramas),
+                                                                      c['angulo_rama'], len(pisos), len(forma)),
+            len(forma) <= 9 and len(tronco) == 1 and abs(pisos[0][1] / 2.0 - c['tronco_frac']) < 1e-9
+            and all(a[2][0] > b[2][0] for a, b in zip(pisos, pisos[1:]))
+            and all(abs(x[3] - c['angulo_rama']) < 1e-9 for x in ramas) and 2 <= len(ramas) <= 4
+            and len(set(x[4] for x in pisos)) == len(pisos) and not bolas, ', '.join(bolas))
+    W = mundo([i], m.GEO, 3)
+    inst = m.build_instances(W, c, absTime.seconds + 10.0)
+    madera = [f[12] if len(f) > 12 else 1.0 for g, f in piezas(inst, 'veg_tronco') + piezas(inst, 'veg_rama')]
+    copa = [f[12] if len(f) > 12 else m.rugosidad(c, 100) for g, f in piezas(inst, 'veg_piso')]
+    t.check('el tronco y las ramas, siempre mates; la copa, con el material de la velocidad',
+            madera and copa and all(x == 1.0 for x in madera)
+            and all(abs(x - m.rugosidad(c, 100)) < 1e-9 for x in copa))
     # 2. cluster de 5 celdas de relieve en fila: una cordillera continua con cumbres nevadas
     fila = [m.note_cell(n) for n in (62, 63, 64, 65, 66)]
     W = mundo(fila, m.ARQ, 9)
@@ -505,7 +553,7 @@ def _prueba_natural(t, m):
     for x in fila:
         W['sp'][x] = m.HIB
     inst = m.build_instances(W, c, absTime.seconds + 10.0)
-    arboles = piezas(inst, 'veg_')
+    arboles = piezas(inst, 'veg_tronco')
     altos = [m.alto_en(ter, m._norm(tuple(f[:3]))) / ter['hmax'] for _, f in arboles]
     t.check('bosque sobre cordillera: %d arboles, todos por debajo de Limitebosque (%.2f); arriba solo roca y nieve'
             % (len(arboles), c['limite_bosque']),
@@ -514,11 +562,11 @@ def _prueba_natural(t, m):
     # 4. de lejos (formacion de ~13 px), una montana grande se distingue de un bosque
     Wb = mundo([i] + list(m.NEIGH[i]), m.GEO, 7)
     instb = m.build_instances(Wb, c, absTime.seconds + 10.0)
-    verdes = [f for _, f in piezas(instb, 'veg_co')]
+    verdes = [f for _, f in piezas(instb, 'veg_piso')]
     cumbre = m.color_piso(c, 1.0)
-    t.check('una montana grande (cumbre blanca) se distingue de un bosque (verde granulado): %d copas verdes'
+    t.check('una montana grande (cumbre blanca) se distingue de un bosque (pisos verdes): %d pisos verdes'
             % len(verdes), verdes and all(f[10] > f[9] and f[10] > f[11] for f in verdes)
-            and min(cumbre) > 0.9 and len(set(round(f[10], 3) for f in verdes)) > 3)
+            and min(cumbre) > 0.9 and len(set(round(f[10], 3) for f in verdes)) >= 3)
     # 5. una nota del SEQ1 sobre un bosque: el borde se ilumina, el verde se mantiene
     m.reset_world()
     W, c = m.world(), m.cfg()
