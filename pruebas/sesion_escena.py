@@ -26,7 +26,9 @@ import estratos_motor as m  # noqa: E402
 PAR_CFG = dict(Paleta='paleta', Paletatono='paleta_tono', Paletacroma='paleta_croma',
                Umbralvecindad='umbral_vecindad', Pesovecina='peso_vecina', Mincluster='min_cluster',
                Umbraldensidad='dens_umbral', Caos='caos', Maxpiezas='max_piezas', Rugmin='rug_min',
-               Rugmax='rug_max', Swaymax='sway_max', Trafico='trafico', Luzcalida='luz_calida')
+               Rugmax='rug_max', Swaymax='sway_max', Trafico='trafico', Luzcalida='luz_calida',
+               Paletaluz='paleta_luz', Paletaalterna='paleta_alterna',
+               Contrasteocupada='contraste_ocupada', Tapaneutra='tapa_neutra', Tapaluz='tapa_luz')
 PATRONES = {'A': [60, 64, 67, 72, 67, 64, 62, 60, 55, 60, 64, 67, 69, 67, 64, 62],
             'B': [48, 50, 53, 55, 53, 50, 48, 46, 45, 48, 50, 53, 57, 53, 50, 48],
             'C': [72, 71, 67, 64, 62, 64, 67, 71, 74, 76, 74, 71, 67, 64, 62, 60]}

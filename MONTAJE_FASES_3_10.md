@@ -25,7 +25,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v14` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46) | `fase8 v11` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46); v12: conchas discretas (suelo oscuro, poco contraste ocupada/vacía, tapa neutra; `Paletaluz`, `Paletaalterna`, `Contrasteocupada`, `Tapaneutra`, `Tapaluz`, motor v53) | `fase8 v12` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar; v10: el bombo y el tom ya no cortan, su destello es suave y sigue el pumping; v11: la autoprueba, con el pumping en seco) | `fase9 v11` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v10: `Encuadre`, el alto del planeta en la pantalla; v11: sin `Planofinal`) | `fase10 v11` |
 
@@ -581,17 +581,51 @@ laguna(c)     = radio_nominal - suelo(c)          (siempre >= 0)
 n         = generación de la concha (0 = la primera)
 t         = frac(n × 0,6180339887)                    (ángulo áureo)
 tono      = Paletatono + t × 200°, saltando las bandas reservadas (245° hasta el motor v45)
-L_vacía   = 0,50 si n es par, 0,64 si es impar
-L_ocupada = L_vacía + 0,12
+L_vacía   = Paletaluz − Paletaalterna/2 si n es par, Paletaluz + Paletaalterna/2 si es impar
+L_ocupada = L_vacía + Contrasteocupada
 croma     = Paletacroma
 ```
 
+**Conchas discretas** (fase 8 v12, motor v53). Desde la cámara de globo, la loseta de arriba de cada columna es el suelo sobre el que crecen las formaciones. Hasta la v11 ese suelo era de tono medio-claro (L 0,50 / 0,64), las celdas ocupadas lo moteaban de manchas claras (+0,12) y competía con lo construido. Ahora:
+
+| Parámetro | Defecto | Antes | Qué hace |
+|---|---|---|---|
+| `Paletaluz` | 0,35 | 0,57 | Luminosidad media de las conchas |
+| `Paletaalterna` | 0,06 | 0,14 | Diferencia de luminosidad entre conchas seguidas |
+| `Contrasteocupada` | 0,04 | 0,12 | Cuánto más clara es una loseta ocupada (0 = igual) |
+| `Paletacroma` | 0,04 | 0,09 | Saturación |
+| `Tapaneutra` | 0,6 | (0) | Mezcla de la cara de arriba hacia un gris neutro (0 = como los flancos, 1 = gris) |
+| `Tapaluz` | 0,28 | — | Luminosidad de ese gris |
+
+- **Contraste entre conchas seguidas:** al menos 60° de tono **y** `Paletaalterna` de luminosidad. Con los valores nuevos las bandas de un corte se distinguen sobre todo por el tono.
+- **Tapa neutra:** la loseta de arriba de cada columna lleva una **tapa**, una instancia fina (0,02 o un 25 % de la loseta) un poco más ancha que ella y que asoma un 0,4 % por arriba, del color de la concha mezclado `Tapaneutra` hacia el gris `Tapaluz`. Los flancos conservan el color de su concha: el color de cada estrato se ve donde la erosión lo deja a la vista, en las paredes de un corte. Cuesta **una instancia más por celda** (N, no el doble: con 24 conchas visibles, un 4 %). Solo las losetas de arriba enseñan su cara superior, así que no hace falta más. Con `Paleta` mineral no hay tapa.
+- **Mate:** la tapa lleva rugosidad 1 en el shader de la piel (fase 15) y `mat_estratos` pasa a especular 0: el suelo no hace brillos que compitan con `mat_pulido`. Los flancos de la fase 15 conservan su materia (el carbón brilla en los cortes).
+- **Secuenciador y cicatriz:** el tinte del secuenciador es una capa aditiva aparte y sigue cubriendo la tapa (se lee mejor sobre un suelo oscuro). La cicatriz manda: una loseta recién expuesta sale cian entera, tapa incluida.
+- **Jerarquía (informe):** la fase 8 comprueba que la tapa más clara posible, `(1 − Tapaneutra) × (Paletaluz + Paletaalterna/2 + Contrasteocupada) + Tapaneutra × Tapaluz`, queda al menos 0,15 por debajo de la luminosidad de las formaciones (media OKLab de las dos especies, `COL_GEO` y `COL_ARQ`: 0,58). Si no, avisa con `..`. Con los valores nuevos, 0,34; con los de antes, 0,76.
+- **Valores antiguos:** `Paletaluz` 0,57 · `Paletaalterna` 0,14 · `Contrasteocupada` 0,12 · `Paletacroma` 0,09 · `Tapaneutra` 0 reproducen la paleta de la v11 tal cual (la autoprueba lo comprueba).
+- **Proyecto en marcha:** al relanzar la fase 8, `Paletacroma` pasa de 0,09 a 0,04 solo si seguía en 0,09, y la tabla `escenas` de la fase 18 pasa de 0,09 / 0,06 a 0,04 / 0,03 si no se había tocado. Los mundos guardados se recolorean solos: el color se calcula, no se guarda.
+
 - **Bandas reservadas** (tono OKLCH): 165°–235°, el cian de la cicatriz, y 55°–100°, el ámbar del SEQ2. Desde el motor v46 (fase 11 v5 y fase 13 v2) también 120°–165°, los verdes de los pisos de la naturaleza, y 235°–275°, el azul de los ríos: una sola banda de 120° a 275°. La secuencia se reparte sobre los 200° que quedan, recorriendo el círculo y saltando las bandas; no se recorta al borde. Ninguna concha camufla un bosque ni un río. La banda verde empieza en 120° y no antes: con menos tono libre, dos conchas seguidas dejarían de diferir 60°.
-- **Croma contenido** (0,09): las conchas son mineral; las luces (secuenciadores, batería, cicatriz) son saturadas y emisivas, y siguen destacando encima.
-- **Sin blancos:** la luminosidad máxima (0,76) queda lejos del blanco del SEQ1. Todos los colores caen dentro de sRGB sin recortar.
+- **Croma contenido** (0,04; 0,09 hasta la v11): las conchas son mineral; las luces (secuenciadores, batería, cicatriz) son saturadas y emisivas, y siguen destacando encima.
+- **Sin blancos:** la luminosidad máxima (0,42; 0,76 hasta la v11) queda lejos del blanco del SEQ1. Todos los colores caen dentro de sRGB sin recortar.
 - **Se conserva** la alternancia claro / oscuro entre conchas seguidas y la loseta de una celda ocupada más clara que la vacía (los continentes se leen así). El zócalo (gris casi negro) y el núcleo quedan oscuros y neutros, fuera de la paleta.
 - **Calculado, no guardado:** el color sale de la generación y de los parámetros. Al cargar un mundo y al cambiar la paleta, todo lo enterrado se vuelve a colorear (el color que guardaban las conchas antiguas ya no manda).
 - **`Paleta` = mineral** vuelve a la paleta anterior, tal cual, para comparar: ámbar en la base y después grises minerales y negros alternos; con ella el zócalo vuelve a ser ámbar apagado.
+
+Con los valores de la v12 (`Paletatono` 20, L 0,32 / 0,38, croma 0,04, ocupada +0,04; flancos y, con `Tapaneutra` 0, también tapas):
+
+| n | Tono | Vacía | Ocupada |
+|---|---|---|---|
+| 0 | 20° | `#452B2A` | `#503534` |
+| 1 | 319° | `#4C3C50` | `#57465B` |
+| 2 | 103° | `#37341B` | `#413E25` |
+| 3 | 357° | `#543A43` | `#5F444D` |
+| 4 | 296° | `#342F45` | `#3F3950` |
+| 5 | 34° | `#563B34` | `#61453F` |
+| 6 | 333° | `#3F2B3C` | `#4A3546` |
+| 7 | 117° | `#41452D` | `#4B5037` |
+
+Con los valores de antes (v11):
 
 | n | Tono | Vacía | Ocupada |
 |---|---|---|---|
@@ -614,13 +648,13 @@ Con `Paletatono` 20 y `Paletacroma` 0,09 (motor v46; hasta la v45 las conchas 2,
 - sin shaders;
 - en la fase 9 permite abrir cortes quitando losetas y ver las paredes de cada capa con su color, que es justo lo que pide la estratigrafía.
 
-**Dibujo.** Cada loseta es una instancia a su radio, con el alto de su grosor y el ancho de su celda a ese radio. `Maxconchas` (24) cuenta por columna: se dibujan las 24 losetas superiores de cada celda y, debajo, un **zócalo** (una sola instancia, gris casi negro; ámbar apagado con `Paleta` mineral) desde el núcleo hasta la loseta dibujada más baja. La esfera del núcleo ya no crece: se queda en el radio base, porque una esfera a cota común taparía las hondonadas. Como mucho, celdas × (`Maxconchas` + 1) instancias.
+**Dibujo.** Cada loseta es una instancia a su radio, con el alto de su grosor y el ancho de su celda a ese radio; con `Tapaneutra`, la de arriba de cada columna lleva además su tapa. `Maxconchas` (24) cuenta por columna: se dibujan las 24 losetas superiores de cada celda y, debajo, un **zócalo** (una sola instancia, gris casi negro; ámbar apagado con `Paleta` mineral) desde el núcleo hasta la loseta dibujada más baja. La esfera del núcleo ya no crece: se queda en el radio base, porque una esfera a cota común taparía las hondonadas. Como mucho, celdas × (`Maxconchas` + 2) instancias (con la tapa).
 
 **Continentes** (en la leyenda): regiones de celdas vecinas ocupadas en al menos la mitad de las 8 últimas conchas.
 
 **Cámara:** la de globo (la misma de la fase 10, sin modos): el planeta entero, centrado y tan cerca como permite el cuadro; retrocede a cada enterramiento. Desde comun v15 la pone `estratos_comun.py` en todas las fases que cargan el motor (de la 3 en adelante).
 
-**Página Fase8:** `Paleta` generaciones (*Paleta de las conchas*: generaciones o mineral) · `Paletatono` 20 (*Tono de la primera concha*, 0–360) · `Paletacroma` 0,09 (*Saturación de las conchas*, 0–0,15) · `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 1,5 · `Cortezamax` 4 (*Corteza máxima: compacta las conchas viejas*, 0–12; 0 = el radio es el tiempo) · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
+**Página Fase8:** `Paleta` generaciones (*Paleta de las conchas*: generaciones o mineral) · `Paletatono` 20 (*Tono de la primera concha*, 0–360) · `Paletacroma` 0,04 (*Saturación de las conchas*, 0–0,15) · `Paletaluz` 0,35 (*Luminosidad media de las conchas*) · `Paletaalterna` 0,06 (*Diferencia de luminosidad entre conchas seguidas*) · `Contrasteocupada` 0,04 (*Loseta ocupada: cuánto más clara*) · `Tapaneutra` 0,6 (*Tapa de las losetas hacia el gris*) · `Tapaluz` 0,28 (*Luminosidad del gris de la tapa*) · `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 1,5 · `Cortezamax` 4 (*Corteza máxima: compacta las conchas viejas*, 0–12; 0 = el radio es el tiempo) · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
 
 **Leyenda:**
 

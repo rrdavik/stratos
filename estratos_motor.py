@@ -21,7 +21,8 @@
 #                 pisos de color por altitud y rios azules por el suelo real;
 #                 motor v52: la vegetacion sale de una biblioteca de ejemplares
 #                 con biomas por latitud, y los hibridos son mesetas construidas:
-#                 arrozal en terrazas y meseta-jardin).
+#                 arrozal en terrazas y meseta-jardin; motor v53: conchas
+#                 discretas, el suelo oscuro y la tapa neutra).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -34,7 +35,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v52'
+MOTOR_VERSION = 'motor v53'
 
 import math
 
@@ -163,7 +164,10 @@ DEFAULT_CFG = dict(
     # fase 8
     herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=1.5, colmatacion=0.0,
     corteza_max=4.0,                                    # motor v37: compactacion
-    paleta=0, paleta_tono=20.0, paleta_croma=0.09,     # 0 generaciones, 1 mineral
+    paleta=0, paleta_tono=20.0, paleta_croma=0.04,     # 0 generaciones, 1 mineral
+    # motor v53: conchas discretas (luminosidad, contraste y tapa neutra)
+    paleta_luz=0.35, paleta_alterna=0.06, contraste_ocupada=0.04,
+    tapa_neutra=0.6, tapa_luz=0.28,
     # fase 9
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
@@ -1558,8 +1562,20 @@ PALETAS = ['generaciones', 'mineral']
 # cicatriz (165-235) y el azul de los rios (235-275)
 BANDAS_RESERVADAS = ((55.0, 100.0), (120.0, 275.0))
 AUREO = 0.6180339887
-L_VACIA = (0.50, 0.64)                                  # generacion par, impar
-L_OCUPADA = 0.12                                        # la celda ocupada, mas clara
+# luminosidad (motor v53, conchas discretas): media Paletaluz, alternando
+# +- Paletaalterna / 2 (par oscura, impar clara); la loseta ocupada,
+# Contrasteocupada mas clara. Hasta la v52, fijas: 0,50 / 0,64 y +0,12
+# (Paletaluz 0,57, Paletaalterna 0,14, Contrasteocupada 0,12).
+L_VACIA = (0.50, 0.64)                                  # los valores antiguos (referencia)
+L_OCUPADA = 0.12
+
+
+def palette_l(cfg, gen, ocupada):
+    """Luminosidad OKLCH de la loseta de la generacion gen."""
+    luz = cfg.get('paleta_luz', 0.35)
+    alt = cfg.get('paleta_alterna', 0.06)
+    L = luz + (0.5 if int(gen) % 2 else -0.5) * alt
+    return L + (cfg.get('contraste_ocupada', 0.04) if ocupada else 0.0)
 COL_ZOCALO_NEUTRO = (0.12, 0.12, 0.13)                  # zocalo: oscuro y neutro
 
 
@@ -1605,10 +1621,12 @@ _PAL = {}
 
 def generation_color(cfg, gen, ocupada):
     """Color de una loseta de la generacion gen (paleta de generaciones)."""
-    key = (round(cfg['paleta_tono'], 6), round(cfg['paleta_croma'], 6), int(gen), bool(ocupada))
+    key = (round(cfg['paleta_tono'], 6), round(cfg['paleta_croma'], 6), round(cfg.get('paleta_luz', 0.35), 6),
+           round(cfg.get('paleta_alterna', 0.06), 6), round(cfg.get('contraste_ocupada', 0.04), 6),
+           int(gen), bool(ocupada))
     col = _PAL.get(key)
     if col is None:
-        L = L_VACIA[int(gen) % 2] + (L_OCUPADA if ocupada else 0.0)
+        L = palette_l(cfg, gen, ocupada)
         col = oklch_to_srgb(L, cfg['paleta_croma'], palette_hue(gen, cfg['paleta_tono']))[0]
         if len(_PAL) > 4096:
             _PAL.clear()
@@ -1630,7 +1648,70 @@ def zocalo_color(cfg):
 
 def palette_key(cfg):
     return (cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'),
+            cfg.get('paleta_luz'), cfg.get('paleta_alterna'), cfg.get('contraste_ocupada'),
+            cfg.get('tapa_neutra'), cfg.get('tapa_luz'),
             cfg['nivel'] >= 15, cfg.get('respaldo', 0))
+
+
+# --- tapa atenuada (motor v53): el color se reserva a los flancos ---------------
+# La cara de arriba de la loseta superior de cada columna (el suelo que se ve
+# desde la camara de globo) se mezcla Tapaneutra hacia un gris neutro de
+# luminosidad Tapaluz; los flancos, que ensenan los cortes, conservan el
+# color de su concha. Una instancia fina por columna (la tapa) sobre su
+# loseta: N instancias mas, no el doble. Mate (rugosidad 1). Solo con la
+# paleta de generaciones; Tapaneutra 0 no la dibuja.
+
+TAPA_GROSOR = 0.02          # alto de la tapa (como mucho un 25 % de la loseta)
+TAPA_K = 1.004              # la tapa envuelve la loseta: sin parpadeo en los flancos
+TAPA_ASOMA = 0.004          # y asoma por arriba (menos que la luz de las conchas, 1,2 %)
+RUG_TAPA = 1.0              # mate: no compite con los reflejos de lo pulido
+
+
+def tapa_on(cfg):
+    return cfg.get('paleta', 0) != 1 and cfg.get('tapa_neutra', 0.0) > 0
+
+
+def tapa_gris(cfg):
+    return oklch_to_srgb(cfg.get('tapa_luz', 0.28), 0.0, 0.0)[0]
+
+
+def tapa_color(cfg, col):
+    """Color de la tapa sobre una loseta de color col."""
+    return _mix(col, tapa_gris(cfg), max(0.0, min(1.0, cfg.get('tapa_neutra', 0.0))))
+
+
+def _tapa_row(fila, col):
+    """La tapa de una loseta (fila de _tile_row): fina, arriba y un poco mas ancha."""
+    p, n, h = fila[0:3], _norm(fila[0:3]), fila[7]
+    hc = min(TAPA_GROSOR, 0.25 * h)
+    t = list(fila)
+    t[0:3] = list(_add(p, n, h - hc))
+    t[6], t[7], t[8] = fila[6] * TAPA_K, hc + TAPA_ASOMA * h, fila[8] * TAPA_K
+    t[9:12] = list(col)
+    return t
+
+
+def srgb_l(col):
+    """Luminosidad OKLab (0-1) de un color sRGB 0-1."""
+    lin = [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in col]
+    l = 0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2]
+    m = 0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969566 * lin[2]
+    s = 0.0883024619 * lin[0] + 0.2817188376 * lin[1] + 0.6299787005 * lin[2]
+    return 0.2104542553 * l ** (1 / 3.) + 0.7936177850 * m ** (1 / 3.) - 0.0040720468 * s ** (1 / 3.)
+
+
+JERARQUIA_MARGEN = 0.15     # el suelo, al menos esto mas oscuro que lo construido
+
+
+def jerarquia_suelo(cfg):
+    """(luminosidad de la tapa mas clara posible, luminosidad de las
+    formaciones). La tapa: la loseta impar ocupada (Paletaluz + Paletaalterna/2
+    + Contrasteocupada) mezclada Tapaneutra hacia Tapaluz. Las formaciones: la
+    media de las dos especies (COL_GEO, COL_ARQ), en OKLab."""
+    lmax = cfg.get('paleta_luz', 0.35) + cfg.get('paleta_alterna', 0.06) / 2 + cfg.get('contraste_ocupada', 0.04)
+    tn = max(0.0, min(1.0, cfg.get('tapa_neutra', 0.0))) if tapa_on(cfg) else 0.0
+    l_tapa = (1.0 - tn) * lmax + tn * cfg.get('tapa_luz', 0.28)
+    return l_tapa, 0.5 * (srgb_l(COL_GEO) + srgb_l(COL_ARQ))
 
 
 def shell_grosor(cfg, bars=None):
@@ -2159,15 +2240,26 @@ def build_tiles(W, cfg, now):
                              zocalo_color(cfg)))
             if era:
                 rows[-1].append(1.0 if respaldo else RUG_ZOCALO)
+        tapa = None
         for s, r_in, r_out in col[first:]:
             sh = W['shells'][s]
             colr, rug = tile_material(cfg, sh, s, c)
+            ctapa = tapa_color(cfg, colr) if tapa_on(cfg) else None
             t0 = W['scars'].get(s * 1000 + c)
-            if t0 is not None:
-                colr = _mix(COL_SCAR, colr, max(0.0, min(1.0, (now - t0) / st)))
+            if t0 is not None:              # la cicatriz manda, tambien sobre la tapa
+                f = max(0.0, min(1.0, (now - t0) / st))
+                colr = _mix(COL_SCAR, colr, f)
+                if ctapa is not None:
+                    ctapa = _mix(COL_SCAR, ctapa, f)
             rows.append(_tile_row(c, n, r_in, r_out, colr))
             if era:
                 rows[-1].append(1.0 if respaldo else rug)
+            if ctapa is not None:
+                tapa = _tapa_row(rows[-1][:12], ctapa)
+        if tapa is not None:                # solo la loseta de arriba ensena su tapa
+            if era:
+                tapa.append(1.0 if respaldo else RUG_TAPA)
+            rows.append(tapa)
     return rows
 
 
@@ -7221,7 +7313,7 @@ ESCENAS = ['naturaleza', 'ciudad']
 # y 'luz_relleno.dimmer' son de las luces, no de FASE1.
 ESCENA_PARS = [
     ('Tema', 'naturaleza', 'ciudad'),
-    ('Paleta', 'generaciones', 'mineral'), ('Paletatono', 20.0, 205.0), ('Paletacroma', 0.09, 0.06),
+    ('Paleta', 'generaciones', 'mineral'), ('Paletatono', 20.0, 205.0), ('Paletacroma', 0.04, 0.03),
     ('Umbralvecindad', 4.0, 4.5), ('Pesovecina', 0.5, 0.5), ('Mincluster', 2, 2),
     ('Umbraldensidad', 0.6, 0.6),
     ('Caos', 3.91, 3.74), ('Maxpiezas', 6, 5),
@@ -7637,6 +7729,11 @@ def cfg():
         paleta=_menu('Paleta', PALETAS, 0),
         paleta_tono=_p('Paletatono', c['paleta_tono']) % 360.0,
         paleta_croma=max(0.0, min(0.15, _p('Paletacroma', c['paleta_croma']))),
+        paleta_luz=max(0.05, min(0.95, _p('Paletaluz', c['paleta_luz']))),
+        paleta_alterna=max(0.0, min(0.4, _p('Paletaalterna', c['paleta_alterna']))),
+        contraste_ocupada=max(0.0, min(0.3, _p('Contrasteocupada', c['contraste_ocupada']))),
+        tapa_neutra=max(0.0, min(1.0, _p('Tapaneutra', c['tapa_neutra']))),
+        tapa_luz=max(0.0, min(1.0, _p('Tapaluz', c['tapa_luz']))),
         max_shells=_p('Maxconchas', c['max_shells']),
         grosor_tiempo=int(_p('Grosortiempo', True)),
         grosor_max=_p('Grosormax', c['grosor_max']),
