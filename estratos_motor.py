@@ -4902,7 +4902,7 @@ def cultivos(W, cfg, ter, por_celda, now, paso, cl=None):
 HOJAS_TOPE = 300000         # el presupuesto de hojas: si no caben, todo con tarjetas de racimo (Impostores)
 _PRESUPUESTO = dict(lleno=False)
 RUTA_HOJAS = 'SOP'          # las hojas van en la malla de cada ejemplar (Script SOP), no en POPs
-PARCELA_TEX = 6             # una parcela de la meseta: 6 x 6 texeles del mapa (los setos, en el shader)
+PARCELA_TEX = 16            # una parcela de la meseta: 16 x 16 texeles del mapa (los setos, en el shader)
 
 
 def _miles(n):
@@ -5182,12 +5182,10 @@ def riego(W, cfg, ter, cauces_, now, paso):
 _POISSON = {}
 
 
-def _poisson(i, cw, cl, r, k=1.0, semilla=0):
-    """Puntos (x, z) de la celda i (en su plano tangente, en unidades del mundo)
-    separados al menos r, solo los que caen en la celda (la mas cercana): los
-    bosques de celdas vecinas encajan sin pisarse. k: la parte de la celda
-    (las etapas del dosel)."""
-    clave = (GRID['lo'], GRID['hi'], i, round(cw, 4), round(cl, 4), round(r, 4), round(k, 2), semilla)
+def _candidatos(i, cw, cl, k, semilla):
+    """Puntos de prueba (x, z) de la celda i, en orden fijo, solo los que caen en
+    ella (su celda mas cercana) y dentro de su elipse (k: la parte de la celda)."""
+    clave = ('cand', GRID['lo'], GRID['hi'], i, round(cw, 5), round(cl, 5), round(k, 2), semilla)
     v = _POISSON.get(clave)
     if v is not None:
         return v
@@ -5195,18 +5193,40 @@ def _poisson(i, cw, cl, r, k=1.0, semilla=0):
     rng = random.Random(1009 * i + 7 * semilla + 3)
     n = NORMALS[i]
     e, t = tangents(n)
-    vecinas = list(NEIGH[i])
-    pts = []
-    for _ in range(40 * max(4, int((cw * cl) / max(1e-6, r * r)) + 4)):
+    vecinas = [NORMALS[j] for j in NEIGH[i]]
+    out = []
+    for _ in range(900):
         x, z = rng.uniform(-0.75, 0.75) * cw * k, rng.uniform(-0.75, 0.75) * cl * k
-        # la celda mas cercana: el punto en la esfera unidad
-        q = _norm(_add(_add(n, e, x / (cw / max(1e-6, SIZE_EW[i]))), t, z / (cl / max(1e-6, SIZE_NS[i]))))
-        if any(_dot(q, NORMALS[j]) > _dot(q, n) for j in vecinas):
-            continue
         if math.hypot(x / (0.5 * cw * k + 1e-9), z / (0.5 * cl * k + 1e-9)) > 1.25:
             continue
-        if all((x - a) ** 2 + (z - b) ** 2 >= r * r for a, b in pts):
-            pts.append((x, z))
+        q = _norm(_add(_add(n, e, x / (cw / max(1e-6, SIZE_EW[i]))), t, z / (cl / max(1e-6, SIZE_NS[i]))))
+        dn = _dot(q, n)
+        if any(_dot(q, v_) > dn for v_ in vecinas):
+            continue
+        out.append((x, z))
+    _POISSON[clave] = out
+    return out
+
+
+def _poisson(i, cw, cl, r, k=1.0, semilla=0):
+    """Puntos (x, z) de la celda i (en su plano tangente) separados al menos r,
+    solo los que caen en la celda (la mas cercana): los bosques de celdas
+    vecinas encajan sin pisarse. k: la parte de la celda (las etapas del dosel).
+    Disco de Poisson por eliminacion sobre candidatos fijos, con una rejilla."""
+    clave = (GRID['lo'], GRID['hi'], i, round(cw, 5), round(cl, 5), round(r, 4), round(k, 2), semilla)
+    v = _POISSON.get(clave)
+    if v is not None:
+        return v
+    r2 = r * r
+    rejilla = {}
+    pts = []
+    for x, z in _candidatos(i, cw, cl, k, semilla):
+        gx, gz = int(math.floor(x / r)), int(math.floor(z / r))
+        if any((x - a) ** 2 + (z - b) ** 2 < r2 for dx in (-1, 0, 1) for dz in (-1, 0, 1)
+               for a, b in rejilla.get((gx + dx, gz + dz), ())):
+            continue
+        rejilla.setdefault((gx, gz), []).append((x, z))
+        pts.append((x, z))
     pts.sort(key=lambda p: (round(p[0], 6), round(p[1], 6)))
     if len(_POISSON) > 4000:
         _POISSON.clear()
@@ -5327,6 +5347,7 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         if cfg.get('cuantizar30', 0):
             g = 30 * int(g // 30)
         fr = _marco(i, float(g), incl + sway, rumbo if incl > 0 else rumbo_sw)
+        ctx['mc'] = (float(g), incl, rumbo, recto)     # para la memoria: balanceo y vigor, al copiar la fila
         col = pintar(color_natural(cfg, hg, rug))
         emit(nombre_ejemplar(modelo, var, deriv, lejos), pulido, pb, fr,
              (h * anch * esc_sat, h, h * anch * esc_sat), col, rug)
@@ -5395,7 +5416,9 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         # y el stop-motion no mueven los arboles de sitio
         r = max(0.08 * min(cw, cl_), h_ref * esc0 * ej['copa'] * (1.0 + cfg['timidez']))
         otra = otra_planta(cfg, i, arbol_mo)
-        for q, (x, z) in enumerate(_poisson(i, cw, cl_, r, 0.75 + 0.25 * kp, int(cfg.get('variantes', 4)))):
+        rq = math.exp(round(math.log(r / S) / 0.04) * 0.04)          # a saltos del 4 %: el disco se guarda
+        pts = _poisson(i, cw / S, cl_ / S, rq, round(0.75 + 0.25 * kp, 1), int(cfg.get('variantes', 4)))
+        for q, (x, z) in enumerate((x * S, z * S) for x, z in pts):     # en unidades de la celda: no se rehace al crecer
             u = _hash01(i, q, 41)
             mo = otra if otra and _hash01(i, q, 42) < cfg['mezcla'] else arbol_mo
             hh = h * (0.82 + 0.22 * u)
@@ -5487,6 +5510,8 @@ def iou(a, b):
 
 
 _NAT_CACHE = {}
+NAT_MEMO = 48                # estados guardados por celda
+VH_SALTO = 0.02              # la altura de la vegetacion va a saltos del 2 % del limite
 NAT_CFG = ('nivel', 'caos', 'max_caos_nat', 'th_branch', 'th_fusion', 'th_crown', 'limite_bosque', 'biomas',
            'variantes', 'var_angulo', 'cuantizar30', 'inclinacion', 'densidad_hoja', 'timidez', 'emergentes',
            'orla', 'mezcla', 'impostores', 'marco', 'sat_size', 'avance', 'pasos_etapa', 'max_niveles',
@@ -5504,21 +5529,37 @@ def piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde
          and now - W['t_et_f'][i] < ESPORAS_PASOS * paso)
     if vivo:
         return piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out, now, paso)
+    paso_h = VH_SALTO * limit(cfg)          # la altura visible, a saltos (el latido y el stop-motion)
+    vh = max(paso_h, round(vh / paso_h) * paso_h)
+    ancho = round(ancho, 2)
     cap = ctx['cl']['capital'][k_] if k_ >= 0 else -1
     kp = avance_etapa(W, i, 'et_f', cf.index('puentes') + 1, now, paso) if k_ >= 0 and 'puentes' in cf else 1.0
-    clave = (W['occ'][i], W['own'][i], W['sp'][i], W['vel'][i], W['par'][i], round(vh, 5), kb, round(fl, 3),
-             sat, round(rug, 4), round(ancho, 4), pulido, doble, cap, len(ctx['cl']['celdas'][k_]) if k_ >= 0 else 1,
+    veg = W['own'][i] == GEO                 # la vegetacion: la altura visible solo escala los ejemplares
+    clave = (W['occ'][i], W['own'][i], W['sp'][i], W['vel'][i], W['par'][i], None if veg else round(vh, 5), kb,
+             round(fl, 3),
+             sat, round(rug, 4), None if veg else ancho, pulido, doble, cap,
+             min(DOSEL_MIN, len(ctx['cl']['celdas'][k_])) if k_ >= 0 else 1,
              W['vel'][cap] if cap >= 0 else 0, W['own'][cap] if cap >= 0 else 0, round(kp, 3), W['et_f'][i],
-             tuple((W['occ'][j] > 0) * W['own'][j] for j in NEIGH[i]), ctx['ter']['version'],
-             tuple(ctx['cauces'].get(i, ())), ctx['rio_cerca'](i), ctx['cerca'](i), ctx['sway'](i),
+             tuple((W['occ'][j] > 0) * W['own'][j] for j in NEIGH[i]), _terreno_local(ctx['ter'], i),
+             tuple(ctx['cauces'].get(i, ())), ctx['rio_cerca'](i), ctx['cerca'](i),
              derivacion(W, cfg, i, now, paso), notas_colonas(W, i), ctx['bases'][i],
              tuple(cfg.get(x) for x in NAT_CFG), _clave_biblio(cfg), GRID['lo'], GRID['hi'])
-    v = _NAT_CACHE.get(i)
+    memo = _NAT_CACHE.setdefault(i, {})
+    v = memo.get(clave)
     res = ctx['res']
-    if v is not None and v[0] == clave:
-        _, filas, d, n = v
-        for g, f in filas:
-            out.setdefault(g, []).append(list(f))
+    sway, rumbo_sw = ctx['sway'](i)
+    if v is not None:
+        filas, d, n, vh0, an0 = v
+        ks = vh / vh0 if veg and vh0 > 0 else 1.0
+        ka = (max(0.7, min(1.4, ancho)) / max(0.7, min(1.4, an0))) if veg else 1.0
+        for g, f, mc in filas:
+            f = list(f)
+            if mc is not None:                  # el balanceo de la fase 17, sobre la fila guardada
+                f[3:6] = _marco(i, mc[0], mc[1] + sway, mc[2] if mc[1] > 0 else rumbo_sw)[3]
+                kx = ks * (1.0 if mc[3] else ka)      # la altura visible y el vigor (el sitio no cambia)
+                if kx != 1.0 or ks != 1.0:
+                    f[6], f[7], f[8] = f[6] * kx, f[7] * ks, f[8] * kx
+            out.setdefault(g, []).append(f)
         emit.contar(len(filas))
         for k, x in d.items():
             if k == 'biomas':
@@ -5530,12 +5571,16 @@ def piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde
                 res[k] += x
         return n
     antes = dict((k, (dict(x) if isinstance(x, dict) else x)) for k, x in res.items())
-    marcas = dict((g, len(f)) for g, f in out.items() if isinstance(f, list))
-    n = piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out, now, paso)
     filas = []
-    for g, f in out.items():
-        if isinstance(f, list) and len(f) > marcas.get(g, 0) and g != 'particulas':
-            filas += [(g, tuple(x)) for x in f[marcas.get(g, 0):]]
+    emit_ = emit
+
+    def emit(modelo, pulido, *a, **kw):     # guarda cada fila y, si es un ejemplar, su marco
+        emit_(modelo, pulido, *a, **kw)
+        g = geometria_de(modelo, pulido, doble)
+        filas.append((g, tuple(out[g][-1]), ctx.pop('mc', None)))
+    emit.contar = emit_.contar
+    ctx.pop('mc', None)
+    n = piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out, now, paso)
     d = {}
     for k, x in res.items():
         if k == 'biomas':
@@ -5544,10 +5589,19 @@ def piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde
             d[k] = dict((c, y) for c, y in x.items() if c == i)
         else:
             d[k] = x - antes[k]
-    if len(_NAT_CACHE) > 4 * N:
-        _NAT_CACHE.clear()
-    _NAT_CACHE[i] = (clave, filas, d, n)
+    if len(memo) >= NAT_MEMO:            # el balanceo y el stop-motion repiten estados: varios por celda
+        memo.pop(next(iter(memo)))
+    memo[clave] = (filas, d, n, vh, ancho)
     return n
+
+
+def _terreno_local(ter, i):
+    """Lo que del mapa de alturas mira la celda i: el relieve en su centro y en
+    el de sus vecinas, y sus hibridos (el resto del mapa no la cambia)."""
+    c = ter['centro']
+    hb = ter.get('hibridos', {})
+    return (round(c[i], 4),) + tuple(round(c[j], 4) for j in NEIGH[i]) + \
+        (hb.get('arrozales', {}).get(i), hb.get('mesetas', {}).get(i), round(ter['hmax'], 4))
 
 
 def derivacion(W, cfg, i, now, paso):
