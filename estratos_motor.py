@@ -18,7 +18,10 @@
 #                 luz local y capas de diagnostico; fase 19: las senales del
 #                 modular; motor v46: la naturaleza legible, con el relieve en
 #                 un mapa de alturas, bosques por colonizacion del espacio,
-#                 pisos de color por altitud y rios azules por el suelo real).
+#                 pisos de color por altitud y rios azules por el suelo real;
+#                 motor v52: la vegetacion sale de una biblioteca de ejemplares
+#                 con biomas por latitud, y los hibridos son mesetas construidas:
+#                 arrozal en terrazas y meseta-jardin).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -31,7 +34,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v51'
+MOTOR_VERSION = 'motor v52'
 
 import math
 
@@ -175,7 +178,11 @@ DEFAULT_CFG = dict(
     # fase 11 v5: la naturaleza legible
     umbral_monte=8, max_caos_nat=5, limite_bosque=0.65, limite_nieve=0.90, altura_monte=1.0,
     lod_nat=80.0, tinte_borde_nat=0.8, superficie=0,
-    pisos_copa=3, ancho_copa=0.6, angulo_rama=40.0, tronco_frac=0.35,     # motor v48: arboles de pisos
+    # fase 11 v8 (motor v52): brotes, arboles y terrazas
+    biomas=1, variantes=4, var_angulo=12.0, cuantizar30=0, inclinacion=8.0, densidad_hoja=6,
+    traslucidez=0.35, timidez=0.12, emergentes=0.1, orla=1, mezcla=0.3, impostores=1,
+    terrazas_por_nota=1, max_terrazas=8, paso_terraza=0.12, muro_terraza=0.25, riego=1,
+    color_cultivo=(0.66, 0.80, 0.22), altura_meseta=0.15, max_niveles=3, marco=1, setos=1,
     # fase 12: moduladores
     material_modo=1, rug_min=0.05, rug_max=0.85, vigor_max=1.5, plantas_ligado=2,
     gate_prueba=0.5, respaldo=0,
@@ -832,6 +839,7 @@ def grow(W, cfg, i, s, vel, now):
     if W['par'][i] >= 0:                    # un satelite que recibe senal
         W['par'][i] = -1                    # directa se independiza
     _mark(W, i, s)
+    _contar_nota(W, i, s)                   # fase 11 v8: la piel cuenta las notas de cada especie
     trig, inc = _charge(W, cfg, i, now)
     out = dict(celda=i, trigger=trig)
     o = W['occ'][i]
@@ -1239,6 +1247,8 @@ def degrade(W, cfg, i, k):
         if not ok_:
             break
         removed += 1
+    if removed and W['sp'][i] == HIB:       # fase 11 v8: el golpe quita el bancal o el nivel de arriba
+        _quitar_colona(W, i, W.get('t'))
     return removed
 
 
@@ -2537,63 +2547,6 @@ def _encajar(prims, ancho=1.0):
     return _escalar(prims, k, -b[2] * k)
 
 
-# --- el L-system de la vegetacion (angulos de 30 grados) ---------------------
-#   F  tramo de tronco o rama        f  avanza sin dibujar
-#   +  -  gira 30 grados (a un lado, al otro)
-#   &  ^  cabecea 30 grados (se abre, se cierra)
-#   /  \  rueda 120 grados (reparte las ramas alrededor)
-#   [  ]  empieza y acaba una rama (mas corta y mas fina)
-#   C     copa (prisma hexagonal)    H  hoja angular (lamina)
-#   D     dosel (copa ancha y plana)
-
-def _lsistema(axioma, reglas, gen):
-    s = axioma
-    for _ in range(int(gen)):
-        s = ''.join(reglas.get(ch, ch) for ch in s)
-    return s
-
-
-def _tortuga(cadena, largo=0.3, ancho=0.07, copa=0.32, k_largo=0.72, k_ancho=0.66):
-    pos = (0.0, 0.0, 0.0)
-    X, H, Z = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
-    pila, prims = [], []
-    L, Wd, C = largo, ancho, copa
-    for ch in cadena:
-        if ch in 'Ff':
-            b = _add(pos, H, L)
-            if ch == 'F':
-                prims.append(_tramo(pos, b, Wd))
-            pos = b
-        elif ch in '+-':
-            g = 30.0 if ch == '+' else -30.0
-            H, X = _girar_eje(H, Z, g), _girar_eje(X, Z, g)
-        elif ch in '&^':
-            g = 30.0 if ch == '&' else -30.0
-            H, Z = _girar_eje(H, X, g), _girar_eje(Z, X, g)
-        elif ch in '/\\':
-            g = 120.0 if ch == '/' else -120.0
-            X, Z = _girar_eje(X, H, g), _girar_eje(Z, H, g)
-        elif ch == '[':
-            pila.append((pos, X, H, Z, L, Wd, C))
-            L, Wd, C = L * k_largo, Wd * k_ancho, C * 0.85
-        elif ch == ']':
-            pos, X, H, Z, L, Wd, C = pila.pop()
-        elif ch in 'CD':
-            k = (1.0, 0.62) if ch == 'C' else (1.7, 0.30)
-            c = _add(pos, (0.0, 1.0, 0.0), C * k[1] * 0.25)
-            yaw = math.degrees(math.atan2(H[2], H[0])) // 30 * 30
-            prims.append(_hexa(c[0], c[1], c[2], C * k[0], C * k[1], 0.0, yaw, 0.0))
-        elif ch == 'H':
-            c = _add(pos, H, L * 0.5)
-            rx, ry, rz = _euler_xyz(X, H, Z)
-            prims.append(_caja(c[0], c[1], c[2], L * 0.8, L * 1.1, Wd * 0.6, rx, ry, rz))
-    return prims
-
-
-def _arbol(axioma, reglas, gen, **kw):
-    return _a_alto_uno(_tortuga(_lsistema(axioma, reglas, gen), **kw))
-
-
 # --- basalto: columnas hexagonales en panal ----------------------------------
 
 PANAL = [(0.0, 0.0)] + [(math.cos(math.radians(60 * k + 30)), math.sin(math.radians(60 * k + 30)))
@@ -2629,39 +2582,8 @@ def _plantas(x, z, w, d, n, h=0.25, losa=0.035, y0=0.0, sobra=0.06):
 def _modelos():
     M = {}
     # ------------------------------------------------------------- vegetacion
-    # motor v48: arboles de piezas, sin esferas. En pantalla cada arbol se arma
-    # con piezas instanciadas (arbol_pisos): tronco, ramas oblicuas y pisos
-    # planos que se estrechan hacia arriba. Estos modelos son esas piezas, y los
-    # arboles enteros del catalogo (los mismos pisos, en un solo modelo).
-    M['veg_tronco'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]         # tronco: caja fina y alta
-    M['veg_rama'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]           # rama: caja fina, inclinada
-    M['veg_piso'] = [_hexa(0.0, 0.5, 0.0, 1.0, 1.0)]                  # piso de la copa: prisma plano
-    M['veg_cono'] = [_cono(0.0, 0.5, 0.0, 1.0, 1.0)]                  # piso en punta (coronacion)
-
-    def arbol_(pisos, ancho, tronco=0.35, punta=False):
-        out = [_losa(-0.05, 0.05, 0.0, 0.92, -0.05, 0.05)]
-        hueco = (1.0 - tronco) / pisos
-        for k in range(pisos):
-            d = ancho * (1.0 - 0.6 * k / max(1, pisos - 1))
-            y = tronco + k * hueco
-            if punta and k == pisos - 1:
-                out.append(_cono(0.0, y + 0.5 * (1.0 - y), 0.0, d, 1.0 - y))
-            else:
-                out.append(_hexa(0.0, y + 0.25 * hueco, 0.0, d, 0.5 * hueco, 0.0, 20.0 * k))
-        return out
-    M['veg_brote'] = arbol_(1, 0.7, 0.45)
-    M['veg_arbol'] = arbol_(3, 0.75)
-    M['veg_conifera'] = arbol_(4, 0.55, 0.3, True)
-    # protagonistas de los clusters de 2 y 3 celdas: arboles grandes de pisos
-    M['veg_prot1'] = arbol_(3, 0.9)
-    M['veg_prot2'] = arbol_(4, 0.8, 0.3)
-    M['veg_prot3'] = arbol_(4, 0.7, 0.3, True)
-    # el dosel: copas anchas y planas de la celda a la vecina (z de 0 a 1)
-    M['veg_dosel'] = [_hexa(0.0, 0.5, 0.18, 0.85, 1.0), _hexa(0.08, 0.42, 0.52, 0.80, 0.84, 0.0, 30.0),
-                      _hexa(-0.06, 0.55, 0.84, 0.82, 0.9)]
-    # bosque sobre terrazas de basalto (el relieve coloniza la vegetacion)
-    M['veg_hib'] = [_hexa(0.0, 0.08, 0.0, 1.0, 0.16), _hexa(0.10, 0.22, -0.08, 0.7, 0.14, 0.0, 30.0),
-                    _hexa(-0.12, 0.34, 0.10, 0.45, 0.12)]
+    # motor v52 (fase 11 v8): la vegetacion ya no tiene modelos de piezas (ni
+    # conos, ni prismas, ni bolas): sale de la biblioteca de ejemplares (veg_<modelo>_<v>_<d>).
     # --------------------------------------------------------------- relieve
     M['rel_columna'] = _columnas([1.0], d=0.36)
     M['rel_columna2'] = _columnas([1.0, 0.7, 0, 0, 0.55], d=0.30)
@@ -2677,8 +2599,6 @@ def _modelos():
                       + _columnas([0.8, 0.8, 0.8, 0.8, 0, 0, 0], d=0.26, sep=0.16)
                       + [_hexa(0.0, 0.9, 0.0, 0.22, 0.2)])
     M['rel_puente'] = [_hexa(0.0, 0.5, z, 0.62, 1.0, 0.0, 30.0 * k) for k, z in enumerate((0.2, 0.55, 0.88))]
-    # arboles que parten la roca (la vegetacion coloniza el relieve)
-    M['rel_hib'] = _encajar(_tortuga('[&F&FC]/[&&FFC]', largo=0.28, ancho=0.06, copa=0.26), 0.9)
     # -------------------------------------------------------------- informal
     techo = lambda x, y, z, w, d, g=30.0: _caja(x, y, z, w * 1.15, 0.05, d * 1.1, 0.0, 0.0, g)
     M['inf_caseta'] = [_losa(-0.35, 0.35, 0.0, 0.72, -0.3, 0.3), techo(0.0, 0.84, 0.0, 0.62, 0.66, 20.0)]
@@ -2819,12 +2739,12 @@ MODELOS = _modelos()
 PIE = {}
 for _m in MODELOS:
     PIE[_m] = ('esbelto', 0.9)
-for _m in ('veg_hib', 'rel_mesetas', 'rel_meseta', 'rel_cumbre', 'rel_prot1', 'rel_prot2',
+for _m in ('rel_mesetas', 'rel_meseta', 'rel_cumbre', 'rel_prot1', 'rel_prot2',
            'rel_prot3', 'inf_barrio', 'inf_prot1', 'inf_prot2', 'inf_prot3', 'inf_hib',
            'pla_manzana', 'pla_podio', 'pla_prot1', 'pla_prot2', 'pla_prot3', 'ciu_valla',
            'veg_claro', 'rel_pedregal', 'inf_escombros'):
     PIE[_m] = ('celda', 0.85)
-PIE.update(rel_hib=('celda', 0.6), inf_torre=('celda', 0.6), pla_bloque=('celda', 0.75),
+PIE.update(inf_torre=('celda', 0.6), pla_bloque=('celda', 0.75),
            pla_bloque2=('celda', 0.75), pla_plantas=('celda', 0.6), pla_rascacielos=('celda', 0.55),
            ciu_foso=('celda', 0.75), ciu_andamio=('celda', 0.9))
 
@@ -2835,6 +2755,557 @@ def _ancho_natural(m):
 
 
 ANCHO = dict((m, _ancho_natural(m)) for m in MODELOS)
+
+
+# --- la biblioteca de ejemplares (fase 11 v8, motor v52) ------------------------
+# La vegetacion ya no son piezas sueltas (conos, prismas, bolas): cada planta es
+# un EJEMPLAR precalculado, inspirado en los modelos arquitectonicos de Halle y
+# Oldeman, con dos partes:
+#   ramas   tubos de 4 o 5 lados; el grosor sigue la regla de Leonardo
+#           (r_padre^2 = suma de r_hijo^2), desde las ramillas hacia el tronco
+#   hojas   puntos de hoja: posicion, normal, eje, tamano, tipo, profundidad en
+#           la copa (0 borde, 1 dentro) y nivel de rama (para el viento)
+# La copa es la suma de sus racimos (de tamanos 0,6 a 1,4); ninguna pieza es una
+# primitiva. Se calcula una vez por (modelo, variante, derivacion) y se guarda;
+# en TouchDesigner cada ejemplar es una malla (Script SOP, una vez) que se
+# instancia entera, con su version lejana de tarjetas de racimo (_lod).
+# Ejes del ejemplar: la base en el origen, Y arriba, alto 1.
+
+ARBOLES = ['conifera', 'pagoda', 'parasol', 'drago', 'frondosa', 'palmera', 'sauce']
+MATORRALES = ['retama', 'brezo', 'helecho', 'graminea', 'enebro', 'palmito']
+PLANTAS = ARBOLES + MATORRALES
+HOJA_DE = dict(conifera='aguja', pagoda='ancha', parasol='ancha', drago='espada', frondosa='ancha',
+               palmera='fronda', sauce='lanceolada', retama='lanceolada', brezo='menuda', helecho='fronda',
+               graminea='lamina', enebro='aguja', palmito='abanico')
+TIPOS_HOJA = ['aguja', 'ancha', 'lanceolada', 'espada', 'fronda', 'abanico', 'lamina', 'menuda']
+DERIVACIONES = 3             # el arbol: 1 brinzal, 2 joven, 3 adulto (derivacion completa)
+ANGULO_PLANTA = dict(conifera=84.0, pagoda=88.0, parasol=45.0, drago=34.0, frondosa=36.0, palmera=12.0,
+                     sauce=38.0, retama=22.0, brezo=40.0, helecho=55.0, graminea=50.0, enebro=80.0,
+                     palmito=45.0)   # angulo de rama con el eje del padre (grados), antes de Varangulo
+ANGULO_AUREO = 137.5         # las hojas, a lo largo de la ramilla con el angulo aureo
+R_PUNTA = 0.0035             # radio de una ramilla (alto 1); Leonardo da el resto
+SUBE = (0.0, 1.0, 0.0)
+
+
+class _Planta(object):
+    """Esqueleto y hojas de un ejemplar mientras se construye."""
+
+    def __init__(self, modelo, var, deriv, cfg):
+        import random
+        self.modelo, self.deriv = modelo, deriv
+        self.rng = random.Random(7919 * (PLANTAS.index(modelo) + 1) + 104729 * var + 17)
+        self.var_ang = max(0.0, float(cfg.get('var_angulo', 12.0)))
+        self.cuant = bool(cfg.get('cuantizar30', 0))
+        self.dens = max(1, int(cfg.get('densidad_hoja', 6)))
+        self.seg, self.hojas, self.racimos = [], [], []
+
+    def u(self, a=0.0, b=1.0):
+        return a + (b - a) * self.rng.random()
+
+    def ang(self, a):
+        """El angulo del modelo +- Varangulo (o cuantizado a 30, para comparar)."""
+        a = a + self.u(-self.var_ang, self.var_ang)
+        return 30.0 * round(a / 30.0) if self.cuant else a
+
+    def tramo(self, a, b, nivel, padre):
+        self.seg.append(dict(a=a, b=b, nivel=nivel, hijos=[], padre=padre, r=R_PUNTA))
+        k = len(self.seg) - 1
+        if padre is not None:
+            self.seg[padre]['hijos'].append(k)
+        return k
+
+    def eje(self, p, d, largo, n, nivel, padre, tropismo=0.0, curva=None):
+        """Un eje de n tramos desde p hacia d: tropismo > 0, la punta sube; < 0,
+        cuelga. curva: un vector que lo dobla poco a poco. Devuelve (tramos,
+        puntos, direccion final)."""
+        tr, pts = [], [p]
+        for _ in range(int(n)):
+            d = _norm(_add(d, SUBE, tropismo))
+            if curva is not None:
+                d = _norm(_add(d, curva))
+            q = _add(p, d, largo / n)
+            padre = self.tramo(p, q, nivel, padre)
+            tr.append(padre)
+            pts.append(q)
+            p = q
+        return tr, pts, d
+
+    def hijo(self, d, angulo, rumbo):
+        """Direccion que se abre 'angulo' grados de d, girada 'rumbo' alrededor de d."""
+        ref = SUBE if abs(_dot(d, SUBE)) < 0.95 else (1.0, 0.0, 0.0)
+        lado = _norm(_cross(d, ref))
+        return _norm(_girar_eje(_girar_eje(d, lado, angulo), d, rumbo))
+
+    def racimo(self, p, d, tam, nivel, padre, tipo=None, n=None, plano=False, abre=55.0, roseta=False):
+        """Un racimo: una ramilla de largo 'tam' desde p hacia d con sus hojas
+        repartidas con el angulo aureo. Su tamano varia 0,6-1,4; 'plano': las
+        hojas miran arriba (platos y techos). 'roseta': todas desde la punta."""
+        f = self.u(0.6, 1.4)
+        tam *= f
+        tipo = tipo or HOJA_DE[self.modelo]
+        n = max(self.dens, int(round((n or self.dens) * f)))
+        q = _add(p, d, tam)
+        k = self.tramo(p, q, nivel + 1, padre)
+        self.racimos.append((q, tam, d, plano))
+        g0 = self.u(0.0, 360.0)
+        ref = SUBE if abs(_dot(d, SUBE)) < 0.95 else (1.0, 0.0, 0.0)
+        lado0 = _norm(_cross(d, ref))
+        for j in range(n):
+            t = 1.0 if roseta else 0.25 + 0.75 * (j + 1) / float(n)
+            pos = _add(p, d, tam * t)
+            lado = _girar_eje(lado0, d, g0 + ANGULO_AUREO * j)
+            if plano:
+                ax = _norm(_add(_mul(lado, 1.0), d, 0.35))
+                ax = _norm((ax[0], 0.08 * ax[1], ax[2]))
+                nrm = SUBE
+            else:
+                e = math.radians(abre + self.u(-10.0, 10.0))
+                ax = _norm(_add(_mul(d, math.cos(e)), lado, math.sin(e)))
+                nrm = _norm(_cross(ax, _cross(SUBE, ax))) if abs(_dot(ax, SUBE)) < 0.98 else _norm(lado)
+                if nrm[1] < 0:
+                    nrm = _mul(nrm, -1.0)
+            self.hojas.append([pos, nrm, ax, tam * self.u(0.75, 1.15) * HOJA_K[tipo], tipo, 0.0, nivel + 1])
+        return k
+
+    def cerrar(self):
+        """Leonardo, alto 1 y la profundidad de cada hoja en la copa."""
+        for s in reversed(self.seg):            # los hijos siempre van despues del padre
+            if s['hijos']:
+                s['r'] = math.sqrt(sum(self.seg[h]['r'] ** 2 for h in s['hijos']))
+        pts = [s['b'] for s in self.seg] + [s['a'] for s in self.seg] + \
+              [_add(h[0], h[2], h[3]) for h in self.hojas]
+        y0 = min(0.0, min(p[1] for p in pts))
+        y1 = max(p[1] for p in pts)
+        k = 1.0 / max(1e-6, y1 - y0)
+        tr = lambda p: ((p[0]) * k, (p[1] - y0) * k, (p[2]) * k)
+        for s in self.seg:
+            s['a'], s['b'], s['r'] = tr(s['a']), tr(s['b']), s['r'] * k
+        for h in self.hojas:
+            h[0], h[3] = tr(h[0]), h[3] * k
+        self.racimos = [(tr(q), t * k, d, pl) for q, t, d, pl in self.racimos]
+        hs = [h[0] for h in self.hojas] or [(0.0, 0.5, 0.0)]
+        c = _mul(tuple(sum(p[q] for p in hs) for q in range(3)), 1.0 / len(hs))
+        R = max(_len(_add(p, c, -1.0)) for p in hs) or 1.0
+        for h in self.hojas:
+            h[5] = max(0.0, min(1.0, 1.0 - _len(_add(h[0], c, -1.0)) / R))
+        nmax = max([s['nivel'] for s in self.seg] + [1])
+        radio = max([math.hypot(p[0], p[2]) for p in hs] + [math.hypot(s['b'][0], s['b'][2]) for s in self.seg])
+        copa = sorted(math.hypot(p[0], p[2]) for p in hs)[int(0.9 * (len(hs) - 1))]
+        base_copa = sorted(p[1] for p in hs)[int(0.05 * (len(hs) - 1))]
+        return dict(modelo=self.modelo, deriv=self.deriv,
+                    ramas=[(s['a'], s['b'], s['r'], s['nivel']) for s in self.seg],
+                    radios=[(s['r'], self.seg[s['hijos'][0]]['r'] if s['hijos'] else s['r'] * 0.8,
+                             [self.seg[h]['r'] for h in s['hijos']]) for s in self.seg],
+                    hojas=[tuple(h) for h in self.hojas], racimos=self.racimos, nmax=nmax,
+                    radio=radio, copa=copa, base_copa=base_copa, centro=c,
+                    alto_tronco=min([s['b'][1] for s in self.seg if s['nivel'] == 0 and s['hijos']
+                                     and len(s['hijos']) > 1] or [base_copa]))
+
+
+HOJA_K = dict(aguja=0.95, ancha=0.75, lanceolada=0.62, espada=1.25, fronda=0.55, abanico=0.6, lamina=1.0,
+              menuda=0.55)   # largo de la hoja, x el del racimo
+
+
+def _gen_conifera(P):
+    """Rauh / Massart: tronco unico, pisos de ramas casi horizontales, mas
+    cortas arriba; las puntas suben. Aguja en haces. Triangulo dentado."""
+    pisos = {1: 3, 2: 5, 3: 8}[P.deriv]
+    tr, pts, _ = P.eje((0, 0, 0), SUBE, 1.0, pisos + 2, 0, None)
+    g = P.u(0, 360)
+    for k in range(pisos):
+        y = 0.16 + 0.76 * k / max(1, pisos - 1) if pisos > 1 else 0.5
+        idx = min(len(tr) - 1, int(y * len(tr)))
+        p = _add(pts[0], SUBE, y)
+        l = 0.04 + 0.30 * (1.0 - y) ** 1.1
+        nr = 4 + (k % 2)
+        for j in range(nr):
+            d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['conifera']), g + 360.0 * j / nr + ANGULO_AUREO * k)
+            t2, p2, d2 = P.eje(p, d, l * P.u(0.85, 1.15), 2 + (P.deriv >= 2), 1, tr[idx], tropismo=0.12)
+            for q in range(1, len(p2) - 1 if P.deriv >= 2 else 1):
+                for s in (-1.0, 1.0):
+                    dl = P.hijo(d2, 55.0, 90.0 * s)
+                    P.racimo(p2[q], _norm((dl[0], 0.25, dl[2])), 0.36 * l, 2, t2[q - 1], n=P.dens + 2)
+            P.racimo(p2[-1], d2, 0.5 * l, 1, t2[-1], n=P.dens + 3)
+    P.racimo(pts[-1], SUBE, 0.14, 0, tr[-1], n=P.dens + 3)
+
+
+def _gen_pagoda(P):
+    """Aubreville: pisos de ramas horizontales que acaban en platos de hojas
+    planos. Pisos separados por huecos."""
+    pisos = {1: 2, 2: 3, 3: 4}[P.deriv]
+    tr, pts, _ = P.eje((0, 0, 0), SUBE, 1.0, 6, 0, None)
+    g = P.u(0, 360)
+    for k in range(pisos):
+        y = 0.38 + 0.56 * k / max(1, pisos - 1) if pisos > 1 else 0.6
+        idx = min(len(tr) - 1, int(y * len(tr)))
+        l = 0.42 * (1.0 - 0.55 * k / max(1, pisos))
+        nr = 5
+        for j in range(nr):
+            d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['pagoda']), g + 72.0 * j + 31.0 * k)
+            t2, p2, d2 = P.eje(_add((0, 0, 0), SUBE, y), d, l, 2, 1, tr[idx], tropismo=0.03)
+            for s in (-35.0, 0.0, 35.0):
+                dd = _girar_eje(d2, SUBE, s)
+                P.racimo(p2[-1], _norm((dd[0], 0.02, dd[2])), 0.42 * l, 1, t2[-1], plano=True, n=P.dens + 4)
+
+
+def _gen_parasol(P):
+    """Troll: el tronco se abre en 3 o 4 brazos oblicuos; ramas plagiotropas
+    con una capa fina de hojas arriba. T de techo plano."""
+    inc = _norm((P.u(-0.08, 0.08), 1.0, P.u(-0.08, 0.08)))
+    tr, pts, d = P.eje((0, 0, 0), inc, 0.55, 3, 0, None)
+    nb = 3 + (P.rng.random() < 0.5)
+    g = P.u(0, 360)
+    for j in range(nb):
+        da = P.hijo(d, P.ang(ANGULO_PLANTA['parasol']), g + 360.0 * j / nb)
+        t2, p2, d2 = P.eje(pts[-1], da, 0.42, 2, 1, tr[-1], tropismo=0.05)
+        nh = {1: 2, 2: 3, 3: 4}[P.deriv]
+        for q in range(nh):
+            dh = _girar_eje(_norm((d2[0], 0.0, d2[2])), SUBE, -50.0 + 100.0 * q / max(1, nh - 1))
+            t3, p3, _ = P.eje(p2[-1], _norm((dh[0], 0.06, dh[2])), 0.30 * P.u(0.8, 1.2), 2, 2, t2[-1])
+            for r_ in range(1, len(p3)):
+                P.racimo(p3[r_], _norm((dh[0], 0.15, dh[2])), 0.16, 2, t3[r_ - 1], plano=True, n=P.dens + 3)
+
+
+def _gen_drago(P):
+    """Leeuwenberg: horquillas de 2 o 3 ramas repetidas, con una roseta de
+    hojas de espada en cada punta. Paraguas de penachos."""
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.42, 3, 0, None)
+    niveles = {1: 2, 2: 3, 3: 4}[P.deriv]
+    frente = [(pts[-1], d, tr[-1], 0.22)]
+    for nv in range(niveles):
+        sig = []
+        for p, dd, pad, l in frente:
+            nh = 2 + (P.rng.random() < 0.4)
+            g = P.u(0, 360)
+            for j in range(nh):
+                dh = P.hijo(dd, P.ang(ANGULO_PLANTA['drago']), g + 360.0 * j / nh)
+                t2, p2, d2 = P.eje(p, dh, l * P.u(0.85, 1.1), 1, nv + 1, pad, tropismo=0.15)
+                sig.append((p2[-1], d2, t2[-1], l * 0.78))
+        frente = sig
+    for p, dd, pad, l in frente:
+        P.racimo(p, _norm(_add(dd, SUBE, 0.6)), 0.15, niveles, pad, roseta=True, abre=70.0, n=P.dens + 8)
+
+
+def _gen_frondosa(P):
+    """Scarrone: 3 o 4 ramas madre ascendentes que se dividen, con racimos de
+    hojas en las puntas. Copa lobulada con huecos."""
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.34, 3, 0, None)
+    niveles = {1: 2, 2: 3, 3: 4}[P.deriv]
+    nm = 3 + (P.rng.random() < 0.6)
+    g = P.u(0, 360)
+    frente = []
+    for j in range(nm):
+        dm = P.hijo(d, P.ang(ANGULO_PLANTA['frondosa']), g + 360.0 * j / nm)
+        frente.append((pts[-1], dm, tr[-1], 0.30 * P.u(0.8, 1.2)))
+    for nv in range(niveles):
+        sig = []
+        for p, dd, pad, l in frente:
+            t2, p2, d2 = P.eje(p, dd, l, 2, nv + 1, pad, tropismo=0.10)
+            if nv == niveles - 1:
+                P.racimo(p2[-1], d2, 0.20, nv + 1, t2[-1], n=P.dens + 6)
+                P.racimo(p2[1], P.hijo(d2, 50.0, P.u(0, 360)), 0.14, nv + 1, t2[0], n=P.dens + 3)
+                continue
+            nh = 2 + (P.rng.random() < 0.35)
+            gg = P.u(0, 360)
+            for q in range(nh):
+                sig.append((p2[-1], P.hijo(d2, P.ang(ANGULO_PLANTA['frondosa'] * 0.9), gg + 360.0 * q / nh),
+                            t2[-1], l * P.u(0.62, 0.82)))
+        frente = sig
+
+
+def _gen_palmera(P):
+    """Corner: tronco curvado sin ramas y una corona de frondas arqueadas.
+    Estrella sobre un palo."""
+    g = math.radians(P.u(0, 360))
+    curva = (0.05 * math.cos(g), 0.0, 0.05 * math.sin(g))
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.82, 6, 0, None, curva=curva)
+    nf = {1: 5, 2: 8, 3: 11}[P.deriv]
+    g0 = P.u(0, 360)
+    for j in range(nf):
+        df = P.hijo(d, P.ang(55.0 + 25.0 * (j % 2)), g0 + ANGULO_AUREO * j)
+        t2, p2, _ = P.eje(pts[-1], df, 0.46 * P.u(0.85, 1.15), 4, 1, tr[-1], tropismo=-0.32)
+        for q in range(1, len(p2)):
+            dq = _norm(_add(p2[q], p2[q - 1], -1.0))
+            P.hojas.append([p2[q - 1], _norm(_cross(dq, _cross(SUBE, dq))) if abs(dq[1]) < 0.98 else SUBE,
+                            dq, 0.17 * P.u(0.9, 1.1), 'fronda', 0.0, 2])
+        P.racimos.append((p2[2], 0.18, df, False))
+
+
+def _gen_sauce(P):
+    """Lloron: ramas que suben y cortinas de ramillas colgantes. Cortina."""
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.30, 2, 0, None)
+    nm = 3 + int(P.u(0, 2.99))
+    g = P.u(0, 360)
+    cortinas = {1: 2, 2: 3, 3: 5}[P.deriv]
+    for j in range(nm):
+        dm = P.hijo(d, P.ang(ANGULO_PLANTA['sauce']), g + 360.0 * j / nm)
+        t2, p2, d2 = P.eje(pts[-1], dm, 0.55 * P.u(0.85, 1.15), 3, 1, tr[-1], tropismo=0.06)
+        for q in range(cortinas):
+            k = len(p2) - 1 - (q % (len(p2) - 1))
+            fuera = _norm((d2[0] + P.u(-0.3, 0.3), 0.0, d2[2] + P.u(-0.3, 0.3)))
+            t3, p3, _ = P.eje(p2[k], _norm(_add(fuera, SUBE, 0.4)), 0.18, 1, 2, t2[k - 1])
+            largo = max(0.15, p3[-1][1] - 0.30) * P.u(0.75, 1.0)     # el tronco se ve debajo
+            t4, p4, _ = P.eje(p3[-1], _norm(_add(fuera, SUBE, -2.5)), largo, 4, 3, t3[-1], tropismo=-0.6)
+            for r_ in range(1, len(p4)):
+                P.racimo(p4[r_ - 1], _norm(_add(p4[r_], p4[r_ - 1], -1.0)), 0.9 * largo / 4.0, 3, t4[r_ - 1],
+                         abre=35.0, n=P.dens)
+
+
+def _gen_retama(P):
+    """15-25 tallos desde la base abiertos en abanico; pocas hojas finas."""
+    n = 15 + int(P.u(0, 10.99))
+    for j in range(n):
+        d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['retama'] * P.u(0.3, 1.6)), ANGULO_AUREO * j)
+        t2, p2, d2 = P.eje((P.u(-0.03, 0.03), 0.0, P.u(-0.03, 0.03)), d, P.u(0.7, 1.0), 3, 0, None,
+                           tropismo=-0.04)
+        P.racimo(p2[-1], d2, 0.16, 1, t2[-1], n=max(2, P.dens // 2), abre=20.0)
+
+
+def _gen_brezo(P):
+    """Ramillete bajo y enmaranado; hoja menuda en racimos."""
+    for j in range(8):
+        d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['brezo'] * P.u(0.5, 1.5)), ANGULO_AUREO * j)
+        t2, p2, d2 = P.eje((0.0, 0.0, 0.0), d, P.u(0.45, 0.7), 2, 0, None, tropismo=0.05)
+        for q in range(3):
+            dh = P.hijo(d2, P.u(20, 60), P.u(0, 360))
+            t3, p3, d3 = P.eje(p2[-1 - (q % 2)], dh, P.u(0.25, 0.4), 2, 1, t2[-1 - (q % 2)])
+            P.racimo(p3[-1], d3, 0.14, 2, t3[-1], n=P.dens + 4, abre=65.0)
+
+
+def _gen_helecho(P):
+    """Roseta de frondas arqueadas desde la base."""
+    for j in range(9 + int(P.u(0, 3.99))):
+        d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['helecho'] * P.u(0.7, 1.2)), ANGULO_AUREO * j)
+        t2, p2, _ = P.eje((0, 0, 0), d, P.u(0.85, 1.1), 4, 0, None, tropismo=-0.22)
+        for q in range(1, len(p2)):
+            dq = _norm(_add(p2[q], p2[q - 1], -1.0))
+            P.hojas.append([p2[q - 1], _norm(_cross(dq, _cross(SUBE, dq))) if abs(dq[1]) < 0.98 else SUBE,
+                            dq, 0.26 * P.u(0.9, 1.1), 'fronda', 0.0, 1])
+        P.racimos.append((p2[2], 0.3, d, False))
+
+
+def _gen_graminea(P):
+    """Mata: fuente de laminas que se arquean hacia fuera."""
+    for j in range(30 + int(P.u(0, 10.99))):
+        d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['graminea'] * P.u(0.2, 1.3)), ANGULO_AUREO * j)
+        t2, p2, _ = P.eje((0, 0, 0), d, P.u(0.15, 0.25), 1, 0, None)
+        e = math.radians(P.u(-15, 15))
+        P.hojas.append([p2[-1], _norm(_cross(d, _cross(SUBE, d))) if abs(d[1]) < 0.98 else SUBE,
+                        _norm(_add(d, SUBE, 0.3 + 0.2 * math.sin(e))), P.u(0.6, 0.85), 'lamina', 0.0, 1])
+        P.racimos.append((p2[-1], 0.3, d, False))
+
+
+def _gen_enebro(P):
+    """Ramas tendidas a ras de suelo, con agujas."""
+    for j in range(6 + int(P.u(0, 2.99))):
+        d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['enebro']), 360.0 * j / 6.0 + P.u(-20, 20))
+        t2, p2, d2 = P.eje((0, 0.0, 0), d, P.u(1.0, 1.5), 4, 0, None, tropismo=0.03)
+        for q in range(1, len(p2)):
+            for s in (-1.0, 1.0):
+                dl = P.hijo(d2, 50.0, 90.0 * s)
+                P.racimo(p2[q], _norm((dl[0], 0.5, dl[2])), 0.14, 1, t2[q - 1], n=P.dens + 4)
+
+
+def _gen_palmito(P):
+    """Abanicos sobre un tallo corto."""
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.25, 2, 0, None)
+    for j in range(8 + int(P.u(0, 3.99))):
+        dp = P.hijo(d, P.ang(ANGULO_PLANTA['palmito'] * P.u(0.4, 1.4)), ANGULO_AUREO * j)
+        t2, p2, d2 = P.eje(pts[-1], dp, P.u(0.4, 0.6), 2, 1, tr[-1], tropismo=0.05)
+        P.hojas.append([p2[-1], _norm(_cross(d2, _cross(SUBE, d2))) if abs(d2[1]) < 0.98 else SUBE,
+                        d2, 0.38 * P.u(0.85, 1.15), 'abanico', 0.0, 2])
+        P.racimos.append((p2[-1], 0.2, d2, False))
+
+
+_GEN = dict(conifera=_gen_conifera, pagoda=_gen_pagoda, parasol=_gen_parasol, drago=_gen_drago,
+            frondosa=_gen_frondosa, palmera=_gen_palmera, sauce=_gen_sauce, retama=_gen_retama,
+            brezo=_gen_brezo, helecho=_gen_helecho, graminea=_gen_graminea, enebro=_gen_enebro,
+            palmito=_gen_palmito)
+_BIBLIO = {}
+
+
+def etapas_de(modelo):
+    """Derivaciones guardadas: los arboles, 1 a DERIVACIONES; los matorrales, 1."""
+    return list(range(1, DERIVACIONES + 1)) if modelo in ARBOLES else [1]
+
+
+def _clave_biblio(cfg):
+    return (round(float(cfg.get('var_angulo', 12.0)), 3), int(bool(cfg.get('cuantizar30', 0))),
+            int(cfg.get('densidad_hoja', 6)))
+
+
+def ejemplar(cfg, modelo, var, deriv):
+    """El ejemplar (modelo, variante, derivacion) de la biblioteca (se calcula
+    una vez por Varangulo, Cuantizar30 y Densidadhoja)."""
+    k = (_clave_biblio(cfg), modelo, int(var), int(deriv))
+    e = _BIBLIO.get(k)
+    if e is None:
+        if len(_BIBLIO) > 2000:
+            _BIBLIO.clear()
+        P = _Planta(modelo, int(var), int(deriv), cfg)
+        _GEN[modelo](P)
+        e = _BIBLIO[k] = P.cerrar()
+    return e
+
+
+def variantes(cfg):
+    """Variantes por modelo: Variantes, sin pasar de las que hay en TouchDesigner."""
+    global VARIANTES_TD
+    v = max(1, int(cfg.get('variantes', 4)))
+    if VARIANTES_TD is None:                # tras recargar el motor: lo que hizo la fase 11
+        try:
+            VARIANTES_TD = int(me.fetch('variantes_td', 0))
+        except Exception:
+            VARIANTES_TD = 0
+    if VARIANTES_TD:
+        v = min(v, VARIANTES_TD)
+    return v
+
+
+VARIANTES_TD = None          # las variantes con geometria en TouchDesigner (0: sin limite)
+
+
+def biblioteca(cfg):
+    """Precalcula toda la biblioteca: modelos x Variantes x derivaciones.
+    Devuelve el numero de ejemplares."""
+    n = 0
+    for mo in PLANTAS:
+        for v in range(variantes(cfg)):
+            for d in etapas_de(mo):
+                ejemplar(cfg, mo, v, d)
+                n += 1
+    return n
+
+
+def nombre_ejemplar(modelo, var, deriv, lejos=False):
+    return 'veg_%s_%d_%d%s' % (modelo, var, deriv, '_lod' if lejos else '')
+
+
+def ejemplares_de(cfg):
+    """Los nombres de los ejemplares (y sus versiones lejanas) que necesita TD."""
+    out = []
+    for mo in PLANTAS:
+        for v in range(variantes(cfg)):
+            for d in etapas_de(mo):
+                out.append(nombre_ejemplar(mo, v, d))
+                out.append(nombre_ejemplar(mo, v, d, True))
+    return out
+
+
+def es_ejemplar(nombre):
+    if not nombre.startswith('veg_'):
+        return False
+    partes = nombre[4:].split('_')
+    return len(partes) >= 3 and partes[0] in _GEN
+
+
+def parte_ejemplar(nombre):
+    """(modelo, variante, derivacion, lejos) de un nombre veg_<modelo>_<v>_<d>[_lod]."""
+    partes = nombre[4:].split('_')
+    return partes[0], int(partes[1]), int(partes[2]), len(partes) > 3
+
+
+# --- la malla de un ejemplar ---------------------------------------------------------
+# Hoja facetada low-poly de dos caras, 4 a 6 triangulos con pliegue central. En el
+# eje local: X a lo largo de la hoja (0 a 1), Y su normal, Z de lado.
+_PLANTILLAS = dict(
+    ancha=([(0, 0, 0), (0.45, -0.06, -0.32), (1, 0, 0), (0.45, -0.06, 0.32), (0.5, 0.06, 0)],
+           [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
+    menuda=([(0, 0, 0), (0.5, -0.05, -0.3), (1, 0, 0), (0.5, -0.05, 0.3), (0.5, 0.05, 0)],
+            [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
+    lanceolada=([(0, 0, 0), (0.4, -0.04, -0.14), (1, 0, 0), (0.4, -0.04, 0.14), (0.45, 0.04, 0)],
+                [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
+    espada=([(0, 0, 0), (0.5, -0.03, -0.07), (1, 0.05, 0), (0.5, -0.03, 0.07), (0.5, 0.03, 0)],
+            [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
+    aguja=([(0, 0, 0), (1, 0.08, -0.34), (0.9, 0.14, -0.26), (1, 0.12, 0.0), (0.9, 0.2, 0.06),
+            (1, 0.08, 0.34), (0.9, 0.14, 0.26)],
+           [(0, 1, 2), (0, 2, 1), (0, 3, 4), (0, 4, 3), (0, 5, 6), (0, 6, 5)]),
+    fronda=([(0, 0, 0), (1, -0.08, 0), (0.25, 0.0, -0.35), (0.55, -0.03, -0.32), (0.85, -0.06, -0.22),
+             (0.25, 0.0, 0.35), (0.55, -0.03, 0.32), (0.85, -0.06, 0.22), (0.5, 0.03, 0)],
+            [(0, 2, 8), (8, 3, 1), (8, 4, 1), (0, 8, 5), (8, 6, 1), (8, 1, 7)]),
+    abanico=([(0, 0, 0)] + [(0.9 * math.cos(math.radians(a)), 0.05 * (k % 2), 0.9 * math.sin(math.radians(a)))
+                            for k, a in enumerate(range(-70, 80, 14))],
+             [(0, 1 + 2 * k, 2 + 2 * k) for k in range(5)]),
+    lamina=([(0, 0, -0.05), (0, 0, 0.05), (0.5, 0.15, -0.04), (0.5, 0.18, 0.04), (1, -0.1, 0), (0.5, 0.2, 0)],
+            [(0, 2, 1), (1, 2, 3), (2, 4, 5), (5, 4, 3)]),
+)
+# tarjeta de racimo (lejos): estrella dentada de 6 puntas, dos cruzadas
+_TARJETA = ([(0, 0, 0)] + [((1.0 if k % 2 == 0 else 0.62) * math.cos(math.pi * k / 4.0), 0.0,
+                            (1.0 if k % 2 == 0 else 0.62) * math.sin(math.pi * k / 4.0)) for k in range(8)],
+            [(0, 1 + k, 1 + (k + 1) % 8) for k in range(8)])     # estrella dentada de 4 puntas
+_MALLAS = {}
+
+
+def malla_ejemplar(nombre, cfg=None):
+    """(puntos, normales, uv, triangulos) de un ejemplar, para su Script SOP.
+    uv = (tipo, profundidad, nivel): tipo 1 corteza, 2 + v hoja, 3 + v tarjeta de
+    racimo (v en 0-0,9: la variacion de la hoja); profundidad 0 borde, 1 dentro;
+    nivel de rama 0 tronco - 1 punta (el viento de la fase 17)."""
+    cfg = cfg or DEFAULT_CFG
+    clave = (nombre, _clave_biblio(cfg))
+    v = _MALLAS.get(clave)
+    if v is not None:
+        return v
+    import random
+    mo, var, d, lejos = parte_ejemplar(nombre)
+    e = ejemplar(cfg, mo, var, d)
+    rng = random.Random(sum((k + 1) * ord(ch) for k, ch in enumerate(nombre)))
+    P, Nn, U, T = [], [], [], []
+    nmax = float(max(1, e['nmax']))
+    for (a, b, nivel), (r0, r1, _) in zip([(s[0], s[1], s[3]) for s in e['ramas']], e['radios']):
+        if lejos and (nivel > 1 or r0 < 0.004):
+            continue
+        lados = 5 if nivel == 0 else 4
+        dv = _norm(_add(b, a, -1.0))
+        ref = SUBE if abs(dv[1]) < 0.95 else (1.0, 0.0, 0.0)
+        x = _norm(_cross(dv, ref))
+        z = _cross(dv, x)
+        k0 = len(P)
+        for q in range(lados):
+            g = 2.0 * math.pi * q / lados
+            o = _add(_mul(x, math.cos(g)), z, math.sin(g))
+            for c_, r_ in ((a, r0), (b, max(r1, 0.6 * r0))):
+                P.append(_add(c_, o, r_))
+                Nn.append(o)
+                U.append((1.0, 0.0, nivel / nmax))
+        for q in range(lados):
+            i0, i1 = k0 + 2 * q, k0 + 2 * ((q + 1) % lados)
+            T += [(i0, i1, i1 + 1), (i0, i1 + 1, i0 + 1)]
+    if lejos:
+        for q, t, dd, plano in e['racimos']:
+            ref = SUBE if abs(dd[1]) < 0.95 else (1.0, 0.0, 0.0)
+            lado = _norm(_cross(dd, ref))
+            if plano:
+                planos = [(SUBE, (1.0, 0.0, 0.0))]
+            else:                          # mira afuera y arriba, a lo largo de la ramilla
+                nr = _norm(_add(_norm(_cross(_cross(dd, SUBE), dd)) if abs(dd[1]) < 0.95 else SUBE, SUBE, 0.6))
+                planos = [(nr, _norm(_cross(nr, lado)) if abs(_dot(nr, lado)) < 0.95 else lado)]
+            centro = q if plano else _add(q, dd, -0.4 * t)
+            for nrm, x in planos:          # la tarjeta del racimo
+                z = _cross(nrm, x)
+                vv = 0.9 * rng.random()
+                k0 = len(P)
+                for px, py, pz in _TARJETA[0]:
+                    P.append(_add(centro, _add(_mul(x, px * t * 0.8), z, pz * t * 0.8)))
+                    Nn.append(nrm)
+                    U.append((3.0 + vv, 0.3, 1.0))
+                T += [(k0 + a_, k0 + b_, k0 + c_) for a_, b_, c_ in _TARJETA[1]]
+    else:
+        for pos, nrm, ax, tam, tipo, prof, nivel in e['hojas']:
+            pv, tv = _PLANTILLAS[tipo]
+            z = _norm(_cross(ax, nrm))
+            y = _cross(z, ax)
+            vv = 0.9 * rng.random()
+            k0 = len(P)
+            for px, py, pz in pv:
+                P.append(_add(pos, _add(_add(_mul(ax, px * tam), y, py * tam), z, pz * tam)))
+                Nn.append(y)
+                U.append((2.0 + vv, prof, min(1.0, nivel / nmax)))
+            T += [(k0 + a_, k0 + b_, k0 + c_) for a_, b_, c_ in tv]
+    v = _MALLAS[clave] = (P, Nn, U, T)
+    if len(_MALLAS) > 600:
+        _MALLAS.clear()
+    return v
 
 
 # -----------------------------------------------------------------------------
@@ -2854,6 +3325,13 @@ ESPECIES = {('naturaleza', GEO): 'vegetacion', ('naturaleza', ARQ): 'relieve',
 CATALOGO_COLS = ['tema', 'especie', 'estado', 'variante', 'modelo']
 
 
+# fase 11 v8: la vegetacion del catalogo son modelos arquitectonicos de la
+# biblioteca (PLANTAS) y los hibridos de la naturaleza, formas del terreno
+FORMAS = ['bosque', 'arrozal', 'meseta']
+MARCOS = ['real', 'tresbolillo']    # el marco de los frutales de la meseta
+FORMA_HIBRIDO = dict(veg='meseta', rel='arrozal')
+
+
 def _catalogo_defecto():
     filas = []
 
@@ -2862,19 +3340,19 @@ def _catalogo_defecto():
             filas.append((tema, esp, estado, v, x))
     for tema, esp, p in (('naturaleza', 'vegetacion', 'veg'), ('naturaleza', 'relieve', 'rel'),
                          ('ciudad', 'informal', 'inf'), ('ciudad', 'planificada', 'pla')):
-        semilla = {'veg': ['veg_brote'], 'rel': ['rel_columna', 'rel_columna2'],
+        semilla = {'veg': list(MATORRALES), 'rel': ['rel_columna', 'rel_columna2'],
                    'inf': ['inf_caseta', 'inf_caseta2'], 'pla': ['pla_bloque', 'pla_bloque2']}[p]
-        resto = {'veg': [['veg_arbol', 'veg_conifera'], ['veg_arbol', 'veg_conifera'],
-                         ['veg_piso', 'veg_cono'], ['veg_piso', 'veg_cono']],
+        resto = {'veg': [list(ARBOLES)] * 4,
                  'rel': ['rel_columnas', 'rel_mesetas', 'rel_meseta', 'rel_cumbre'],
                  'inf': ['inf_anadidos', 'inf_pasarelas', 'inf_barrio', 'inf_torre'],
                  'pla': ['pla_plantas', 'pla_manzana', 'pla_podio', 'pla_rascacielos']}[p]
         add(tema, esp, 'semilla', semilla)
         for estado, mo in zip(ESTADOS[1:], resto):
             add(tema, esp, estado, mo if isinstance(mo, list) else [mo])
-        add(tema, esp, 'puente', ['veg_dosel' if p == 'veg' else p + '_puente'])
-        add(tema, esp, 'protagonista', [p + '_prot1', p + '_prot2', p + '_prot3'])
-        add(tema, esp, 'hibrido', [p + '_hib'])
+        add(tema, esp, 'puente', ['bosque' if p == 'veg' else p + '_puente'])
+        add(tema, esp, 'protagonista', ['frondosa', 'pagoda', 'conifera'] if p == 'veg'
+            else [p + '_prot1', p + '_prot2', p + '_prot3'])
+        add(tema, esp, 'hibrido', [FORMA_HIBRIDO.get(p, p + '_hib')])
     add('ciudad', 'planificada', 'remate', ['pla_aguja'])
     for tema, esp, mo in (('naturaleza', 'vegetacion', 'veg_claro'), ('naturaleza', 'relieve', 'rel_pedregal'),
                           ('ciudad', 'informal', 'inf_escombros'), ('ciudad', 'planificada', 'ciu_valla')):
@@ -2912,7 +3390,7 @@ def catalogo_de(filas):
     out = {}
     for tema, esp, estado, var, x in filas:
         lista = out.setdefault((tema, esp, estado), [])
-        if (estado.startswith('cadena') and x in ETAPAS) or x in MODELOS:
+        if (estado.startswith('cadena') and x in ETAPAS) or x in MODELOS or x in PLANTAS or x in FORMAS:
             lista.append((int(var), x))
     return dict((k, [x for _, x in sorted(v)]) for k, v in out.items())
 
@@ -3389,7 +3867,7 @@ def geometria_de(modelo, pulido=True, doble=True):
     clave = (modelo, pulido, doble)
     g = _GEOMETRIAS.get(clave)
     if g is None:
-        g = 'mod_' + modelo if modelo.startswith('ciu_') or not doble else \
+        g = 'mod_' + modelo if modelo.startswith('ciu_') or not doble or es_ejemplar(modelo) else \
             'mod_%s_%s' % (modelo, 'pul' if pulido else 'por')
         _GEOMETRIAS[clave] = g
     return g
@@ -3409,6 +3887,8 @@ def geometrias_piel(cfg=None):
             out.append((geometria_de(mo, False), mo, 'mat_poroso'))
         else:
             out.append((geometria_de(mo, doble=False), mo, MAT_FAMILIA[familia_de(mo)]))
+    for mo in ejemplares_de(cfg or DEFAULT_CFG):     # fase 11 v8: la biblioteca, una geometria por ejemplar
+        out.append((geometria_de(mo), mo, 'mat_pulido' if doble else MAT_FAMILIA['dosel']))
     return out
 
 
@@ -3585,14 +4065,23 @@ def build_piel(W, cfg, now, out):
         out.setdefault(geometria_de(modelo, pulido, not doce), []).append(fila)
         piezas += 1
 
+    def contar(k):                  # fase 11 v8: filas copiadas de la memoria de la celda
+        nonlocal piezas
+        piezas += k
+    emit.contar = contar
+
     natural = tema == 'naturaleza'      # fase 11 v5: la naturaleza legible (piel_natural)
     nat_copas = 0
     if natural:
         ter = terreno(W, cfg, cl)
-        ctx = dict(cl=cl, ter=ter, bases=suelos,
-                   cauces=cauces(W, cfg, cl, ter)['por_celda'] if cfg['nivel'] >= 13 else {},
+        por_celda = cauces(W, cfg, cl, ter)['por_celda'] if cfg['nivel'] >= 13 else {}
+        cult = cultivos(W, cfg, ter, por_celda, now, paso)     # fase 11 v8: bancales, riego y acequias
+        ctx = dict(cl=cl, ter=ter, bases=suelos, cauces=por_celda,
                    sway=(lambda i: balanceo(W, cfg, i, bq)) if tiempo else (lambda i: (0.0, 0.0)),
-                   cerca=lambda i: lod_cerca(W, cfg, i))
+                   cerca=lambda i: lod_cerca(W, cfg, i) and not (cfg.get('impostores', 1) and _PRESUPUESTO['lleno']),
+                   rio_cerca=lambda i: any(c in por_celda for c in [i] + list(NEIGH[i])),
+                   res=dict(hojas=0, todas=0, ejemplares=0, emergentes=0, frutales={},
+                            biomas=dict((b, 0) for b in BIOMAS)))
     bomba = _Bomba(W, cfg, now, out)    # fase 7 v12: el pumping de los impulsos
     for i in range(N):
         bomba.cerrar()
@@ -3632,8 +4121,8 @@ def build_piel(W, cfg, now, out):
         if natural:                                 # el latido hincha; su color va al borde (uTinte)
             if lt > 0:
                 vh *= 1.0 + amp * lt
-            nat_copas += piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out,
-                                      now, paso)
+            nat_copas += piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out,
+                                            now, paso, not doce)
             continue
         if lt > 0:
             vh *= 1.0 + amp * lt
@@ -3821,6 +4310,11 @@ def build_piel(W, cfg, now, out):
                piezas=piezas, obras=obras, medias=medias)
     if natural:
         _, ln = _limites_pisos(cfg)
+        r_ = ctx['res']
+        _PRESUPUESTO['lleno'] = r_['todas'] > HOJAS_TOPE    # el fotograma siguiente: impostores si no caben
+        res.update(ejemplares=r_['ejemplares'], hojas=r_['hojas'], emergentes=r_['emergentes'],
+                   biomas=dict(r_['biomas']), frutales=r_['frutales'], hibridos=ter.get('hibridos', {}),
+                   inundados=cult['inundados'], parcelas=cult['parcelas'])
         res.update(copas=nat_copas, montes=ter['montes'], cordilleras=ter['cordilleras'],
                    nevadas=sum(1 for c in range(N) if ter['centro'][c] >= ln * ter['hmax']),
                    cerca=sum(1 for c in range(N) if W['occ'][c] > 0 and lod_cerca(W, cfg, c)))
@@ -4202,7 +4696,8 @@ def terreno(W, cfg, cl=None):
         return _TERRENO['t']                # ya visto en este fotograma
     rasgos, res = rasgos_terreno(W, cfg, cl)
     S = suelos_fotograma(W, cfg)
-    clave = (GRID['lo'], GRID['hi'], tuple(rasgos), S, round(alto_hipso(cfg), 4))
+    hib = _hibridos_clave(W, cfg, cl)
+    clave = (GRID['lo'], GRID['hi'], tuple(rasgos), S, round(alto_hipso(cfg), 4), hib)
     t = _TERRENO.get('t')
     if t is not None and _TERRENO.get('clave') == clave:
         _TERRENO['sello_t'] = sello
@@ -4226,6 +4721,7 @@ def terreno(W, cfg, cl=None):
             else:
                 _sobre(np, Erel, Hrel, pa)
         E = np.zeros((TERRENO_H, TERRENO_W), dtype=np.float32)
+        hib_t = None
         if r1 > r0:
             r0, r1 = max(0, r0 - 3), min(TERRENO_H, r1 + 3)
             Nz = rej['ruido'][r0:r1]
@@ -4239,18 +4735,189 @@ def terreno(W, cfg, cl=None):
             for _ in range(2):              # suavizado 3x3: la malla (un vertice por texel) sin dientes
                 Ez = (Ez + np.roll(Ez, 1, 0) + np.roll(Ez, -1, 0) + np.roll(Ez, 1, 1) + np.roll(Ez, -1, 1)) / 5.0
             E[r0:r1] = Ez
+        if hib[0] or hib[1]:                # fase 11 v8: bancales y mesetas, en el mismo mapa
+            hib_t = _hibridos_terreno(np, rej, E, cfg, hib)
+            filas = [k for k in range(TERRENO_H) if hib_t['filas'][k]]
+            r0, r1 = min([r0] + filas), max([r1] + [k + 1 for k in filas])
         cero = [0.0] * TERRENO_W
         El = [cero] * r0 + E[r0:r1].tolist() + [cero] * (TERRENO_H - max(r0, r1)) if r1 > r0 \
             else [cero] * TERRENO_H
         Sa = _suelo_mapa(np, rej, S)
     t = dict(E=E, S=Sa, El=El, centro=centro, hmax=alto_hipso(cfg),
              version=_TERRENO.get('version', 0) + 1, rasgos=len(rasgos), **res)
+    t['hib'] = hib_t if np is not None else None
+    t['hibridos'] = dict(arrozales=dict((i, nb) for i, nb in hib[0]), mesetas=dict(hib[1]))
     if El is not None:
         t['centro'] = [alto_en(t, NORMALS[c]) for c in range(N)]
     _TERRENO['clave'], _TERRENO['t'], _TERRENO['version'] = clave, t, t['version']
     _TERRENO['array'] = None
     _TERRENO['sello_t'] = sello
     return t
+
+
+def _hibridos_clave(W, cfg, cl):
+    """(arrozales ((celda, bancales)...), mesetas ((celda, nivel)...), capitales, parametros)."""
+    if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza':
+        return ((), (), (), ())
+    arroz = tuple((i, bancales(W, cfg, i)) for i in range(N) if bancales(W, cfg, i))
+    mes = tuple((i, niveles_meseta(W, cfg, i)) for i in range(N) if niveles_meseta(W, cfg, i))
+    caps = ()
+    if mes:
+        cl = cl or clusters(W, cfg)
+        caps = tuple((i, cl['capital'][cl['de'][i]] if cl['de'][i] >= 0 else i) for i, _ in mes)
+    return arroz, mes, caps, (cfg['paso_terraza'], cfg['muro_terraza'], cfg['altura_meseta'],
+                              cfg['limite_bosque'], round(limit(cfg), 5))
+
+
+def _smooth(np, a, b, x):
+    """smoothstep(a, b, x) (a > b: de bajada)."""
+    u = np.clip((x - a) / (b - a if abs(b - a) > 1e-12 else 1e-12), 0.0, 1.0)
+    return u * u * (3.0 - 2.0 * u)
+
+
+def _hibridos_terreno(np, rej, E, cfg, hib):
+    """Los hibridos de la naturaleza en el mapa de alturas E (lo cambia):
+      ARROZAL  dentro de la banda aterrazada (de la base a bancales x Pasoterraza,
+               sin pasar de Limitebosque) la altura se cuantiza:
+               h' = D floor(h/D) + D smoothstep(1 - m, 1, fract(h/D))
+               (D Pasoterraza, m Muroterraza): los bancales siguen las curvas de
+               nivel reales del monte, onduladas por el ruido de crestas
+      MESETA   el suelo sube Alturameseta por nivel con el borde vertical: cada
+               nivel es la isolinea de la ocupacion del SEQ2 interpolada entre
+               las celdas, y se contrae hacia la capital (x MESETA_K)
+    Devuelve dict(h0 relieve sin aterrazar, top tope de la banda, mesa nivel de
+    la meseta, filas con algo)."""
+    arroz, mes, caps, _ = hib
+    lim = limit(cfg)
+    D = max(1e-4, cfg['paso_terraza'] * lim)
+    m = cfg['muro_terraza']
+    lb, _ = _limites_pisos(cfg)
+    hmax = alto_hipso(cfg)
+    h0 = np.zeros_like(E)
+    top = np.zeros_like(E)
+    mesa = np.zeros_like(E)
+    filas = np.zeros(E.shape[0], dtype=bool)
+    for i, nb in arroz:
+        f_, c_ = _ventana(np, NORMALS[i], 0.8 * max(SIZE_EW[i], SIZE_NS[i]))
+        ix = np.ix_(f_, c_)
+        dentro = rej['celda'][ix] == i
+        h = E[ix].astype(np.float64)
+        tope = D * min(nb, int(lb * hmax / D))
+        banda = dentro & (h < tope)
+        q = h / D
+        fr = q - np.floor(q)
+        hq = D * np.floor(q) + D * _smooth(np, 1.0 - m, 1.0, fr)
+        E[ix] = np.where(banda, hq, h).astype(np.float32)
+        h0[ix] = np.where(dentro, h, h0[ix])
+        top[ix] = np.where(dentro, tope, top[ix])
+        filas[f_] = True
+    if mes:
+        nivel = dict(mes)
+        cap = dict(caps)
+        alt = cfg['altura_meseta'] * lim
+        for i, nv in mes:
+            c0 = cap.get(i, i)
+            grupo = [x for x in nivel if cap.get(x, x) == c0]
+            # cada nivel se contrae hacia la capital (la mas alta del grupo; a igualdad, la del cluster)
+            c = max(grupo, key=lambda x: (nivel[x], x == c0, -x))
+            otras = set(grupo)
+            for x in grupo:
+                otras.update(NEIGH[x])
+            celdas = sorted(otras)
+            Nc = np.array([NORMALS[x] for x in celdas])
+            L = np.array([float(nivel.get(x, 0)) for x in celdas])
+            tam = np.array([0.5 * (SIZE_EW[x] + SIZE_NS[x]) for x in celdas])
+            R0 = max(float(np.linalg.norm(np.array(NORMALS[x]) - np.array(NORMALS[c]))) +
+                     0.5 * (SIZE_EW[x] + SIZE_NS[x]) * 0.5 for x in grupo)
+            f_, c_ = _ventana(np, NORMALS[i], 0.75 * max(SIZE_EW[i], SIZE_NS[i]))
+            ix = np.ix_(f_, c_)
+            Dd = rej['D'][ix]
+            d2 = ((Dd[..., None, :] - Nc[None, None, :, :]) ** 2).sum(-1)
+            w = np.exp(-d2 / (0.42 * tam[None, None, :]) ** 2)
+            fld = (w * L[None, None, :]).sum(-1) / np.maximum(1e-9, w.sum(-1))
+            dcap = np.linalg.norm(Dd - np.array(NORMALS[c]), axis=-1)
+            sube = np.zeros(fld.shape)
+            for k in range(1, int(max(L)) + 1):
+                dentro = _smooth(np, k - 0.62, k - 0.5, fld)
+                if k > 1:
+                    Rk = R0 * MESETA_K ** (k - 1)
+                    dentro = dentro * _smooth(np, Rk + 0.012, Rk, dcap)
+                sube += dentro
+            mesa[ix] = np.maximum(mesa[ix], sube)
+            filas[f_] = True
+        E += (mesa * alt).astype(np.float32)
+    return dict(h0=h0.astype(np.float32), top=top.astype(np.float32), mesa=mesa.astype(np.float32),
+                filas=filas)
+
+
+_CULTIVOS = {}
+
+
+def cultivos(W, cfg, ter, por_celda, now, paso, cl=None):
+    """La textura de los cultivos (Script TOP 'cultivos', TERRENO_H x TERRENO_W x 4):
+    r el relieve sin aterrazar, g el tope de la banda aterrazada (0: sin bancales),
+    b desde donde se inunda (Riego: los bancales del lado del rio, en cascada desde
+    arriba, uno por paso; >= g: secos), a nivel de la meseta (0-3) + 10 si la
+    cruza una acequia. Devuelve dict(array, inundados {celda: n}, parcelas {celda: n})."""
+    np = _np()
+    rg = riego(W, cfg, ter, por_celda, now, paso)
+    hib = ter.get('hib')
+    clave = (ter['version'], tuple(sorted(rg.items())), cfg.get('riego', 1))
+    v = _CULTIVOS.get('v')
+    if v is not None and v[0] == clave:
+        return v[1]
+    inund = dict((i, x[1]) for i, x in rg.items())
+    out = dict(array=None, inundados=inund, parcelas={})
+    if np is None or hib is None:
+        _CULTIVOS['v'] = (clave, out)
+        return out
+    rej = _rejilla(np)
+    a = np.zeros((TERRENO_H, TERRENO_W, 4), dtype=np.float32)
+    a[..., 0] = hib['h0']
+    a[..., 1] = hib['top']
+    a[..., 2] = hib['top']
+    D = cfg['paso_terraza'] * limit(cfg)
+    for i, (lado, k) in rg.items():
+        f_, c_ = _ventana(np, NORMALS[i], 0.8 * max(SIZE_EW[i], SIZE_NS[i]))
+        ix = np.ix_(f_, c_)
+        dentro = (rej['celda'][ix] == i) & ((rej['D'][ix] - np.array(NORMALS[i])) @ np.array(lado) > 0.0)
+        tope = a[..., 1][ix]
+        a[..., 2][ix] = np.where(dentro, tope - k * D, a[..., 2][ix])
+    a[..., 3] = hib['mesa']
+    mes = ter.get('hibridos', {}).get('mesetas', {})
+    if mes:                                     # la acequia: el rio cerca de la meseta
+        for i in mes:
+            if any(c in por_celda for c in [i] + list(NEIGH[i])):
+                f_, c_ = _ventana(np, NORMALS[i], 0.75 * max(SIZE_EW[i], SIZE_NS[i]))
+                ix = np.ix_(f_, c_)
+                a[..., 3][ix] = np.where(a[..., 3][ix] > 0.5, a[..., 3][ix] + 10.0, a[..., 3][ix])
+            m_ = (rej['celda'] == i) & (hib['mesa'] > 0.5)
+            ys, xs = np.nonzero(m_)
+            out['parcelas'][i] = len(set(zip((xs // PARCELA_TEX).tolist(), (ys // PARCELA_TEX).tolist())))
+    out['array'] = a
+    _CULTIVOS['v'] = (clave, out)
+    return out
+
+
+HOJAS_TOPE = 300000         # el presupuesto de hojas: si no caben, todo con tarjetas de racimo (Impostores)
+_PRESUPUESTO = dict(lleno=False)
+RUTA_HOJAS = 'SOP'          # las hojas van en la malla de cada ejemplar (Script SOP), no en POPs
+PARCELA_TEX = 6             # una parcela de la meseta: 6 x 6 texeles del mapa (los setos, en el shader)
+
+
+def _miles(n):
+    return '%dk' % int(round(n / 1000.0)) if n >= 1000 else str(int(n))
+
+
+def cultivos_array():
+    """El array del Script TOP 'cultivos' (el ultimo calculado) o uno vacio."""
+    np = _np()
+    if np is None:
+        return None
+    v = _CULTIVOS.get('v')
+    if v is not None and v[1]['array'] is not None:
+        return v[1]['array']
+    return np.zeros((TERRENO_H, TERRENO_W, 4), dtype=np.float32)
 
 
 def _suelo_mapa(np, rej, S):
@@ -4372,59 +5039,223 @@ def _lejos_del_rio(cauce, d, r):
 
 _SITIOS = {}
 
+# --- que planta le toca a cada celda (fase 11 v8) ------------------------------------
+# Con Biomas, la latitud elige la familia (los polos, do1 y do8, frio; el centro
+# del registro, calido) y la semilla del motor (velocidad fundadora y celda, por
+# el mapa logistico) elige dentro de ella: la misma historia, la misma planta. El
+# piso montano fuerza la conifera; el rio de la fase 13 (en la celda o en una
+# vecina), el sauce en lo templado.
+BIOMAS = ['frio', 'templado', 'calido']
+BIOMA_PLANTAS = dict(frio=(['graminea', 'enebro'], ['conifera']),
+                     templado=(['retama', 'brezo'], ['frondosa', 'pagoda']),
+                     calido=(['helecho', 'palmito'], ['parasol', 'drago', 'palmera']))
+BIOMA_FRIO, BIOMA_CALIDO = 0.6, 0.25        # latitud relativa (0 ecuador, 1 polo)
+MONTANO = 0.35                              # el piso montano (v5): de aqui a Limitebosque, conifera
+SOTOBOSQUE_K = 0.6                          # el matorral al pie del arbol joven
+MATORRAL_K = 0.45                           # el matorral, de la altura de la formacion
+MESETA_K = 0.55                             # cada nivel de la meseta, 0,55 del de abajo hacia la capital
+EMERGE = (1.3, 1.6)                         # el emergente sobresale del dosel
+FRUTAL_K = 0.55                             # los frutales de la meseta, de la altura de la formacion
 
-def forma_arbol(cfg, h, pisos, ramas, ancho=1.0, ensanche=0.0, punta=False, pino=False, radio_max=None):
-    """Las piezas de un arbol de alto h, en su eje (la base en 0): [(modelo,
-    altura de la base, (ancho, alto, fondo), inclinacion, rumbo relativo en
-    grados, piso)], piso = -1 tronco, -2 rama, 0.. el piso de la copa.
-      tronco  fino y alto; se ve por debajo de la copa: Troncofrac x h
-      pisos   1 a Pisoscopa piezas planas que se estrechan hacia arriba; el de
-              abajo mide Anchocopa x h (x ancho: el vigor; pino, mas estrecho;
-              acacia, mas ancho) o 'ensanche' si es mayor (el bosque: llega a
-              las vecinas); cada uno girado PISOS_GIRO; 'punta': el de arriba
-              es un cono (el arbol emergente de la coronacion)
-      ramas   0 o 2 a 4 piezas finas que salen del tronco a Angulorama grados
-              y acaban bajo un piso (lo sostienen), repartidas alrededor
-    Como mucho 1 + 4 + 4 = 9 piezas. 'radio_max' (fase 13 v3): la copa no pasa
-    de ese radio (no tapa el rio que pasa al lado)."""
-    pisos = max(1, min(4, int(pisos)))
-    ramas = 0 if ramas <= 0 else max(2, min(4, int(ramas)))
-    tf = max(0.1, min(0.7, cfg['tronco_frac']))
-    a = math.radians(max(10.0, min(80.0, cfg['angulo_rama'])))
-    y0 = tf * h
-    hueco = (h - y0) / pisos
-    grueso = 0.32 * hueco                   # planos: se ve el hueco entre pisos
-    d0 = max(cfg['ancho_copa'] * h * ancho * (0.75 if pino else 1.15), ensanche)
-    if radio_max is not None:
-        d0 = min(d0, 2.0 * radio_max)
-    out = []
-    for k in range(pisos):
-        d = d0 * (1.0 - 0.6 * k / max(1, pisos - 1)) if pisos > 1 else d0
-        yb = y0 + k * hueco
-        if punta and k == pisos - 1:
-            out.append(('veg_cono', yb, (d * 0.8, h - yb + 0.35 * hueco, d * 0.8), 0.0, PISOS_GIRO * k, k))
-        else:
-            out.append(('veg_piso', yb, (d, grueso, d), 0.0, PISOS_GIRO * k, k))
-    alto_t = y0 + (pisos - 1) * hueco + grueso
-    w_t = max(0.012 * h, 0.07 * h * min(1.3, ancho))
-    out.insert(0, ('veg_tronco', 0.0, (w_t, alto_t, w_t), 0.0, 0.0, -1))
-    for j in range(ramas):
-        k = j % pisos                       # cada rama sostiene un piso, los de abajo primero
-        yb = y0 + k * hueco
-        r = 0.34 * (d0 * (1.0 - 0.6 * k / max(1, pisos - 1)) if pisos > 1 else d0)
-        largo = r / max(0.17, math.sin(a))
-        ys = yb - largo * math.cos(a)
-        if ys < RAMA_DESDE * y0:            # nace en el tercio superior del tronco visible
-            ys = RAMA_DESDE * y0
-            largo = (yb - ys) / max(0.17, math.cos(a))
-        out.append(('veg_rama', ys, (0.45 * w_t, largo, 0.45 * w_t), math.degrees(a),
-                    360.0 * j / ramas + 23.0 * k, -2))
+
+def bioma_de(i):
+    lat = abs(latitud(i)) / 90.0
+    return 'frio' if lat >= BIOMA_FRIO else ('calido' if lat < BIOMA_CALIDO else 'templado')
+
+
+def planta_de(W, cfg, i, arbol=True, hg=0.0, rio=False, k=0):
+    """El modelo de la planta k de la celda i (k 0: la principal)."""
+    xs = logistica(semilla_caos(W['vel'][i], i + 97 * k), cfg['caos'], 2)
+    if not cfg.get('biomas', 1):
+        lista = ARBOLES if arbol else MATORRALES
+    else:
+        b = bioma_de(i)
+        lista = BIOMA_PLANTAS[b][1 if arbol else 0]
+        if arbol:
+            lb, _ = _limites_pisos(cfg)
+            if MONTANO <= hg < lb:
+                lista = ['conifera']
+            elif b == 'templado' and rio:
+                lista = ['sauce']
+    return lista[min(len(lista) - 1, int(xs[0] * len(lista)))]
+
+
+def otra_planta(cfg, i, mo):
+    """El otro arbol del mismo bioma (la mezcla del bosque); None si no hay."""
+    lista = ARBOLES
+    if cfg.get('biomas', 1):
+        lista = next((v[1] for v in BIOMA_PLANTAS.values() if mo in v[1]), BIOMA_PLANTAS[bioma_de(i)][1])
+    otros = [x for x in lista if x != mo]
+    return otros[int(_hash01(i, 77) * len(otros))] if otros else None
+
+
+# --- los hibridos: mesetas construidas -----------------------------------------------
+# La piel cuenta las notas que la especie colonizadora deja en cada celda hibrida
+# (el estado del motor solo guarda las dos trazas, la fundadora y la ocupacion
+# total). La cuenta vive aqui, fuera de W: se rehace si la celda renace.
+_COLONAS = {}
+_MUROS = []                 # fase 14: los muros que caen como pedregal: [t, celda]
+
+
+def _contar_nota(W, i, s):
+    """Una nota de la especie s en la celda i ya ocupada (las presiones del
+    desborde no tallan bancales: no son notas en la celda)."""
+    if not 0 <= i < N or W['occ'][i] <= 0:
+        return
+    e = _COLONAS.get(i)
+    if e is None or e['t'] != W['t_nac'][i] or e['own'] != W['own'][i]:
+        e = _COLONAS[i] = dict(t=W['t_nac'][i], own=W['own'][i], n={GEO: 0, ARQ: 0})
+    e['n'][s] = e['n'].get(s, 0) + 1
+
+
+def notas_colonas(W, i):
+    """Notas de la especie colonizadora en la celda hibrida i (0 si no lo es).
+    Sin cuenta (el motor se recargo, un mundo hecho a mano o una celda que se
+    hizo hibrida por la presion de un desborde), una."""
+    if W['sp'][i] != HIB or W['occ'][i] <= 0:
+        return 0
+    e = _COLONAS.get(i)
+    otra = ARQ if W['own'][i] == GEO else GEO
+    if e is None or e['t'] != W['t_nac'][i] or e['own'] != W['own'][i]:
+        return 1
+    return e['n'].get(otra, 0)
+
+
+def _quitar_colona(W, i, now):
+    """Un golpe en una celda hibrida quita el bancal mas alto (o el nivel de
+    arriba de la meseta): en orden inverso a la promocion."""
+    if W['sp'][i] != HIB:
+        return
+    n = notas_colonas(W, i)
+    e = _COLONAS.get(i)
+    otra = ARQ if W['own'][i] == GEO else GEO
+    if e is None or e['t'] != W['t_nac'][i] or e['own'] != W['own'][i]:
+        e = _COLONAS[i] = dict(t=W['t_nac'][i], own=W['own'][i], n={GEO: 0, ARQ: 0})
+    e['n'][otra] = max(0, n - 1)
+    _MUROS.append([now if now is not None else 0.0, i])
+    del _MUROS[:-16]
+
+
+def bancales(W, cfg, i):
+    """Bancales del arrozal de la celda i (relieve colonizado por la vegetacion)."""
+    if W['own'][i] != ARQ or W['sp'][i] != HIB:
+        return 0
+    return min(int(cfg['max_terrazas']), int(round(cfg['terrazas_por_nota'] * notas_colonas(W, i))))
+
+
+def niveles_meseta(W, cfg, i):
+    """Niveles de la meseta-jardin de la celda i (vegetacion colonizada por el relieve)."""
+    if W['own'][i] != GEO or W['sp'][i] != HIB:
+        return 0
+    return min(int(cfg['max_niveles']), notas_colonas(W, i))
+
+
+_RIEGO = {}
+
+
+def riego(W, cfg, ter, cauces_, now, paso):
+    """{celda: (lado, inundados)} de los arrozales con un rio en la celda o en
+    una vecina: los bancales de ese lado se inundan en cascada desde arriba,
+    uno por paso desde que llego el agua."""
+    out = {}
+    if not cfg.get('riego', 1) or cfg['nivel'] < 13:
+        _RIEGO.clear()
+        return out
+    for i in range(N):
+        nb = bancales(W, cfg, i)
+        if nb <= 0:
+            continue
+        n = NORMALS[i]
+        lado = (0.0, 0.0, 0.0)
+        for c in [i] + list(NEIGH[i]):
+            for q, _ in cauces_.get(c, ()):
+                lado = _add(lado, _add(q, n, -1.0))
+        if _len(lado) < 1e-9:
+            _RIEGO.pop(i, None)
+            continue
+        t0 = _RIEGO.setdefault(i, now)
+        out[i] = (_norm(lado), min(nb, 1 + int(max(0.0, now - t0) / max(1e-6, paso))))
     return out
 
 
+# --- el bosque: disco de Poisson con timidez de copa -----------------------------------
+_POISSON = {}
+
+
+def _poisson(i, cw, cl, r, k=1.0, semilla=0):
+    """Puntos (x, z) de la celda i (en su plano tangente, en unidades del mundo)
+    separados al menos r, solo los que caen en la celda (la mas cercana): los
+    bosques de celdas vecinas encajan sin pisarse. k: la parte de la celda
+    (las etapas del dosel)."""
+    clave = (GRID['lo'], GRID['hi'], i, round(cw, 4), round(cl, 4), round(r, 4), round(k, 2), semilla)
+    v = _POISSON.get(clave)
+    if v is not None:
+        return v
+    import random
+    rng = random.Random(1009 * i + 7 * semilla + 3)
+    n = NORMALS[i]
+    e, t = tangents(n)
+    vecinas = list(NEIGH[i])
+    pts = []
+    for _ in range(40 * max(4, int((cw * cl) / max(1e-6, r * r)) + 4)):
+        x, z = rng.uniform(-0.75, 0.75) * cw * k, rng.uniform(-0.75, 0.75) * cl * k
+        # la celda mas cercana: el punto en la esfera unidad
+        q = _norm(_add(_add(n, e, x / (cw / max(1e-6, SIZE_EW[i]))), t, z / (cl / max(1e-6, SIZE_NS[i]))))
+        if any(_dot(q, NORMALS[j]) > _dot(q, n) for j in vecinas):
+            continue
+        if math.hypot(x / (0.5 * cw * k + 1e-9), z / (0.5 * cl * k + 1e-9)) > 1.25:
+            continue
+        if all((x - a) ** 2 + (z - b) ** 2 >= r * r for a, b in pts):
+            pts.append((x, z))
+    pts.sort(key=lambda p: (round(p[0], 6), round(p[1], 6)))
+    if len(_POISSON) > 4000:
+        _POISSON.clear()
+    _POISSON[clave] = pts
+    return pts
+
+
+def _marco_rejilla(i, cw, cl, sep, tresbolillo=True):
+    """Los frutales de la meseta en marco real o al tresbolillo, dentro de la celda."""
+    n = NORMALS[i]
+    e, t = tangents(n)
+    vecinas = list(NEIGH[i])
+    fila = sep * (math.sqrt(3.0) / 2.0 if tresbolillo else 1.0)
+    out = []
+    nz = int(0.7 * cl / max(1e-6, fila)) + 1
+    nx = int(0.7 * cw / max(1e-6, sep)) + 1
+    for a in range(-nz, nz + 1):
+        for b in range(-nx, nx + 1):
+            x = (b + (0.5 if tresbolillo and a % 2 else 0.0)) * sep
+            z = a * fila
+            q = _norm(_add(_add(n, e, x / (cw / max(1e-6, SIZE_EW[i]))), t, z / (cl / max(1e-6, SIZE_NS[i]))))
+            if any(_dot(q, NORMALS[j]) > _dot(q, n) - 1e-4 for j in vecinas):
+                continue
+            out.append((x, z))
+    return out
+
+
+def inclinacion_luz(W, cfg, i):
+    """(grados, rumbo): el ejemplar se inclina hasta Inclinacion hacia el lado
+    con menos vecinas ocupadas, como si buscara la luz."""
+    n = normal_i(i)
+    s = (0.0, 0.0, 0.0)
+    vac = 0
+    for j in NEIGH[i]:
+        if W['occ'][j] <= 0:
+            s = _add(s, _hacia(n, n, normal_i(j)))
+            vac += 1
+    if vac == 0 or _len(s) < 1e-6:
+        return 0.0, 0.0
+    k = min(1.0, _len(s) / max(1.0, 0.5 * len(NEIGH[i])))
+    return round(cfg.get('inclinacion', 8.0) * k * 2.0) / 2.0, round(_rumbo(n, _norm(s)))
+
+
 def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out, now, paso):
-    """La celda i con el tema naturaleza (vegetacion o relieve), con la escalera
-    nueva. ctx: lo comun del fotograma (clusters, terreno, cauces, sway)."""
+    """La celda i con el tema naturaleza (fase 11 v8): la vegetacion es una
+    sucesion de ejemplares de la biblioteca (matorral pionero, arbol joven,
+    adulto, arboleda, bosque y monte), con el bioma de su latitud; los hibridos
+    son mesetas construidas en el mapa de alturas (arrozal y meseta-jardin).
+    Devuelve el numero de ejemplares."""
     cl, ter = ctx['cl'], ctx['ter']
     own = W['own'][i]
     esp = especie_de('naturaleza', own)
@@ -4439,13 +5270,15 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
     k_ = cl['de'][i]
     ncl = len(cl['celdas'][k_]) if k_ >= 0 else 1
     cf, cc = cadenas_de(cfg, 'naturaleza', esp)
-    incl, rumbo = ctx['sway'](i)
-    marco = _marco(i, 0.0, incl, rumbo)
+    sway, rumbo_sw = ctx['sway'](i)
     cauce = ctx['cauces'].get(i, ())
     lb, _ = _limites_pisos(cfg)
-    cerca = ctx['cerca'](i)
+    lejos = cfg.get('impostores', 1) and not ctx['cerca'](i)
     esc_sat = cfg['sat_size'] if sat else 1.0
-    copas = 0
+    nv = W['vel'][i]
+    res = ctx['res']
+    cuenta = [0]
+    rio = ctx['rio_cerca'](i)
 
     def pintar(col):
         if fl > 0:                          # destello del nacimiento (no es un tinte)
@@ -4456,105 +5289,57 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
             col = _quemar(col, arde[i], int(now / paso * FOTOS_PASO + i) % 2)
         return col
 
-    def arbol(x, z, h, pisos, ramas, ensanche=0.0, punta=False):
-        """Un arbol de piezas (forma_arbol) en (x, z) de la celda, sobre el
-        terreno: pino (conico) desde el piso montano, acacia (ancho) en el basal.
-        Sin arbol sobre el limite del bosque ni sobre un rio."""
-        nonlocal copas
+    def sitio(x, z):
         clave = (i, round(x, 5), round(z, 5), S, ter['version'])
         v = _SITIOS.get(clave)
         if v is None:                       # el sitio y su suelo, una vez por mapa
             pt = _add(_add(p0, e, x), t, z)
             d = _norm(pt)
-            if len(_SITIOS) > 20000:
+            if len(_SITIOS) > 40000:
                 _SITIOS.clear()
             v = _SITIOS[clave] = (pt, d, alto_en(ter, d))
-        pt, d, E = v
-        if cauce and not _lejos_del_rio(cauce, d, 0.08 * min(cw, cl_) / max(1e-6, S)):
-            return False                    # el tronco no pisa el rio
-        radio_max = None
-        if cauce:                           # fase 13 v3: la copa tampoco lo tapa
-            radio_max = max(0.12 * min(cw, cl_), min(
-                math.sqrt(max(0.0, 2.0 * (1.0 - _dot(q_, d)))) * S - 0.5 * w_ * S - 0.03
-                for q_, w_ in cauce))
+        return v
+
+    def plantar(modelo, deriv, x, z, h, giro=0.0, incl=0.0, rumbo=0.0, var=None, recto=False):
+        """Un ejemplar de la biblioteca en (x, z) de la celda, sobre el terreno,
+        de alto h. Sin plantas sobre el limite del bosque ni sobre un rio; la
+        copa no tapa el rio que pasa al lado (fase 13 v3)."""
+        pt, d, E = sitio(x, z)
         hg = E / hmax
         if hg > lb:
-            return False
-        pino = hg >= 0.35
-        pb = _mul(d, _len(pt) + E)          # sobre la vertical de su sitio, en el terreno
-        giro0 = 15 * int(_hash01(i, int(1000 * x), int(1000 * z), 5) * 24)    # cada arbol, su giro
+            return None
+        if cauce and not _lejos_del_rio(cauce, d, 0.06 * min(cw, cl_) / max(1e-6, S)):
+            return None
+        nvar = variantes(cfg)
+        var = int(_hash01(i, int(1000 * x), int(1000 * z), 11) * nvar) if var is None else var % nvar
+        ej = ejemplar(cfg, modelo, var, deriv)
+        h *= kb
+        anch = 1.0 if recto else max(0.7, min(1.4, ancho))      # el vigor: tronco y alcance de copa
+        rmax = 0.62 * min(cw, cl_) if modelo in ARBOLES else 0.45 * min(cw, cl_)
+        if cauce:
+            rmax = min(rmax, max(0.10 * min(cw, cl_), min(
+                math.sqrt(max(0.0, 2.0 * (1.0 - _dot(q_, d)))) * S - 0.5 * w_ * S - 0.03 for q_, w_ in cauce)))
+        r_ej = max(1e-6, ej['radio'] * anch)
+        if h * r_ej > rmax and not recto:
+            h = rmax / r_ej
+        pb = _mul(d, _len(pt) + E)
+        g = round(giro) % 360
+        if cfg.get('cuantizar30', 0):
+            g = 30 * int(g // 30)
+        fr = _marco(i, float(g), incl + sway, rumbo if incl > 0 else rumbo_sw)
         col = pintar(color_natural(cfg, hg, rug))
-        madera = pintar(_mix(COL_TRONCO, color_piso(cfg, hg), 0.15))
-        lista = modelos_de(cfg, 'naturaleza', 'vegetacion', 'coronacion') or ['veg_piso', 'veg_cono']
-        n_ = max(1, min(4, int(pisos)))
-        for mo, y, dims, inc, rumbo_, k in forma_arbol(cfg, h * kb, pisos, ramas, ancho, ensanche * kb,
-                                                       punta, pino, radio_max):
-            if mo == 'veg_piso':
-                mo = lista[0]
-            elif mo == 'veg_cono' and len(lista) > 1:
-                mo = lista[1]
-            if k == -2:                     # rama: inclinada hacia su rumbo
-                fr = _marco(i, 0.0, inc + incl, (giro0 + rumbo_) % 360.0)
-            else:
-                fr = _marco(i, (giro0 + rumbo_) % 360.0, incl, rumbo)
-            if k < 0:                       # madera: siempre mate
-                emit(mo, pulido, _add(pb, n, y), fr, (dims[0] * esc_sat, dims[1], dims[2] * esc_sat), madera, 1.0)
-            else:                           # la copa: material de la velocidad; clara arriba
-                brillo = 0.86 + 0.28 * k / max(1, n_ - 1) if n_ > 1 else 1.0
-                emit(mo, pulido, _add(pb, n, y), fr, (dims[0] * esc_sat, dims[1], dims[2] * esc_sat),
-                     _tint(col, brillo), rug)
-        copas += 1
-        return True
+        emit(nombre_ejemplar(modelo, var, deriv, lejos), pulido, pb, fr,
+             (h * anch * esc_sat, h, h * anch * esc_sat), col, rug)
+        cuenta[0] += 1
+        res['hojas'] += len(ej['racimos']) if lejos else len(ej['hojas'])     # lejos: una tarjeta por racimo
+        res['todas'] += len(ej['hojas'])
+        res['ejemplares'] += 1
+        return h * ej['copa'] * anch
 
-    if esp == 'vegetacion':
-        pmax = max(1, min(4, int(cfg['pisos_copa'])))
-        bosque = (k_ >= 0 and ncl >= DOSEL_MIN) or (est >= 3 and not sat)
-        if sat:                                     # satelite: un arbol joven (1 o 2 pisos)
-            arbol(0.0, 0.0, vh * 0.8, 1 + (o >= 2), 2 if cerca else 0)
-        elif bosque:                                # bosque: el piso de abajo llega a las vecinas
-            kp = 1.0
-            if k_ >= 0 and 'puentes' in cf:         # el dosel se cierra con la etapa 'puentes'
-                kp = avance_etapa(W, i, 'et_f', cf.index('puentes') + 1, now, paso)
-            ens = (0.65 + 0.45 * kp) * max(cw, cl_)
-            if est >= 4:                            # coronacion: el emergente, en punta, sobre el dosel
-                tr = cumbre_tramos(cfg, o)
-                arbol(0.0, 0.0, vh * (CORONA_K + CORONA_TRAMO * tr), pmax, 4, ens, punta=True)
-            else:
-                arbol(0.0, 0.0, vh, pmax, 3, ens)
-        elif k_ >= 0 and cl['capital'][k_] == i and cf and W['et_f'][i] >= len(cf):
-            arbol(0.0, 0.0, vh * 1.1, pmax, 4)      # protagonista de los clusters de 2 y 3 celdas
-        elif est == 2:                              # ramificacion: el arbol y jovenes alrededor
-            arbol(0.0, 0.0, vh, pmax, 3)
-            nn = 2 + min(2, o - int(cfg['th_branch']))
-            caos = o <= int(cfg['max_caos_nat'])
-            xs = logistica(semilla_caos(W['vel'][i], i), cfg['caos'], 3 * (nn + 1)) if caos else None
-            for q in range(1, nn + 1):
-                if caos:                            # el caos solo mueve y escala los jovenes
-                    a_, b_, c_ = xs[3 * q:3 * q + 3]
-                    g, r_, esc = 2 * math.pi * a_, 0.30 + 0.10 * b_, 0.42 + 0.16 * c_
-                else:                               # orden: repartidos alrededor
-                    g, r_, esc = 2 * math.pi * q / nn + 0.4, 0.36, 0.5
-                arbol(math.cos(g) * r_ * cw, math.sin(g) * r_ * cl_, vh * esc, 1 + (q % 2), 2 if cerca else 0)
-        elif est == 1:                              # crecimiento: el tronco sube y se anaden pisos
-            arbol(0.0, 0.0, vh, min(pmax, o), min(o, 4))
-        else:                                       # semilla: brote, tronco corto y un piso
-            arbol(0.0, 0.0, vh, 1, 0)
-        if W['sp'][i] == HIB:                       # el relieve coloniza: terrazas de basalto
-            hib = modelos_de(cfg, 'naturaleza', esp, 'hibrido')
-            if hib:
-                E = alto_en(ter, n)
-                dims = _pie(hib[0], vh * kb, cw * esc_sat * kb, cl_ * esc_sat * kb)
-                col = material_tema(cfg, _mix(color_piso(cfg, 0.8), COL_BASALTO_PIE, 0.5), 'mineral', rug)
-                emit(hib[0], pulido, _add(p0, n, E), _marco(i), dims, pintar(col), rug)
-        if k_ >= 0 and 'esporas' in cf and W['et_f'][i] >= cf.index('esporas') + 1 \
-                and now - W['t_et_f'][i] < ESPORAS_PASOS * paso:
-            _particulas(out.setdefault('particulas', []), n, _add(p0, n, alto_en(ter, n)), cw, cl_, vh,
-                        semilla_caos(i, 3), 6, COL_ESPORA, now, paso, 'esporas')
-    else:                                           # relieve: el cono esta en el mapa
+    if esp != 'vegetacion':                         # relieve: el cono esta en el mapa
         if est <= 2:                                # columnas de basalto en las laderas bajas
-            xs = logistica(semilla_caos(W['vel'][i], i + 300), 3.91, 15)
-            dmo = modelos_de(cfg, 'naturaleza', esp, 'semilla') or ['rel_columna']
-            mo = dmo[0]
+            xs = logistica(semilla_caos(nv, i + 300), 3.91, 15)
+            mo = (modelos_de(cfg, 'naturaleza', esp, 'semilla') or ['rel_columna'])[0]
             for q in range(5):
                 a, b, c_ = xs[3 * q:3 * q + 3]
                 g, r_ = 2 * math.pi * (q + a) / 5.0, 0.30 + 0.12 * b
@@ -4563,17 +5348,232 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
                 E = alto_en(ter, d)
                 hh = vh * (0.22 + 0.16 * c_) * kb
                 w_ = 0.13 * min(cw, cl_) * esc_sat
-                col = material_tema(cfg, _mix(color_piso(cfg, E / hmax), COL_BASALTO_PIE, 0.55),
-                                    'mineral', rug)
+                col = material_tema(cfg, _mix(color_piso(cfg, E / hmax), COL_BASALTO_PIE, 0.55), 'mineral', rug)
                 emit(mo, pulido, _add(_add(_add(p0, e, x), t, z), n, E - 0.25 * hh), _marco(i, 60.0 * q),
                      (w_ / ANCHO.get(mo, 1.0), hh, w_ / ANCHO.get(mo, 1.0)), pintar(col), rug)
-        if W['sp'][i] == HIB:                       # la vegetacion coloniza: el bosque sube por la ladera
-            for q in range(8):
-                a, b, c_ = (_hash01(i, q, 61), _hash01(i, q, 62), _hash01(i, q, 63))
-                g, r_ = 2 * math.pi * a, 0.12 + 0.36 * b
-                arbol(math.cos(g) * r_ * cw, math.sin(g) * r_ * cl_, (0.25 + 0.15 * c_) * limit(cfg), 2,
-                      2 if cerca else 0)
-    return copas
+        _pedregal(W, cfg, i, p0, n, cw, cl_, vh, rug, emit, now, paso)
+        return cuenta[0]
+
+    # ---------------------------------------------------------------- vegetacion
+    hg0 = ter['centro'][i] / hmax
+    arbol_mo = planta_de(W, cfg, i, True, hg0, rio)
+    mata_mo = planta_de(W, cfg, i, False)
+    if k_ >= 0:                                     # el bosque del cluster: el modelo de la capital
+        cap = cl['capital'][k_]
+        if cap != i and W['own'][cap] == GEO:
+            arbol_mo = planta_de(W, cfg, cap, True, ter['centro'][cap] / hmax, ctx['rio_cerca'](cap))
+    caos = o <= int(cfg['max_caos_nat'])
+    xs = logistica(semilla_caos(nv, i), cfg['caos'], 24)
+    if caos:                                        # el caos elige variante, giro y escala
+        var0, giro0, esc0 = int(xs[0] * 64), 360.0 * xs[1], 0.9 + 0.2 * xs[2]
+    else:
+        var0, giro0, esc0 = int(_hash01(i, 5) * 64), 360.0 * _hash01(i, 6), 1.0
+    incl0, rumbo0 = inclinacion_luz(W, cfg, i)
+    deriv_full = DERIVACIONES
+    h_ref = height_for(cfg, o) * esc_sat
+    meseta = niveles_meseta(W, cfg, i)
+    if sat:                                         # satelite: matorral o arbol joven
+        if o <= 1:
+            plantar(mata_mo, 1, 0.0, 0.0, vh * MATORRAL_K * 1.4, giro0, incl0, rumbo0, var0)
+        else:
+            plantar(arbol_mo, 2, 0.0, 0.0, vh * 0.8, giro0, incl0, rumbo0, var0)
+    elif meseta:                                    # meseta-jardin: la vegetacion se ordena
+        ej = ejemplar(cfg, arbol_mo, 0, deriv_full)
+        h = vh * FRUTAL_K
+        sep = max(2.0 * h_ref * FRUTAL_K * ej['copa'] * 1.05, 0.16 * min(cw, cl_))
+        for q, (x, z) in enumerate(_marco_rejilla(i, cw, cl_, sep, int(cfg.get('marco', 1)) == 1)):
+            if plantar(arbol_mo, deriv_full, x, z, h * (0.95 + 0.1 * _hash01(i, q, 31)), 0.0, 0.0, 0.0,
+                       var0, recto=True):
+                res['frutales'][i] = res['frutales'].get(i, 0) + 1
+    elif est >= 3 or (k_ >= 0 and ncl >= DOSEL_MIN):    # bosque de ejemplares reales
+        kp = 1.0
+        if k_ >= 0 and 'puentes' in cf:             # el bosque llena la celda con la etapa 'puentes'
+            kp = avance_etapa(W, i, 'et_f', cf.index('puentes') + 1, now, paso)
+        ej = ejemplar(cfg, arbol_mo, 0, deriv_full)
+        h = vh * esc0
+        # el disco se mide con la altura de la ocupacion, no con la visible: el latido
+        # y el stop-motion no mueven los arboles de sitio
+        r = max(0.08 * min(cw, cl_), h_ref * esc0 * ej['copa'] * (1.0 + cfg['timidez']))
+        otra = otra_planta(cfg, i, arbol_mo)
+        for q, (x, z) in enumerate(_poisson(i, cw, cl_, r, 0.75 + 0.25 * kp, int(cfg.get('variantes', 4)))):
+            u = _hash01(i, q, 41)
+            mo = otra if otra and _hash01(i, q, 42) < cfg['mezcla'] else arbol_mo
+            hh = h * (0.82 + 0.22 * u)
+            if _hash01(i, q, 43) < cfg['emergentes']:
+                hh = h * (EMERGE[0] + (EMERGE[1] - EMERGE[0]) * _hash01(i, q, 44))
+                res['emergentes'] += 1
+            plantar(mo, deriv_full, x, z, hh, 360.0 * _hash01(i, q, 45), incl0 * 0.5, rumbo0, var0 + q)
+        if cfg.get('orla', 1):                      # la orla: matorral en el borde del bosque
+            for j in NEIGH[i]:
+                if W['occ'][j] > 0 and W['own'][j] == GEO:
+                    continue
+                dj = _hacia(n, n, normal_i(j))
+                bx, bz = _dot(dj, e), _dot(dj, t)
+                for s in (-1, 1):
+                    x = 0.40 * cw * bx - 0.18 * s * cw * bz
+                    z = 0.40 * cl_ * bz + 0.18 * s * cl_ * bx
+                    plantar(mata_mo, 1, x, z, vh * MATORRAL_K * 0.9, 120.0 * s + giro0, 0.0, 0.0, var0 + s)
+    elif est == 2:                                  # arboleda: ejemplares desiguales y matorral entre ellos
+        nn = min(7, 3 + 2 * (o - int(cfg['th_branch'])) + int(2 * xs[3]))
+        pts = [(0.0, 0.0)]
+        ej = ejemplar(cfg, arbol_mo, 0, deriv_full)
+        rr = 0.55 * h_ref * ej['copa']
+        for q in range(60):
+            if len(pts) >= nn:
+                break
+            a_, b_ = (xs[4 + q % 18], xs[5 + (q * 7) % 18]) if caos else (_hash01(i, q, 51), _hash01(i, q, 52))
+            g_ = 2 * math.pi * ((a_ + 0.618 * q) % 1.0)
+            r_ = 0.18 + 0.24 * ((b_ + 0.382 * q) % 1.0)
+            x, z = math.cos(g_) * r_ * cw, math.sin(g_) * r_ * cl_
+            if all((x - a) ** 2 + (z - b) ** 2 >= rr * rr for a, b in pts):
+                pts.append((x, z))
+        for q, (x, z) in enumerate(pts):
+            esc = 1.0 if q == 0 else 0.55 + 0.4 * _hash01(i, q, 53)
+            plantar(arbol_mo, deriv_full, x, z, vh * esc * esc0, giro0 + 97.0 * q, incl0, rumbo0, var0 + q)
+        for q in range(len(pts) - 1):               # matorral entre ellos
+            (x0, z0), (x1, z1) = pts[q], pts[q + 1]
+            plantar(mata_mo, 1, 0.5 * (x0 + x1), 0.5 * (z0 + z1), vh * MATORRAL_K * 0.8, 53.0 * q, 0.0, 0.0,
+                    var0 + q)
+    elif k_ >= 0 and cl['capital'][k_] == i and cf and W['et_f'][i] >= len(cf):
+        plantar(arbol_mo, deriv_full, 0.0, 0.0, vh * 1.1, giro0, incl0, rumbo0, var0)   # protagonista
+    elif est == 1:                                  # arbol joven (2 derivaciones) o adulto (completa)
+        deriv = derivacion(W, cfg, i, now, paso)
+        plantar(arbol_mo, deriv, 0.0, 0.0, vh * esc0, giro0, incl0, rumbo0, var0)
+        if deriv < deriv_full:                      # el matorral se queda al pie como sotobosque
+            ex = 0.30 * min(cw, cl_)
+            plantar(mata_mo, 1, ex * math.cos(math.radians(giro0)), ex * math.sin(math.radians(giro0)),
+                    vh * MATORRAL_K * SOTOBOSQUE_K * 1.6, giro0 + 60.0, 0.0, 0.0, var0)
+    else:                                           # matorral pionero del bioma
+        plantar(mata_mo, 1, 0.0, 0.0, vh * MATORRAL_K * 1.6, giro0, incl0, rumbo0, var0)
+    res['biomas'][bioma_de(i)] += 1
+    if meseta:
+        _pedregal(W, cfg, i, p0, n, cw, cl_, vh, rug, emit, now, paso)
+    if k_ >= 0 and 'esporas' in cf and W['et_f'][i] >= cf.index('esporas') + 1 \
+            and now - W['t_et_f'][i] < ESPORAS_PASOS * paso:
+        _particulas(out.setdefault('particulas', []), n, _add(p0, n, alto_en(ter, n)), cw, cl_, vh,
+                    semilla_caos(i, 3), 6, COL_ESPORA, now, paso, 'esporas')
+    return cuenta[0]
+
+
+def radio_copa(geometria, fila):
+    """Radio de la copa (en el mundo) de una fila de ejemplar (fase 13: la copa no
+    tapa el rio). 0 si la geometria no es un ejemplar."""
+    nm = geometria[4:] if geometria.startswith('mod_') else geometria
+    if not es_ejemplar(nm):
+        return 0.0
+    mo, var, d, _ = parte_ejemplar(nm)
+    return ejemplar(DEFAULT_CFG, mo, var, d)['copa'] * abs(fila[6])
+
+
+def silueta(cfg, nombre, px=18, ancho=None):
+    """La silueta de un ejemplar vista de lado a 'px' pixeles de alto (la prueba
+    a distancia de la lamina): set de (columna, fila), fila 0 abajo. ancho: la
+    escala horizontal (por defecto, la del alto)."""
+    P, _, _, T = malla_ejemplar(nombre, cfg)
+    k = (px - 1) / 1.0
+    out = set()
+    for a, b, c in T:
+        pa, pb, pc = P[a], P[b], P[c]
+        for u, v in ((0, 0), (1, 0), (0, 1), (0.5, 0), (0, 0.5), (0.5, 0.5), (0.33, 0.33)):
+            x = pa[0] + (pb[0] - pa[0]) * u + (pc[0] - pa[0]) * v
+            y = pa[1] + (pb[1] - pa[1]) * u + (pc[1] - pa[1]) * v
+            out.add((int(round(x * k * (ancho or 1.0))), int(round(y * k))))
+    return out
+
+
+def iou(a, b):
+    """Interseccion sobre union de dos siluetas (centradas en su eje)."""
+    return len(a & b) / float(max(1, len(a | b)))
+
+
+_NAT_CACHE = {}
+NAT_CFG = ('nivel', 'caos', 'max_caos_nat', 'th_branch', 'th_fusion', 'th_crown', 'limite_bosque', 'biomas',
+           'variantes', 'var_angulo', 'cuantizar30', 'inclinacion', 'densidad_hoja', 'timidez', 'emergentes',
+           'orla', 'mezcla', 'impostores', 'marco', 'sat_size', 'avance', 'pasos_etapa', 'max_niveles',
+           'rug_min', 'rug_max', 'limite_nieve', 'respaldo', 'lod_nat', 'superficie')
+
+
+def piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out, now, paso, doble):
+    """piel_natural con memoria por celda (fase 11 v8): las filas de la celda solo
+    se rehacen si cambia algo de lo que la decide; si no, se copian. Las celdas
+    que cambian con el tiempo (fuego, esporas, muros que caen) no se guardan."""
+    k_ = ctx['cl']['de'][i]
+    cf = cadenas_de(cfg, 'naturaleza', especie_de('naturaleza', W['own'][i]))[0]
+    vivo = i in arde or any(c == i and 0 <= now - t0 < PEDREGAL_PASOS * paso for t0, c in _MUROS) or \
+        (k_ >= 0 and 'esporas' in cf and W['et_f'][i] >= cf.index('esporas') + 1
+         and now - W['t_et_f'][i] < ESPORAS_PASOS * paso)
+    if vivo:
+        return piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out, now, paso)
+    cap = ctx['cl']['capital'][k_] if k_ >= 0 else -1
+    kp = avance_etapa(W, i, 'et_f', cf.index('puentes') + 1, now, paso) if k_ >= 0 and 'puentes' in cf else 1.0
+    clave = (W['occ'][i], W['own'][i], W['sp'][i], W['vel'][i], W['par'][i], round(vh, 5), kb, round(fl, 3),
+             sat, round(rug, 4), round(ancho, 4), pulido, doble, cap, len(ctx['cl']['celdas'][k_]) if k_ >= 0 else 1,
+             W['vel'][cap] if cap >= 0 else 0, W['own'][cap] if cap >= 0 else 0, round(kp, 3), W['et_f'][i],
+             tuple((W['occ'][j] > 0) * W['own'][j] for j in NEIGH[i]), ctx['ter']['version'],
+             tuple(ctx['cauces'].get(i, ())), ctx['rio_cerca'](i), ctx['cerca'](i), ctx['sway'](i),
+             derivacion(W, cfg, i, now, paso), notas_colonas(W, i), ctx['bases'][i],
+             tuple(cfg.get(x) for x in NAT_CFG), _clave_biblio(cfg), GRID['lo'], GRID['hi'])
+    v = _NAT_CACHE.get(i)
+    res = ctx['res']
+    if v is not None and v[0] == clave:
+        _, filas, d, n = v
+        for g, f in filas:
+            out.setdefault(g, []).append(list(f))
+        emit.contar(len(filas))
+        for k, x in d.items():
+            if k == 'biomas':
+                for b, y in x.items():
+                    res['biomas'][b] += y
+            elif k == 'frutales':
+                res['frutales'].update(x)
+            else:
+                res[k] += x
+        return n
+    antes = dict((k, (dict(x) if isinstance(x, dict) else x)) for k, x in res.items())
+    marcas = dict((g, len(f)) for g, f in out.items() if isinstance(f, list))
+    n = piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out, now, paso)
+    filas = []
+    for g, f in out.items():
+        if isinstance(f, list) and len(f) > marcas.get(g, 0) and g != 'particulas':
+            filas += [(g, tuple(x)) for x in f[marcas.get(g, 0):]]
+    d = {}
+    for k, x in res.items():
+        if k == 'biomas':
+            d[k] = dict((b, x[b] - antes[k][b]) for b in x)
+        elif k == 'frutales':
+            d[k] = dict((c, y) for c, y in x.items() if c == i)
+        else:
+            d[k] = x - antes[k]
+    if len(_NAT_CACHE) > 4 * N:
+        _NAT_CACHE.clear()
+    _NAT_CACHE[i] = (clave, filas, d, n)
+    return n
+
+
+def derivacion(W, cfg, i, now, paso):
+    """Derivacion visible del arbol de la celda i: 2 el joven (ocupacion 2), la
+    completa el adulto. Avance = gates: cada gate que sube la ocupacion anade una
+    derivacion; Avance = pasos: la nueva aparece Pasosetapa pasos despues."""
+    o = W['occ'][i]
+    obj = max(1, min(DERIVACIONES, o))
+    if int(cfg.get('avance', 0)) == 1 and now - W['t_h'][i] < cfg['pasos_etapa'] * paso:
+        return max(1, obj - 1)
+    return obj
+
+
+PEDREGAL_PASOS = 8          # el muro caido se ve 8 pasos
+
+
+def _pedregal(W, cfg, i, p0, n, cw, cl, vh, rug, emit, now, paso):
+    """Fase 14: los muros del bancal o de la meseta que quita un golpe caen como pedregal."""
+    if cfg['nivel'] < 14:
+        return
+    for t0, c in _MUROS:
+        if c == i and 0 <= now - t0 < PEDREGAL_PASOS * paso:
+            col = material_tema(cfg, COL_RUINA['relieve'], 'mineral', rug)
+            w_ = 0.35 * min(cw, cl)
+            emit('rel_pedregal', True, _add(p0, n, alto_en(_TERRENO.get('t') or {}, n)), _marco(i, 30.0),
+                 (w_, 0.25 * vh, w_), col, rug)
 
 
 # -----------------------------------------------------------------------------
@@ -6569,11 +7569,31 @@ def cfg():
                  lod_nat=max(0.0, _p('Lodnat', c['lod_nat'])),
                  tinte_borde_nat=max(0.0, _p('Tintebordenat', c['tinte_borde_nat'])),
                  superficie=int(str(_p('Modocamara', 'globo')) == 'superficie'),
-                 # motor v48: arboles de pisos
-                 pisos_copa=max(1, min(4, int(_p('Pisoscopa', c['pisos_copa'])))),
-                 ancho_copa=max(0.05, _p('Anchocopa', c['ancho_copa'])),
-                 angulo_rama=max(10.0, min(80.0, _p('Angulorama', c['angulo_rama']))),
-                 tronco_frac=max(0.1, min(0.7, _p('Troncofrac', c['tronco_frac']))))
+                 # fase 11 v8: brotes, arboles y terrazas
+                 biomas=int(bool(_p('Biomas', True))),
+                 variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
+                 var_angulo=max(0.0, min(45.0, _p('Varangulo', c['var_angulo']))),
+                 cuantizar30=int(bool(_p('Cuantizar30', False))),
+                 inclinacion=max(0.0, min(30.0, _p('Inclinacion', c['inclinacion']))),
+                 densidad_hoja=max(1, min(30, int(_p('Densidadhoja', c['densidad_hoja'])))),
+                 traslucidez=max(0.0, min(1.0, _p('Traslucidez', c['traslucidez']))),
+                 timidez=max(0.0, min(1.0, _p('Timidez', c['timidez']))),
+                 emergentes=max(0.0, min(1.0, _p('Emergentes', c['emergentes']))),
+                 orla=int(bool(_p('Orla', True))),
+                 mezcla=max(0.0, min(1.0, _p('Mezcla', c['mezcla']))),
+                 impostores=int(bool(_p('Impostores', True))),
+                 terrazas_por_nota=max(0.0, _p('Terrazaspornota', float(c['terrazas_por_nota']))),
+                 max_terrazas=max(1, min(16, int(_p('Maxterrazas', c['max_terrazas'])))),
+                 paso_terraza=max(0.02, min(0.5, _p('Pasoterraza', c['paso_terraza']))),
+                 muro_terraza=max(0.05, min(0.9, _p('Muroterraza', c['muro_terraza']))),
+                 riego=int(bool(_p('Riego', True))),
+                 color_cultivo=(max(0.0, _p('Colorcultivor', c['color_cultivo'][0])),
+                                max(0.0, _p('Colorcultivog', c['color_cultivo'][1])),
+                                max(0.0, _p('Colorcultivob', c['color_cultivo'][2]))),
+                 altura_meseta=max(0.0, min(1.0, _p('Alturameseta', c['altura_meseta']))),
+                 max_niveles=max(1, min(6, int(_p('Maxniveles', c['max_niveles'])))),
+                 marco=_menu('Marco', MARCOS, 1),
+                 setos=int(bool(_p('Setos', True))))
     if c['nivel'] >= 12:
         c.update(material_modo=_menu('Materialmodo', MATERIALES, 1),
                  rug_min=max(0.0, min(1.0, _p('Rugmin', c['rug_min']))),
@@ -6923,6 +7943,14 @@ def terreno_al_dia_td(W, c):
             o.cook(force=True)
         except Exception as e:
             print('AVISO  alturas: %s' % e)
+    cu = parent().op('cultivos')            # fase 11 v8: bancales, riego y mesetas
+    v = _CULTIVOS.get('v')
+    if cu is not None and v is not None and _CACHE.get('cultivos_v') is not v[1]:
+        _CACHE['cultivos_v'] = v[1]
+        try:
+            cu.cook(force=True)
+        except Exception as e:
+            print('AVISO  cultivos: %s' % e)
     filas = rampa_filas(c)
     tab = parent().op('rampa_hipso_claves')
     if tab is not None and _CACHE.get('rampa') != filas:
@@ -6946,6 +7974,13 @@ def uniformes_piel(W, c, now):
     u['uPisos'] = (lb, ln, 0.65 if nat else 0.0, 0.0)
     u['uBorde'] = (c.get('tinte_borde_nat', 0.0) if nat else 0.0, 0.0, 0.0, 0.0)
     u['uAgua'] = (c.get('emisivo_rio', 0.25), 0.0, 0.0, 0.0)
+    if c['nivel'] >= 11:                    # fase 11 v8: hojas, bancales y mesetas
+        cc = c.get('color_cultivo', DEFAULT_CFG['color_cultivo'])
+        u['uHojas'] = (c.get('traslucidez', 0.35) if nat else 0.0, 0.0, 0.0, 0.0)
+        u['uCultivo'] = (cc[0], cc[1], cc[2], c.get('paso_terraza', 0.12) * limit(c))
+        u['uBancal'] = (c.get('muro_terraza', 0.25), float(c.get('setos', 1)), float(PARCELA_TEX),
+                        c.get('altura_meseta', 0.15) * limit(c))
+        u['uRiego'] = tuple(_mix(color_rio(c), (0.45, 0.50, 0.52), 0.35)) + (0.0,)
     focos = focos_tinte(W, c, now) if nat else []
     for k in range(3):
         if k < len(focos):
@@ -7157,6 +8192,20 @@ def on_value(name, val):
             parent().par.Showgrid = not bool(val)
         except Exception:
             pass
+    elif name in ('Variantes', 'Varangulo', 'Cuantizar30', 'Densidadhoja'):    # fase 11 v8
+        c = cfg()
+        biblioteca(c)                   # se precalcula de nuevo
+        if VARIANTES_TD and int(c['variantes']) > VARIANTES_TD:
+            print('FASE11  Variantes %d: hay geometria para %d; relanza fase11_piel.py para las demas'
+                  % (int(c['variantes']), VARIANTES_TD))
+        mo = parent().op('modelos')
+        for o in (mo.findChildren(name='veg_*', depth=1) if mo is not None else []):
+            s = o.op('malla')
+            if s is not None:
+                try:
+                    s.cook(force=True)
+                except Exception:
+                    pass
     elif name == 'Escena':              # fase 18: cargar la escena elegida
         n = cargar_escena(str(val))
         print('ESCENA  %s cargada (%d parametros)' % (val, n))
@@ -7371,6 +8420,10 @@ def radio_encuadre(W, cfg):
 def _ext_modelo(modelo):
     """Semiejes (x, y, z) de un modelo del catalogo, desde su origen."""
     v = _EXT.get(modelo)
+    if v is None and es_ejemplar(modelo):     # fase 11 v8: un ejemplar de la biblioteca
+        mo, var, d, _ = parte_ejemplar(modelo)
+        r = ejemplar(DEFAULT_CFG, mo, var, d)['radio']
+        v = _EXT[modelo] = (r, 1.0, r)
     if v is None:
         b = _caja_modelo(MODELOS[modelo])
         v = _EXT[modelo] = (max(abs(b[0]), abs(b[1])), max(abs(b[2]), abs(b[3])),
@@ -7738,9 +8791,29 @@ def _legend():
                      % (tema_de(c), pz.get('clusters', 0), pz.get('max', 0), pz.get('compuestos', 0),
                         pz.get('piezas', 0), pz.get('obras', 0), pz.get('medias', 0)))
         if 'copas' in pz:                       # fase 11 v5: la naturaleza legible
-            lines.append('  NATURA   copas %d   montes %d   cordilleras %d   cumbres nevadas %d   detalle %s'
-                         % (pz['copas'], pz['montes'], pz['cordilleras'], pz['nevadas'],
-                            'cerca (%d celdas)' % pz['cerca'] if pz['cerca'] else 'globo'))
+            b = pz.get('biomas', {})            # fase 11 v8: la biblioteca de ejemplares
+            lines.append('  NATURALEZA  biomas F/T/C %d/%d/%d   ejemplares %d   %s hojas %s/%s'
+                         % (b.get('frio', 0), b.get('templado', 0), b.get('calido', 0), pz.get('ejemplares', 0),
+                            RUTA_HOJAS, _miles(pz.get('hojas', 0)), _miles(HOJAS_TOPE)))
+            lines.append('  NATURA   montes %d   cordilleras %d   cumbres nevadas %d   emergentes %d   detalle %s'
+                         % (pz['montes'], pz['cordilleras'], pz['nevadas'], pz.get('emergentes', 0),
+                            'cerca (%d celdas)' % pz['cerca'] if pz['cerca'] else 'globo (impostores)'
+                            if c.get('impostores', 1) else 'globo'))
+            hb = pz.get('hibridos', {})
+            for i_, nb in sorted(hb.get('arrozales', {}).items())[:2]:
+                lines.append('  ARROZAL  celda %d   bancales %d/%d   inundados %d'
+                             % (i_, nb, int(c['max_terrazas']), pz.get('inundados', {}).get(i_, 0)))
+            mes = hb.get('mesetas', {})
+            if mes:
+                cl_ = clusters(W, c)
+                grupos = {}
+                for i_, nv in mes.items():
+                    grupos.setdefault(cl_['de'][i_], []).append(i_)
+                for k_, cs in sorted(grupos.items())[:2]:
+                    lines.append('  MESETA   cluster %s   niveles %d/%d   frutales %d   parcelas %d'
+                                 % (k_ if k_ >= 0 else '-', max(mes[x] for x in cs), int(c['max_niveles']),
+                                    sum(pz.get('frutales', {}).get(x, 0) for x in cs),
+                                    sum(pz.get('parcelas', {}).get(x, 0) for x in cs)))
     if lvl >= 12:
         md = W['ev'].get('mod')
         modo = MATERIALES[int(c['material_modo'])] + ('   RESPALDO (Phong)' if c['respaldo'] else '')

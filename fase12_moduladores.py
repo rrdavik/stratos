@@ -47,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v6  (autoprueba: el material de la velocidad va a la copa de los arboles de pisos)'
+VERSION = 'fase12 v7  (autoprueba: cuenta las geometrias de la biblioteca de ejemplares de la fase 11 v8)'
 banner(VERSION)
 
 base = require_base(12)
@@ -122,7 +122,8 @@ def _prueba(t, m):
     dobles = [o.name for o in base.children if o.name.startswith('mod_')
               and (o.name.endswith('_pul') or o.name.endswith('_por'))]
     t.check('una geometria por modelo (%d), sin las pulidas y porosas de la fase 11' % len(geos),
-            len(geos) == len(m.MODELOS) and all(base.op(g) is not None for g, _, _ in geos) and not dobles,
+            len(geos) == len(m.MODELOS) + len(m.ejemplares_de(c))      # fase 11 v8: y la biblioteca
+            and all(base.op(g) is not None for g, _, _ in geos) and not dobles,
             '%d duplicadas' % len(dobles))
     malas = []
     for g, mo, mat in geos:
@@ -180,9 +181,9 @@ def _prueba(t, m):
                 if g.startswith('mod_') and abs(sum(f[q] * m.normal_i(i)[q] for q in range(3))
                                                 - m.base_radius(W, m.cfg(), i)) < 1e-6:
                     principal = principal or f
-        if pulso == 'Sembrar':                          # fase 11 v6: la copa del arbol (el piso de abajo);
-            principal = next((f for g, fs in sorted(inst.items())     # el tronco es siempre mate
-                              if g.startswith('mod_veg_piso') for f in fs), principal)
+        if pulso == 'Sembrar':                          # fase 11 v8: un ejemplar de la biblioteca (la
+            principal = next((f for g, fs in sorted(inst.items())     # corteza es mate en el shader)
+                              if g.startswith('mod_veg_') and m.es_ejemplar(g[4:]) for f in fs), principal)
         if principal is None and pulso == 'Sembrar2':   # fase 11 v5: el relieve es la malla; sus
             principal = next((f for g, fs in sorted(inst.items())      # columnas, en las laderas
                               if g.startswith('mod_rel_') for f in fs), None)

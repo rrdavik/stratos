@@ -35,6 +35,9 @@ uniform TDMatrix uTDMats[1];
 in vec3 P;
 in vec3 N;
 in vec4 Cd;
+in vec3 uv0;
+#define uv uvTD
+vec3 uvTD[1];
 in vec3 iT;
 in vec3 iR;
 in vec3 iS;
@@ -48,7 +51,7 @@ mat3 tdRot(vec3 r)
     mat3 rz = mat3(cos(a.z), sin(a.z), 0.0, -sin(a.z), cos(a.z), 0.0, 0.0, 0.0, 1.0);
     return rz * ry * rx;
 }
-vec4 TDDeform(vec3 p) { return vec4(tdRot(iR) * (p * iS) + iT, 1.0); }
+vec4 TDDeform(vec3 p) { uvTD[0] = uv0; return vec4(tdRot(iR) * (p * iS) + iT, 1.0); }
 vec3 TDDeformNorm(vec3 n) { return tdRot(iR) * (n / iS); }
 vec4 TDWorldToProj(vec4 w) { return uViewProj * w; }
 vec4 TDInstanceColor(vec4 c) { return iC * c; }
@@ -84,18 +87,23 @@ def compilar(ctx):
     return ctx.program(vertex_shader=TD_VERTEX + v, fragment_shader=TD_PIXEL + p)
 
 
-def malla(m, prims):
-    """Triangulos con normal plana: (n, 6) = posicion y normal."""
-    tris = vp.mallas_de(m, prims)
+def malla(m, prims, c=None):
+    """Triangulos con normal plana: (n, 9) = posicion, normal y uv. prims: las
+    piezas de un modelo o, desde la fase 11 v8, el nombre de un ejemplar."""
+    if isinstance(prims, str):
+        tris, uvs = vp.malla_ejemplar(m, prims, c)
+    else:
+        tris = vp.mallas_de(m, prims)
+        uvs = np.zeros((len(tris), 3))
     out = []
-    for t in tris:
+    for t, u in zip(tris, uvs):
         n = np.cross(t[1] - t[0], t[2] - t[0])
         ln = np.linalg.norm(n)
         if ln < 1e-12:
             continue
         n = n / ln
         for q in t:
-            out.append(np.concatenate([q, n]))
+            out.append(np.concatenate([q, n, u]))
     return np.array(out, dtype='f4')
 
 
@@ -170,6 +178,19 @@ def escena_natural(m):
     for k in range(120):
         t += 1 / 30.0
         m.tick(W, c, t, 120.0, True)
+    # fase 11 v8: arrozal (5 notas del SEQ1 en la cumbre de la cordillera) y
+    # meseta-jardin (2 notas del SEQ2 en el bosque)
+    for _ in range(5):
+        m.note_on(W, c, m.GEO, m.cell_note(fila[1]), 100, t, 120.0)
+    veg = [x for x in [i] + list(m.NEIGH[i]) if W['own'][x] == m.GEO]
+    if veg:
+        i = veg[0]
+        for x in [i] + [y for y in m.NEIGH[i] if W['own'][y] == m.GEO][:2]:
+            for _ in range(2 if x == i else 1):
+                m.note_on(W, c, m.ARQ, m.cell_note(x), 100, t, 120.0)
+    for k in range(60):
+        t += 1 / 30.0
+        m.tick(W, c, t, 120.0, True)
     m.note_on(W, c, m.GEO, m.cell_note(i), 100, t, 120.0)       # la nota: el borde se tine
     return c, W, t, fila, i
 
@@ -190,7 +211,7 @@ def esfera(filas=256, cols=512):
             c_, d = a + cols + 1, b + cols + 1
             tri += [a, b, d, a, d, c_]
     P = v[np.array(tri)]
-    return np.concatenate([P, P], axis=1).astype('f4')
+    return np.concatenate([P, P, np.zeros_like(P)], axis=1).astype('f4')
 
 
 def texturas(ctx, m, c):
@@ -202,7 +223,10 @@ def texturas(ctx, m, c):
     fil = np.array([list(m.color_piso(c, x / 255.0)) + [1.0] for x in range(256)], dtype='f4')
     ram = ctx.texture((256, 1), 4, fil.tobytes(), dtype='f4')
     ram.repeat_x = ram.repeat_y = False
-    return alt, ram, len(claves)
+    cu = m.cultivos_array()                     # fase 11 v8: bancales, riego y mesetas
+    cul = ctx.texture((cu.shape[1], cu.shape[0]), 4, cu.astype('f4').tobytes(), dtype='f4')
+    cul.repeat_x, cul.repeat_y = True, False
+    return alt, ram, len(claves), cul
 
 
 def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
@@ -233,9 +257,12 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
         if k in prog:
             prog[k].value = v
     if terreno is not None and 'uTerreno' in prog:      # fase 11 v5: la malla del relieve
-        alt, ram, _ = terreno
+        alt, ram, _, cul = terreno
         alt.use(0)
         ram.use(1)
+        cul.use(2)
+        if 'sCultivo' in prog:
+            prog['sCultivo'].value = 2
         if 'sAlturas' in prog:
             prog['sAlturas'].value = 0
         if 'sRampa' in prog:
@@ -246,7 +273,7 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
         vbo = ctx.buffer(esf.tobytes())
         ibo = ctx.buffer(np.array([[0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]], dtype='f4').tobytes())
         cd = ctx.buffer(np.ones((len(esf), 4), dtype='f4').tobytes())
-        vao = ctx.vertex_array(prog, [(vbo, '3f 3f', 'P', 'N'), (cd, '4f', 'Cd'),
+        vao = ctx.vertex_array(prog, [(vbo, '3f 3f 3f', 'P', 'N', 'uv0'), (cd, '4f', 'Cd'),
                                       (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
         vao.render(instances=1)
         prog['uTerreno'].value = (0.0, 1.0, 0.0, 1.0)
@@ -255,12 +282,12 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
         if not filas or 'uFamilia' not in prog:
             continue
         prog['uFamilia'].value = (fam, 0, 0, 0)
-        tri = malla(m, [('caja', 0.0, 0.5, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0)])
+        tri = malla(m, [('caja', 0.0, 0.5, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0)], c)
         vbo = ctx.buffer(tri.tobytes())
         datos = np.array([list(f[:12]) + [f[12] if len(f) > 12 else 1.0] for f in filas], dtype='f4')
         ibo = ctx.buffer(datos.tobytes())
         cd = ctx.buffer(np.ones((len(tri), 4), dtype='f4').tobytes())
-        vao = ctx.vertex_array(prog, [(vbo, '3f 3f', 'P', 'N'), (cd, '4f', 'Cd'),
+        vao = ctx.vertex_array(prog, [(vbo, '3f 3f 3f', 'P', 'N', 'uv0'), (cd, '4f', 'Cd'),
                                       (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
         vao.render(instances=len(filas))
     for g, mo, mat in m.geometrias_piel(c):
@@ -270,12 +297,12 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
         if 'uFamilia' in prog:
             prog['uFamilia'].value = (float(m.FAMILIAS.index(m.familia_de(mo))) if mo[:3] != 'ciu' else 0.0,
                                       0, 0, 0)
-        tri = malla(m, m.MODELOS[mo])
+        tri = malla(m, mo if m.es_ejemplar(mo) else m.MODELOS[mo], c)
         vbo = ctx.buffer(tri.tobytes())
         datos = np.array([list(f[:12]) + [f[12] if len(f) > 12 else 1.0] for f in filas], dtype='f4')
         ibo = ctx.buffer(datos.tobytes())
         cd = ctx.buffer(np.ones((len(tri), 4), dtype='f4').tobytes())
-        vao = ctx.vertex_array(prog, [(vbo, '3f 3f', 'P', 'N'), (cd, '4f', 'Cd'),
+        vao = ctx.vertex_array(prog, [(vbo, '3f 3f 3f', 'P', 'N', 'uv0'), (cd, '4f', 'Cd'),
                                       (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
         vao.render(instances=len(filas))
     img = np.frombuffer(fbo.read(components=3), dtype='u1').reshape(lado, lado, 3)[::-1]
@@ -308,6 +335,7 @@ def main():
     if hasattr(m, 'terreno'):                   # fase 11 v5: la naturaleza legible, cerca y lejos
         c, W, now, cord, bosque = escena_natural(m)
         m.terreno(W, c)
+        m.build_instances(W, c, now)
         tex = texturas(ctx, m, c)
         mid = m._norm(m._add(m.normal_i(cord[2]), m.normal_i(bosque)))
         R = m.top_radius(W, c)
@@ -316,9 +344,11 @@ def main():
             img, inst = dibujar(ctx, prog, m, c, W, now, cam, m._mul(mid, R * 0.6), terreno=tex)
             imgs.append(img)
         pz = W['piel']
-        print('       naturaleza legible: %d copas, %d montes, %d cordilleras, %d cumbres nevadas, '
-              'rios %d (%d lagos)' % (pz['copas'], pz['montes'], pz['cordilleras'], pz['nevadas'],
-                                      W['rios_res']['rios'], W['rios_res']['lagos']))
+        print('       naturaleza legible: %d ejemplares (%d hojas), %d montes, %d cordilleras, %d cumbres '
+              'nevadas, rios %d (%d lagos), arrozales %s, mesetas %s'
+              % (pz['ejemplares'], pz['hojas'], pz['montes'], pz['cordilleras'], pz['nevadas'],
+                 W['rios_res']['rios'], W['rios_res']['lagos'], pz['hibridos']['arrozales'],
+                 pz['hibridos']['mesetas']))
     filas_img = [fila(imgs[0], imgs[1]), fila(imgs[2], imgs[3])]
     if len(imgs) >= 6:
         filas_img.append(fila(imgs[4], imgs[5]))

@@ -67,7 +67,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v4  (rios mas vivos: azul claro y saturado, orilla clara, emisivo 0,6, 4 px)'
+VERSION = 'fase13 v5  (autoprueba: las copas de los ejemplares de la fase 11 v8 no tapan el rio)'
 banner(VERSION)
 
 base = require_base(13)
@@ -409,17 +409,20 @@ def _prueba_v3(t, m):
     inst = m.build_instances(W, c, absTime.seconds + 10.0)
     cauces = m.cauces(W, c)['por_celda']
     tapan = 0
-    for g, fs in inst.items():
-        if g.startswith('mod_veg_piso'):
-            for f in fs:
-                r_ = math.sqrt(sum(v * v for v in f[:3]))
-                d = tuple(v / r_ for v in f[:3])
-                if any(math.sqrt(max(0.0, 2.0 * (1.0 - sum(d[k] * q[k] for k in range(3))))) * r_ < 0.5 * f[6]
-                       for lista in cauces.values() for q, _ in lista):
-                    tapan += 1
-    t.check('un bosque alrededor: ningun piso de arbol encima de la cinta (%d pisos)'
-            % sum(len(v) for g, v in inst.items() if g.startswith('mod_veg_piso')), tapan == 0,
-            '%d pisos encima' % tapan)
+    copas = 0
+    for g, fs in inst.items():                  # fase 11 v8: las copas de los ejemplares
+        for f in fs:
+            rc = m.radio_copa(g, f)
+            if rc <= 0:
+                continue
+            copas += 1
+            r_ = math.sqrt(sum(v * v for v in f[:3]))
+            d = tuple(v / r_ for v in f[:3])
+            if any(math.sqrt(max(0.0, 2.0 * (1.0 - sum(d[k] * q[k] for k in range(3))))) * r_ < 0.5 * rc
+                   for lista in cauces.values() for q, _ in lista):
+                tapan += 1
+    t.check('un bosque alrededor: ninguna copa de arbol encima de la cinta (%d copas)' % copas,
+            tapan == 0 and copas > 0, '%d copas encima' % tapan)
     # 5. un mundo casi plano: con Pendientemin bajo, la celda mas alta del cluster de relieve es fuente
     Wp = m.new_world()
     zona_ = [i] + list(m.NEIGH[i])
