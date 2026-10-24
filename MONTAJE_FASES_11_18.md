@@ -443,7 +443,7 @@ Comprueba:
 4. **Lado de sombra: sí.** Usaban el material mineral sin emisivo: en la cara oscura del globo el azul (y además oscuro: `(0,12 0,26 0,56)`) se volvía negro.
 
 **Qué cambia.**
-- **Azul reservado:** OKLCH 0,55 · 0,15 · 255 (`Colorrio`), distinto del cian de las cicatrices y del ámbar del SEQ2. Su banda (235°–275°) sale de la paleta de conchas, como el cian y el ámbar.
+- **Azul reservado:** OKLCH 0,55 · 0,15 · 255 (`Colorrio`; desde la v4, 0,65 · 0,18 · 250), distinto del cian de las cicatrices y del ámbar del SEQ2. Su banda (235°–275°) sale de la paleta de conchas, como el cian y el ámbar.
 - **Sin tintes:** los ríos van en su geometría (`rios`) con su material (`mat_piel_agua`, familia 4 del shader): ignoran el tinte de celda, de pad y de concha y el borde tintado de la naturaleza.
 - **Cinta, no caja:** una cinta continua (una curva Catmull-Rom troceada en tramos planos de 6 milésimas) apoyada en el suelo local más el relieve, con un desfase de 2,5 centésimas (algo más en las laderas). Cruza cada celda por sus bordes y a 0,36 anchos de celda de su centro: **bordea** la formación y la loseta de luz en vez de pasar por debajo. En los bosques, las copas que pisarían el río no se dibujan.
 - **Ancho por caudal:** cada tramo suma los ríos que confluyen en él: de `Anchorio` a `Anchomaxrio`.
@@ -463,10 +463,10 @@ ANTES DE RELANZAR  Nivel 19
                    fix de los rios azules (fase 13 v2): aplicado
 DIAGNOSTICO DE LOS RIOS
   OK     1. Nivel 19
-  OK     2. fase 13 fase13 v3; parametros de los rios presentes
+  OK     2. fase 13 fase13 v4; parametros de los rios presentes
   OK     3. el motor genera 4 tramos (4 fuentes, 2 lagos, caudal max 1)
   OK     4. i_rios con 40 instancias; rios en el render
-  OK     5. cintas de 4.4 px (Anchominpx 2.0), azul reservado, mat_piel_agua sin errores, sin copas encima, a 0.025 del suelo
+  OK     5. cintas de 4.4 px (Anchominpx 4.0), azul reservado, mat_piel_agua sin errores, sin copas encima, a 0.025 del suelo
 ```
 
 Recorre los puntos del encargo en orden y **para en el primero que falla** (marcado `FALLA`: es el estado del mundo, no un fallo del script):
@@ -479,16 +479,16 @@ Recorre los puntos del encargo en orden y **para en el primero que falla** (marc
 **Lo que se encontró en simulación** (con los valores del proyecto de la hoja Estratos_parametros: `Shellthick` 0,26, `Alturafactor` 8, `Growstep` 0,04…): el motor genera ríos en todo momento (de 6 a 11, con 6 a 12 tramos en una sesión de 6 minutos) y miden de 4 a 5 px a 720 px de alto. Así que, si en TouchDesigner no se ven, falla un punto anterior al 3 (nivel o versión aplicados) o uno de representación (4 o 5). La hoja dice además que el proyecto estaba en el nivel 8 cuando se hizo; sin la fase 13 no hay ríos. Y un hueco real en el punto 5: desde los árboles de pisos (fase 11 v6), el piso de abajo del bosque se ensancha hasta las vecinas y podía tapar la cinta desde arriba.
 
 **Cambios.**
-- **`Anchominpx`** (2 px): el río nunca mide menos en pantalla con la cámara de globo (el planeta a `Encuadre` del alto de un cuadro de 720 px), se calcule como se calcule su ancho en mundo.
+- **`Anchominpx`** (2 px; 4 desde la v4): el río nunca mide menos en pantalla con la cámara de globo (el planeta a `Encuadre` del alto de un cuadro de 720 px), se calcule como se calcule su ancho en mundo.
 - **Por encima de todo lo bajo:** la cinta sigue a 2,5 centésimas sobre el suelo y el relieve (más en las laderas), sobre la loseta y lejos del centro de la celda. Nuevo: **los pisos de los árboles se recortan** para no pasar por encima del río (como mucho hasta su orilla), y ningún tronco lo pisa.
-- **Azul que se lee:** el color reservado (`Colorrio`) y el emisivo (`Emisivorio`), sin cambios.
+- **Azul que se lee:** el color reservado (`Colorrio`) y el emisivo (`Emisivorio`), sin cambios en la v3 (la v4 los aviva, ver *Ríos más vivos*).
 - **`Pendientemin`** (0,01 × el límite; antes fijo en 0,05): el relieve mínimo de una fuente. Y la celda más alta de cada cluster de relieve es fuente siempre, aunque el mundo sea casi plano.
 - **`Pruebario`** (pulso): levanta una cordillera de 5 celdas en el anillo de `Nota2` (con notas del SEQ2, como `Sembrar2`) y dice en el Textport el río que baja de su cumbre y su ancho en píxeles. Si con eso no se ve un río azul desde el globo, el fallo está en la representación, no en el motor.
 - **Leyenda:** `RIOS     tramos 6   fuentes 3   lagos 0   caudal max 1   ancho 4.9 px`.
 
 **Autoprueba (v3):** `Pruebario` da una cordillera y un río azul que baja de la cumbre y mide al menos `Anchominpx`; con `Anchominpx` 6 la cinta mide 6 px; tras `Pruebario` los cinco puntos del diagnóstico salen `OK`; con un bosque alrededor ningún piso de árbol queda encima de la cinta; en un mundo casi plano la celda más alta del cluster de relieve es fuente; y la línea `RIOS` de la leyenda.
 
-**Parámetros nuevos (página Fase13):** `Anchominpx` 2 px · `Pendientemin` 0,01 · `Pruebario`.
+**Parámetros nuevos (página Fase13):** `Anchominpx` 2 px (4 desde la v4) · `Pendientemin` 0,01 · `Pruebario`.
 
 ### Ríos más vivos (fase 13 v4, motor v51, comun v35)
 
@@ -500,6 +500,11 @@ Con la v3 los ríos se ven, pero poco destacados. La v4 los hace más vivos sin 
 - **`Anchominpx` 4 px** (antes 2).
 - **Shader del agua:** fresnel y especular más fuertes.
 - **Migración:** al relanzar la fase 13, `Emisivorio`, `Anchominpx` y `Colorrio` toman los valores nuevos solo si seguían en los de antes; si los habías cambiado, se quedan como estaban.
+- **Diagnóstico:** `i_rios` tiene el doble de instancias (cada tramo con su orilla); el punto 5 acepta el azul del río y el de la orilla.
+
+**Autoprueba (v4):** el color de `Colorrio` es el nuevo; la mitad de las filas de `rios` son orilla, más anchas que su tramo; los cinco puntos del diagnóstico siguen saliendo `OK` tras `Pruebario`.
+
+**Para aplicarla:** copia `estratos_motor.py`, `estratos_comun.py` y `fase13_tejido.py` y ejecuta `fase13_tejido.py`. Si aún los quieres más intensos, sube `Emisivorio` (0,8–1); más anchos, `Anchominpx` (6).
 
 ---
 
@@ -1040,6 +1045,8 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | Ancho mínimo en píxeles (`Anchominpx`) sobre un cuadro de 720 px | Subir `Anchorio` | El planeta crece con las conchas: un ancho en mundo acaba bajo el píxel |
 | La cumbre de cada cluster de relieve es fuente siempre; `Pendientemin` como parámetro | Fuentes solo con relieve de 0,05 × el límite | Con un mundo muy plano no nacía ningún río |
 | `Pruebario` con notas del SEQ2 | Escribir el mundo a mano | Respeta las reglas del motor (desborde, clusters, cadenas) |
+| Ríos más vivos (v4): azul más claro y saturado y orilla clara bajo la cinta | Solo subir `Emisivorio` | El emisivo solo aplana el azul; el contraste de la orilla lo despega del suelo y del dosel |
+| Migrar `Emisivorio`, `Anchominpx` y `Colorrio` solo si seguían por defecto | Forzar los valores nuevos | Respeta lo que hayas ajustado a mano |
 
 ### Decisiones tomadas en la fase 14
 
@@ -1156,7 +1163,7 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 13. **Escenas (fase 18)**: que cada escena se ve como se espera y que guardar y cargar no tocan el mundo; que los focos de obra, las brasas y el polvo se leen como luz (mezcla aditiva de `mat_luz_local`) y no tapan nada; con la sesión real de 20 minutos, los fotogramas con el máximo de piezas.
 14. **Modular (fase 19)**: decidir cómo llegan los voltajes (OSC o un CHOP) y comprobar en la leyenda `MODULAR` que llegan y en qué rango. Que la niebla de la cámara existe (página Fog de `camara`; si no, solo la piel tiene niebla) y que el glitch no molesta a la lectura con saturación baja.
 15. **Naturaleza legible (fase 11 v5)**: que `mat_piel_tierra` compila (clic derecho → Info) y que su página Samplers tiene `sAlturas` = `alturas` y `sRampa` = `rampa_hipso`; que `alturas` es de 32 bits float y que las montañas salen hacia fuera y en su sitio (si salen del revés en latitud, el Script TOP voltea la imagen: dímelo y lo invierto); que `modelos/veg_conifera/cono` tiene la punta arriba; a distancia de globo, que una cordillera nevada se distingue de un bosque y que el borde se enciende con la nota. Medir los fotogramas cuando cambia la ocupación de una montaña (se rehace el mapa).
-16. **Ríos azules (fase 13 v2 y v3)**: aplicar `fase13_tejido.py` y pegarme el bloque `ANTES DE RELANZAR` y `DIAGNOSTICO DE LOS RIOS`; pulsar `Pruebario` y mirar el río desde el globo (si no se ve azul con la línea `PRUEBARIO` correcta, el fallo es de representación); que se ven también en la cara de sombra (si no, sube `Emisivorio`) y que los lagos llenan las hondonadas sin tapar las cicatrices.
+16. **Ríos azules (fase 13 v2, v3 y v4)**: aplicar `fase13_tejido.py` y pegarme el bloque `ANTES DE RELANZAR` y `DIAGNOSTICO DE LOS RIOS`; pulsar `Pruebario` y mirar el río desde el globo (si no se ve azul con la línea `PRUEBARIO` correcta, el fallo es de representación); que se ven también en la cara de sombra (si no, sube `Emisivorio` de 0,6 hacia 1), que la orilla clara los separa del bosque sin parecer nieve y que los lagos llenan las hondonadas sin tapar las cicatrices.
 
 ### Problemas frecuentes
 

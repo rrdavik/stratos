@@ -117,7 +117,7 @@ geo = make_instanced(base, 'tejido', 520, 940, 'mat_piel_mineral')
 if not setp_any(geo, ['instancea'], 'a'):
     fail('tejido no lee la rugosidad: Instance 2 -> Color A = a')
 setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else 'mat_piel_mineral'")
-# v2: los rios, en su geometria, con el material del agua (azul reservado, emisivo bajo)
+# v2: los rios, en su geometria, con el material del agua (azul reservado; v4: mas vivo y con orilla clara)
 geo = make_instanced(base, 'rios', 520, 860, 'mat_piel_agua')
 if not setp_any(geo, ['instancea'], 'a'):
     fail('rios no lee la rugosidad: Instance 2 -> Color A = a')
@@ -396,7 +396,7 @@ def _prueba_v3(t, m):
     base.par.Anchominpx = 2.0
     t.check('Anchominpx: el rio nunca mide menos en pantalla (6 px -> %.1f px)' % px6, px6 >= 6.0 - 1e-6)
     # 3. el diagnostico de la cadena llega al punto 5 sin fallos
-    diag = diagnostico_rios(base, m, 'fase13 v3')
+    diag = diagnostico_rios(base, m, 'fase13 v4')
     t.check('diagnostico de los rios: los cinco puntos OK tras Pruebario',
             [d[1] for d in diag] == [1, 2, 3, 4, 5] and all(d[0] == 'OK' for d in diag),
             '; '.join('%s %d %s' % d for d in diag if d[0] != 'OK'))
