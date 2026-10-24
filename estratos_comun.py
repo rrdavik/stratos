@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v35'
+VERSION_COMUN = 'comun v36'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -566,7 +566,7 @@ def onPulse(par):
 
 
 def onValueChange(par, prev):
-    if par.name in ('Modoactuacion', 'Escena'):
+    if par.name in ('Modoactuacion', 'Escena', 'Variantes', 'Varangulo', 'Cuantizar30', 'Densidadhoja'):
         op('motor').module.on_value(par.name, par.eval())
     return
 '''
@@ -683,6 +683,7 @@ out Vertex {
     vec3 oPos;
     vec3 pPos;
     float hrel;
+    vec3 hoja;
     flat int inst;
     flat int camIndex;
 } oVert;
@@ -727,6 +728,9 @@ void main()
     oVert.oPos = p;
     oVert.pPos = (uTDMats[TDCameraIndex()].worldInverse * wPos).xyz;
     oVert.hrel = h;
+    // fase 11 v8: el uv de los ejemplares (tipo: 1 corteza, 2 hoja, 3 tarjeta de
+    // racimo; profundidad en la copa; nivel de rama, para el viento)
+    oVert.hoja = uv[0];
     oVert.color = TDInstanceColor(Cd);
 #else
     TDWritePickingValues();
@@ -758,6 +762,11 @@ uniform vec4 uTinte2;
 uniform vec4 uTinteCol2;
 uniform vec4 uAgua;         // x emisivo del agua (Emisivorio)
 uniform sampler2D sRampa;   // los pisos de color (Ramp TOP rampa_hipso)
+uniform vec4 uHojas;        // fase 11 v8: x Traslucidez
+uniform vec4 uCultivo;      // rgb Colorcultivo, w Pasoterraza (unidades del mundo)
+uniform vec4 uBancal;       // x Muroterraza, y Setos, z texeles por parcela, w alto de un nivel de meseta
+uniform vec4 uRiego;        // rgb el agua de los bancales (el azul de rio con menos croma)
+uniform sampler2D sCultivo; // r relieve sin aterrazar, g tope de los bancales, b desde donde se inunda, a meseta (+10 acequia)
 
 in Vertex {
     vec4 color;
@@ -766,6 +775,7 @@ in Vertex {
     vec3 oPos;
     vec3 pPos;
     float hrel;
+    vec3 hoja;
     flat int inst;
     flat int camIndex;
 } iVert;
@@ -817,6 +827,11 @@ vec3 rampa(float h)
     return mix(c, mix(vec3(0.92, 0.94, 0.97), vec3(1.0), smoothstep(ln, 1.0, h)), step(ln - 0.001, h));
 }
 
+vec2 uvMapa(vec3 d)
+{
+    return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+}
+
 vec3 foco(vec4 t, vec4 c, vec3 d)
 {
     return c.rgb * smoothstep(t.w, c.w, dot(d, t.xyz));
@@ -865,11 +880,72 @@ void main()
         ks = mix(0.30, 0.02, rug);
         amb = 1.15;
         sombra = max(sombra, 0.65);
+        // fase 11 v8: los hibridos son mesetas construidas
+        vec2 tuv = uvMapa(normalize(iVert.oPos));
+        vec4 cu = texture(sCultivo, tuv);
+        float muro = 1.0 - smoothstep(0.55, 0.80, abs(dot(nf, normalize(iVert.wPos))));
+        float lejos = clamp(fwidth(cu.r) / max(1e-4, uCultivo.w) * 1.5, 0.0, 1.0);
+        if (cu.g > 1e-4 && cu.r < cu.g && uCultivo.w > 1e-5) {
+            // ARROZAL: bancales por la curva de nivel (la huella verde arroz, la
+            // contrahuella de piedra seca), surcos de cerca, lamina de agua si se riega
+            float fr = fract(cu.r / uCultivo.w);
+            float m = clamp(uBancal.x, 0.05, 0.9);
+            float contra = smoothstep(1.0 - m, 1.0 - m + 0.04, fr) * (1.0 - smoothstep(0.96, 1.0, fr));
+            float surco = mix(0.9 + 0.1 * step(0.5, fract(cu.r / uCultivo.w * 7.0)), 0.95, lejos);
+            vec3 huella = uCultivo.rgb * surco;
+            if (cu.b < cu.g - 1e-5 && cu.r >= cu.b) {
+                float planton = step(0.78, ruido(iVert.pPos * 60.0));
+                huella = mix(uRiego.rgb, uCultivo.rgb * 0.8, planton * (1.0 - lejos));
+                rug = mix(0.08, rug, contra);
+                expo = mix(110.0, expo, contra);
+                ks = mix(1.2, ks, contra);
+                sombra = mix(0.0, sombra, contra);
+            }
+            base = mix(huella, vec3(0.52, 0.47, 0.40) * mix(0.85, 1.1, ruido(iVert.pPos * 30.0)), contra);
+        } else if (cu.a > 0.5) {
+            // MESETA-JARDIN: muro vertical de piedra seca, pradera arriba, setos
+            // que dividen las parcelas y, con un rio cerca, una acequia azul
+            float acequia = step(9.5, cu.a);
+            vec2 pc = tuv * vec2(textureSize(sCultivo, 0)) / max(1.0, uBancal.z);
+            vec2 g = fract(pc);
+            float linea = 1.0 - step(0.07, min(min(g.x, 1.0 - g.x), min(g.y, 1.0 - g.y)));
+            vec3 pradera = vec3(0.36, 0.56, 0.24) * mix(0.9, 1.08, ruido(iVert.pPos * 12.0));
+            pradera = mix(pradera, vec3(0.10, 0.25, 0.10), linea * step(0.5, uBancal.y));
+            float canal = acequia * (1.0 - step(0.08, abs(g.x - 0.5))) * (mod(floor(pc.x), 3.0) < 0.5 ? 1.0 : 0.0);
+            pradera = mix(pradera, uRiego.rgb, canal);
+            base = mix(pradera, vec3(0.52, 0.47, 0.40), muro);
+            rug = mix(0.85, 0.08, canal);
+        }
     } else if (agua) {
         rug = clamp(iVert.color.a, 0.02, 1.0);
         expo = 90.0;
         ks = 1.4;
         sombra = 0.0;
+    } else if (vegetal && iVert.hoja.x > 0.5) {
+        // fase 11 v8: los ejemplares de la biblioteca. Corteza mate y parda; la
+        // hoja facetada (el pliegue coge la luz), +-12 % de valor y +-2 % de tono
+        // por hoja, mas oscura dentro de la copa y mas clara arriba
+        vec3 nf = normalize(cross(dFdx(iVert.wPos), dFdy(iVert.wPos)));
+        if (dot(nf, v) < 0.0)
+            nf = -nf;
+        if (iVert.hoja.x < 1.5) {
+            float fibra = ruido(vec3(q.x * 3.0, q.y * 0.35, q.z * 3.0));
+            base = mix(vec3(0.17, 0.12, 0.08), base, 0.15) * mix(0.75, 1.1, fibra);
+            rug = 1.0;
+            expo = 8.0;
+            ks = 0.02;
+            wrap = 0.2;
+        } else {
+            float var = fract(iVert.hoja.x);
+            float prof = clamp(iVert.hoja.y, 0.0, 1.0);
+            base *= (0.88 + 0.27 * var) * (1.0 - 0.38 * prof) * (0.90 + 0.22 * clamp(iVert.oPos.y, 0.0, 1.0));
+            base = mix(base, base.gbr * vec3(1.0, 0.96, 1.0), 0.04 * (var - 0.45));
+            n = normalize(mix(n, nf, 0.6));
+            expo = mix(36.0, 8.0, rug);
+            ks = mix(0.30, 0.02, rug);
+            wrap = 0.5;
+        }
+        amb = 1.5;
     } else if (vegetal) {
         // vegetal: hojas en manchas anchas de dos verdes (nada de lineas finas);
         // las caras de lado (troncos, ramas, bordes de copa), mas pardas y oscuras;
@@ -908,6 +984,12 @@ void main()
         // agua: el azul se lee tambien en la cara de sombra (emisivo) y brilla en el
         // borde y con la luz (comun v35: mas vivo)
         col += base * uAgua.x + fres * vec3(0.25, 0.35, 0.45) + spec * 0.5;
+    } else if (vegetal && iVert.hoja.x > 1.5) {
+        // fase 11 v8: a contraluz el borde de la copa se vuelve traslucido y calido
+        // (amarillo verdoso, Traslucidez); dentro de la copa, no
+        vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
+        float tras = pow(max(dot(-l0, v), 0.0), 3.0) * (1.0 - clamp(iVert.hoja.y, 0.0, 1.0));
+        col += uHojas.x * tras * vec3(0.78, 0.92, 0.30) * uLuz0Col.rgb * 0.9 + fres * vec3(0.05, 0.08, 0.05);
     } else if (vegetal) {
         // a contraluz la copa deja pasar la luz: brillo verde, sin reflejo de vidrio
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
@@ -1758,11 +1840,16 @@ PIEL_UNIFORMES = [
 ] + [(nm % k, tuple(PIEL_U % (nm % k, q) for q in range(4)))
      for k in range(3) for nm in ('uTinte%d', 'uTinteCol%d')] + [
     ('uAgua', (PIEL_U % ('uAgua', 0), '0', '0', '0')),
+    # fase 11 v8: hojas, bancales y mesetas
+    ('uHojas', (PIEL_U % ('uHojas', 0), '0', '0', '0')),
+    ('uCultivo', tuple(PIEL_U % ('uCultivo', q) for q in range(4))),
+    ('uBancal', tuple(PIEL_U % ('uBancal', q) for q in range(4))),
+    ('uRiego', tuple(PIEL_U % ('uRiego', q) for q in range(3)) + ('0',)),
 ]
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua']
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
 SIN_TINTE = ('ciudad', 'agua')
-PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso')]
+PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
 
 
 def _uniforme(mat, k, nombre, valores):
@@ -1798,6 +1885,27 @@ def onCook(scriptOp):
 '''
 
 
+CULTIVOS_CB = r'''# Script TOP 'cultivos' (fase 11 v8): los hibridos de la naturaleza que pide
+# al motor (lat/lon, 512 x 256, float32): r el relieve sin aterrazar, g el tope
+# de los bancales, b desde donde se inundan, a el nivel de la meseta (+10 con
+# acequia). El motor lo recuece solo cuando cambia.
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def onCook(scriptOp):
+    try:
+        a = op('motor').module.cultivos_array()
+    except Exception as e:
+        a = None
+        print('AVISO  cultivos: %s' % e)
+    if a is not None:
+        scriptOp.copyNumpyArray(a)
+    return
+'''
+
+
 def mapas_terreno(base):
     """Las texturas del terreno (fase 11 v5): el Script TOP 'alturas' (el mapa
     de alturas del motor, float32) y el Ramp TOP 'rampa_hipso' con sus claves en
@@ -1813,6 +1921,17 @@ def mapas_terreno(base):
         info('alturas: pon a mano Pixel Format = 32-bit float (RGBA) en el Script TOP')
     try:
         top.cook(force=True)
+    except Exception:
+        pass
+    cb2 = get_or_make(base, 'textDAT', 'cultivos_callbacks', 960, 1260)     # fase 11 v8
+    cb2.text = CULTIVOS_CB
+    cu = get_or_make(base, 'scriptTOP', 'cultivos', 1180, 1260)
+    bien = bool(setp_any(cu, ['callbacks', 'callbackdat', 'dat'], 'cultivos_callbacks')) and bien
+    if not (setmenu(cu, ['format', 'pixelformat'], ['rgba32float', '32bit float (RGBA)'])
+            or setp_any(cu, ['format', 'pixelformat'], 'rgba32float')):
+        info('cultivos: pon a mano Pixel Format = 32-bit float (RGBA) en el Script TOP')
+    try:
+        cu.cook(force=True)
     except Exception:
         pass
     tab = get_or_make(base, 'tableDAT', 'rampa_hipso_claves', 960, 1100)
@@ -2029,6 +2148,65 @@ def construir_modelo(modelos, nombre, prims, x, y, ajustadas):
     return comp
 
 
+EJEMPLAR_CB = r'''# Script SOP de un ejemplar de la biblioteca (fase 11 v8): pide al motor la
+# malla del ejemplar con el nombre de su COMP (veg_<modelo>_<variante>_<derivacion>
+# y _lod, la version lejana con tarjetas de racimo) y la escribe una vez: ramas
+# (tubos de 4 o 5 lados) y hojas facetadas. Atributos: N y uv = (tipo,
+# profundidad en la copa, nivel de rama). Solo se recuece si cambia la
+# biblioteca (Varangulo, Cuantizar30, Densidadhoja).
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def onCook(scriptOp):
+    scriptOp.clear()
+    try:
+        m = parent(2).op('motor').module
+        P, Nn, U, T = m.malla_ejemplar(scriptOp.parent().name, m.cfg())
+    except Exception as e:
+        print('AVISO  %s: %s' % (scriptOp.parent().name, e))
+        return
+    for nm in ('N', 'uv'):
+        try:
+            scriptOp.pointAttribs.create(nm, (0.0, 0.0, 0.0))
+        except Exception:
+            pass
+    pts = []
+    for k in range(len(P)):
+        p = scriptOp.appendPoint()
+        p.P = P[k]
+        try:
+            p.N = Nn[k]
+            p.uv = U[k]
+        except Exception:
+            pass
+        pts.append(p)
+    for a, b, c in T:
+        poly = scriptOp.appendPoly(3, closed=True, addPoints=False)
+        poly[0].point = pts[a]
+        poly[1].point = pts[b]
+        poly[2].point = pts[c]
+    return
+'''
+
+
+def construir_ejemplar(modelos, nombre, x, y):
+    """Fase 11 v8: el COMP de un ejemplar de la biblioteca, con su Script SOP
+    (callbacks: modelos/ejemplar_callbacks) y la salida."""
+    comp = fresh(modelos, 'baseCOMP', nombre, x, y)
+    s = mk(comp, 'scriptSOP', 'malla', 0, 0)
+    setp_any(s, ['callbacks', 'callbackdat', 'dat'], '../ejemplar_callbacks')
+    out = mk(comp, 'nullSOP', 'salida', 200, 0)
+    connect(out, s, 0)
+    for attr in ('render', 'display'):
+        try:
+            setattr(out, attr, True)
+        except Exception:
+            pass
+    return comp
+
+
 def construir_modelos(base, m, solo_nuevos=False):
     """Los SOP de cada modelo del motor, dentro de 'modelos' (fase 11). Con
     solo_nuevos conserva los que ya estan y anade los que falten (los de una
@@ -2044,6 +2222,24 @@ def construir_modelos(base, m, solo_nuevos=False):
         construir_modelo(modelos, nm, m.MODELOS[nm], (k % 8) * 220, -(k // 8) * 160, ajustadas)
         hechos += 1
         piezas += len(m.MODELOS[nm])
+    # fase 11 v8: la biblioteca de ejemplares (un Script SOP por ejemplar)
+    cb = get_or_make(modelos, 'textDAT', 'ejemplar_callbacks', -440, 200)
+    cb.text = EJEMPLAR_CB
+    c = m.cfg()
+    m.VARIANTES_TD = 0
+    m.biblioteca(c)
+    nombres = m.ejemplares_de(c)
+    fila0 = len(m.MODELOS) // 8 + 2
+    for k, nm in enumerate(nombres):
+        if solo_nuevos and modelos.op(nm) is not None:
+            continue
+        construir_ejemplar(modelos, nm, (k % 12) * 220, -(fila0 + k // 12) * 160)
+        hechos += 1
+    m.VARIANTES_TD = m.variantes(c)
+    try:
+        base.op('motor').store('variantes_td', m.VARIANTES_TD)
+    except Exception:
+        pass
     return modelos, hechos, piezas, ajustadas
 
 

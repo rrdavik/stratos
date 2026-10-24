@@ -46,6 +46,9 @@ def cfg_escena(nombre):
     return c
 
 
+RAFAGA = 6                  # fotogramas seguidos por muestra
+
+
 def sesion(nombre, minutos=20.0, fps=30.0, tempo=120.0, muestra=0.5):
     c = cfg_escena(nombre)
     W = m.new_world()
@@ -56,7 +59,7 @@ def sesion(nombre, minutos=20.0, fps=30.0, tempo=120.0, muestra=0.5):
     caja = pads_corte[1] if len(pads_corte) > 1 else (pads_corte[0] if pads_corte else 0)
     aranazo = next((k for k in range(8) if m.es_aranazo(c, k)), 4)
     datos = dict(dens=[], piezas=[], ms=[], luz=[], particulas=[], colgados=[], eras=0, frentes=0,
-                 px=[])
+                 px=[], chops=[])
     pend = []
     k_paso = -1
     t = 0.0
@@ -96,9 +99,19 @@ def sesion(nombre, minutos=20.0, fps=30.0, tempo=120.0, muestra=0.5):
             datos['colgados'].append(len(m.transitos_colgados(W, c)))
         if t >= sig:
             sig += muestra
-            t0 = time.perf_counter()
-            inst = m.build_instances(W, c, t)
-            datos['ms'].append((time.perf_counter() - t0) * 1000.0)
+            # como en TouchDesigner: fotogramas seguidos (con el refresco de la naturaleza,
+            # fase 11 v8) y los Script CHOP de modelos que habria que recocer
+            ms, recocer, antes = [], [], None
+            for j in range(RAFAGA):
+                t0 = time.perf_counter()
+                inst = m.build_instances(W, c, t + j / fps, tiles=(j == 0), refresco=True)   # losetas: como en TD
+                ms.append((time.perf_counter() - t0) * 1000.0)
+                mods = dict((k, v) for k, v in inst.items() if k.startswith('mod_'))
+                if antes is not None:
+                    recocer.append(sum(1 for k, v in mods.items() if antes.get(k, []) != v))
+                antes = mods
+            datos['ms'].append(statistics.mean(ms))
+            datos['chops'].append(statistics.mean(recocer) if recocer else 0.0)
             datos['dens'].append(m.occupied(W) / float(m.N))
             datos['piezas'].append(sum(len(v) for k, v in inst.items() if k.startswith('mod_')))
             datos['particulas'].append(len(inst.get('particulas', [])))
@@ -129,8 +142,9 @@ def informe(nombre, d, minutos):
         ('ningun transito colgado tras %d fines de ciclo' % d['eras'], not any(d['colgados'])),
     ]
     print('== %s, %.0f minutos: %d eras, %d frentes, radio %.1f, piezas max %d, particulas max %d, '
-          'luz local max %d' % (nombre, minutos, d['eras'], d['frentes'], d['R'], max(d['piezas']),
-                                max(d['particulas']), max(d['luz'])))
+          'luz local max %d, CHOP de modelos a recocer por fotograma %.1f'
+          % (nombre, minutos, d['eras'], d['frentes'], d['R'], max(d['piezas']), max(d['particulas']),
+             max(d['luz']), statistics.mean(d['chops']) if d['chops'] else 0.0))
     for texto, bien in criterios:
         print('   %-6s %s' % ('OK' if bien else 'FALLO', texto))
     return all(b for _, b in criterios)

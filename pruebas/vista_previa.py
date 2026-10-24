@@ -4,6 +4,7 @@ modelo del motor (sus cajas, prismas, bolas y conos, con luz plana) en una hoja 
 contactos PNG.
 
     python3 pruebas/vista_previa.py [salida.png]
+    python3 pruebas/vista_previa.py lamina [salida.png]     # fase 11 v8: los ejemplares y su silueta a 18 px
 
 Tambien sirve de rasterizador para otras pruebas: pintar(tris, ...) y
 mallas_de(prims).
@@ -103,6 +104,21 @@ def mallas_de(m, prims, M=None, T=None, S=None):
     return np.array(tris).reshape(-1, 3, 3)
 
 
+def malla_ejemplar(m, nombre, cfg=None, M=None, T=None, S=None):
+    """Fase 11 v8: (triangulos (n, 3, 3), uv de cada triangulo) de un ejemplar de
+    la biblioteca, con la transformacion de instancia si se da."""
+    P, _, U, F = m.malla_ejemplar(nombre, cfg)
+    P = np.array(P, float)
+    if S is not None:
+        P = P * np.array(S)
+    if M is not None:
+        P = P @ np.array(M).T
+    if T is not None:
+        P = P + np.array(T)
+    F = np.array(F, int).reshape(-1, 3)
+    return P[F], np.array(U, float)[F[:, 0]]
+
+
 def pintar(img, zbuf, tris, color, cam, foco, escala, centro, luz=(0.5, 0.8, 0.4)):
     """Rasteriza triangulos con luz plana en img (H, W, 3) y zbuf."""
     H, W = zbuf.shape
@@ -175,7 +191,7 @@ def hoja(m, nombres, salida, lado=200, cols=8):
 UNIDAD = [('caja', 0.0, 0.5, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0)]     # la caja de las fases 3-10
 
 
-def escena(m, inst, salida, cam, foco, lado=900, escala=None, nucleo=None):
+def escena(m, inst, salida, cam, foco, lado=900, escala=None, nucleo=None, cfg=None):
     """Dibuja las instancias de build_instances (modelos, cajas y particulas)
     vistas desde cam hacia foco."""
     img = np.zeros((lado, lado, 3)) + np.array([0.08, 0.08, 0.10])
@@ -197,23 +213,71 @@ def escena(m, inst, salida, cam, foco, lado=900, escala=None, nucleo=None):
         if not filas or clave in ('luz_conchas',):
             continue
         prims = UNIDAD
+        nm = None
         if clave.startswith('mod_'):
             nm = clave[4:]
             for suf in ('_pul', '_por'):
                 if nm.endswith(suf):
                     nm = nm[:-len(suf)]
-            prims = m.MODELOS[nm]
+            prims = None if m.es_ejemplar(nm) else m.MODELOS[nm]
         for f in filas:
             if f[1] < -9000:
                 continue
             M = m._rot_xyz(f[3], f[4], f[5])
+            if prims is None:                   # fase 11 v8: un ejemplar, corteza y hojas
+                tris, uv = malla_ejemplar(m, nm, cfg, M, f[0:3], f[6:9])
+                hoja = uv[:, 0] >= 1.5
+                pintar(img, zb, tris[~hoja], (0.20, 0.14, 0.09), cam, foco, escala, (lado / 2, lado / 2), luz=luz)
+                pintar(img, zb, tris[hoja], f[9:12], cam, foco, escala, (lado / 2, lado / 2), luz=luz)
+                continue
             tris = mallas_de(m, prims, M, f[0:3], f[6:9])
             pintar(img, zb, tris, f[9:12], cam, foco, escala, (lado / 2, lado / 2), luz=luz)
     Image.fromarray((np.clip(img, 0, 1) * 255).astype('uint8')).save(salida)
     return salida
 
 
+def lamina(m, salida, lado=170, px=18):
+    """Fase 11 v8: la lamina de la naturaleza. Fila de arriba, los 13 ejemplares
+    de la biblioteca (variante 0, derivacion completa) de cerca; de abajo, su
+    silueta a 'px' pixeles de alto (la prueba a distancia), con la bola y el
+    cono de las versiones anteriores para comparar."""
+    c = dict(m.DEFAULT_CFG)
+    nombres = [m.nombre_ejemplar(mo, 0, m.etapas_de(mo)[-1]) for mo in m.PLANTAS]
+    cols = len(nombres) + 2
+    lienzo = Image.new('RGB', (cols * lado, 2 * lado + 32), (236, 236, 230))
+    dib = ImageDraw.Draw(lienzo)
+    for k, nm in enumerate(nombres):
+        img = np.zeros((lado, lado, 3)) + np.array([0.93, 0.93, 0.90])
+        zb = np.full((lado, lado), np.inf)
+        tris, uv = malla_ejemplar(m, nm, c)
+        hojas = uv[:, 0] >= 1.5
+        pintar(img, zb, tris[~hojas], (0.30, 0.22, 0.14), (0, 0.5, 3.4), (0, 0.5, 0), lado * 1.25,
+               (lado / 2, lado / 2))
+        pintar(img, zb, tris[hojas], (0.22, 0.48, 0.20), (0, 0.5, 3.4), (0, 0.5, 0), lado * 1.25,
+               (lado / 2, lado / 2))
+        lienzo.paste(Image.fromarray((np.clip(img, 0, 1) * 255).astype('uint8')), (k * lado, 0))
+        dib.text((k * lado + 4, lado + 2), nm[4:], fill=(40, 40, 40))
+    sil = [m.silueta(c, nm, px) for nm in nombres]
+    r = px // 2
+    sil.append(set((x, y) for x in range(-r, r + 1) for y in range(px) if x * x + (y - r + 0.5) ** 2 <= r * r))
+    sil.append(set((x, y) for y in range(px) for x in range(-r, r + 1) if abs(x) <= r * (1 - y / (px - 1.0))))
+    for k, s in enumerate(sil):
+        chico = Image.new('RGB', (2 * px, px), (236, 236, 230))
+        for x, y in s:
+            if 0 <= x + px < 2 * px and 0 <= y < px:
+                chico.putpixel((x + px, px - 1 - y), (34, 70, 32))
+        grande = chico.resize((lado, lado // 2), Image.NEAREST)
+        lienzo.paste(grande, (k * lado, lado + 16 + lado // 4))
+    dib.text((len(nombres) * lado + 4, lado + 2), 'bola (v5)', fill=(40, 40, 40))
+    dib.text(((len(nombres) + 1) * lado + 4, lado + 2), 'cono (v5)', fill=(40, 40, 40))
+    lienzo.save(salida)
+    return salida
+
+
 if __name__ == '__main__':
     m = cargar_motor()
-    out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(AQUI, 'catalogo.png')
-    print(hoja(m, sorted(m.MODELOS), out))
+    if len(sys.argv) > 1 and sys.argv[1] == 'lamina':
+        print(lamina(m, sys.argv[2] if len(sys.argv) > 2 else os.path.join(AQUI, 'lamina_naturaleza.png')))
+    else:
+        out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(AQUI, 'catalogo.png')
+        print(hoja(m, sorted(m.MODELOS), out))
