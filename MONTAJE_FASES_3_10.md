@@ -18,14 +18,14 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | Archivo | Para qué | Versión |
 |---|---|---|
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
-| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`, ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`); la v38, la fase 16; la v39, la fase 17; la v40, la fase 18; la v41, la fase 19; la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12); la v44, el pumping en seco (fase 7 v13); la v45, los pulsos de ocupación del impulso (fase 7 v14) | `motor v45` |
-| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar; la v29, la calibración de la vista (`Ciclomin` 16, `Compasesquietos` 3, `Grosormax` 1,5 si seguían por defecto, y `Cortezamax`); la v30, la fase 17 (ventanas por edificio, color de la luz desde el motor); la v31, la fase 18; la v32, la fase 19 (niebla y glitch en el shader) | `comun v32` |
+| `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`, ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`); la v38, la fase 16; la v39, la fase 17; la v40, la fase 18; la v41, la fase 19; la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12); la v44, el pumping en seco (fase 7 v13); la v45, los pulsos de ocupación del impulso (fase 7 v14); la v46, la naturaleza legible y los ríos azules (fase 11 v5 y fase 13 v2; la paleta de conchas reserva de 120 a 275 grados) | `motor v46` |
+| `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar; la v29, la calibración de la vista (`Ciclomin` 16, `Compasesquietos` 3, `Grosormax` 1,5 si seguían por defecto, y `Cortezamax`); la v30, la fase 17 (ventanas por edificio, color de la luz desde el motor); la v31, la fase 18; la v32, la fase 19 (niebla y glitch en el shader); la v33, el terreno, los pisos, el borde tintado y el agua (fase 11 v5 y fase 13 v2) | `comun v33` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11) | `fase3 v12` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v14` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5 | `fase8 v10` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46) | `fase8 v11` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar; v10: el bombo y el tom ya no cortan, su destello es suave y sigue el pumping; v11: la autoprueba, con el pumping en seco) | `fase9 v11` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v10: `Encuadre`, el alto del planeta en la pantalla) | `fase10 v10` |
 
@@ -580,13 +580,13 @@ laguna(c)     = radio_nominal - suelo(c)          (siempre >= 0)
 ```
 n         = generación de la concha (0 = la primera)
 t         = frac(n × 0,6180339887)                    (ángulo áureo)
-tono      = Paletatono + t × 245°, saltando las bandas reservadas
+tono      = Paletatono + t × 200°, saltando las bandas reservadas (245° hasta el motor v45)
 L_vacía   = 0,50 si n es par, 0,64 si es impar
 L_ocupada = L_vacía + 0,12
 croma     = Paletacroma
 ```
 
-- **Bandas reservadas** (tono OKLCH): 165°–235°, el cian de la cicatriz, y 55°–100°, el ámbar del SEQ2. La secuencia se reparte sobre los 245° que quedan, recorriendo el círculo y saltando las bandas; no se recorta al borde.
+- **Bandas reservadas** (tono OKLCH): 165°–235°, el cian de la cicatriz, y 55°–100°, el ámbar del SEQ2. Desde el motor v46 (fase 11 v5 y fase 13 v2) también 120°–165°, los verdes de los pisos de la naturaleza, y 235°–275°, el azul de los ríos: una sola banda de 120° a 275°. La secuencia se reparte sobre los 200° que quedan, recorriendo el círculo y saltando las bandas; no se recorta al borde. Ninguna concha camufla un bosque ni un río. La banda verde empieza en 120° y no antes: con menos tono libre, dos conchas seguidas dejarían de diferir 60°.
 - **Croma contenido** (0,09): las conchas son mineral; las luces (secuenciadores, batería, cicatriz) son saturadas y emisivas, y siguen destacando encima.
 - **Sin blancos:** la luminosidad máxima (0,76) queda lejos del blanco del SEQ1. Todos los colores caen dentro de sRGB sin recortar.
 - **Se conserva** la alternancia claro / oscuro entre conchas seguidas y la loseta de una celda ocupada más clara que la vacía (los continentes se leen así). El zócalo (gris casi negro) y el núcleo quedan oscuros y neutros, fuera de la paleta.
@@ -596,15 +596,15 @@ croma     = Paletacroma
 | n | Tono | Vacía | Ocupada |
 |---|---|---|---|
 | 0 | 20° | `#904D4E` | `#B67070` |
-| 1 | 286° | `#8884C1` | `#ACA9E8` |
-| 2 | 123° | `#5A6B2D` | `#7C8F50` |
-| 3 | 344° | `#B37699` | `#DB9ABF` |
-| 4 | 251° | `#396695` | `#5C8ABB` |
-| 5 | 42° | `#BB7A60` | `#E29E84` |
-| 6 | 309° | `#72548A` | `#9677B0` |
-| 7 | 145° | `#699B6A` | `#8DC18E` |
+| 1 | 319° | `#A47AAF` | `#CA9FD6` |
+| 2 | 103° | `#6D651F` | `#908844` |
+| 3 | 357° | `#B8758D` | `#E099B2` |
+| 4 | 296° | `#685891` | `#8A7BB7` |
+| 5 | 34° | `#BC7867` | `#E49D8B` |
+| 6 | 333° | `#824F79` | `#A7719D` |
+| 7 | 117° | `#889352` | `#ADB976` |
 
-Con `Paletatono` 20 y `Paletacroma` 0,09. Cambiar `Paletatono` entre sesiones da otra secuencia con las mismas propiedades.
+Con `Paletatono` 20 y `Paletacroma` 0,09 (motor v46; hasta la v45 las conchas 2, 4 y 7 caían en verde y azul). Cambiar `Paletatono` entre sesiones da otra secuencia con las mismas propiedades.
 
 **Colores de la batería frente a las conchas.** Los pads 1 a 6 son saturados (croma 0,17–0,25, frente a 0,09 de las conchas). Los pads 7 (`#F9A8D4`, rosa) y 8 (`#C4B5FD`, lila) son apagados (croma 0,10–0,11) y quedan cerca de las conchas rosas y lilas claras ocupadas: se distinguen sobre todo porque la luz de celda no se sombrea. Si se confunden, súbeles el croma en `colores_drum`.
 

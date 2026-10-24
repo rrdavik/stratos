@@ -7,6 +7,10 @@ motor (naturaleza y ciudad, velocidades altas y bajas).
 
     xvfb-run -a python3 pruebas/glsl_piel.py [salida.png]
 
+Desde la fase 11 v5 dibuja tambien la malla del terreno (la esfera desplazada
+por el mapa de alturas del motor, con la rampa de los pisos), los rios y los
+lagos, con los focos del tinte de una nota del SEQ1.
+
 Necesita moderngl (pip install moderngl) y una pantalla (Xvfb vale). No
 comprueba que TouchDesigner declare sus funciones igual: solo que el
 shader es GLSL 4.5 correcto y que hace lo que se espera con esos datos.
@@ -26,6 +30,8 @@ import vista_previa as vp  # noqa: E402
 
 TD_VERTEX = """#version 450
 #define TD_NUM_COLOR_BUFFERS 1
+struct TDMatrix { mat4 camInverse; mat4 worldInverse; };
+uniform TDMatrix uTDMats[1];
 in vec3 P;
 in vec3 N;
 in vec4 Cd;
@@ -54,7 +60,7 @@ void TDWritePickingValues() {}
 
 TD_PIXEL = """#version 450
 #define TD_NUM_COLOR_BUFFERS 1
-struct TDMatrix { mat4 camInverse; };
+struct TDMatrix { mat4 camInverse; mat4 worldInverse; };
 uniform TDMatrix uTDMats[1];
 void TDCheckDiscard() {}
 vec4 TDOutputSwizzle(vec4 c) { return c; }
@@ -136,7 +142,70 @@ def escena(m):
     return mundos
 
 
-def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700):
+def escena_natural(m):
+    """Fase 11 v5: una cordillera de 5 celdas en fila con cumbres, un monte
+    boscoso (ocupacion 12) y un bosque de 7 celdas; una nota del SEQ1 encendida."""
+    c = dict(m.DEFAULT_CFG)
+    c.update(nivel=13, tema=0, avance=1)
+    W = m.new_world()
+    t = 0.0
+    paso = m.step_dur(c, 120.0)
+    fila = [m.note_cell(n) for n in (62, 63, 64, 65, 66)]
+    for _ in range(4):
+        for x in fila:
+            for _ in range(4):
+                m.note_on(W, c, m.ARQ, m.cell_note(x), 100, t, 120.0)
+                m.note_off(W, c, m.ARQ, m.cell_note(x), t + 0.5 * paso, 120.0)
+    for x, k in ((fila[1], 40), (fila[3], 24)):
+        for _ in range(k):
+            m.note_on(W, c, m.ARQ, m.cell_note(x), 100, t, 120.0)
+    i = m.note_cell(52)
+    for _ in range(3):
+        for x in [i] + list(m.NEIGH[i]):
+            for _ in range(4):
+                m.note_on(W, c, m.GEO, m.cell_note(x), 100, t, 120.0)
+                m.note_off(W, c, m.GEO, m.cell_note(x), t + 0.5 * paso, 120.0)
+    for _ in range(80):
+        m.note_on(W, c, m.GEO, 52, 100, t, 120.0)
+    for k in range(120):
+        t += 1 / 30.0
+        m.tick(W, c, t, 120.0, True)
+    m.note_on(W, c, m.GEO, m.cell_note(i), 100, t, 120.0)       # la nota: el borde se tine
+    return c, W, t, fila, i
+
+
+def esfera(filas=256, cols=512):
+    """La malla del terreno: esfera unidad (posicion y normal)."""
+    v = []
+    for r in range(filas + 1):
+        la = math.pi * r / filas - math.pi / 2
+        for k in range(cols + 1):
+            lo = 2 * math.pi * k / cols - math.pi
+            v.append([math.cos(la) * math.cos(lo), math.sin(la), math.cos(la) * math.sin(lo)])
+    v = np.array(v, dtype='f4')
+    tri = []
+    for r in range(filas):
+        for k in range(cols):
+            a, b = r * (cols + 1) + k, r * (cols + 1) + k + 1
+            c_, d = a + cols + 1, b + cols + 1
+            tri += [a, b, d, a, d, c_]
+    P = v[np.array(tri)]
+    return np.concatenate([P, P], axis=1).astype('f4')
+
+
+def texturas(ctx, m, c):
+    """sAlturas (el mapa del motor) y sRampa (la rampa de los pisos)."""
+    a = m.alturas_array()
+    alt = ctx.texture((a.shape[1], a.shape[0]), 4, a.astype('f4').tobytes(), dtype='f4')
+    alt.repeat_x, alt.repeat_y = True, False
+    claves = m.rampa_hipso(c)
+    fil = np.array([list(m.color_piso(c, x / 255.0)) + [1.0] for x in range(256)], dtype='f4')
+    ram = ctx.texture((256, 1), 4, fil.tobytes(), dtype='f4')
+    ram.repeat_x = ram.repeat_y = False
+    return alt, ram, len(claves)
+
+
+def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
     inst = m.build_instances(W, c, now)
     fbo = ctx.simple_framebuffer((lado, lado))
     fbo.use()
@@ -146,6 +215,15 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700):
     prog['uViewProj'].write(VP.T.astype('f4').tobytes())
     Ci = np.linalg.inv(np.array([[1, 0, 0, cam[0]], [0, 1, 0, cam[1]], [0, 0, 1, cam[2]], [0, 0, 0, 1.0]]))
     prog['uTDMats[0].camInverse'].write(np.linalg.inv(Ci).T.astype('f4').tobytes())
+    if 'uTDMats[0].worldInverse' in prog:
+        prog['uTDMats[0].worldInverse'].write(np.identity(4).astype('f4').tobytes())
+    uni = m.uniformes_piel(W, c, now) if hasattr(m, 'uniformes_piel') else {}
+    for k, v in uni.items():
+        if k in prog and k != 'uTerreno':
+            prog[k].value = tuple(float(x) for x in v)
+    for k in ('uTerreno',):
+        if k in prog:
+            prog[k].value = (0.0, 1.0, 0.0, 1.0)
     R = m.top_radius(W, c)
     luces = dict(uLuz0=(0.0, R * 2 + 14, 4.0, 0), uLuz0Col=(0.82 * 1.15, 0.90 * 1.15, 1.15, 0),
                  uLuz1=(14.0, -10.0, 18.0, 0), uLuz1Col=(0.10, 0.14, 0.20, 0),
@@ -154,6 +232,37 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700):
     for k, v in luces.items():
         if k in prog:
             prog[k].value = v
+    if terreno is not None and 'uTerreno' in prog:      # fase 11 v5: la malla del relieve
+        alt, ram, _ = terreno
+        alt.use(0)
+        ram.use(1)
+        if 'sAlturas' in prog:
+            prog['sAlturas'].value = 0
+        if 'sRampa' in prog:
+            prog['sRampa'].value = 1
+        prog['uTerreno'].value = (1.0, float(uni['uTerreno'][1]), float(uni['uTerreno'][2]), 1.0)
+        prog['uFamilia'].value = (3.0, 0, 0, 0)
+        esf = esfera()
+        vbo = ctx.buffer(esf.tobytes())
+        ibo = ctx.buffer(np.array([[0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]], dtype='f4').tobytes())
+        cd = ctx.buffer(np.ones((len(esf), 4), dtype='f4').tobytes())
+        vao = ctx.vertex_array(prog, [(vbo, '3f 3f', 'P', 'N'), (cd, '4f', 'Cd'),
+                                      (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
+        vao.render(instances=1)
+        prog['uTerreno'].value = (0.0, 1.0, 0.0, 1.0)
+    for g, fam in (('rios', 4.0), ('tejido', 0.0)):    # fase 11 v5: rios y lagos (agua)
+        filas = inst.get(g) or []
+        if not filas or 'uFamilia' not in prog:
+            continue
+        prog['uFamilia'].value = (fam, 0, 0, 0)
+        tri = malla(m, [('caja', 0.0, 0.5, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0)])
+        vbo = ctx.buffer(tri.tobytes())
+        datos = np.array([list(f[:12]) + [f[12] if len(f) > 12 else 1.0] for f in filas], dtype='f4')
+        ibo = ctx.buffer(datos.tobytes())
+        cd = ctx.buffer(np.ones((len(tri), 4), dtype='f4').tobytes())
+        vao = ctx.vertex_array(prog, [(vbo, '3f 3f', 'P', 'N'), (cd, '4f', 'Cd'),
+                                      (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
+        vao.render(instances=len(filas))
     for g, mo, mat in m.geometrias_piel(c):
         filas = inst.get(g) or []
         if not filas:
@@ -196,7 +305,24 @@ def main():
         print('       %s, vel %d: %d instancias de modelos'
               % (m.tema_de(c), W['vel'][i], sum(len(v) for k, v in inst.items() if k.startswith('mod_'))))
     fila = lambda a, b: np.concatenate([a, b], axis=1)
-    Image.fromarray(np.concatenate([fila(imgs[0], imgs[1]), fila(imgs[2], imgs[3])], axis=0)).save(salida)
+    if hasattr(m, 'terreno'):                   # fase 11 v5: la naturaleza legible, cerca y lejos
+        c, W, now, cord, bosque = escena_natural(m)
+        m.terreno(W, c)
+        tex = texturas(ctx, m, c)
+        mid = m._norm(m._add(m.normal_i(cord[2]), m.normal_i(bosque)))
+        R = m.top_radius(W, c)
+        for dist, k in ((R * 2.3, 0.0), (R * 5.2, 0.0)):
+            cam = m._add(m._mul(mid, dist), m._mul(m.tangents(mid)[0], dist * 0.25))
+            img, inst = dibujar(ctx, prog, m, c, W, now, cam, m._mul(mid, R * 0.6), terreno=tex)
+            imgs.append(img)
+        pz = W['piel']
+        print('       naturaleza legible: %d copas, %d montes, %d cordilleras, %d cumbres nevadas, '
+              'rios %d (%d lagos)' % (pz['copas'], pz['montes'], pz['cordilleras'], pz['nevadas'],
+                                      W['rios_res']['rios'], W['rios_res']['lagos']))
+    filas_img = [fila(imgs[0], imgs[1]), fila(imgs[2], imgs[3])]
+    if len(imgs) >= 6:
+        filas_img.append(fila(imgs[4], imgs[5]))
+    Image.fromarray(np.concatenate(filas_img, axis=0)).save(salida)
     print('       %s' % salida)
     return 0
 
