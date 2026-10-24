@@ -31,7 +31,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v48'
+MOTOR_VERSION = 'motor v49'
 
 import math
 
@@ -3868,6 +3868,7 @@ CANOPIA_K = 0.95             # la copa, de la altura de la formacion
 COL_BASALTO_PIE = (0.20, 0.21, 0.24)
 COL_TRONCO = (0.17, 0.12, 0.08)    # madera oscura (tronco y ramas, siempre mates)
 PISOS_GIRO = 17.0            # cada piso, girado respecto al anterior
+RAMA_DESDE = 2.0 / 3.0       # las ramas salen del tercio superior del tronco visible (motor v49)
 RAMPA_COLS = ['pos', 'r', 'g', 'b', 'a']
 # colores de los pisos (cartografia de montana): verde profundo, verde azulado
 # de coniferas, verde y ocre del limite, gris calido facetado y nieve
@@ -4409,8 +4410,8 @@ def forma_arbol(cfg, h, pisos, ramas, ancho=1.0, ensanche=0.0, punta=False, pino
         r = 0.34 * (d0 * (1.0 - 0.6 * k / max(1, pisos - 1)) if pisos > 1 else d0)
         largo = r / max(0.17, math.sin(a))
         ys = yb - largo * math.cos(a)
-        if ys < 0.55 * y0:                  # nace en lo alto del tronco, nunca a ras del suelo
-            ys = 0.55 * y0
+        if ys < RAMA_DESDE * y0:            # nace en el tercio superior del tronco visible
+            ys = RAMA_DESDE * y0
             largo = (yb - ys) / max(0.17, math.cos(a))
         out.append(('veg_rama', ys, (0.45 * w_t, largo, 0.45 * w_t), math.degrees(a),
                     360.0 * j / ramas + 23.0 * k, -2))
