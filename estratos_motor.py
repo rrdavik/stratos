@@ -31,7 +31,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v49'
+MOTOR_VERSION = 'motor v50'
 
 import math
 
@@ -182,6 +182,7 @@ DEFAULT_CFG = dict(
     # fase 13: tejido conectivo
     rios=1, carreteras=1, min_via=2, grosor_via=0.18, max_rio=12,
     color_rio=None, ancho_rio=0.10, ancho_max_rio=0.34, emisivo_rio=0.25, lagos=1,     # fase 13 v2
+    ancho_min_px=2.0, pendiente_min=0.01, encuadre=0.85,                                # fase 13 v3
     # fase 14: destructores
     ventana_escalada=8, golpes_escalada=2, pasos_fuego=6, max_fuego=6, pasos_polvo=8,
     # fase 15: el ciclo como era
@@ -4372,7 +4373,7 @@ def _lejos_del_rio(cauce, d, r):
 _SITIOS = {}
 
 
-def forma_arbol(cfg, h, pisos, ramas, ancho=1.0, ensanche=0.0, punta=False, pino=False):
+def forma_arbol(cfg, h, pisos, ramas, ancho=1.0, ensanche=0.0, punta=False, pino=False, radio_max=None):
     """Las piezas de un arbol de alto h, en su eje (la base en 0): [(modelo,
     altura de la base, (ancho, alto, fondo), inclinacion, rumbo relativo en
     grados, piso)], piso = -1 tronco, -2 rama, 0.. el piso de la copa.
@@ -4384,7 +4385,8 @@ def forma_arbol(cfg, h, pisos, ramas, ancho=1.0, ensanche=0.0, punta=False, pino
               es un cono (el arbol emergente de la coronacion)
       ramas   0 o 2 a 4 piezas finas que salen del tronco a Angulorama grados
               y acaban bajo un piso (lo sostienen), repartidas alrededor
-    Como mucho 1 + 4 + 4 = 9 piezas."""
+    Como mucho 1 + 4 + 4 = 9 piezas. 'radio_max' (fase 13 v3): la copa no pasa
+    de ese radio (no tapa el rio que pasa al lado)."""
     pisos = max(1, min(4, int(pisos)))
     ramas = 0 if ramas <= 0 else max(2, min(4, int(ramas)))
     tf = max(0.1, min(0.7, cfg['tronco_frac']))
@@ -4393,6 +4395,8 @@ def forma_arbol(cfg, h, pisos, ramas, ancho=1.0, ensanche=0.0, punta=False, pino
     hueco = (h - y0) / pisos
     grueso = 0.32 * hueco                   # planos: se ve el hueco entre pisos
     d0 = max(cfg['ancho_copa'] * h * ancho * (0.75 if pino else 1.15), ensanche)
+    if radio_max is not None:
+        d0 = min(d0, 2.0 * radio_max)
     out = []
     for k in range(pisos):
         d = d0 * (1.0 - 0.6 * k / max(1, pisos - 1)) if pisos > 1 else d0
@@ -4467,7 +4471,12 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
             v = _SITIOS[clave] = (pt, d, alto_en(ter, d))
         pt, d, E = v
         if cauce and not _lejos_del_rio(cauce, d, 0.08 * min(cw, cl_) / max(1e-6, S)):
-            return False                    # el tronco no pisa el rio (la copa puede cubrirlo)
+            return False                    # el tronco no pisa el rio
+        radio_max = None
+        if cauce:                           # fase 13 v3: la copa tampoco lo tapa
+            radio_max = max(0.12 * min(cw, cl_), min(
+                math.sqrt(max(0.0, 2.0 * (1.0 - _dot(q_, d)))) * S - 0.5 * w_ * S - 0.03
+                for q_, w_ in cauce))
         hg = E / hmax
         if hg > lb:
             return False
@@ -4479,7 +4488,7 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         lista = modelos_de(cfg, 'naturaleza', 'vegetacion', 'coronacion') or ['veg_piso', 'veg_cono']
         n_ = max(1, min(4, int(pisos)))
         for mo, y, dims, inc, rumbo_, k in forma_arbol(cfg, h * kb, pisos, ramas, ancho, ensanche * kb,
-                                                       punta, pino):
+                                                       punta, pino, radio_max):
             if mo == 'veg_piso':
                 mo = lista[0]
             elif mo == 'veg_cono' and len(lista) > 1:
@@ -4600,13 +4609,22 @@ def rios(W, cfg, cl=None, ter=None):
     todas sus vecinas, y las capitales de relieve), se trazan de la mas alta a
     la mas baja y en cada tramo van a la vecina mas baja (empate: la de indice
     menor). Acaban en una hondonada o un llano (ninguna vecina mas baja), al
-    llegar a otro rio (confluyen) o tras Maxrio tramos."""
+    llegar a otro rio (confluyen) o tras Maxrio tramos. Fase 13 v3: es cumbre
+    la celda con un relieve de Pendientemin x el limite o mas (antes, 0,05), y
+    la mas alta de cada cluster de relieve lo es siempre, aunque el mundo sea
+    casi plano."""
     cl = cl or clusters(W, cfg)
     ter = ter or terreno(W, cfg, cl)
     G = [suelo(W, cfg, c) + ter['centro'][c] for c in range(N)]
     lim = limit(cfg)
-    alto = set(c for c in range(N) if ter['centro'][c] > 0.05 * lim)
+    alto = set(c for c in range(N) if ter['centro'][c] > cfg.get('pendiente_min', 0.05) * lim)
     caps = set(cl['capital'][k] for k in cl['capital'] if W['own'][cl['capital'][k]] == ARQ)
+    for k_, cs in cl['celdas'].items():     # v3: la celda mas alta de cada cluster de relieve, siempre
+        if W['own'][cs[0]] == ARQ:
+            top = max(cs, key=lambda c: (G[c], -c))
+            if ter['centro'][top] > 1e-6:
+                caps.add(top)
+                alto.add(top)
     cumbres = set(c for c in alto if all(G[c] > G[j] + 1e-6 for j in NEIGH[c]))
     fuentes = sorted(cumbres | (caps & alto), key=lambda c: (-G[c], c))
     lista, abajo, en_rio = [], {}, set()
@@ -4639,6 +4657,15 @@ def color_rio(cfg):
     """El azul reservado de los rios (Colorrio), fuera de la paleta de conchas."""
     c = cfg.get('color_rio')
     return tuple(c) if c else COL_RIO
+
+
+ALTO_CUADRO = 720.0           # alto de la imagen con el que se mide el ancho minimo
+
+
+def px_unidad(W, cfg):
+    """Pixeles por unidad de mundo con la camara de globo (el planeta mide
+    Encuadre del alto de un cuadro de ALTO_CUADRO px), como px_formaciones."""
+    return cfg.get('encuadre', ENCUADRE_DEF) * ALTO_CUADRO / (2.0 * (top_radius(W, cfg) + RETICULA_SOBRE_DEF))
 
 
 def ancho_rio(cfg, q):
@@ -4698,8 +4725,9 @@ def cauces(W, cfg, cl=None, ter=None):
         return dict(muestras=[], lagos=[], por_celda={})
     ter = ter or terreno(W, cfg, cl)
     tj = tejido(W, cfg)
+    wmin = cfg.get('ancho_min_px', 0.0) / max(1e-6, px_unidad(W, cfg))     # v3: Anchominpx en pantalla
     clave = (_TEJIDO.get('version'), ter['version'], cfg['ancho_rio'], cfg['ancho_max_rio'],
-             cfg.get('lagos', 1), suelos_fotograma(W, cfg))
+             cfg.get('lagos', 1), suelos_fotograma(W, cfg), round(wmin, 5))
     if _CAUCES.get('clave') == clave:
         return _CAUCES['c']
     recodos, muestras, lagos, por = {}, [], [], {}
@@ -4734,11 +4762,11 @@ def cauces(W, cfg, cl=None, ter=None):
         for d, k in _catmull(P):
             x, y = arista[min(len(arista) - 1, k)]
             c_ = x if _dot(d, NORMALS[x]) >= _dot(d, NORMALS[y]) else y
-            w = ancho_rio(cfg, tj['caudal'].get((x, y), 1))
+            w = max(wmin, ancho_rio(cfg, tj['caudal'].get((x, y), 1)))
             lista.append((d, c_, w))
             por.setdefault(c_, []).append((d, w / max(1e-6, suelo(W, cfg, c_))))
         muestras.append(lista)
-    c = dict(muestras=muestras, lagos=sorted(set(lagos)), por_celda=por)
+    c = dict(muestras=muestras, lagos=sorted(set(lagos)), por_celda=por, wmin=wmin)
     _CAUCES['clave'], _CAUCES['c'] = clave, c
     return c
 
@@ -4749,11 +4777,17 @@ def build_rios(W, cfg):
     reservado, sin tintes de celda, de pad ni de concha."""
     ca = cauces(W, cfg)
     filas = []
+    tj = tejido(W, cfg) if cfg['nivel'] >= 13 else dict(rios=[], caudal={})
+    res = dict(rios=len(ca['muestras']), lagos=len(ca['lagos']),
+               tramos=sum(len(r) - 1 for r in tj['rios']), fuentes=len(tj['rios']),
+               caudal=max(tj['caudal'].values() or [0]), px=0.0)
     if not ca['muestras'] and not ca['lagos']:
-        return filas, dict(rios=0, lagos=0)
+        return filas, res
+    res['px'] = max(w for lista in ca['muestras'] for _, _, w in lista) * px_unidad(W, cfg) \
+        if ca['muestras'] else 0.0
     clave = (id(ca), _CAUCES.get('clave'), cfg.get('respaldo', 0), color_rio(cfg))
     if _CAUCES.get('filas_clave') == clave:         # las cintas no se mueven: se guardan
-        return [list(f) for f in _CAUCES['filas']], dict(rios=len(ca['muestras']), lagos=len(ca['lagos']))
+        return [list(f) for f in _CAUCES['filas']], res
     ter = terreno(W, cfg)
     col = color_rio(cfg)
     hmax = ter['hmax']
@@ -4786,7 +4820,7 @@ def build_rios(W, cfg):
         cw, cl_ = _cell_sizes(S, c)
         filas.append(_row(_mul(NORMALS[c], S), NORMALS[c], 1.02 * cw, h, 1.02 * cl_, col) + [rug])
     _CAUCES['filas_clave'], _CAUCES['filas'] = clave, [list(f) for f in filas]
-    return filas, dict(rios=len(ca['muestras']), lagos=len(ca['lagos']))
+    return filas, res
 
 
 def _caudal(lista, abajo):
@@ -4917,7 +4951,7 @@ def tejido(W, cfg):
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), tema, cfg['rios'], cfg['carreteras'],
              cfg['min_via'], cfg['max_rio'], cfg['umbral_vecindad'], cfg['peso_vecina'],
              cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'], trazas,
-             cfg.get('peso_traza', 0.0), alturas)
+             cfg.get('peso_traza', 0.0), alturas, cfg.get('pendiente_min', 0.05))
     if _TEJIDO.get('clave') == clave:
         _TEJIDO['sello'] = sello
         return _TEJIDO['t']
@@ -6552,7 +6586,11 @@ def cfg():
                  ancho_rio=max(0.005, _p('Anchorio', c['ancho_rio'])),
                  ancho_max_rio=max(0.005, _p('Anchomaxrio', c['ancho_max_rio'])),
                  emisivo_rio=max(0.0, _p('Emisivorio', c['emisivo_rio'])),
-                 lagos=int(_p('Lagos', True)))
+                 lagos=int(_p('Lagos', True)),
+                 # fase 13 v3: rios que se ven desde el globo
+                 ancho_min_px=max(0.0, _p('Anchominpx', c['ancho_min_px'])),
+                 pendiente_min=max(0.0, _p('Pendientemin', c['pendiente_min'])),
+                 encuadre=max(0.3, min(1.0, _p('Encuadre', c['encuadre']))))
     if c['nivel'] >= 14:
         c.update(ventana_escalada=max(1, int(_p('Ventanaescalada', c['ventana_escalada']))),
                  golpes_escalada=max(1, int(_p('Golpesescalada', c['golpes_escalada']))),
@@ -6962,6 +7000,42 @@ def _gate_prueba(W, c, s, note, now):
         W.setdefault('gate_sim', []).append([now + c['gate_prueba'] * step_dur(c, tempo()), s, int(note)])
 
 
+def prueba_rio(W, c, nota, now):
+    """Pruebario (fase 13 v3): levanta una cordillera de 5 celdas en el anillo
+    de Nota2 (la del centro mas alta), con notas del SEQ2 como Sembrar2, y
+    dice el rio que baja de su cumbre. Si no se ve un rio azul desde el globo,
+    el fallo esta en la representacion, no en el motor."""
+    if c['nivel'] < 13:
+        return 'PRUEBARIO  el proyecto esta en el nivel %d: los rios llegan con la fase 13' % c['nivel']
+    if tema_de(c) != 'naturaleza':
+        return 'PRUEBARIO  Tema ciudad: los rios son de la naturaleza (pon Tema en naturaleza)'
+    i = note_cell(nota)
+    anillo = RINGS[RING_OF[i]] if 0 <= RING_OF[i] < len(RINGS) else [i]
+    q = anillo.index(i) if i in anillo else 0
+    fila = [anillo[(q + k) % len(anillo)] for k in (-2, -1, 0, 1, 2)] if len(anillo) >= 5 else [i]
+    objetivo = dict((x, int(c['th_crown']) + (3 if x == i else 1)) for x in fila)
+    for _ in range(600):                # como Sembrar2, nota a nota, con sus reglas
+        faltan = [x for x in fila if W['occ'][x] < objetivo[x]]
+        if not faltan:
+            break
+        for x in faltan:
+            note_on(W, c, ARQ, cell_note(x), 110, now, tempo())
+            note_off(W, c, ARQ, cell_note(x), now + 0.01, tempo())
+    for x in range(N):
+        W['vh'][x] = W['h'][x]
+    W['dirty'] = True
+    tj = tejido(W, c)
+    ter = terreno(W, c)
+    cumbre = max(fila, key=lambda x: ter['centro'][x])
+    rio = next((r for r in tj['rios'] if r[0] in fila), [])
+    _, res = build_rios(W, c)
+    if not rio:
+        return ('PRUEBARIO  cordillera %s, cumbre %d (relieve %.2f): NINGUN RIO: el motor no lo genera; '
+                'baja Pendientemin o mira la linea RIOS' % (fila, cumbre, ter['centro'][cumbre]))
+    return ('PRUEBARIO  cordillera %s, cumbre %d: rio %s (%d tramos), ancho %.1f px con la camara de globo. '
+            'Si no lo ves azul, el fallo esta en la representacion' % (fila, cumbre, rio, len(rio) - 1, res['px']))
+
+
 def _texto_destructor(ev):
     """Lo que hizo un aranazo de la fase 14, para el Textport."""
     out = ''
@@ -7042,6 +7116,8 @@ def on_pulse(name):
         W['aviso'] = 'Frenteprueba: cambio de pattern'
         print('FRENTE  de polo a polo en %d pasos (pattern saliente %s)'
               % (int(c['pasos_frente']), W['ev']['frente'].get('sale') or '-'))
+    elif name == 'Pruebario':           # fase 13 v3: una cordillera de 5 celdas y su rio
+        print(prueba_rio(W, c, _p('Nota2', 64), now))
     elif name in ('Sembrarzona', 'Sembrarzona2'):
         s = GEO if name == 'Sembrarzona' else ARQ
         note = _p('Nota' if s == GEO else 'Nota2', 60)
@@ -7672,6 +7748,11 @@ def _legend():
         lines.append('  TEJIDO   rios %d (%d tramos, %d lagos)   carreteras %d tramos'
                      % (tj.get('rios', 0), tj.get('tramos_rio', 0), (W.get('rios_res') or {}).get('lagos', 0),
                         tj.get('tramos_via', 0)))
+        if tema_de(c) == 'naturaleza':          # fase 13 v3: el diagnostico de los rios
+            rr = W.get('rios_res') or {}
+            lines.append('  RIOS     tramos %d   fuentes %d   lagos %d   caudal max %d   ancho %.1f px'
+                         % (rr.get('tramos', 0), rr.get('fuentes', 0), rr.get('lagos', 0), rr.get('caudal', 0),
+                            rr.get('px', 0.0)))
     if lvl >= 14:
         lines.append(_legend_escalada(W, c))
     if lvl >= 15:

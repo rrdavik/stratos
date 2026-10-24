@@ -15,11 +15,11 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12, ver `MONTAJE_FASES_3_10.md`); la v44, su pumping en seco (fase 7 v13); la v45, sus pulsos de ocupación (fase 7 v14); la v46, la naturaleza legible (fase 11 v5: monte boscoso, relieve en un mapa de alturas, dosel por colonización del espacio, pisos de color, tinte al borde) y los ríos azules (fase 13 v2); la v47, sin `Planofinal` (fase 10 v11); la v48, los árboles de pisos (fase 11 v6: tronco, ramas y copa en pisos, sin esferas); la v49, las ramas desde el tercio superior del tronco visible (fase 11 v7) | `motor v49` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`); la v33, el terreno (`terreno_al_dia`, `mapas_terreno`: Script TOP `alturas`, Ramp TOP `rampa_hipso`), bolas y conos en los modelos, y en el shader las familias tierra y agua, los pisos, el sombreado rasante y el borde tintado | `comun v33` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12, ver `MONTAJE_FASES_3_10.md`); la v44, su pumping en seco (fase 7 v13); la v45, sus pulsos de ocupación (fase 7 v14); la v46, la naturaleza legible (fase 11 v5: monte boscoso, relieve en un mapa de alturas, dosel por colonización del espacio, pisos de color, tinte al borde) y los ríos azules (fase 13 v2); la v47, sin `Planofinal` (fase 10 v11); la v48, los árboles de pisos (fase 11 v6: tronco, ramas y copa en pisos, sin esferas); la v49, las ramas desde el tercio superior del tronco visible (fase 11 v7); la v50, ríos que se ven (fase 13 v3: `Anchominpx`, `Pendientemin`, `Pruebario`, línea `RIOS`) | `motor v50` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`); la v33, el terreno (`terreno_al_dia`, `mapas_terreno`: Script TOP `alturas`, Ramp TOP `rampa_hipso`), bolas y conos en los modelos, y en el shader las familias tierra y agua, los pisos, el sombreado rasante y el borde tintado ; la v34, el diagnóstico de los ríos (`diagnostico_rios`, fase 13 v3) | `comun v34` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun; v5: la naturaleza legible; v6: árboles de pisos; v7: las ramas, desde el tercio superior del tronco visible) | `fase11 v7` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal; v5: solo la autoprueba (la naturaleza toma el color de los pisos y el relieve es la malla); v6: solo la autoprueba (el material de la velocidad va a la copa de los árboles) | `fase12 v6` |
-| `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometrías `tejido` y (v2) `rios`, página Fase13 (v2: ríos azules por el suelo real, lagos) | `fase13 v2` |
+| `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometrías `tejido` y (v2) `rios`, página Fase13 (v2: ríos azules por el suelo real, lagos; v3: diagnóstico de la cadena, `Anchominpx`, `Pendientemin`, `Pruebario`) | `fase13 v3` |
 | `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 (v2: un pad de impulso no es arañazo) | `fase14 v2` |
 | `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 (v2: la autoprueba no depende de la `Herencia` del proyecto) | `fase15 v2` |
 | `fase16_cortes.py` | Arqueología temática: lo que enseñan los cortes (fondo y paredes), unión de cortes (cañón y galería de metro), página Fase16 (v2: solo cambia el texto; corta la caja) | `fase16 v2` |
@@ -451,6 +451,44 @@ Comprueba:
 - **Brillo:** especular alto (rugosidad 0,1) y emisivo bajo (`Emisivorio` 0,25): se lee también en la cara de sombra.
 - **Pendiente:** bajan por el suelo real, así que nacen en las cumbres de la fase 11 v5 y bajan entre montes.
 - Las cintas solo se recalculan cuando cambian el tejido, el terreno o el suelo; las filas se guardan.
+
+### Ríos que se ven (fase 13 v3, motor v50, comun v34)
+
+**Qué pasaba.** Con la cámara de globo no se veía ningún río. Antes de cambiar nada más hay que saber en qué punto de la cadena desaparecen.
+
+**El diagnóstico lo hace la propia fase.** Al aplicar `fase13_tejido.py` (v3) el Textport muestra:
+
+```
+ANTES DE RELANZAR  Nivel 19
+                   fix de los rios azules (fase 13 v2): aplicado
+DIAGNOSTICO DE LOS RIOS
+  OK     1. Nivel 19
+  OK     2. fase 13 fase13 v3; parametros de los rios presentes
+  OK     3. el motor genera 4 tramos (4 fuentes, 2 lagos, caudal max 1)
+  OK     4. i_rios con 40 instancias; rios en el render
+  OK     5. cintas de 4.4 px (Anchominpx 2.0), azul reservado, mat_piel_agua sin errores, sin copas encima, a 0.025 del suelo
+```
+
+Recorre los puntos del encargo en orden y **para en el primero que falla** (marcado `FALLA`: es el estado del mundo, no un fallo del script):
+1. **¿Fase 13 aplicada?** `Nivel` antes de relanzar (`ANTES DE RELANZAR`) y después.
+2. **¿Fix de los ríos azules?** La versión de la fase y si estaban `Colorrio`, `Anchorio`, `Anchomaxrio`, `Emisivorio` y `Lagos` antes de relanzar.
+3. **¿Genera tramos el motor?** Si no, dice por qué: no hay relieve (ninguna celda del SEQ2), el mapa de alturas está vacío (sin numpy), el relieve más alto no llega a `Pendientemin` × el límite, o no hay ninguna vecina más baja. Enterrar una concha no borra los ríos: se recalculan con cada mundo y vuelven en cuanto hay relieve.
+4. **¿Llegan a la geometría?** Instancias de `i_rios` y si `rios` está en la lista del render. `DIAGNOSTICO DEL RENDER` también revisa `i_rios` y `mat_piel_agua`.
+5. **¿Se ven?** El ancho en píxeles de la cinta más ancha con la cámara de globo, el material (`mat_piel_agua`) y sus errores, el azul de cada cinta y si algún piso de árbol cae encima.
+
+**Lo que se encontró en simulación** (con los valores del proyecto de la hoja Estratos_parametros: `Shellthick` 0,26, `Alturafactor` 8, `Growstep` 0,04…): el motor genera ríos en todo momento (de 6 a 11, con 6 a 12 tramos en una sesión de 6 minutos) y miden de 4 a 5 px a 720 px de alto. Así que, si en TouchDesigner no se ven, falla un punto anterior al 3 (nivel o versión aplicados) o uno de representación (4 o 5). La hoja dice además que el proyecto estaba en el nivel 8 cuando se hizo; sin la fase 13 no hay ríos. Y un hueco real en el punto 5: desde los árboles de pisos (fase 11 v6), el piso de abajo del bosque se ensancha hasta las vecinas y podía tapar la cinta desde arriba.
+
+**Cambios.**
+- **`Anchominpx`** (2 px): el río nunca mide menos en pantalla con la cámara de globo (el planeta a `Encuadre` del alto de un cuadro de 720 px), se calcule como se calcule su ancho en mundo.
+- **Por encima de todo lo bajo:** la cinta sigue a 2,5 centésimas sobre el suelo y el relieve (más en las laderas), sobre la loseta y lejos del centro de la celda. Nuevo: **los pisos de los árboles se recortan** para no pasar por encima del río (como mucho hasta su orilla), y ningún tronco lo pisa.
+- **Azul que se lee:** el color reservado (`Colorrio`) y el emisivo (`Emisivorio`), sin cambios.
+- **`Pendientemin`** (0,01 × el límite; antes fijo en 0,05): el relieve mínimo de una fuente. Y la celda más alta de cada cluster de relieve es fuente siempre, aunque el mundo sea casi plano.
+- **`Pruebario`** (pulso): levanta una cordillera de 5 celdas en el anillo de `Nota2` (con notas del SEQ2, como `Sembrar2`) y dice en el Textport el río que baja de su cumbre y su ancho en píxeles. Si con eso no se ve un río azul desde el globo, el fallo está en la representación, no en el motor.
+- **Leyenda:** `RIOS     tramos 6   fuentes 3   lagos 0   caudal max 1   ancho 4.9 px`.
+
+**Autoprueba (v3):** `Pruebario` da una cordillera y un río azul que baja de la cumbre y mide al menos `Anchominpx`; con `Anchominpx` 6 la cinta mide 6 px; tras `Pruebario` los cinco puntos del diagnóstico salen `OK`; con un bosque alrededor ningún piso de árbol queda encima de la cinta; en un mundo casi plano la celda más alta del cluster de relieve es fuente; y la línea `RIOS` de la leyenda.
+
+**Parámetros nuevos (página Fase13):** `Anchominpx` 2 px · `Pendientemin` 0,01 · `Pruebario`.
 
 ---
 
@@ -977,6 +1015,21 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | Emisivo bajo | Solo difuso | Se perdía en la cara de sombra |
 | Geometría y material propios (`rios`, `mat_piel_agua`) | Seguir en `tejido` con el mineral | Ningún tinte ni borde puede tocarlos |
 
+**Fase 13 v3 · ríos que se ven.** Diagnóstico, en el orden del encargo:
+1. Fase 13: en TouchDesigner, lo dice `ANTES DE RELANZAR` al aplicar la v3. La hoja Estratos_parametros, hecha antes, da `Nivel` 8: sin la fase 13 no hay ríos.
+2. Fix de los ríos azules: lo dice la misma línea.
+3. Tramos: en simulación, con los valores del proyecto, el motor siempre genera (6–11 ríos); el relieve suave no los impedía (la capital de relieve era fuente). Enterrar no los borra: se recalculan.
+4. Geometría: correcta en simulación (`i_rios` con sus filas, `rios` en el render).
+5. Pantalla: de 4 a 5 px a 720 px de alto, azul reservado, emisivo; **tapados por los pisos del bosque** desde la fase 11 v6 (el piso de abajo llega a las vecinas).
+
+| Decisión | Alternativa descartada | Motivo |
+|---|---|---|
+| La fase diagnostica la cadena al aplicarse y para en el primer punto que falla | Pedir capturas y valores a mano | Desde aquí no se ve el proyecto: el Textport lo cuenta |
+| Pisos de árbol recortados junto al río | Subir la cinta por encima de las copas | Una cinta flotando sobre el bosque no se lee como río |
+| Ancho mínimo en píxeles (`Anchominpx`) sobre un cuadro de 720 px | Subir `Anchorio` | El planeta crece con las conchas: un ancho en mundo acaba bajo el píxel |
+| La cumbre de cada cluster de relieve es fuente siempre; `Pendientemin` como parámetro | Fuentes solo con relieve de 0,05 × el límite | Con un mundo muy plano no nacía ningún río |
+| `Pruebario` con notas del SEQ2 | Escribir el mundo a mano | Respeta las reglas del motor (desborde, clusters, cadenas) |
+
 ### Decisiones tomadas en la fase 14
 
 | Pregunta | Decisión |
@@ -1092,7 +1145,7 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 13. **Escenas (fase 18)**: que cada escena se ve como se espera y que guardar y cargar no tocan el mundo; que los focos de obra, las brasas y el polvo se leen como luz (mezcla aditiva de `mat_luz_local`) y no tapan nada; con la sesión real de 20 minutos, los fotogramas con el máximo de piezas.
 14. **Modular (fase 19)**: decidir cómo llegan los voltajes (OSC o un CHOP) y comprobar en la leyenda `MODULAR` que llegan y en qué rango. Que la niebla de la cámara existe (página Fog de `camara`; si no, solo la piel tiene niebla) y que el glitch no molesta a la lectura con saturación baja.
 15. **Naturaleza legible (fase 11 v5)**: que `mat_piel_tierra` compila (clic derecho → Info) y que su página Samplers tiene `sAlturas` = `alturas` y `sRampa` = `rampa_hipso`; que `alturas` es de 32 bits float y que las montañas salen hacia fuera y en su sitio (si salen del revés en latitud, el Script TOP voltea la imagen: dímelo y lo invierto); que `modelos/veg_conifera/cono` tiene la punta arriba; a distancia de globo, que una cordillera nevada se distingue de un bosque y que el borde se enciende con la nota. Medir los fotogramas cuando cambia la ocupación de una montaña (se rehace el mapa).
-16. **Ríos azules (fase 13 v2)**: que se ven azules desde la cámara de globo, también en la cara de sombra (si no, sube `Emisivorio`), y que los lagos llenan las hondonadas sin tapar las cicatrices.
+16. **Ríos azules (fase 13 v2 y v3)**: aplicar `fase13_tejido.py` y pegarme el bloque `ANTES DE RELANZAR` y `DIAGNOSTICO DE LOS RIOS`; pulsar `Pruebario` y mirar el río desde el globo (si no se ve azul con la línea `PRUEBARIO` correcta, el fallo es de representación); que se ven también en la cara de sombra (si no, sube `Emisivorio`) y que los lagos llenan las hondonadas sin tapar las cicatrices.
 
 ### Problemas frecuentes
 
