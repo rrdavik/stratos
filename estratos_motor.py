@@ -31,7 +31,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v46'
+MOTOR_VERSION = 'motor v47'
 
 import math
 
@@ -7375,7 +7375,7 @@ def luz_color(nombre, k, frame=None):
 # modo (Modocamara).
 
 CAM_DIR = (0.0, 0.0, 1.0)          # direccion de referencia de la camara
-CAM_TRANS = 20.0                   # segundos de Planofinal y del cambio de modo
+CAM_TRANS = 20.0                   # segundos del cambio de modo (Modocamara)
 ENCUADRE = 0.85                    # alto del planeta en la pantalla (1 = de borde a borde)
 RETICULA_SOBRE = 0.2               # lo que asoma la reticula sobre el planeta
 CAJA_EXT = (0.5, 1.0, 0.5)         # semiejes de la caja de las geometrias (base en y = 0)
@@ -7586,8 +7586,7 @@ def camera_state():
         d, v = d_min, max(0.0, v)
     _CACHE.update(cam_d=d, cam_v=v, cam_R=R)
     # modo: peso de la camara de superficie (0 globo, 1 superficie)
-    sup = c['nivel'] >= 10 and str(_p('Modocamara', 'globo')) == 'superficie' \
-        and not _p('Planofinal', False)
+    sup = c['nivel'] >= 10 and str(_p('Modocamara', 'globo')) == 'superficie'
     wq = _CACHE.get('cam_w')
     if wq is None:
         wq = 1.0 if sup else 0.0

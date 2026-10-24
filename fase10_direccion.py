@@ -23,8 +23,9 @@ QUE HACE
                  planeta ensenan todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
-                 Planofinal la lleva en 20 s al encuadre de globo.
-               Cambiar de modo en directo hace la misma transicion de 20 s.
+               Cambiar de modo en directo hace una transicion de 20 s.
+               (v11: sin Planofinal: el globo ya es la camara por defecto;
+               relanzar la fase lo borra de la pagina)
   ACTUACION    Modoactuacion oculta reticula y leyenda (la luz de celda se
                ve: es parte del mundo). Al
                quitarlo vuelve el modo diagnostico.
@@ -38,7 +39,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v10  (camara de globo: Encuadre, el alto del planeta en pantalla; superficie como modo; paleta)'
+VERSION = 'fase10 v11  (sin Planofinal: la camara la gobiernan Modocamara, Camaltura y Camvel)'
 banner(VERSION)
 
 base = require_base(10)
@@ -50,18 +51,26 @@ add_par(base, page, 'menu', 'Modocamara', 'Camara', 'globo', menu=['globo', 'sup
 add_encuadre(base)                      # motor v36: un solo parametro de encuadre
 add_par(base, page, 'float', 'Camsuave', 'Segundos para el encuadre nuevo', 3.0, 0.0, 20.0)
 add_par(base, page, 'toggle', 'Modoactuacion', 'Modo actuacion (sin diagnostico)', False)
-add_par(base, page, 'toggle', 'Planofinal', 'Plano final: el globo entero (en superficie)', False)
 add_par(base, page, 'float', 'Camaltura', 'Altura de camara sobre la superficie (superficie)', 4.0, 0.5, 20.0)
 add_par(base, page, 'float', 'Camvel', 'Velocidad de camara, grados/s (superficie)', 0.6, 0.0, 6.0)
-for nm, lb in (('Planofinal', 'Plano final: el globo entero (en superficie)'),
-               ('Camaltura', 'Altura de camara sobre la superficie (superficie)'),
+for nm, lb in (('Camaltura', 'Altura de camara sobre la superficie (superficie)'),
                ('Camvel', 'Velocidad de camara, grados/s (superficie)')):
     try:
         getattr(base.par, nm).label = lb
     except Exception:
         pass
 ok('pagina Fase10: Modocamara (globo), Encuadre (0,85), Camsuave (3 s), Modoactuacion, '
-   'Planofinal, Camaltura, Camvel')
+   'Camaltura, Camvel')
+
+
+def quitar_planofinal(base):
+    """v11: Planofinal ya no existe (la camara de globo es la de por defecto):
+    en un proyecto que lo tenia se borra el parametro."""
+    return has_par(base, 'Planofinal') and remove_par(base, 'Planofinal')
+
+
+if quitar_planofinal(base):
+    ok('Planofinal: quitado de la pagina Fase10 (la camara la gobiernan Modocamara, Camaltura y Camvel)')
 
 # --- camara -------------------------------------------------------------------
 obj = get_or_make(base, 'nullCOMP', 'objetivo', 400, -280)
@@ -121,7 +130,7 @@ leeme(base, 10, """FASE 10 - DIRECCION VISUAL
   Camara de globo (Modocamara): el planeta entero y centrado; Encuadre es
   su alto en la pantalla (1 = de borde a borde). Con cada concha nueva se
   aleja en Camsuave s. Superficie: a Camaltura, orbita a Camvel grados/s;
-  Planofinal la lleva al globo en 20 s.
+  cambiar de modo hace una transicion de 20 s.
   Modoactuacion: sin reticula ni leyenda; la luz de celda se ve.
   Luz cenital fria; nucleo negro; una concha de cada color; cian en cicatrices.""")
 
@@ -243,12 +252,19 @@ def _encuadre_cercano(t, m):
     base.par.Encuadre = k0
     t.check('sin Encuadremargen ni Holguraaltura (un solo parametro)',
             not has_par(base, 'Encuadremargen') and not has_par(base, 'Holguraaltura'))
+    # v11: relanzar la fase sobre un proyecto que tenia Planofinal lo borra
+    if not has_par(base, 'Planofinal'):
+        get_page(base, 'Fase10').appendToggle('Planofinal', label='Plano final (v10)')
+    tenia = has_par(base, 'Planofinal')
+    quitar_planofinal(base)
+    t.check('sin Planofinal: relanzar la fase sobre un proyecto que lo tenia borra el parametro',
+            tenia and not has_par(base, 'Planofinal') and m._p('Planofinal', None) is None)
     m.cam_reset()
 
 
 run_test(base, prueba)
 print('  Listo: el sistema completo.')
-print('  Para actuar: Modoactuacion. Para cerrar: Planofinal.')
+print('  Para actuar: Modoactuacion.')
 print('  Ajustes de encuadre: Encuadre (alto del planeta), Camsuave y Tilt; en superficie,')
 print('  Camaltura y Camvel.')
 print('=' * 66)
