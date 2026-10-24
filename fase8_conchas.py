@@ -21,6 +21,20 @@ Al terminar cada ciclo de ecosistema (fase 6: lo cierra el mundo):
      del SEQ2 (desde el motor v46, tambien los verdes de los pisos y el
      azul de los rios: 120-275); claro y oscuro alternos; croma de
      mineral (Paletacroma).
+     CONCHAS DISCRETAS (v12, motor v53): el suelo no compite con lo
+     construido. Luminosidad media Paletaluz (0,35), alternando
+     Paletaalterna (0,06) entre conchas seguidas; la ocupada, solo
+     Contrasteocupada (0,04) mas clara; Paletacroma 0,04. Dos conchas
+     seguidas difieren al menos 60 grados de tono y Paletaalterna de
+     luminosidad: en un corte, las bandas se leen por el tono.
+     TAPA NEUTRA: la cara de arriba de la loseta superior de cada columna
+     se mezcla Tapaneutra (0,6) hacia un gris de luminosidad Tapaluz
+     (0,28), mate; los flancos conservan el color de su concha, que se ve
+     en las paredes de los cortes. Una instancia fina por columna (N mas,
+     no el doble). El tinte del secuenciador sigue encima; la cicatriz
+     tine tambien la tapa. Valores de antes: Paletaluz 0,57,
+     Paletaalterna 0,14, Contrasteocupada 0,12, Paletacroma 0,09,
+     Tapaneutra 0.
      Calculado de la generacion: cambiar la paleta recolorea lo enterrado.
      Paleta = mineral vuelve a la anterior (ambar y grises).
   2. El planeta engorda el GROSOR de la concha. Con Grosortiempo es
@@ -77,7 +91,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v11  (autoprueba: la paleta tambien reserva los verdes de los pisos y el azul de los rios)'
+VERSION = 'fase8 v12  (conchas discretas: suelo oscuro, poco contraste y tapa neutra)'
 banner(VERSION)
 
 base = require_base(8)
@@ -94,16 +108,52 @@ add_par(base, page, 'float', 'Colmatacion', 'Relleno de las hondonadas al enterr
 add_par(base, page, 'menu', 'Paleta', 'Paleta de las conchas', 'generaciones',
         menu=['generaciones', 'mineral'], menu_labels=['Un color por concha', 'Mineral (anterior)'])
 add_par(base, page, 'float', 'Paletatono', 'Tono de la primera concha (grados)', 20.0, 0.0, 360.0)
-add_par(base, page, 'float', 'Paletacroma', 'Saturacion de las conchas', 0.09, 0.0, 0.15, clamp=True)
+add_par(base, page, 'float', 'Paletacroma', 'Saturacion de las conchas', 0.04, 0.0, 0.15, clamp=True)
+add_par(base, page, 'float', 'Paletaluz', 'Luminosidad media de las conchas', 0.35, 0.05, 0.95, clamp=True)
+add_par(base, page, 'float', 'Paletaalterna', 'Diferencia de luminosidad entre conchas seguidas', 0.06, 0.0, 0.4,
+        clamp=True)
+add_par(base, page, 'float', 'Contrasteocupada', 'Loseta ocupada: cuanto mas clara (0: igual)', 0.04, 0.0, 0.3,
+        clamp=True)
+add_par(base, page, 'float', 'Tapaneutra', 'Tapa de las losetas hacia el gris (0: como los flancos)', 0.6, 0.0, 1.0,
+        clamp=True)
+add_par(base, page, 'float', 'Tapaluz', 'Luminosidad del gris de la tapa', 0.28, 0.0, 1.0, clamp=True)
+# v12: el defecto de Paletacroma baja de 0,09 a 0,04; un proyecto que seguia en 0,09 pasa al nuevo
+try:
+    if abs(base.par.Paletacroma.eval() - 0.09) < 1e-9:
+        base.par.Paletacroma = 0.04
+        info('Paletacroma 0,09 -> 0,04 (el nuevo defecto; vuelve a 0,09 para el aspecto anterior)')
+except Exception:
+    pass
+try:                # y en la tabla de escenas de la fase 18, si sigue con los de antes (0,09 y 0,06)
+    tab = base.op('escenas')
+    for r in range(1, tab.numRows if tab is not None else 0):
+        nuevo = {('naturaleza', '0.09'): '0.04', ('ciudad', '0.06'): '0.03'}.get((tab[r, 0].val, tab[r, 2].val))
+        if tab[r, 1].val == 'Paletacroma' and nuevo:
+            tab[r, 2] = nuevo
+            info('escenas: Paletacroma de %s -> %s' % (tab[r, 0].val, nuevo))
+except Exception:
+    pass
 try:
     base.par.Maxconchas.label = 'Losetas visibles por columna'
 except Exception:
     pass
 ok('pagina Fase8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Grosormax (1,5), '
    'Cortezamax (4), '
-   'Colmatacion (0), Paleta (generaciones), Paletatono (20), Paletacroma (0,09)')
+   'Colmatacion (0), Paleta (generaciones), Paletatono (20), Paletacroma (0,04), Paletaluz (0,35), '
+   'Paletaalterna (0,06), Contrasteocupada (0,04), Tapaneutra (0,6), Tapaluz (0,28)')
 
-make_phong(base, 'mat_estratos', 780, 620, spec=0.12, shin=8, diff=1.0)
+make_phong(base, 'mat_estratos', 780, 620, spec=0.0, shin=1, diff=1.0)     # v12: mate
+ok('mat_estratos mate (sin especular): las losetas no compiten con los reflejos de mat_pulido')
+try:
+    l_tapa, l_form = motor.module.jerarquia_suelo(motor.module.cfg())
+    if l_tapa <= l_form - motor.module.JERARQUIA_MARGEN:
+        ok('jerarquia: la tapa mas clara (L %.2f) queda %.2f por debajo de las formaciones (L %.2f)'
+           % (l_tapa, l_form - l_tapa, l_form))
+    else:
+        info('jerarquia: la tapa mas clara (L %.2f) no queda 0,15 por debajo de las formaciones (L %.2f): '
+             'baja Paletaluz o Contrasteocupada, o sube Tapaneutra' % (l_tapa, l_form))
+except Exception as e:
+    info('jerarquia: no pude comprobarla (%s)' % e)
 make_instanced(base, 'estratos', 520, 620, 'mat_estratos')
 conchas_al_dia(base, motor.module)     # desde la fase 15, las conchas con el shader de la piel
 set_render(base)
@@ -120,7 +170,9 @@ else:
 leeme(base, 8, """FASE 8 - CONCHAS
   En cada fin de ciclo cada celda deposita una loseta sobre su columna,
   con el color de su generacion (Paleta: uno distinto por concha): las hondonadas se tapizan (Colmatacion
-  las rellena). Grosor: Shellthick x compases / Ciclomin (Grosortiempo),
+  las rellena). Conchas discretas: Paletaluz (0,35), Paletaalterna (0,06),
+  Contrasteocupada (0,04), Paletacroma (0,04); la tapa de arriba, Tapaneutra
+  (0,6) hacia el gris Tapaluz (0,28); los flancos, con su color. Grosor: Shellthick x compases / Ciclomin (Grosortiempo),
   entre 0,25x y Ciclomax/Ciclomin, como mucho Grosormax (1,5).
   Cortezamax (4): la concha nueva compacta las viejas; la corteza tiende
   a ese grosor y el planeta deja de engordar (0: sin compactar).
@@ -137,6 +189,7 @@ def prueba(t):
     m = t.m
     c = dict(m.cfg())
     c['corteza_max'] = 0.0              # sin compactar: el radio es el tiempo
+    c['tapa_neutra'] = 0.0              # sin tapa: una instancia por loseta (la tapa se prueba aparte)
     W = m.new_world()
     for g in range(4):
         for k in range(16):
@@ -245,27 +298,44 @@ def prueba(t):
             '%.3f -> %.3f (x%.3f)' % (lq0, m.laguna(Wq, cz, i), Wq['compacta']))
     # paleta de generaciones
     cp = dict(c)
-    cp.update(paleta=0, paleta_tono=20.0, paleta_croma=0.09,
+    cp.update(paleta=0, paleta_tono=20.0, paleta_croma=0.04, paleta_luz=0.35, paleta_alterna=0.06,
+              contraste_ocupada=0.04, tapa_neutra=0.0, tapa_luz=0.28,
               nivel=min(c['nivel'], 14))          # desde la fase 15 la concha lleva la materia de su tema
 
     def oklch(n, ocup):
-        L = m.L_VACIA[n % 2] + (m.L_OCUPADA if ocup else 0.0)
-        return L, m.palette_hue(n, cp['paleta_tono'])
+        return m.palette_l(cp, n, ocup), m.palette_hue(n, cp['paleta_tono'])
     contraste = all(min(abs(oklch(n, 0)[1] - oklch(n + 1, 0)[1]),
                         360 - abs(oklch(n, 0)[1] - oklch(n + 1, 0)[1])) >= 60
-                    and abs(oklch(n, 0)[0] - oklch(n + 1, 0)[0]) >= 0.1 - 1e-9 for n in range(200))
-    t.check('paleta: dos conchas seguidas difieren 60 grados de tono y 0,1 de luminosidad', contraste)
+                    and abs(oklch(n, 0)[0] - oklch(n + 1, 0)[0]) >= cp['paleta_alterna'] - 1e-9
+                    for n in range(200))
+    t.check('paleta: dos conchas seguidas difieren 60 grados de tono y Paletaalterna de luminosidad', contraste)
     t.check('paleta: ningun tono en las bandas reservadas (ambar 55-100; verdes, cian y azul de los rios 120-275)',
             not any(m._en_banda(m.palette_hue(n, cp['paleta_tono'])) for n in range(200)))
     gama = all(m.oklch_to_srgb(oklch(n, o)[0], cp['paleta_croma'], oklch(n, o)[1])[1]
                for n in range(200) for o in (0, 1))
     t.check('paleta: todos los colores dentro de sRGB sin recortar', gama)
-    ref = ['#904D4E', '#A47AAF', '#6D651F', '#B8758D', '#685891', '#BC7867', '#824F79', '#889352']
     hx = lambda col: '#%02X%02X%02X' % tuple(int(round(v * 255)) for v in col)
-    t.check('paleta: los colores de referencia', [hx(m.generation_color(cp, n, False)) for n in range(8)] == ref)
-    t.check('paleta: la loseta ocupada, mas clara que la vacia',
-            all(sum(m.generation_color(cp, n, True)) > sum(m.generation_color(cp, n, False)) + 0.1
-                for n in range(200)))
+    ref = [('#452B2A', '#503534'), ('#4C3C50', '#57465B'), ('#37341B', '#413E25'), ('#543A43', '#5F444D'),
+           ('#342F45', '#3F3950'), ('#563B34', '#61453F'), ('#3F2B3C', '#4A3546'), ('#41452D', '#4B5037')]
+    t.check('paleta: los colores de referencia (vacia y ocupada)',
+            [(hx(m.generation_color(cp, n, False)), hx(m.generation_color(cp, n, True))) for n in range(8)] == ref)
+    t.check('paleta: la loseta ocupada, algo mas clara que la vacia',
+            all(sum(m.generation_color(cp, n, False)) < sum(m.generation_color(cp, n, True))
+                < sum(m.generation_color(cp, n, False)) + 0.25 for n in range(200)))
+    c0 = dict(cp, contraste_ocupada=0.0)
+    t.check('Contrasteocupada 0: la ocupada, igual que la vacia',
+            all(m.generation_color(c0, n, True) == m.generation_color(c0, n, False) for n in range(20)))
+    viejos = dict(cp, paleta_luz=0.57, paleta_alterna=0.14, contraste_ocupada=0.12, paleta_croma=0.09)
+    t.check('valores antiguos: la paleta de antes, tal cual',
+            [hx(m.generation_color(viejos, n, False)) for n in range(8)]
+            == ['#904D4E', '#A47AAF', '#6D651F', '#B8758D', '#685891', '#BC7867', '#824F79', '#889352']
+            and all(abs(m.palette_l(viejos, n, o) - (m.L_VACIA[n % 2] + (m.L_OCUPADA if o else 0))) < 1e-9
+                    for n in range(4) for o in (0, 1)))
+    l_tapa, l_form = m.jerarquia_suelo(dict(cp, tapa_neutra=0.6))
+    l_viejo = m.jerarquia_suelo(dict(viejos, tapa_neutra=0.0))[0]
+    t.check('jerarquia: con los valores nuevos la tapa queda 0,15 por debajo de las formaciones (antes no)',
+            l_tapa <= l_form - m.JERARQUIA_MARGEN and l_viejo > l_form - m.JERARQUIA_MARGEN,
+            'tapa %.2f, antes %.2f, formaciones %.2f' % (l_tapa, l_viejo, l_form))
     Wp = m.new_world()
     for g in range(3):
         m.note_on(Wp, cp, 1, 64, 100, float(g))
@@ -287,6 +357,21 @@ def prueba(t):
             tuple(t1[0][9:12]) == m.generation_color(cp, Wp['shells'][0]['gen'],
                                                      Wp['shells'][0]['occ'][0] > 0)
             and all(a[9:12] != b[9:12] for a, b in zip(t1, t2)))
+    # tapa neutra: una tapa fina y gris por columna, los flancos con su color
+    ct = dict(cp, tapa_neutra=0.6)
+    sin, con = m.build_tiles(Wp, cp, 0.0), m.build_tiles(Wp, ct, 0.0)
+    tapas = [r for r in con if r not in sin]
+    t.check('Tapaneutra: una tapa por columna (N instancias mas, no el doble)',
+            len(con) == len(sin) + m.N and len(tapas) == m.N, '%d -> %d' % (len(sin), len(con)))
+    gris = m.tapa_gris(ct)
+    tp, su = tapas[0], sin[len(Wp['shells']) - 1]       # la tapa y la loseta de arriba de la celda 0
+    alto = lambda r: math.sqrt(sum(x * x for x in r[:3])) + r[7]
+    t.check('la tapa: 60 % hacia el gris Tapaluz, encima de la loseta de arriba y algo mas ancha',
+            all(abs(tp[9 + k] - (0.4 * su[9 + k] + 0.6 * gris[k])) < 1e-9 for k in range(3))
+            and tp[6] > su[6] and 0 < alto(tp) - alto(su) < 0.01 * su[7])
+    t.check('los flancos conservan su color con la tapa neutra', [r for r in con if r in sin] == sin)
+    t.check('Tapaneutra 0: sin tapa, como antes', m.build_tiles(Wp, dict(ct, tapa_neutra=0.0), 0.0) == sin)
+    t.check('Paleta mineral: sin tapa', len(m.build_tiles(Wp, dict(ct, paleta=1), 0.0)) == len(sin))
     cc = dict(cp)
     cc['nivel'] = max(9, cc['nivel'])
     m.cut(Wp, cc, i, 1, 0, 50.0)
@@ -298,6 +383,10 @@ def prueba(t):
     esperado = m._mix(m.COL_SCAR, m.tile_color(cc, Wp['shells'][fondo[0]], Wp['shells'][fondo[0]]['occ'][i]), 0.5)
     t.check('la cicatriz se funde con el color de la concha de la loseta',
             fila and all(abs(fila[0][9 + k] - esperado[k]) < 1e-6 for k in range(3)))
+    ctn = dict(cc, tapa_neutra=0.6)
+    cian = [r for r in m.build_tiles(Wp, ctn, 50.0) if r[9] < 0.15 and r[11] > 0.95]
+    t.check('la cicatriz manda sobre la tapa neutra: loseta y tapa recien expuestas, en cian',
+            len(cian) >= 2 and any(r[7] < 0.5 * (fondo[2] - fondo[1]) for r in cian), '%d' % len(cian))
     # la luz del secuenciador en las conchas de la celda
     import math
     cl = dict(c)
@@ -375,7 +464,9 @@ def prueba(t):
     m._CACHE['inst'] = m.build_instances(m.world(), m.cfg(), 0.0)
     est = base.op('i_estratos')
     est.cook(force=True)
-    t.check('i_estratos dibuja la concha', est.numSamples == m.N, '%d de %d' % (est.numSamples, m.N))
+    quiere = m.N * (2 if m.tapa_on(m.cfg()) else 1)     # con Tapaneutra, una tapa por columna
+    t.check('i_estratos dibuja la concha (y sus tapas)', est.numSamples == quiere,
+            '%d de %d' % (est.numSamples, quiere))
     t.check('leyenda CONCHAS', 'CONCHAS' in m.legend())
 
 
