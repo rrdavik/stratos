@@ -15,10 +15,10 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12, ver `MONTAJE_FASES_3_10.md`); la v44, su pumping en seco (fase 7 v13); la v45, sus pulsos de ocupación (fase 7 v14); la v46, la naturaleza legible (fase 11 v5: monte boscoso, relieve en un mapa de alturas, dosel por colonización del espacio, pisos de color, tinte al borde) y los ríos azules (fase 13 v2); la v47, sin `Planofinal` (fase 10 v11) | `motor v47` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12, ver `MONTAJE_FASES_3_10.md`); la v44, su pumping en seco (fase 7 v13); la v45, sus pulsos de ocupación (fase 7 v14); la v46, la naturaleza legible (fase 11 v5: monte boscoso, relieve en un mapa de alturas, dosel por colonización del espacio, pisos de color, tinte al borde) y los ríos azules (fase 13 v2); la v47, sin `Planofinal` (fase 10 v11); la v48, los árboles de pisos (fase 11 v6: tronco, ramas y copa en pisos, sin esferas) | `motor v48` |
 | `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`); la v33, el terreno (`terreno_al_dia`, `mapas_terreno`: Script TOP `alturas`, Ramp TOP `rampa_hipso`), bolas y conos en los modelos, y en el shader las familias tierra y agua, los pisos, el sombreado rasante y el borde tintado | `comun v33` |
-| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun; v5: la naturaleza legible) | `fase11 v5` |
-| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal; v5: solo la autoprueba (la naturaleza toma el color de los pisos y el relieve es la malla) | `fase12 v5` |
+| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun; v5: la naturaleza legible; v6: árboles de pisos) | `fase11 v6` |
+| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal; v5: solo la autoprueba (la naturaleza toma el color de los pisos y el relieve es la malla); v6: solo la autoprueba (el material de la velocidad va a la copa de los árboles) | `fase12 v6` |
 | `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometrías `tejido` y (v2) `rios`, página Fase13 (v2: ríos azules por el suelo real, lagos) | `fase13 v2` |
 | `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 (v2: un pad de impulso no es arañazo) | `fase14 v2` |
 | `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 (v2: la autoprueba no depende de la `Herencia` del proyecto) | `fase15 v2` |
@@ -59,14 +59,14 @@ Cada pieza que el motor ya colocaba como caja pasa a ser un modelo del tema acti
 
 | Estado (umbrales de la fase 4) | Vegetación | Relieve | Informal | Planificada |
 |---|---|---|---|---|
-| semilla (1) | brote: bola o cono pequeño | cono con ruido de crestas y columnas de basalto en las laderas bajas | caseta (2) | bloque de una planta (2) |
-| crecimiento (2 a `Umbralram` − 1) | árbol: frondosa (bola) o conífera (cono) según el piso | el cono sube | añadidos oblicuos apilados | apila plantas |
-| ramificación (`Umbralram`, 5+) | arboleda: 5 a 12 copas agrupadas | montañas satélite | pasarelas hacia las vecinas | anexos: manzana |
-| fusión (`Umbralfusion`, 7+) | bosque: dosel continuo (colonización del espacio) | cordillera (cluster de 3+), sin columnas | barrio denso | podio que une la manzana |
+| semilla (1) | brote: tronco corto y un solo piso pequeño | cono con ruido de crestas y columnas de basalto en las laderas bajas | caseta (2) | bloque de una planta (2) |
+| crecimiento (2 a `Umbralram` − 1) | el tronco sube y se añaden pisos (hasta `Pisoscopa`) y ramas | el cono sube | añadidos oblicuos apilados | apila plantas |
+| ramificación (`Umbralram`, 5+) | el árbol y 2 a 4 árboles jóvenes alrededor (1–2 pisos); los satélites, árboles jóvenes | montañas satélite | pasarelas hacia las vecinas | anexos: manzana |
+| fusión (`Umbralfusion`, 7+) | bosquecillo: los pisos de abajo se tocan, dosel continuo | cordillera (cluster de 3+), sin columnas | barrio denso | podio que une la manzana |
 | monte (`Umbralmonte`, 8+) | monte boscoso: sube el terreno y el bosque lo cubre | el terreno sube: cumbres nevadas | — | — |
-| coronación (`Umbralcorona`, 9+) | sigue el monte (sin árbol madre) | sigue el monte | torre de antenas | rascacielos con aguja |
+| coronación (`Umbralcorona`, 9+) | un árbol emergente que sobresale del dosel, con el piso de arriba en punta | sigue el monte | torre de antenas | rascacielos con aguja |
 
-*Desde la fase 11 v5 la naturaleza tiene su escalera propia: ver* La naturaleza legible *más abajo. La tabla de la ciudad no cambia.*
+*Desde la fase 11 v5 la naturaleza tiene su escalera propia (ver* La naturaleza legible *más abajo), y desde la v6 sus árboles son de pisos (ver* Árboles de pisos*). La tabla de la ciudad no cambia.*
 
 **Ojo con los números.** El plan habla de ocupación 1, 2–3, 4–5, 6–7 y 8+. Aquí los estados salen de los umbrales que ya tiene el motor (`Umbralram` 5, `Umbralfusion` 7, `Umbralcorona` 9), para que cambiar un umbral cambie también la piel. Con los valores por defecto cada estado empieza una ocupación más tarde que en el plan.
 
@@ -188,7 +188,7 @@ Comprueba: el catálogo completo en los dos temas (estados, puentes, protagonist
 - **Las columnas de basalto** quedan como textura de las laderas bajas en los estados 1 a 3 (5 columnas oscuras alrededor del cono). Las mesetas, la cumbre escalonada y los puentes del relieve ya no se dibujan.
 - **Híbrido** (la vegetación coloniza el relieve): el bosque sube por la ladera hasta `Limitebosque`; por encima, roca y nieve.
 
-**Dosel por colonización del espacio.**
+**Dosel por colonización del espacio** (fase 11 v5; desde la v6 lo sustituyen los árboles de pisos, ver más abajo).
 - En los clusters de vegetación de 4 celdas o más (y en un bosque suelto) la copa es una sola envolvente: se siembran puntos de atracción en el volumen de cada celda y las ramas crecen hacia ellos desde una raíz en el centro (Runions, Lane y Prusinkiewicz, 2007). Cada celda coloniza su parte: **abierta hasta arriba hacia sus vecinas del cluster y en cúpula hacia fuera**, así que las partes se juntan en una sola copa sin solaparse.
 - Se calcula en Python, **una vez por celda y vecinas del cluster** (se guarda): un cluster que crece solo rehace sus bordes. La primera versión colonizaba el cluster entero de golpe y, con clusters de 30 celdas que cambian a cada nota, tardaba unos 100 ms cada vez (lo detectó la sesión de 20 minutos).
 - **Lo que llega a la imagen** es el borde de la copa: de lejos, las copas de arriba (bolas o conos, 1,25 veces más grandes); cerca, todas y los troncos. Claras arriba, más oscuras abajo: la textura granulada que hace de ventanas de la ciudad.
@@ -236,6 +236,45 @@ NATURA   copas 214   montes 2   cordilleras 1   cumbres nevadas 3   detalle glob
 **Rendimiento** (simulación, sesión de naturaleza de 5 minutos, un fotograma sin cambios): `build_instances` 3,9 ms de mediana, frente a 3,5 ms de la ciudad (+11 %) y 3,5 ms de la naturaleza antes del cambio. Cuando cambia la ocupación de una celda con relieve o monte, ese fotograma rehace el mapa de alturas (los parches de cada rasgo se guardan; se recomponen solo las filas con relieve) y TouchDesigner sube la textura: unos ms más en ese fotograma. El tiempo real hay que medirlo en TouchDesigner.
 
 **Lo que necesita el shader.** El relieve solo se levanta con el shader de la piel (`mat_piel_tierra`): con `Materialrespaldo` las formaciones pasan a Phong pero la malla del terreno sigue con su GLSL MAT, porque sin él no hay desplazamiento.
+
+### Árboles de pisos (fase 11 v6, motor v48)
+
+**Qué pasaba.** Las copas eran bolas: cada formación se leía como un racimo de esferas («bolas de caviar») y no como un árbol. Faltaba lo que hace que un árbol se reconozca de lejos: tronco visible, ramas en ángulo y una copa con silueta propia, más ancha que el tronco y abierta.
+
+**Cómo es un árbol.** Piezas instanciadas, como el resto de formaciones, en el lenguaje del mundo (sin realismo de postal y sin esferas):
+
+| Pieza | Modelo | Forma |
+|---|---|---|
+| Tronco | `veg_tronco` (caja) | fino y alto, oscuro y siempre mate; se ve por debajo de la copa: `Troncofrac` × el alto (0,35) |
+| Ramas | `veg_rama` (caja fina) | 2 a 4, del tronco a `Angulorama` grados (40), repartidas alrededor del eje con un giro que sale de la celda y del sitio (no hay dos árboles iguales); cada una acaba bajo un piso y lo sostiene; nacen en lo alto del tronco, nunca a ras del suelo |
+| Pisos de la copa | `veg_piso` (prisma hexagonal plano) | 1 a `Pisoscopa` (3), apilados, con hueco entre ellos (cada uno, un tercio de su tramo) y estrechándose hacia arriba: el de abajo mide `Anchocopa` × el alto (0,6) y el de arriba un 40 %; cada uno girado 17° respecto al anterior |
+| Punta | `veg_cono` (cono de 8 caras) | el piso de arriba del árbol emergente de la coronación |
+
+- **Pino o acacia:** en el piso montano (desde el 35 % de la altura de los pisos de color) el árbol es un pino, con los pisos un 25 % más estrechos; en el basal, una acacia, un 15 % más ancha.
+- **9 piezas como mucho** por árbol: tronco + 4 ramas + 4 pisos.
+- **Material:** la copa lleva el material de la velocidad (fase 12) y el color de su piso de altitud, más clara arriba; el tronco y las ramas, madera oscura y siempre mate.
+- El catálogo sigue diciendo qué modelo es el piso (`fusion`, variante 0) y cuál la punta (variante 1); `veg_brote`, `veg_arbol`, `veg_conifera` y `veg_prot1`–`3` son árboles enteros de pisos en un solo modelo. Ningún modelo vegetal lleva esferas; `veg_copa` y `veg_brote2` ya no existen.
+
+**Cómo crece** (mismos umbrales, crecimiento y límite de altura):
+
+| Estado | Árbol |
+|---|---|
+| Semilla | brote: tronco corto y un solo piso pequeño (2 piezas) |
+| Crecimiento | el tronco sube y se añade un piso y una rama por ocupación, hasta `Pisoscopa` |
+| Ramificación | el árbol entero y 2 a 4 árboles jóvenes alrededor, más bajos, de 1 o 2 pisos (hasta `Maxcaosnat`, el mapa logístico los mueve y escala; por encima, repartidos en corro). Las celdas satélite, un árbol joven |
+| Fusión (y clusters de 4+) | bosquecillo: el piso de abajo de cada árbol llega a las vecinas (de 0,65 a 1,1 veces la celda, con la etapa `puentes`) y las copas forman un dosel continuo |
+| Monte (`Umbralmonte`) | el mismo bosque, sobre el terreno que sube |
+| Coronación | un árbol emergente que sobresale del dosel (1,35 veces más alto y un 10 % más por tramo de cumbre), con el piso de arriba en punta |
+
+Los clusters de 2 y 3 celdas llevan en la capital un árbol protagonista (1,1 veces más alto, con 4 ramas). Los bosques que suben por un relieve (híbridos) son 8 árboles jóvenes de 2 pisos por celda, hasta `Limitebosque`.
+
+**Detalle (LOD):** con la cámara de globo, los árboles jóvenes van sin ramas; cerca (`Lodnat` px por celda o la cámara de superficie), con 2.
+
+**Parámetros nuevos (página Fase11):** `Pisoscopa` 3 (1–4) · `Anchocopa` 0,6 · `Angulorama` 40° (30–50) · `Troncofrac` 0,35.
+
+**Autoprueba:** la escalera de 1 a 12 (brote de 2 piezas; tronco, 3 pisos y ramas; el árbol y sus jóvenes; un bosque con el piso de abajo de al menos 0,6 celdas; la punta y más alto en la coronación; solo piezas de árbol en todos los estados); la forma (tronco visible de `Troncofrac`, ramas a `Angulorama`, pisos que se estrechan y giran, 9 piezas, ningún modelo vegetal con esferas); el tronco mate y la copa con el material de la velocidad; `Sembrarzona` × 2 da un árbol por celda del cluster; el bosque sobre la cordillera no pasa de `Limitebosque`; y el rendimiento frente a la ciudad.
+
+**Rendimiento** (simulación, sesión de naturaleza de 5 minutos, un fotograma sin cambios): `build_instances` 4,3 ms de mediana frente a 3,9 ms de la ciudad (+10 %), en la misma máquina.
 
 ---
 
@@ -885,13 +924,22 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | Por encima del bosque sube el terreno | Más piezas apiladas (árbol madre, caos) | A escala de globo el apilado es ruido |
 | Pisos por altura relativa al suelo local | Por radio absoluto | El planeta crece y los pisos se moverían |
 | Tinte del SEQ al borde (fresnel, focos uTinte) | Tinte en el albedo | El verde es lo que dice «naturaleza» |
-| Dosel por colonización del espacio, una parte por celda abierta a sus vecinas del cluster | Copas sueltas por celda; colonizar el cluster entero de golpe | Masa única sin solapes; el cluster entero tardaba ~100 ms en cada cambio |
+| Dosel por colonización del espacio, una parte por celda abierta a sus vecinas del cluster (hasta la v5) | Copas sueltas por celda; colonizar el cluster entero de golpe | Masa única sin solapes; el cluster entero tardaba ~100 ms en cada cambio |
 | Cordillera como malla por cluster | Columnas por celda | Silueta continua legible |
 | Una sola esfera desplazada en el shader por un mapa de alturas (Script TOP) | Un Script SOP que rehace la malla en Python | Sin reconstruir geometría: solo una textura cuando cambia la ocupación |
 | El mapa se rehace con la ocupación, no con el stop-motion | Seguir la altura visible fotograma a fotograma | Rehacerlo 24 veces por segundo no cabe en el fotograma; la cumbre salta a su altura nueva |
 | Escalera por los umbrales (`Umbralram`, `Umbralfusion`) y `Umbralmonte` aparte | Los números del encargo (4–5, 6–7) | Como en el resto de la piel: cambiar un umbral cambia la piel |
 | Puntos de atracción por hash determinista | El mapa logístico | Sus ternas casi se repiten: la cúpula de una celda suelta quedaba vacía |
 | Banda verde reservada desde 120° | Desde 100° (todo el verde amarillento) | Con menos tono libre dos conchas seguidas dejarían de diferir 60° |
+
+**Fase 11 v6 · árboles de pisos.** Causa: las copas eran bolas (las del dosel por colonización del espacio y las de los árboles sueltos), y un racimo de esferas no se lee como árbol.
+
+| Decisión | Alternativa descartada | Motivo |
+|---|---|---|
+| Árbol de piezas instanciadas: tronco, ramas y pisos | Un modelo de árbol entero por estado | El giro de cada piso y de cada rama, y el ancho del piso de abajo (el bosque), cambian por árbol |
+| Pisos de prisma hexagonal plano; punta de cono facetado | Esferas o un modelo nuevo | Sin geometrías nuevas: el prisma y el cono ya existían, y son facetados |
+| El bosque: el piso de abajo llega a las vecinas | Colonización del espacio con bolas | Copas que se tocan sin dejar de ser árboles; menos piezas |
+| Los jóvenes sin ramas con la cámara de globo | Siempre con ramas | Menos piezas de lejos, donde una rama joven mide menos de un píxel |
 
 ---
 

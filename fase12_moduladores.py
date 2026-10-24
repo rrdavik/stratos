@@ -47,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v5  (autoprueba: la naturaleza toma el color de los pisos; el relieve, de la malla)'
+VERSION = 'fase12 v6  (autoprueba: el material de la velocidad va a la copa de los arboles de pisos)'
 banner(VERSION)
 
 base = require_base(12)
@@ -180,6 +180,9 @@ def _prueba(t, m):
                 if g.startswith('mod_') and abs(sum(f[q] * m.normal_i(i)[q] for q in range(3))
                                                 - m.base_radius(W, m.cfg(), i)) < 1e-6:
                     principal = principal or f
+        if pulso == 'Sembrar':                          # fase 11 v6: la copa del arbol (el piso de abajo);
+            principal = next((f for g, fs in sorted(inst.items())     # el tronco es siempre mate
+                              if g.startswith('mod_veg_piso') for f in fs), principal)
         if principal is None and pulso == 'Sembrar2':   # fase 11 v5: el relieve es la malla; sus
             principal = next((f for g, fs in sorted(inst.items())      # columnas, en las laderas
                               if g.startswith('mod_rel_') for f in fs), None)
