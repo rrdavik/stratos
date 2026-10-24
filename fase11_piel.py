@@ -23,7 +23,7 @@ malla ortogonal.
 ARBOLES DE PISOS (v6)
 ---------------------
   Cada arbol son piezas instanciadas, sin esferas: tronco fino y oscuro que
-  se ve por debajo de la copa (Troncofrac), 2 a 4 ramas que salen del tronco
+  se ve por debajo de la copa (Troncofrac), 2 a 4 ramas que salen del tercio superior del tronco
   a Angulorama grados y sostienen los pisos, y 1 a Pisoscopa pisos planos que
   se estrechan hacia arriba (el de abajo, Anchocopa x el alto), cada uno
   girado; pino en el piso montano, acacia en el basal. 9 piezas como mucho.
@@ -96,7 +96,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v6  (arboles de pisos: tronco, ramas y copa en pisos; sin bolas)'
+VERSION = 'fase11 v7  (arboles de pisos: las ramas salen del tercio superior del tronco visible)'
 banner(VERSION)
 
 base = require_base(11)
@@ -520,12 +520,14 @@ def _prueba_natural(t, m):
     pisos = [x for x in forma if x[5] >= 0]
     ramas = [x for x in forma if x[5] == -2]
     bolas = [mo for mo, prims in m.MODELOS.items() if mo.startswith('veg_') and any(p_[0] == 'bola' for p_ in prims)]
-    t.check('el arbol: tronco visible (%.2f del alto), %d ramas a %.0f grados, %d pisos que se estrechan, '
+    t.check('el arbol: tronco visible (%.2f del alto), %d ramas a %.0f grados desde su tercio superior, '
+            '%d pisos que se estrechan, '
             '%d piezas (<= 9), ningun modelo vegetal con esferas' % (pisos[0][1] / 2.0, len(ramas),
                                                                       c['angulo_rama'], len(pisos), len(forma)),
             len(forma) <= 9 and len(tronco) == 1 and abs(pisos[0][1] / 2.0 - c['tronco_frac']) < 1e-9
             and all(a[2][0] > b[2][0] for a, b in zip(pisos, pisos[1:]))
             and all(abs(x[3] - c['angulo_rama']) < 1e-9 for x in ramas) and 2 <= len(ramas) <= 4
+            and all(x[1] >= 2.0 / 3.0 * pisos[0][1] - 1e-9 for x in ramas)
             and len(set(x[4] for x in pisos)) == len(pisos) and not bolas, ', '.join(bolas))
     W = mundo([i], m.GEO, 3)
     inst = m.build_instances(W, c, absTime.seconds + 10.0)
