@@ -23,8 +23,9 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 
 import td
 import copy
+import math
 
-VERSION_COMUN = 'comun v33'
+VERSION_COMUN = 'comun v34'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -97,7 +98,8 @@ def diagnostico_render(base):
     malos = []
     for nm in ['motor', 'latido', 'ritmo', 'reticula_chop', 'formas_callbacks',
                'i_formas_pulidas', 'i_formas_porosas', 'i_coronas', 'i_estratos',
-               'i_luz_celda', 'camara', 'render', 'rotulo', 'con_rotulo', 'salida']:
+               'i_luz_celda', 'i_rios', 'mat_piel_agua', 'camara', 'render', 'rotulo', 'con_rotulo',
+               'salida']:
         o = base.op(nm)
         if o is None:
             continue
@@ -117,6 +119,129 @@ def diagnostico_render(base):
             print('  AVISO  linea de tiempo PARADA: las formaciones no brotan hasta darle a play')
     except Exception:
         pass
+    print('-' * 66)
+
+
+RIOS_PARS = ('Colorrior', 'Anchorio', 'Anchomaxrio', 'Emisivorio', 'Lagos')
+
+
+def diagnostico_rios(base, m, version=None):
+    """Fase 13 v3: en que punto de la cadena desaparecen los rios. Recorre los
+    puntos en orden y para en el primero que falla. Devuelve [(estado, punto,
+    texto)], estado OK o FALLA (el
+    punto donde desaparecen; no es un fallo del script, es el estado del mundo)."""
+    out = []
+
+    def nota(estado, punto, texto):
+        out.append((estado, punto, texto))
+        return estado != 'FALLA'
+    try:
+        W, c = m.world(), m.cfg()
+    except Exception as e:
+        nota('FALLA', 0, 'el motor no responde: %s' % e)
+        return out
+    # 1. la fase 13
+    if not nota('OK' if c['nivel'] >= 13 else 'FALLA', 1,
+                'Nivel %d%s' % (c['nivel'], '' if c['nivel'] >= 13 else
+                                ': menor de 13, el motor no genera rios; aplica fase13_tejido.py')):
+        return out
+    # 2. el fix de rios azules (fase 13 v2 o posterior)
+    faltan = [nm for nm in RIOS_PARS if not has_par(base, nm)]
+    if not nota('FALLA' if faltan else 'OK', 2, 'fase 13 %s; parametros de los rios %s'
+                % (version or '?', 'que faltan: ' + ', '.join(faltan) if faltan else 'presentes')):
+        return out
+    # 3. el motor genera tramos
+    if m.tema_de(c) != 'naturaleza':
+        nota('FALLA', 3, 'Tema ciudad: los rios son de la naturaleza (en la ciudad hay carreteras)')
+        return out
+    tj = m.tejido(W, c)
+    ter = m.terreno(W, c)
+    n_tramos = sum(len(r) - 1 for r in tj['rios'])
+    if n_tramos == 0:
+        lim = m.limit(c)
+        rel = [x for x in range(m.N) if W['occ'][x] > 0 and W['own'][x] == m.ARQ]
+        umbral = c['pendiente_min'] * lim
+        alto = max(ter['centro'] or [0.0])
+        if not rel:
+            motivo = 'no hay relieve (ninguna celda del SEQ2): los rios nacen en las cumbres'
+        elif ter.get('E') is None:
+            motivo = 'el mapa de alturas esta vacio (sin numpy en TouchDesigner?)'
+        elif alto <= umbral:
+            motivo = ('el relieve mas alto mide %.3f y una fuente pide Pendientemin x el limite = %.3f: '
+                      'baja Pendientemin' % (alto, umbral))
+        else:
+            motivo = ('hay cumbres (relieve max %.3f) pero ninguna vecina mas baja: el relieve no tiene '
+                      'pendiente hacia ningun lado' % alto)
+        nota('FALLA', 3, 'el motor no genera tramos: %s. Enterrar una concha no borra los rios: se '
+                         'recalculan con el mundo nuevo (con relieve vuelven)' % motivo)
+        return out
+    W['vh'] = list(W['vh'])
+    inst = m.build_instances(W, c, absTime.seconds)
+    rr = W.get('rios_res') or {}
+    nota('OK', 3, 'el motor genera %d tramos (%d fuentes, %d lagos, caudal max %d)'
+         % (n_tramos, rr.get('fuentes', 0), rr.get('lagos', 0), rr.get('caudal', 0)))
+    # 4. llegan a una geometria del render
+    chop, geo = base.op('i_rios'), base.op('rios')
+    filas = inst.get('rios', [])
+    try:
+        if chop is not None:
+            m._CACHE['inst'] = inst
+            chop.cook(force=True)
+        n_chop = chop.numSamples if chop is not None else 0
+    except Exception:
+        n_chop = 0
+    try:
+        en_render = 'rios' in str(base.op('render').par.geometry.val).split()
+    except Exception:
+        en_render = False
+    if chop is None or geo is None or n_chop < len(filas) or not en_render:
+        nota('FALLA', 4, 'i_rios %s, geometria rios %s, en el render %s; relanza fase13_tejido.py'
+             % ('%d muestras de %d' % (n_chop, len(filas)) if chop is not None else 'no existe',
+                'existe' if geo is not None else 'no existe', 'si' if en_render else 'no'))
+        return out
+    nota('OK', 4, 'i_rios con %d instancias; rios en el render' % n_chop)
+    # 5. se ven en pantalla
+    px = rr.get('px', 0.0)
+    mat = nombre_op(geo.par.material.eval()) if has_par(geo, 'material') else '?'
+    errs = _errs(base.op('mat_piel_agua')) if base.op('mat_piel_agua') is not None else 'no existe'
+    col = m.color_rio(c)
+    azules = all(tuple(f[9:12]) == tuple(col) for f in filas)
+    tapados = 0
+    cauces = m.cauces(W, c)['por_celda']
+    for g, fs in inst.items():          # copas de arbol que caen sobre la cinta
+        if g.startswith('mod_veg_piso'):
+            for f in fs:
+                r_ = math.sqrt(f[0] ** 2 + f[1] ** 2 + f[2] ** 2)
+                d = (f[0] / r_, f[1] / r_, f[2] / r_)
+                for lista in cauces.values():
+                    if any(math.sqrt(max(0.0, 2.0 * (1.0 - sum(d[k] * q[k] for k in range(3))))) * r_
+                           < 0.5 * f[6] for q, _ in lista):
+                        tapados += 1
+                        break
+    problemas = []
+    if px < c['ancho_min_px'] - 1e-6:
+        problemas.append('mide %.1f px, menos que Anchominpx' % px)
+    if mat != 'mat_piel_agua' and mat != 'mat_respaldo':
+        problemas.append('su material es %s, no mat_piel_agua' % mat)
+    if errs:
+        problemas.append('mat_piel_agua: %s' % errs)
+    if not azules:
+        problemas.append('alguna cinta no lleva el azul de Colorrio')
+    if tapados:
+        problemas.append('%d pisos de arbol encima de la cinta' % tapados)
+    nota('FALLA' if problemas else 'OK', 5,
+         ('; '.join(problemas)) if problemas else
+         'cintas de %.1f px (Anchominpx %.1f), azul reservado, mat_piel_agua sin errores, sin copas encima, '
+         'a %.3f del suelo' % (px, c['ancho_min_px'], m.RIO_LIFT))
+    return out
+
+
+def informe_rios(base, m, version=None):
+    """Imprime el diagnostico de los rios (diagnostico_rios)."""
+    print('DIAGNOSTICO DE LOS RIOS')
+    print('-' * 66)
+    for estado, punto, texto in diagnostico_rios(base, m, version):
+        print('  %-6s %d. %s' % (estado, punto, texto))
     print('-' * 66)
 
 

@@ -40,6 +40,21 @@ PROBAR SIN BEATSTEP
   Sembrarzona2 dos veces y Sembrar2 en el centro (Nota2) para levantarlo:
   el rio baja de la cumbre por las laderas hasta el llano.
 
+RIOS QUE SE VEN (v3)
+--------------------
+  Al aplicarse, la fase recorre la cadena (DIAGNOSTICO DE LOS RIOS) y dice
+  en que punto desaparecen: 1 Nivel, 2 el fix de los rios azules, 3 el motor
+  genera tramos, 4 llegan a la geometria 'rios' del render, 5 se ven
+  (ancho en pixeles, material, color, copas encima). La leyenda lleva la
+  linea RIOS (tramos, fuentes, lagos, caudal max, ancho en px).
+  Anchominpx  el rio nunca mide menos de esos pixeles con la camara de globo
+  Pendientemin relieve minimo de una fuente (x el limite); la celda mas alta
+              de cada cluster de relieve es fuente siempre
+  Pruebario   levanta una cordillera de 5 celdas en el anillo de Nota2 y
+              dice el rio que baja de su cumbre: si no se ve azul desde el
+              globo, el fallo esta en la representacion, no en el motor
+  Los pisos de los arboles no tapan la cinta: se recortan a su lado.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase13_tejido.py').read())
@@ -49,10 +64,16 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v2  (rios azules: bajan por el suelo real, cintas que bordean, ancho por caudal, lagos)'
+VERSION = 'fase13 v3  (rios que se ven: diagnostico de la cadena, Anchominpx, Pendientemin, Pruebario)'
 banner(VERSION)
 
 base = require_base(13)
+# v3: como estaba el proyecto antes de relanzar (puntos 1 y 2 del diagnostico de los rios)
+try:
+    nivel_antes = int(base.par.Nivel.eval())
+except Exception:
+    nivel_antes = None
+faltaban = [nm for nm in RIOS_PARS if not has_par(base, nm)]
 motor = install_core(base, CARPETA, 13)
 m = motor.module
 
@@ -72,8 +93,12 @@ add_par(base, page, 'float', 'Anchorio', 'Ancho minimo de un rio', 0.10, 0.01, 1
 add_par(base, page, 'float', 'Anchomaxrio', 'Ancho maximo de un rio (caudal)', 0.34, 0.01, 1.5)
 add_par(base, page, 'float', 'Emisivorio', 'Emisivo del agua (cara de sombra)', 0.25, 0.0, 1.0)
 add_par(base, page, 'toggle', 'Lagos', 'Lagos en las hondonadas', True)
+add_par(base, page, 'float', 'Anchominpx', 'Ancho minimo del rio en pantalla (px, camara de globo)', 2.0, 0.0, 10.0)
+add_par(base, page, 'float', 'Pendientemin', 'Relieve minimo de una fuente (x el limite)', 0.01, 0.0, 0.5)
+add_par(base, page, 'pulse', 'Pruebario', 'Cordillera de prueba y su rio (en Nota2)')
 ok('pagina Fase13: Rios, Carreteras, Minvia 2, Grosorvia 0,18 (carreteras), Maxrio 12; v2: Colorrio '
-   '(OKLCH 0,55 0,15 255), Anchorio 0,10, Anchomaxrio 0,34, Emisivorio 0,25, Lagos')
+   '(OKLCH 0,55 0,15 255), Anchorio 0,10, Anchomaxrio 0,34, Emisivorio 0,25, Lagos; v3: Anchominpx 2, '
+   'Pendientemin 0,01, Pruebario')
 
 # -----------------------------------------------------------------------------
 # GEOMETRIA: el tejido, cajas a ras del suelo con el shader de la piel
@@ -100,9 +125,18 @@ leeme(base, 13, """FASE 13 - TEJIDO CONECTIVO
   Ciudad: carreteras por Kruskal entre capitales y formaciones sueltas con
   ocupacion >= Minvia, por el camino mas corto de la reticula.
   A ras del suelo, bajo las formaciones (geometria tejido). Grosorvia.
-  Prueba: Sembrarzona en dos zonas separadas.""")
+  Prueba: Sembrarzona en dos zonas separadas.
+  v3: Pruebario (cordillera de 5 celdas en Nota2 y su rio); Anchominpx
+  (ancho minimo en pantalla); Pendientemin (relieve minimo de una fuente).
+  Al aplicar la fase: DIAGNOSTICO DE LOS RIOS en el Textport; leyenda RIOS.""")
 
 print_report()
+print('ANTES DE RELANZAR  Nivel %s%s' % (nivel_antes if nivel_antes is not None else '?',
+                                     '   (menor de 13: no habia rios)' if nivel_antes is not None and nivel_antes < 13
+                                     else ''))
+print('                   fix de los rios azules (fase 13 v2): %s'
+      % ('no aplicado: faltaban ' + ', '.join(faltaban) if faltaban else 'aplicado'))
+informe_rios(base, m, VERSION.split('  ')[0])
 
 
 # -----------------------------------------------------------------------------
@@ -112,7 +146,8 @@ print_report()
 def prueba(t):
     m = t.m
     guarda = {}
-    for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Rios', 'Carreteras', 'Minvia', 'Maxrio', 'Lagos'):
+    for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Rios', 'Carreteras', 'Minvia', 'Maxrio', 'Lagos',
+               'Anchominpx', 'Pendientemin'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -318,6 +353,80 @@ def _prueba(t, m):
     chop.cook(force=True)
     t.check('i_rios recibe las cintas (con el canal a)', chop.numSamples >= 1 and chop['a'] is not None)
     t.check('leyenda TEJIDO', 'TEJIDO' in m.legend() and 'rios' in m.legend() and 'lagos' in m.legend())
+    _prueba_v3(t, m)
+
+
+def _prueba_v3(t, m):
+    """v3: rios que se ven desde el globo."""
+    import math
+    base.par.Tema = 'naturaleza'
+    # 1. Pruebario: una cordillera de 5 celdas y un rio azul de la cumbre al valle, visible
+    m.reset_world()
+    base.par.Nota2 = 64
+    m.on_pulse('Pruebario')
+    W, c = m.world(), m.cfg()
+    inst = m.build_instances(W, c, absTime.seconds + 10.0)
+    m._CACHE['inst'] = inst
+    rr = W.get('rios_res') or {}
+    tj = m.tejido(W, c)
+    ter = m.terreno(W, c)
+    G = [m.suelo(W, c, x) + ter['centro'][x] for x in range(m.N)]
+    baja = tj['rios'] and all(G[b] < G[a] for r_ in tj['rios'] for a, b in zip(r_, r_[1:]))
+    t.check('Pruebario: cordillera de 5 celdas y un rio azul de la cumbre al valle (%d tramos, %.1f px)'
+            % (rr.get('tramos', 0), rr.get('px', 0.0)),
+            ter['cordilleras'] == 1 and rr.get('tramos', 0) > 0 and baja and inst.get('rios')
+            and all(tuple(f[9:12]) == tuple(m.color_rio(c)) for f in inst['rios'])
+            and rr.get('px', 0.0) >= c['ancho_min_px'] - 1e-6)
+    # 2. Anchominpx: con el planeta grande (rios estrechos en pantalla) el rio no baja de esos px
+    base.par.Anchominpx = 6.0
+    c6 = m.cfg()
+    m.build_instances(W, c6, absTime.seconds + 10.0)
+    px6 = (W.get('rios_res') or {}).get('px', 0.0)
+    base.par.Anchominpx = 2.0
+    t.check('Anchominpx: el rio nunca mide menos en pantalla (6 px -> %.1f px)' % px6, px6 >= 6.0 - 1e-6)
+    # 3. el diagnostico de la cadena llega al punto 5 sin fallos
+    diag = diagnostico_rios(base, m, 'fase13 v3')
+    t.check('diagnostico de los rios: los cinco puntos OK tras Pruebario',
+            [d[1] for d in diag] == [1, 2, 3, 4, 5] and all(d[0] == 'OK' for d in diag),
+            '; '.join('%s %d %s' % d for d in diag if d[0] != 'OK'))
+    # 4. las copas de los arboles no tapan la cinta
+    i = m.note_cell(64)
+    for x in range(m.N):
+        if W['occ'][x] <= 0 and x not in tj['rios'][0]:
+            W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = 7, m.GEO, m.GEO, 100
+            W['h'][x] = W['vh'][x] = m.height_for(c, 7)
+    inst = m.build_instances(W, c, absTime.seconds + 10.0)
+    cauces = m.cauces(W, c)['por_celda']
+    tapan = 0
+    for g, fs in inst.items():
+        if g.startswith('mod_veg_piso'):
+            for f in fs:
+                r_ = math.sqrt(sum(v * v for v in f[:3]))
+                d = tuple(v / r_ for v in f[:3])
+                if any(math.sqrt(max(0.0, 2.0 * (1.0 - sum(d[k] * q[k] for k in range(3))))) * r_ < 0.5 * f[6]
+                       for lista in cauces.values() for q, _ in lista):
+                    tapan += 1
+    t.check('un bosque alrededor: ningun piso de arbol encima de la cinta (%d pisos)'
+            % sum(len(v) for g, v in inst.items() if g.startswith('mod_veg_piso')), tapan == 0,
+            '%d pisos encima' % tapan)
+    # 5. un mundo casi plano: con Pendientemin bajo, la celda mas alta del cluster de relieve es fuente
+    Wp = m.new_world()
+    zona_ = [i] + list(m.NEIGH[i])
+    for x in zona_:
+        Wp['occ'][x], Wp['own'][x], Wp['sp'][x], Wp['vel'][x] = 2, m.ARQ, m.ARQ, 100
+        Wp['h'][x] = Wp['vh'][x] = m.height_for(c, 2)
+    Wp['occ'][i] = 3
+    cp = dict(c)
+    cp.update(seed_frac=0.18, grow_frac=0.04, shell_thick=0.26, height_factor=8.0, pendiente_min=0.5)
+    alto_ = max(m.terreno(Wp, cp)['centro'])
+    sin = m.rios(Wp, cp)[0]
+    cp['pendiente_min'] = 0.01
+    con = m.rios(Wp, cp)[0]
+    t.check('mundo casi plano (relieve %.2f): con Pendientemin 0,5 %s; con 0,01 la cumbre del cluster es '
+            'fuente (%d rios)' % (alto_, 'tambien' if sin else 'no hay rios', len(con)),
+            con and any(r_[0] == max(zona_, key=lambda x: m.terreno(Wp, cp)['centro'][x]) for r_ in con))
+    t.check('leyenda RIOS (tramos, fuentes, lagos, caudal max, ancho en px)',
+            'RIOS     tramos' in m.legend() and 'px' in m.legend())
 
 run_test(base, prueba)
 print('  Ahora: con Tema ciudad, Sembrarzona en dos notas lejanas: la carretera')
