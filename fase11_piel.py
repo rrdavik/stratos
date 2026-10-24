@@ -43,6 +43,11 @@ BROTES, ARBOLES Y TERRAZAS (v8)
                sobre relieve: un bancal por nota del SEQ1 por la curva de nivel,
                Riego en cascada con la fase 13) y MESETA-JARDIN (relieve sobre
                vegetacion: un nivel por nota del SEQ2, frutales en Marco, Setos).
+  LIGERO       (por defecto, para una maquina modesta) la naturaleza se
+               recalcula cada Refresconat s (a saltos: sus Script CHOP casi no
+               se recuecen), 6 arboles por celda de bosque, tarjetas de racimo
+               con la camara de globo, Variantes 2 y solo el arbol joven y el
+               adulto en TD (80 geometrias).
   (Los arboles de pisos de la v6 y la v7 se sustituyen; sus parametros
   Pisoscopa, Anchocopa, Angulorama y Troncofrac se quitan.)
 
