@@ -14,6 +14,9 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
     (una caja, una esfera o, desde la fase 11, un modelo del catalogo)
   - instanciar_modelos(): las geometrias de los modelos (fase 11: pulida y
     porosa; fase 12: una por modelo con el shader de la piel)
+  - terreno_al_dia(): la malla del relieve (fase 11 v5): la esfera 'terreno'
+    que el shader desplaza con el mapa de alturas del motor (Script TOP
+    'alturas') y colorea con los pisos (Ramp TOP 'rampa_hipso')
   - set_render(), set_legend(), autoprueba
 =============================================================================
 """
@@ -21,10 +24,10 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 
-VERSION_COMUN = 'comun v32'
+VERSION_COMUN = 'comun v33'
 COMP_PATH = '/project1/FASE1'
 
-RENDER_ORDER = ['nucleo', 'estratos', 'tejido', 'reticula', 'formas_porosas', 'formas_pulidas',
+RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
                 'coronas', 'particulas', 'diagnostico', 'luz_celda', 'luz_conchas',
                 'luz_local']                    # las capas aditivas, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
@@ -238,7 +241,7 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
             menu=None, menu_labels=None, clamp=False):
     """Anade un parametro si no existe. Si ya existe no lo toca: conserva
     lo que hayas ajustado a mano."""
-    if has_par(base, name):
+    if has_par(base, name) or (kind == 'rgb' and has_par(base, name + 'r')):
         return False
     if kind == 'float':
         p = page.appendFloat(name, label=label)
@@ -253,6 +256,11 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
         p = page.appendStr(name, label=label)
         if default is not None:
             p[0].default = p[0].val = default
+        return True
+    elif kind == 'rgb':                  # name + r g b (Colorrio -> Colorrior, Colorriog, Colorriob)
+        p = page.appendRGB(name, label=label)
+        for k, v in enumerate(default or (1.0, 1.0, 1.0)):
+            p[k].default = p[k].val = v
         return True
     elif kind == 'menu':
         p = page.appendMenu(name, label=label)
@@ -530,27 +538,70 @@ def onCook(scriptOp):
 # ventanas ambar que enciende uVentanas.x desde la fase 17). Las luces llegan
 # como uniformes (posicion y color x dimmer de luz_principal, luz_relleno y
 # luz_destello). Si el shader falla, Materialrespaldo vuelve a un Phong.
+# Fase 11 v5 (comun v33): 3 tierra, la malla del relieve (la esfera 'terreno'
+# desplazada en el vertex shader por el mapa de alturas del motor, sAlturas),
+# con los pisos de color de la rampa (sRampa, el Ramp TOP 'rampa_hipso'),
+# roca facetada, nieve brillante y un sombreado rasante fijo respecto a la
+# camara (relieve sombreado suizo); 4 agua, los rios y lagos: azul reservado,
+# especular alto y un emisivo bajo (uAgua.x) para la cara de sombra. En la
+# naturaleza el tinte del secuenciador y de los pads no toca el albedo: es
+# un emisivo de borde (fresnel, uBorde.x) alrededor de los focos uTinte0-2.
 
-PIEL_VERTEX = r"""// Estratos - piel (fase 12): vertex shader
+PIEL_VERTEX = r"""// Estratos - piel (fase 12; terreno, fase 11 v5): vertex shader
+uniform vec4 uTerreno;      // x: 1 la malla del terreno, y: altura de los pisos, z: lo que se hunde sin relieve
+uniform sampler2D sAlturas; // r: relieve sobre el suelo local, g: radio del suelo (lat/lon, fila 0 = polo sur)
+
 out Vertex {
     vec4 color;
     vec3 wPos;
     vec3 wNorm;
     vec3 oPos;
+    vec3 pPos;
+    float hrel;
     flat int inst;
     flat int camIndex;
 } oVert;
 
+vec2 uvDe(vec3 d)
+{
+    return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+}
+
+vec3 sobre(vec3 d)
+{
+    vec2 a = textureLod(sAlturas, uvDe(d), 0.0).rg;
+    float e = max(a.r, 0.0);
+    return d * (a.g + e - uTerreno.z * (1.0 - smoothstep(0.0, 0.08, e)));
+}
+
 void main()
 {
-    vec4 wPos = TDDeform(P);
+    vec3 p = P;
+    vec3 nrm = N;
+    float h = -1.0;
+    if (uTerreno.x > 0.5) {
+        // la esfera unidad, desplazada: el suelo de la celda mas el relieve
+        vec3 d = normalize(P);
+        vec3 e = normalize(cross(vec3(0.0, 1.0, 0.0), d) + vec3(1e-4, 0.0, 0.0));
+        vec3 t = cross(d, e);
+        p = sobre(d);
+        vec3 pe = sobre(normalize(d + e * 0.004));
+        vec3 pn = sobre(normalize(d + t * 0.004));
+        nrm = normalize(cross(pe - p, pn - p));
+        if (dot(nrm, d) < 0.0)
+            nrm = -nrm;
+        h = max(textureLod(sAlturas, uvDe(d), 0.0).r, 0.0) / max(1e-4, uTerreno.y);
+    }
+    vec4 wPos = TDDeform(p);
     gl_Position = TDWorldToProj(wPos);
 #ifndef TD_PICKING_ACTIVE
     oVert.camIndex = TDCameraIndex();
     oVert.inst = TDInstanceID();
     oVert.wPos = wPos.xyz;
-    oVert.wNorm = normalize(TDDeformNorm(N));
-    oVert.oPos = P;
+    oVert.wNorm = normalize(TDDeformNorm(nrm));
+    oVert.oPos = p;
+    oVert.pPos = (uTDMats[TDCameraIndex()].worldInverse * wPos).xyz;
+    oVert.hrel = h;
     oVert.color = TDInstanceColor(Cd);
 #else
     TDWritePickingValues();
@@ -558,8 +609,8 @@ void main()
 }
 """
 
-PIEL_PIXEL = r"""// Estratos - piel (fase 12): pixel shader
-uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad
+PIEL_PIXEL = r"""// Estratos - piel (fase 12; tierra, agua y borde, fase 11 v5): pixel shader
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua
 uniform vec4 uLuz0;         // posicion de luz_principal
 uniform vec4 uLuz0Col;      // su color x dimmer
 uniform vec4 uLuz1;         // luz_relleno
@@ -571,12 +622,25 @@ uniform vec4 uVentanas;     // x: ventanas de la ciudad, 0 apagadas (hasta la fa
 uniform vec4 uNiebla;       // fase 19: x cantidad 0-1, y distancia donde empieza, z donde es total
 uniform vec4 uNieblaCol;    // su color
 uniform vec4 uGlitch;       // fase 19: x saturacion del modular 0-1, y tiempo (s)
+uniform vec4 uTerreno;      // fase 11 v5: y altura de los pisos, w 1 si sRampa esta enlazada
+uniform vec4 uPisos;        // x Limitebosque, y Limitenieve, z sombreado rasante (0 fuera de la naturaleza)
+uniform vec4 uBorde;        // x intensidad del borde tintado (Tintebordenat; 0 en la ciudad)
+uniform vec4 uTinte0;       // focos del tinte: xyz direccion (planeta), w coseno del borde exterior
+uniform vec4 uTinteCol0;    // rgb color x intensidad, w coseno del borde interior
+uniform vec4 uTinte1;
+uniform vec4 uTinteCol1;
+uniform vec4 uTinte2;
+uniform vec4 uTinteCol2;
+uniform vec4 uAgua;         // x emisivo del agua (Emisivorio)
+uniform sampler2D sRampa;   // los pisos de color (Ramp TOP rampa_hipso)
 
 in Vertex {
     vec4 color;
     vec3 wPos;
     vec3 wNorm;
     vec3 oPos;
+    vec3 pPos;
+    float hrel;
     flat int inst;
     flat int camIndex;
 } iVert;
@@ -614,6 +678,25 @@ vec3 luz(vec3 pos, vec3 col, vec3 p, vec3 n, vec3 v, vec3 base, float expo, floa
     return base * col * nw;
 }
 
+vec3 rampa(float h)
+{
+    // la misma rampa que el Ramp TOP (rampa_hipso del motor), por si sRampa no esta
+    float lb = uPisos.x;
+    float ln = uPisos.y;
+    vec3 c = mix(vec3(0.11, 0.29, 0.11), vec3(0.15, 0.34, 0.13), smoothstep(0.0, 0.35, h));
+    c = mix(c, mix(vec3(0.07, 0.23, 0.18), vec3(0.10, 0.25, 0.20), smoothstep(0.36, lb - 0.05, h)),
+            step(0.355, h));
+    c = mix(c, vec3(0.38, 0.37, 0.21), smoothstep(lb - 0.05, lb, h));
+    c = mix(c, mix(vec3(0.50, 0.46, 0.40), vec3(0.31, 0.29, 0.27), smoothstep(lb + 0.05, ln - 0.01, h)),
+            smoothstep(lb, lb + 0.05, h));
+    return mix(c, mix(vec3(0.92, 0.94, 0.97), vec3(1.0), smoothstep(ln, 1.0, h)), step(ln - 0.001, h));
+}
+
+vec3 foco(vec4 t, vec4 c, vec3 d)
+{
+    return c.rgb * smoothstep(t.w, c.w, dot(d, t.xyz));
+}
+
 void main()
 {
     TDCheckDiscard();
@@ -636,7 +719,33 @@ void main()
     float wrap = 0.0;
     float amb = 1.0;
     bool vegetal = fam > 0.5 && fam < 1.5;
-    if (vegetal) {
+    bool tierra = fam > 2.5 && fam < 3.5;
+    bool agua = fam > 3.5;
+    float sombra = uPisos.z;
+    if (tierra) {
+        // los pisos por la altura sobre el suelo local: verde mate y granulado
+        // abajo, roca facetada en medio, nieve brillante arriba
+        float h = clamp(iVert.hrel, 0.0, 1.0);
+        base = uTerreno.w > 0.5 ? texture(sRampa, vec2(h, 0.5)).rgb : rampa(h);
+        float roca = smoothstep(uPisos.x, uPisos.x + 0.05, h) * (1.0 - step(uPisos.y, h));
+        float nieve = step(uPisos.y, h);
+        vec3 nf = normalize(cross(dFdx(iVert.wPos), dFdy(iVert.wPos)));
+        if (dot(nf, v) < 0.0)
+            nf = -nf;
+        n = normalize(mix(n, nf, 0.35 * roca));
+        vec3 qg = iVert.pPos * 9.0;
+        base *= mix(0.80 + 0.40 * ruido(qg * 3.0), 1.0, max(roca, nieve));
+        rug = mix(0.9, mix(0.7, 0.3, nieve), max(roca, nieve));
+        expo = mix(48.0, 6.0, rug);
+        ks = mix(0.30, 0.02, rug);
+        amb = 1.15;
+        sombra = max(sombra, 0.65);
+    } else if (agua) {
+        rug = clamp(iVert.color.a, 0.02, 1.0);
+        expo = 90.0;
+        ks = 1.4;
+        sombra = 0.0;
+    } else if (vegetal) {
         // vegetal: hojas en manchas anchas de dos verdes (nada de lineas finas);
         // las caras de lado (troncos, ramas, bordes de copa), mas pardas y oscuras;
         // cada planta con su matiz. Pulido: hoja cerosa; rugoso: musgo seco.
@@ -661,14 +770,24 @@ void main()
     dif += luz(uLuz0.xyz, uLuz0Col.rgb, iVert.wPos, n, v, base, expo, ks, wrap, spec);
     dif += luz(uLuz1.xyz, uLuz1Col.rgb, iVert.wPos, n, v, base, expo, ks, wrap, spec);
     dif += luz(uLuz2.xyz, uLuz2Col.rgb, iVert.wPos, n, v, base, expo, ks, wrap, spec);
+    if (sombra > 0.001 && (fam < 1.5 || fam > 2.5)) {
+        // relieve sombreado suizo: una luz rasante fija respecto a la camara (de
+        // arriba a la izquierda), para que crestas y valles se lean aunque gire el globo
+        mat4 ci = uTDMats[iVert.camIndex].camInverse;
+        vec3 lr = normalize(-ci[0].xyz * 0.75 + ci[1].xyz * 0.85 + ci[2].xyz * 0.35);
+        dif *= mix(1.0, 0.45 + 0.85 * max(dot(n, lr), 0.0), sombra);
+    }
     float fres = pow(1.0 - max(dot(n, v), 0.0), 5.0);
     vec3 col = dif + spec;
-    if (vegetal) {
+    if (agua) {
+        // agua: el azul se lee tambien en la cara de sombra (emisivo bajo)
+        col += base * uAgua.x + fres * vec3(0.10, 0.14, 0.20);
+    } else if (vegetal) {
         // a contraluz la copa deja pasar la luz: brillo verde, sin reflejo de vidrio
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
         float tras = pow(max(dot(-l0, v), 0.0), 3.0) * (1.0 - 0.5 * rug);
         col += tras * base * uLuz0Col.rgb * 0.35 + fres * vec3(0.05, 0.08, 0.05);
-    } else if (fam > 1.5) {
+    } else if (fam > 1.5 && fam < 2.5) {
         // ciudad: vidrio negro con reflejo de borde; ventanas ambar (fase 17): de
         // cada edificio se encienden tantas como diga su nivel (1 de 4 ... todas)
         col += fres * (1.0 - rug) * vec3(0.25, 0.28, 0.32);
@@ -678,9 +797,16 @@ void main()
         float cual = hash13(vec3(floor(wv), float(iVert.inst) * 0.731));
         float lado = 1.0 - abs(dot(n, normalize(iVert.wPos)));
         col += ventana * step(0.5, lado) * uVentanas.x * step(cual, luces - 0.001) * vec3(1.0, 0.62, 0.25);
-    } else {
+    } else if (!tierra) {
         // mineral: la obsidiana pulida tiene un reflejo de borde frio
         col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
+    }
+    if (uBorde.x > 0.001 && !agua && (fam < 1.5 || tierra)) {
+        // fase 11 v5: el tinte del secuenciador y de los pads, al borde (fresnel)
+        vec3 d = normalize(iVert.pPos);
+        vec3 tin = foco(uTinte0, uTinteCol0, d) + foco(uTinte1, uTinteCol1, d) + foco(uTinte2, uTinteCol2, d);
+        float borde = 0.15 + 0.85 * pow(1.0 - max(dot(n, v), 0.0), 2.0);
+        col += uBorde.x * borde * tin;
     }
     // fase 19: saturacion del modular -> fracturas y glitch en los materiales
     float gl = uGlitch.x;
@@ -950,6 +1076,8 @@ def piel_al_dia(base, m):
         if cambiadas:
             ok('piel: %d geometrias con el material de su familia (la vegetacion, mat_piel_dosel)'
                % cambiadas)
+        if base.op('terreno') is not None:      # fase 11 v5: la malla del relieve, al dia
+            setp(base.op('terreno'), 'material', 'mat_piel_tierra')
     except Exception as e:
         info('piel: no pude poner al dia los materiales (%s); relanza fase12_moduladores.py' % e)
     conchas_al_dia(base, m)
@@ -1480,6 +1608,7 @@ def color_luz_expr(luz, exprs):
 
 
 MODULAR_U = "parent().op('motor').module.modular_uniforme('%s', %d, absTime.frame)"
+PIEL_U = "parent().op('motor').module.piel_uniforme('%s', %d, absTime.frame)"
 PIEL_UNIFORMES = [
     ('uFamilia', ('%d', '0', '0', '0')),
     ('uLuz0', ("parent().op('luz_principal').par.tx", "parent().op('luz_principal').par.ty",
@@ -1496,8 +1625,18 @@ PIEL_UNIFORMES = [
     ('uNiebla', tuple(MODULAR_U % ('niebla', k) for k in range(4))),           # fase 19
     ('uNieblaCol', tuple(MODULAR_U % ('nieblacol', k) for k in range(4))),
     ('uGlitch', tuple(MODULAR_U % ('glitch', k) for k in range(4))),
+    # fase 11 v5: terreno, pisos, borde tintado y agua (uTerreno.x y .w los pone materiales_piel)
+    ('uTerreno', ('0', PIEL_U % ('uTerreno', 1), PIEL_U % ('uTerreno', 2), '0')),
+    ('uPisos', tuple(PIEL_U % ('uPisos', k) for k in range(3)) + ('0',)),
+    ('uBorde', (PIEL_U % ('uBorde', 0), '0', '0', '0')),
+] + [(nm % k, tuple(PIEL_U % (nm % k, q) for q in range(4)))
+     for k in range(3) for nm in ('uTinte%d', 'uTinteCol%d')] + [
+    ('uAgua', (PIEL_U % ('uAgua', 0), '0', '0', '0')),
 ]
-FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad']
+FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua']
+# familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
+SIN_TINTE = ('ciudad', 'agua')
+PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso')]
 
 
 def _uniforme(mat, k, nombre, valores):
@@ -1513,15 +1652,90 @@ def _uniforme(mat, k, nombre, valores):
     return bien
 
 
+ALTURAS_CB = r'''# Script TOP 'alturas' (fase 11 v5): el mapa de alturas del relieve que pide
+# al motor (lat/lon, 512 x 256, float32): r el relieve sobre el suelo local,
+# g el radio del suelo. El motor lo recuece solo cuando el mapa cambia.
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def onCook(scriptOp):
+    try:
+        a = op('motor').module.alturas_array()
+    except Exception as e:
+        a = None
+        print('AVISO  alturas: %s' % e)
+    if a is not None:
+        scriptOp.copyNumpyArray(a)
+    return
+'''
+
+
+def mapas_terreno(base):
+    """Las texturas del terreno (fase 11 v5): el Script TOP 'alturas' (el mapa
+    de alturas del motor, float32) y el Ramp TOP 'rampa_hipso' con sus claves en
+    la tabla 'rampa_hipso_claves' (los pisos de color; el motor la reescribe si
+    cambian Limitebosque o Limitenieve). Devuelve True si estan."""
+    bien = True
+    cb = get_or_make(base, 'textDAT', 'alturas_callbacks', 960, 1180)
+    cb.text = ALTURAS_CB
+    top = get_or_make(base, 'scriptTOP', 'alturas', 1180, 1180)
+    bien = bool(setp_any(top, ['callbacks', 'callbackdat', 'dat'], 'alturas_callbacks')) and bien
+    if not (setmenu(top, ['format', 'pixelformat'], ['rgba32float', '32bit float (RGBA)'])
+            or setp_any(top, ['format', 'pixelformat'], 'rgba32float')):
+        info('alturas: pon a mano Pixel Format = 32-bit float (RGBA) en el Script TOP')
+    try:
+        top.cook(force=True)
+    except Exception:
+        pass
+    tab = get_or_make(base, 'tableDAT', 'rampa_hipso_claves', 960, 1100)
+    try:
+        m = base.op('motor').module
+        tab.clear()
+        for f in m.rampa_filas(m.cfg()):
+            tab.appendRow(f)
+    except Exception:
+        bien = False
+    ramp = get_or_make(base, 'rampTOP', 'rampa_hipso', 1180, 1100)
+    bien = bool(setp_any(ramp, ['dat'], 'rampa_hipso_claves')) and bien
+    setmenu(ramp, ['type'], ['horizontal'])
+    setmenu(ramp, ['outputresolution'], ['custom'])
+    setp_any(ramp, ['resolutionw'], 256)
+    setp_any(ramp, ['resolutionh'], 1)
+    return bien
+
+
+def _samplers(mat):
+    """Los samplers de la piel: sAlturas (el mapa de alturas) y sRampa (los
+    pisos). True si se pudieron enlazar."""
+    try:                             # TouchDesigner 2022+: la pagina Samplers es una secuencia
+        sec = mat.seq.sampler
+        if sec.numBlocks < len(PIEL_SAMPLERS):
+            sec.numBlocks = len(PIEL_SAMPLERS)
+    except Exception:
+        pass
+    bien = True
+    for k, (nombre, top) in enumerate(PIEL_SAMPLERS):
+        bien = bool(setp(mat, 'sampler%dname' % k, nombre)) and bien
+        bien = bool(setp_any(mat, ['sampler%dtop' % k], top)) and bien
+        setmenu(mat, ['sampler%dextendu' % k], ['repeat'])
+        setmenu(mat, ['sampler%dextendv' % k], ['hold'])
+    return bien
+
+
 def materiales_piel(base):
     """El shader de la piel (fase 12): un GLSL MAT por familia de material
-    (mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad) que lee la rugosidad
-    del alfa de cada instancia, y mat_respaldo (Phong) para Materialrespaldo."""
+    (mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad; desde la fase 11 v5,
+    mat_piel_tierra para el relieve y mat_piel_agua para los rios) que lee la
+    rugosidad del alfa de cada instancia, y mat_respaldo (Phong) para
+    Materialrespaldo. Tambien las texturas del terreno (mapas_terreno)."""
     vdat = get_or_make(base, 'textDAT', 'piel_vertex', 1180, 1020)
     vdat.text = PIEL_VERTEX
     pdat = get_or_make(base, 'textDAT', 'piel_pixel', 1180, 940)
     pdat.text = PIEL_PIXEL
-    malos = []
+    mapas = mapas_terreno(base)
+    malos, sin_rampa = [], []
     for k, fam in enumerate(FAMILIAS_PIEL):
         mat = get_or_make(base, 'glslMAT', 'mat_piel_' + fam, 1400, 1020 - 80 * k)
         bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'piel_vertex'))
@@ -1532,8 +1746,15 @@ def materiales_piel(base):
                 sec.numBlocks = len(PIEL_UNIFORMES)
         except Exception:
             pass
+        rampa = _samplers(mat) and mapas
+        if not rampa:
+            sin_rampa.append(mat.name)
         for q, (nombre, valores) in enumerate(PIEL_UNIFORMES):
             vals = tuple(v % k if '%d' in v else v for v in valores)
+            if nombre == 'uTerreno':
+                vals = ('1' if fam == 'tierra' else '0',) + vals[1:3] + ('1' if rampa else '0',)
+            elif fam in SIN_TINTE and (nombre.startswith('uTinte') or nombre in ('uPisos', 'uBorde')):
+                vals = ('0', '0', '0', '0')
             bien = _uniforme(mat, q, nombre, vals) and bien
         if not bien:
             malos.append(mat.name)
@@ -1543,8 +1764,11 @@ def materiales_piel(base):
              'piel_pixel; Vectors: uFamilia, uLuz0...); si la piel no se ve, Materialrespaldo'
              % ', '.join(malos))
     else:
-        ok('shader de la piel: mat_piel_mineral, mat_piel_dosel y mat_piel_ciudad (GLSL), '
-           'mat_respaldo (Phong)')
+        ok('shader de la piel: mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad, mat_piel_tierra y '
+           'mat_piel_agua (GLSL), mat_respaldo (Phong)')
+    if sin_rampa:
+        info('%s: no pude enlazar los samplers sAlturas (TOP alturas) y sRampa (TOP rampa_hipso) en la '
+             'pagina Samplers; sin ellos no se levanta el relieve' % ', '.join(sin_rampa[:2]))
     return not malos
 
 
@@ -1596,6 +1820,25 @@ def a_la_unidad(comp, sop, nombre, ajustadas):
     return aj
 
 
+def punta_arriba(comp, cono):
+    """El cono con la punta hacia +Y: si el Tube SOP deja el radio 0 abajo (el
+    orden de rad1 y rad2 depende de la version), se le da la vuelta midiendo
+    sus puntos."""
+    xf = mk(comp, 'transformSOP', 'cono_arriba', 100, cono.nodeY - 60)
+    connect(xf, cono, 0)
+    try:
+        pts = list(cono.points)
+        if pts:
+            ys = [p.y for p in pts]
+            arriba = [abs(p.x) + abs(p.z) for p in pts if p.y > (max(ys) + min(ys)) / 2.0]
+            abajo = [abs(p.x) + abs(p.z) for p in pts if p.y <= (max(ys) + min(ys)) / 2.0]
+            if arriba and abajo and max(arriba) > max(abajo):
+                setp(xf, 'rx', 180.0)
+    except Exception:
+        pass
+    return xf
+
+
 def construir_modelo(modelos, nombre, prims, x, y, ajustadas):
     comp = fresh(modelos, 'baseCOMP', nombre, x, y)
     fuentes = {}
@@ -1619,6 +1862,28 @@ def construir_modelo(modelos, nombre, prims, x, y, ajustadas):
             info('%s: no pude fijar el prisma hexagonal (Tube SOP: radio 0,5, alto 1, 6 columnas, '
                  'eje Y, con tapas); ponlo a mano en modelos/%s/hexa' % (nombre, nombre))
         fuentes['hexa'] = a_la_unidad(comp, hexa, nombre, ajustadas)
+    if any(p[0] == 'bola' for p in prims):       # fase 11 v5: copas redondas (pocas caras)
+        bola = mk(comp, 'sphereSOP', 'bola', 0, -240)
+        for ax in ('radx', 'rady', 'radz'):
+            setp(bola, ax, 0.5)
+        setmenu(bola, ['type', 'primtype'], ['polygon', 'poly'])
+        setp_any(bola, ['rows'], 6)
+        setp_any(bola, ['cols'], 10)
+        for ax in ('tx', 'ty', 'tz'):
+            setp(bola, ax, 0.0)
+        fuentes['bola'] = a_la_unidad(comp, bola, nombre, ajustadas)
+    if any(p[0] == 'cono' for p in prims):       # fase 11 v5: coniferas (Tube SOP con un radio 0)
+        cono = mk(comp, 'tubeSOP', 'cono', 0, -360)
+        setp_any(cono, ['rad1'], 0.5)
+        setp_any(cono, ['rad2'], 0.0)
+        setp(cono, 'height', 1.0)
+        setp_any(cono, ['cols', 'columns'], 8)
+        setp_any(cono, ['rows'], 2)
+        setp_any(cono, ['caps', 'endcaps', 'capends'], True)
+        setmenu(cono, ['orient', 'orientation'], ['y'], 1)
+        for ax in ('tx', 'ty', 'tz'):
+            setp(cono, ax, 0.0)
+        fuentes['cono'] = a_la_unidad(comp, punta_arriba(comp, cono), nombre, ajustadas)
     todo = mk(comp, 'mergeSOP', 'todo', 400, 0)
     for k, p in enumerate(prims):
         xf = mk(comp, 'transformSOP', 'p%d' % k, 200, -60 * k)
@@ -1719,6 +1984,44 @@ def instanciar_modelos(base, m):
     for g in sin_alfa[:3]:
         fail('%s no lee la rugosidad: Instance 2 -> Color A = a' % g)
     return geos
+
+
+TERRENO_FILAS, TERRENO_COLS = 256, 512      # la malla, del tamano del mapa de alturas
+
+
+def terreno_al_dia(base, m=None):
+    """La malla del relieve (fase 11 v5): una sola esfera de radio 1
+    ('terreno', Sphere SOP de 256 x 512) que el shader de la piel
+    (mat_piel_tierra) desplaza con el mapa de alturas del motor y colorea con
+    los pisos. Gira con el planeta. No es instanciada: el relieve de todas
+    las celdas es una sola malla. Devuelve la geometria."""
+    materiales_piel(base)
+    geo = base.op('terreno')
+    if geo is None or str(getattr(geo, 'OPType', '')) != 'geometryCOMP':
+        geo = fresh(base, 'geometryCOMP', 'terreno', 520, 1020)
+        for k in list(geo.children):
+            try:
+                k.destroy()
+            except Exception:
+                pass
+    s = geo.op('esfera') or mk(geo, 'sphereSOP', 'esfera', 0, 0)
+    for ax in ('radx', 'rady', 'radz'):
+        setp(s, ax, 1.0)
+    setmenu(s, ['type', 'primtype'], ['polymesh', 'mesh'])
+    bien = bool(setp_any(s, ['rows'], TERRENO_FILAS)) and bool(setp_any(s, ['cols'], TERRENO_COLS))
+    for attr in ('render', 'display'):
+        try:
+            setattr(s, attr, True)
+        except Exception:
+            pass
+    set_spin(geo)
+    setp(geo, 'material', 'mat_piel_tierra')
+    if not bien:
+        info('terreno: pon a mano Rows %d y Columns %d en terreno/esfera (Sphere SOP, Polygon Mesh)'
+             % (TERRENO_FILAS, TERRENO_COLS))
+    ok('terreno: la malla del relieve (esfera de %d x %d desplazada por el mapa de alturas en '
+       'mat_piel_tierra; texturas alturas y rampa_hipso)' % (TERRENO_FILAS, TERRENO_COLS))
+    return geo
 
 
 def set_render(base):

@@ -4,7 +4,7 @@ ESTRATOS - TOUCHDESIGNER SIMULADO (solo para probar, fuera de TouchDesigner)
 =============================================================================
 Imita lo justo de TouchDesigner para ejecutar los scripts de fase TAL CUAL:
 operadores y rutas, parametros (con expresiones), paginas propias, el
-storage, el modulo de los Text DAT, Script CHOP, Table DAT, absTime y el
+storage, el modulo de los Text DAT, Script CHOP y TOP, Table DAT, absTime y el
 componente de tiempo del proyecto (/local/time).
 
 Los COMP (base, geometry, camera, light, null) solo aceptan los parametros
@@ -236,6 +236,9 @@ class Page(object):
 
     def appendMenu(self, name, label=None):
         return self._append(name, 'menu', label, '')
+
+    def appendRGB(self, name, label=None):
+        return [self._append(name + c, 'float', label, 0.0)[0] for c in 'rgb']
 
 
 # -----------------------------------------------------------------------------
@@ -563,7 +566,7 @@ class OP(object):
     # cocinar
     def cook(self, force=False, recurse=False):
         self.cooks += 1
-        if self.OPType == 'scriptCHOP':
+        if self.OPType in ('scriptCHOP', 'scriptTOP'):
             dat = None
             for nm in ('callbacks', 'callbackdat', 'dat'):
                 p = self.par._pars.get(nm)
@@ -575,11 +578,17 @@ class OP(object):
             try:
                 dat.module.onCook(self)
             except Exception as e:
-                self._errors.append('Script CHOP: %s' % e)
+                self._errors.append('%s: %s' % (self.OPType, e))
                 if self.sim.estricto:
                     raise
 
     # TOP
+    def copyNumpyArray(self, a):
+        self._np = a
+
+    def numpyArray(self):
+        return getattr(self, '_np', None)
+
     @property
     def width(self):
         return int(float(self.par.resolutionw.eval()))

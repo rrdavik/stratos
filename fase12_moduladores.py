@@ -47,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v4  (moduladores: velocidad -> material por shader, gate -> vigor y plantas; vegetal)'
+VERSION = 'fase12 v5  (autoprueba: la naturaleza toma el color de los pisos; el relieve, de la malla)'
 banner(VERSION)
 
 base = require_base(12)
@@ -180,6 +180,9 @@ def _prueba(t, m):
                 if g.startswith('mod_') and abs(sum(f[q] * m.normal_i(i)[q] for q in range(3))
                                                 - m.base_radius(W, m.cfg(), i)) < 1e-6:
                     principal = principal or f
+        if principal is None and pulso == 'Sembrar2':   # fase 11 v5: el relieve es la malla; sus
+            principal = next((f for g, fs in sorted(inst.items())      # columnas, en las laderas
+                              if g.startswith('mod_rel_') for f in fs), None)
         return W, inst, principal
     base.par.Materialmodo = 'continuo'
     _, inst10, f10 = sembrar(10, 6)
@@ -188,7 +191,7 @@ def _prueba(t, m):
     luma = lambda f: f[9] + f[10] + f[11]
     t.check('vegetacion, velocidad 10: rugosa (musgo seco); 120: pulida (hoja cerosa)',
             f10 and f120 and abs(f10[12] - m.rugosidad(c, 10)) < 1e-9 and abs(f120[12] - m.rugosidad(c, 120)) < 1e-9
-            and f10[12] > 0.7 > 0.15 > f120[12] and luma(f10) > luma(f120) + 0.15,
+            and f10[12] > 0.7 > 0.15 > f120[12] and luma(f10) > luma(f120) + 0.1,
             'rugosidad %.2f y %.2f' % (f10[12] if f10 else -1, f120[12] if f120 else -1))
     nota2 = int(base.par.Nota2)
     base.par.Nota2 = nota

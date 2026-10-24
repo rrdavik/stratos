@@ -7,7 +7,7 @@
 
 ### Estado en una frase
 
-Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes; desde la 15, cada ciclo se entierra con la materia de su tema y la herencia rebrota según su lógica; desde la 16, los cortes enseñan lo que hubo en cada concha (troncos fósiles, basalto, cimientos, sótanos y calles) y dos cortes vecinos se unen en un cañón o una galería de metro; desde la 17, el tiempo se ve en el paisaje: el dosel se balancea y el tráfico corre al tempo, STOP lo congela y un cambio de pattern cruza el planeta como un frente que trae la estación de ese pattern; la 18 cierra las dos escenas (naturaleza y ciudad) como presets listos para actuar, con luz local sin luces nuevas y capas de diagnóstico que el modo actuación oculta. La 19, ya fuera del plan 11–18, añade las señales del modular: viento, ventanas que respiran, esporas, smog, niebla de distancia y glitch. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio.
+Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (naturaleza o ciudad). Desde la fase 14, los arañazos de la batería también tienen forma temática y escalan en catástrofes; desde la 15, cada ciclo se entierra con la materia de su tema y la herencia rebrota según su lógica; desde la 16, los cortes enseñan lo que hubo en cada concha (troncos fósiles, basalto, cimientos, sótanos y calles) y dos cortes vecinos se unen en un cañón o una galería de metro; desde la 17, el tiempo se ve en el paisaje: el dosel se balancea y el tráfico corre al tempo, STOP lo congela y un cambio de pattern cruza el planeta como un frente que trae la estación de ese pattern; la 18 cierra las dos escenas (naturaleza y ciudad) como presets listos para actuar, con luz local sin luces nuevas y capas de diagnóstico que el modo actuación oculta. La 19, ya fuera del plan 11–18, añade las señales del modular: viento, ventanas que respiran, esporas, smog, niebla de distancia y glitch. Las vecinas que insisten se funden en clusters con puentes y una pieza protagonista, cada formación es un compuesto que sale del mapa logístico, y los cambios de estado se animan en stop-motion al ritmo de los gates. Desde la fase 12, la velocidad decide el material (obsidiana o pómez en el relieve, hoja cerosa o musgo seco en la vegetación, vidrio negro u hormigón en la ciudad) y la duración del gate, el vigor de los árboles o las plantas de cada edificio. Desde la fase 11 v5 la naturaleza se lee por masa, silueta y bandas de color: el bosque crece hasta un monte boscoso, el relieve es una sola malla con cordilleras y cumbres nevadas, el color sale de los pisos de altitud (ya no de la concha ni del secuenciador, cuyo tinte va al borde) y, desde la fase 13 v2, los ríos bajan azules por el suelo real.
 
 ---
 
@@ -15,11 +15,11 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12, ver `MONTAJE_FASES_3_10.md`); la v44, su pumping en seco (fase 7 v13); la v45, sus pulsos de ocupación (fase 7 v14) | `motor v45` |
-| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`) | `comun v32` |
-| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun) | `fase11 v4` |
-| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal | `fase12 v4` |
-| `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometría `tejido`, página Fase13 | `fase13 v1` |
+| `estratos_motor.py` | La lógica entera del mundo; desde la v27, también la piel: catálogo de modelos, clusters, compuestos, tránsitos y partículas; la v28, los moduladores de la fase 12; la v29, ríos y carreteras; la v30, el color de las luces para el shader (`luz_color`); la v31, el aspecto de la cámara sin bucle de cocinado; la v32, el material vegetal en toda la vegetación y el dosel cerrado; la v33, el encuadre cercano de la cámara y medios puentes sin parpadeo; la v34, los destructores de la fase 14; la v35, el ciclo como era (fase 15); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`) y los valores calibrados (ver *Calibración de la vista*); la v38, la arqueología temática de la fase 16; la v39, el tiempo en el paisaje (fase 17); la v40, escenas, luz local y diagnóstico (fase 18); la v41, las señales del modular (fase 19); la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12, ver `MONTAJE_FASES_3_10.md`); la v44, su pumping en seco (fase 7 v13); la v45, sus pulsos de ocupación (fase 7 v14); la v46, la naturaleza legible (fase 11 v5: monte boscoso, relieve en un mapa de alturas, dosel por colonización del espacio, pisos de color, tinte al borde) y los ríos azules (fase 13 v2) | `motor v46` |
+| `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`); la v33, el terreno (`terreno_al_dia`, `mapas_terreno`: Script TOP `alturas`, Ramp TOP `rampa_hipso`), bolas y conos en los modelos, y en el shader las familias tierra y agua, los pisos, el sombreado rasante y el borde tintado | `comun v33` |
+| `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun; v5: la naturaleza legible) | `fase11 v5` |
+| `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal; v5: solo la autoprueba (la naturaleza toma el color de los pisos y el relieve es la malla) | `fase12 v5` |
+| `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometrías `tejido` y (v2) `rios`, página Fase13 (v2: ríos azules por el suelo real, lagos) | `fase13 v2` |
 | `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 (v2: un pad de impulso no es arañazo) | `fase14 v2` |
 | `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 (v2: la autoprueba no depende de la `Herencia` del proyecto) | `fase15 v2` |
 | `fase16_cortes.py` | Arqueología temática: lo que enseñan los cortes (fondo y paredes), unión de cortes (cañón y galería de metro), página Fase16 (v2: solo cambia el texto; corta la caja) | `fase16 v2` |
@@ -28,7 +28,7 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 | `fase19_modular.py` | Señales del modular (OSC, un CHOP, a mano o de prueba): viento, respiración de las ventanas, esporas, smog, niebla y glitch; página Fase19 y OSC In CHOP `modular_osc` (v2: rango -10..10 V) | `fase19 v2` |
 | `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v1` |
 | `pruebas/sesion_escena.py` | La sesión de 20 minutos por escena de la fase 18, sobre el motor: densidad, piezas, coste por fotograma y criterios de cierre | — |
-| `pruebas/` | TouchDesigner simulado, vista previa del catálogo y comprobación del shader con OpenGL (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
+| `pruebas/` | TouchDesigner simulado (desde la fase 11 v5, también Script TOP y parámetros RGB), vista previa del catálogo (bolas y conos) y comprobación del shader con OpenGL, con el terreno y los ríos (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase11_piel.py').read())
@@ -59,11 +59,14 @@ Cada pieza que el motor ya colocaba como caja pasa a ser un modelo del tema acti
 
 | Estado (umbrales de la fase 4) | Vegetación | Relieve | Informal | Planificada |
 |---|---|---|---|---|
-| semilla (1) | brote angular (2 variantes) | columna de basalto (2) | caseta (2) | bloque de una planta (2) |
-| crecimiento (2 a `Umbralram` − 1) | tronco y copa | las columnas suben | añadidos oblicuos apilados | apila plantas |
-| ramificación (`Umbralram`, 5+) | arboleda; los satélites son arbolitos | mesetas satélite | pasarelas hacia las vecinas | anexos: manzana |
-| fusión (`Umbralfusion`, 7+) | bosque, dosel multicelda | meseta continua | barrio denso | podio que une la manzana |
-| coronación (`Umbralcorona`, 9+) | árbol madre que rompe el dosel | cumbre escalonada | torre de antenas | rascacielos con aguja |
+| semilla (1) | brote: bola o cono pequeño | cono con ruido de crestas y columnas de basalto en las laderas bajas | caseta (2) | bloque de una planta (2) |
+| crecimiento (2 a `Umbralram` − 1) | árbol: frondosa (bola) o conífera (cono) según el piso | el cono sube | añadidos oblicuos apilados | apila plantas |
+| ramificación (`Umbralram`, 5+) | arboleda: 5 a 12 copas agrupadas | montañas satélite | pasarelas hacia las vecinas | anexos: manzana |
+| fusión (`Umbralfusion`, 7+) | bosque: dosel continuo (colonización del espacio) | cordillera (cluster de 3+), sin columnas | barrio denso | podio que une la manzana |
+| monte (`Umbralmonte`, 8+) | monte boscoso: sube el terreno y el bosque lo cubre | el terreno sube: cumbres nevadas | — | — |
+| coronación (`Umbralcorona`, 9+) | sigue el monte (sin árbol madre) | sigue el monte | torre de antenas | rascacielos con aguja |
+
+*Desde la fase 11 v5 la naturaleza tiene su escalera propia: ver* La naturaleza legible *más abajo. La tabla de la ciudad no cambia.*
 
 **Ojo con los números.** El plan habla de ocupación 1, 2–3, 4–5, 6–7 y 8+. Aquí los estados salen de los umbrales que ya tiene el motor (`Umbralram` 5, `Umbralfusion` 7, `Umbralcorona` 9), para que cambiar un umbral cambie también la piel. Con los valores por defecto cada estado empieza una ocupación más tarde que en el plan.
 
@@ -153,6 +156,86 @@ Comprueba: el catálogo completo en los dos temas (estados, puentes, protagonist
 - Los marcos de cada pieza, los compuestos y los clusters se guardan y no se recalculan en cada fotograma.
 - En simulación, con 64 celdas ocupadas, 4 clusters y unas 480 piezas: el motor tarda unos 3,7 ms por fotograma en calcular las instancias (1,6 ms a nivel 10, con la mitad de instancias) y unos 5 ms por fotograma en total, contando los Script CHOP simulados. El tiempo real hay que medirlo en TouchDesigner (fase 18).
 - Hasta la fase 12 hay dos geometrías por modelo (pulida y porosa); la fase 12 las reduce a una.
+
+### La naturaleza legible (fase 11 v5, motor v46, comun v33)
+
+**Qué pasaba.** La ciudad se leía a distancia de cámara de globo y la naturaleza no: hasta el bosque se entendía algo, pero por encima el árbol madre y los compuestos del juego del caos (incrustar, orbitar, inclinar a 30°) se apilaban en un amasijo sin forma, y el relieve no se leía como montaña ni como cordillera. A 13–50 px de alto el detalle de un árbol no existe: la ciudad se lee por su orden repetido (ventanas en rejilla), su silueta (prismas con remate) y su escalera (más ocupación, más alta y densa). **Regla de esta corrección:** la naturaleza se lee por masa, silueta y bandas de color, como la cartografía de montaña a escala pequeña.
+
+**Diagnóstico: de dónde salían el modelo y el color.** Antes de tocar nada se localizó, en el motor v45:
+- **Modelos.** El catálogo daba a la vegetación `veg_brote`/`veg_brote2`, `veg_arbol`, `veg_arboleda`, `veg_bosque` y `veg_madre` (L-system de 30°) y al relieve `rel_columna`, `rel_columnas`, `rel_mesetas`, `rel_meseta` y `rel_cumbre` (columnas apiladas). Cada formación era un compuesto de hasta `Maxpiezas` piezas del juego del caos; el dosel, medios puentes (`veg_dosel`) y copas en los huecos.
+- **Color por instancia** (`build_piel`): el color de la especie (`COL_ESPECIE`) acercado al material de la velocidad (`material_tema`), y encima el **latido mezclaba el tinte del secuenciador o del pad al 75 %** (`LATIDO_TINTE`) mientras sonaba la nota. Esa era la causa de que el bosque se volviera blanco, ámbar o del color del pad. La concha no pasaba al albedo de los modelos; lo que sí cambiaba con la concha era el fondo: la paleta de generaciones generaba verdes (tono 123° y 145°) que camuflaban el bosque.
+
+**La escalera nueva (vegetación, SEQ1).**
+
+| Ocupación | Antes | Ahora |
+|---|---|---|
+| 1 | brote angular | brote: bola o cono pequeño |
+| 2 a `Umbralram` − 1 | tronco y copa | árbol de silueta clara: frondosa (bola) en el piso basal, conífera (cono) desde el montano; hasta `Maxcaosnat`, pimpollos alrededor |
+| `Umbralram` (5) | arboleda en las vecinas | arboleda: de 5 a 12 árboles agrupados |
+| `Umbralfusion` (7) | dosel multicelda | bosque: dosel continuo (ver *Dosel*) |
+| `Umbralmonte` (8) y más | árbol madre que rompe el dosel | **monte boscoso**: la ocupación ya no añade piezas, sube el terreno de la celda y el bosque lo cubre como una manta |
+
+- Con los umbrales de siempre los estados empiezan una ocupación más tarde que en el encargo (ver *Ojo con los números*); el monte usa su propio umbral, `Umbralmonte` 8.
+- **El terreno sube** `Alturamonte` × el límite en 6 ocupaciones (`PASOS_MONTE`) desde `Umbralmonte`; la erosión lo baja y el bosque se reajusta (la copa va siempre sobre el suelo local).
+- **El juego del caos** deja de actuar en la naturaleza por encima de `Maxcaosnat` (5). Por debajo solo varía la posición y la escala de las copas, sin incrustar, orbitar ni inclinar; por encima, las copas van en filotaxis (orden repetido). En la ciudad el caos no cambia.
+- **El árbol madre desaparece** como pieza (también del catálogo: `veg_madre`, `veg_bosque` y `veg_arboleda` ya no existen). Los protagonistas de los clusters de 2 y 3 celdas son árboles grandes de silueta clara.
+
+**El relieve (SEQ2): montaña y cordillera, una sola malla.**
+- El relieve ya no son piezas: es **una sola malla**, la esfera `terreno` (Sphere SOP de 256 × 512), que el shader desplaza en el vertex shader con el **mapa de alturas** del motor (512 × 256 en latitud y longitud, float32, en el Script TOP `alturas`). Así una cordillera es una superficie continua, no columnas por celda, y Python no reconstruye geometría: solo reescribe la textura cuando cambia la ocupación.
+- **Montaña suelta:** un cono deformado con ruido de crestas (*ridged multifractal* de 4 octavas sobre la esfera) que talla crestas y valles en las laderas sin tocar la cumbre. Alto: 1,5 × la formación más el monte; la capital de un cluster, un 8 % más.
+- **Cordillera** (cluster de relieve de 3 celdas o más): una cresta continua a lo largo del **eje** del cluster (el camino, por la máscara de vecinas, entre sus dos celdas más alejadas), con collados al 85 % entre cumbres; las demás uniones del cluster son estribaciones bajas (35 %). Las cumbres quedan en la capital y en los máximos locales.
+- **Las laderas se cierran** sobre la esfera como el dosel: donde no hay relieve la malla se hunde 6 centésimas bajo las losetas (con el suelo erosionado 3 × 3, nunca asoma de una loseta).
+- **Las columnas de basalto** quedan como textura de las laderas bajas en los estados 1 a 3 (5 columnas oscuras alrededor del cono). Las mesetas, la cumbre escalonada y los puentes del relieve ya no se dibujan.
+- **Híbrido** (la vegetación coloniza el relieve): el bosque sube por la ladera hasta `Limitebosque`; por encima, roca y nieve.
+
+**Dosel por colonización del espacio.**
+- En los clusters de vegetación de 4 celdas o más (y en un bosque suelto) la copa es una sola envolvente: se siembran puntos de atracción en el volumen de cada celda y las ramas crecen hacia ellos desde una raíz en el centro (Runions, Lane y Prusinkiewicz, 2007). Cada celda coloniza su parte: **abierta hasta arriba hacia sus vecinas del cluster y en cúpula hacia fuera**, así que las partes se juntan en una sola copa sin solaparse.
+- Se calcula en Python, **una vez por celda y vecinas del cluster** (se guarda): un cluster que crece solo rehace sus bordes. La primera versión colonizaba el cluster entero de golpe y, con clusters de 30 celdas que cambian a cada nota, tardaba unos 100 ms cada vez (lo detectó la sesión de 20 minutos).
+- **Lo que llega a la imagen** es el borde de la copa: de lejos, las copas de arriba (bolas o conos, 1,25 veces más grandes); cerca, todas y los troncos. Claras arriba, más oscuras abajo: la textura granulada que hace de ventanas de la ciudad.
+- **Forma por altitud:** bola (frondosa) en el piso basal, cono (conífera) desde el montano; en el límite del bosque las copas se ralean y por encima no hay ninguna.
+- Los clusters de 2 y 3 celdas conservan sus medios puentes del dosel y su protagonista.
+
+**Pisos de color por altitud (tintes hipsométricos).**
+
+| Piso | Altura relativa | Color | Material |
+|---|---|---|---|
+| Basal | 0–35 % | verde profundo | mate (rugosidad 0,9), granulado |
+| Montano | 35 % – `Limitebosque` − 5 % | verde azulado oscuro (coníferas) | mate |
+| Límite del bosque | ± 5 % de `Limitebosque` (0,65) | verde y ocre, copas ralas | mate |
+| Roca | hasta `Limitenieve` (0,9) | gris cálido que se oscurece hacia arriba, facetado | rugosidad 0,7, normales marcadas |
+| Cumbre | `Limitenieve`–100 % | blanco nieve | brillo, rugosidad 0,3 |
+
+- La altura es **sobre el suelo local** (el de la celda), no sobre el radio del núcleo: el planeta crece y los pisos no se mueven. El 100 % es la altura máxima posible: el límite más el monte entero (`Alturamonte` × el límite).
+- La rampa está en el **Ramp TOP `rampa_hipso`** (sus claves, en la tabla `rampa_hipso_claves`, las reescribe el motor si cambian `Limitebosque` o `Limitenieve`), y el GLSL MAT del terreno la lee por altura relativa (`sRampa`). Si el sampler no se enlaza, el shader calcula la misma rampa (`uTerreno.w`).
+- Las copas y las columnas toman el color de su piso desde el motor (la misma rampa), con un 30 % del material de la velocidad (fase 12).
+- **Contraste en las cumbres:** el gris de la roca se oscurece al acercarse a la nieve, así que la cumbre más alta es blanco sobre gris oscuro.
+- **Sombreado de laderas:** una luz rasante fija respecto a la cámara (de arriba a la izquierda, como el relieve sombreado suizo) además de la principal, para que crestas y valles se lean aunque el globo gire.
+
+**El color de la naturaleza ya no viene de la concha ni del secuenciador.**
+- Los modelos de naturaleza no toman el color de la concha ni el tinte del secuenciador o del pad en el albedo: su color sale de los pisos.
+- **El tinte va al borde:** un emisivo de borde (fresnel) alrededor de hasta tres focos (la nota de cada SEQ y el pad más fuerte; uniformes `uTinte0`–`uTinte2`, intensidad `Tintebordenat`), y a la loseta de la celda (`luz_celda`, como antes). Se ve dónde cae la nota sin que el bosque se vuelva ámbar o cian. La nota sigue hinchando la formación (el latido).
+- **La paleta de conchas** reserva ahora también los verdes de los pisos (120°–165°) y el azul de los ríos (235°–275°): ver la paleta de generaciones en `MONTAJE_FASES_3_10.md`.
+
+**Detalle según distancia (LOD).** Con la cámara de globo, el dosel es la envolvente con su textura de copas y la montaña la malla; si la celda mide en pantalla `Lodnat` px o más (con el planeta a `Encuadre` del alto) o con la cámara de superficie, aparecen todas las copas y los troncos. La leyenda dice `detalle cerca (N celdas)` o `globo`.
+
+**Parámetros (página Fase11).** `Umbralmonte` 8 · `Maxcaosnat` 5 · `Limitebosque` 0,65 · `Limitenieve` 0,9 · `Alturamonte` 1 (× el límite) · `Lodnat` 80 px · `Tintebordenat` 0,8.
+
+**Leyenda.**
+```
+NATURA   copas 214   montes 2   cordilleras 1   cumbres nevadas 3   detalle globo
+```
+
+**Probar sin BeatStep.**
+1. `Sembrar` en una celda una docena de veces (`Velprueba` 100): brote, árbol, arboleda, bosque y, desde la ocupación 8, el terreno sube con el bosque encima.
+2. `Sembrarzona2` dos veces y `Sembrar2` en el centro: una cordillera con la cumbre nevada.
+3. Una nota sobre un bosque: el borde de las copas se ilumina con el color del SEQ y el verde se mantiene.
+4. `Erosionar` sobre un monte: baja el terreno y el bosque baja con él.
+
+**Autoprueba (las siete pruebas del encargo).** Ocupación 1 → 12 en una celda (brote, árbol, arboleda, bosque y un monte que sube, sin árbol madre); un cluster de 5 celdas de relieve en fila es una cordillera continua con cumbres nevadas y sin piezas sueltas; el bosque sobre la cordillera no pasa de `Limitebosque`; una montaña (cumbre blanca) se distingue de un bosque (copas verdes con varios valores); una nota del SEQ1 sobre un bosque deja el albedo igual y enciende el foco del borde; la erosión sobre un monte baja el terreno y el bosque; con las 85 celdas a ocupación 14, la naturaleza tarda en Python lo mismo que la ciudad ± 10 % (más 2 ms de margen); y la línea `NATURA` de la leyenda. Además, `Sembrarzona` × 2 da un cluster de 7 celdas con un dosel de copas y sin puentes, y `Sembrarzona2` × 2, una cordillera sin puentes ni protagonista.
+
+**Rendimiento** (simulación, sesión de naturaleza de 5 minutos, un fotograma sin cambios): `build_instances` 3,9 ms de mediana, frente a 3,5 ms de la ciudad (+11 %) y 3,5 ms de la naturaleza antes del cambio. Cuando cambia la ocupación de una celda con relieve o monte, ese fotograma rehace el mapa de alturas (los parches de cada rasgo se guardan; se recomponen solo las filas con relieve) y TouchDesigner sube la textura: unos ms más en ese fotograma. El tiempo real hay que medirlo en TouchDesigner.
+
+**Lo que necesita el shader.** El relieve solo se levanta con el shader de la piel (`mat_piel_tierra`): con `Materialrespaldo` las formaciones pasan a Phong pero la malla del terreno sigue con su GLSL MAT, porque sin él no hay desplazamiento.
 
 ---
 
@@ -260,35 +343,35 @@ La mitad de geometrías y de Script CHOP que en la fase 11. En simulación, con 
 
 Une las formaciones con algo que ninguna señal pide: el sistema lo deduce del estado. Es la fase en la que el tema se lee de lejos.
 
-- **Ríos (naturaleza).**
-  - Nacen en la capital de cada cluster de relieve.
-  - Bajan celda a celda hacia la vecina menos ocupada (en empate, la de índice menor), sin volver por donde han pasado.
-  - Acaban al llegar a una celda vacía (la desembocadura), al llegar a otro río (confluyen), tras `Maxrio` tramos o si no les queda vecina libre.
-  - Se trazan por orden de capital. Un río que llega a otro acaba ahí, y aguas abajo de la confluencia el río que lo recibe se ensancha: ancho = `Grosorvia` × (0,7 + 0,3 × ríos que pasan por el tramo).
+- **Ríos (naturaleza)** — desde la fase 13 v2, ver *Ríos azules* más abajo.
+  - Nacen en las cumbres: las celdas con relieve más altas que todas sus vecinas, y las capitales de los clusters de relieve.
+  - Bajan por el **suelo real** (el suelo de la celda más el relieve de la fase 11 v5 en su centro) hacia la vecina más baja (en empate, la de índice menor), sin volver por donde han pasado. Hasta la v1 bajaban hacia la vecina menos ocupada.
+  - Acaban en una hondonada o un llano (ninguna vecina más baja), al llegar a otro río (confluyen), tras `Maxrio` tramos o si no les queda vecina libre.
+  - Se trazan de la cumbre más alta a la más baja. Un río que llega a otro acaba ahí, y aguas abajo de la confluencia el río que lo recibe se ensancha: de `Anchorio` con un río a `Anchomaxrio` con cuatro o más.
 - **Carreteras (ciudad).**
   - Los nodos son las capitales de los clusters y las formaciones sueltas (sin cluster ni satélites) con ocupación de `Minvia` o más.
   - La distancia entre dos nodos es el número de saltos por la retícula. Kruskal elige el árbol de expansión mínima (en empate, por los índices).
   - Cada arista se dibuja por el camino más corto de la retícula. Los tramos compartidos se dibujan una vez.
-- **Los tramos** van de centro a centro de celda, a ras del suelo de cada celda (6 milésimas por encima), en dos medios tramos que siguen la curva del planeta. Pasan por debajo de las formaciones que cruzan.
-- **La geometría `tejido`** es la caja instanciada de siempre, con el shader de la piel: el agua (azul profundo, fuera de la banda del cian) brilla, el asfalto es mate. `Materialrespaldo` también la cambia a Phong. Se dibuja justo encima de las conchas.
+- **Las carreteras** van de centro a centro de celda, a ras del suelo de cada celda (6 milésimas por encima), en dos medios tramos que siguen la curva del planeta. Pasan por debajo de las formaciones que cruzan.
+- **La geometría `tejido`** es la caja instanciada de siempre, con el shader de la piel: el asfalto es mate. `Materialrespaldo` también la cambia a Phong. Se dibuja justo encima de las conchas. Desde la v2 los ríos van en su propia geometría, `rios`.
 - **Se recalcula solo cuando cambia la ocupación** (las especies o los satélites); si no, se reutiliza. Las filas sí se rehacen en cada fotograma, porque el suelo cambia con las conchas y los cortes.
 
 ### Parámetros (página Fase13)
 
-`Rios` (encendido) · `Carreteras` (encendido) · `Minvia` 2 · `Grosorvia` 0,18 · `Maxrio` 12 (tramos)
+`Rios` (encendido) · `Carreteras` (encendido) · `Minvia` 2 · `Grosorvia` 0,18 (carreteras) · `Maxrio` 12 (tramos) · v2: `Colorrio` (OKLCH 0,55 · 0,15 · 255: `#2971C6`) · `Anchorio` 0,10 · `Anchomaxrio` 0,34 · `Emisivorio` 0,25 · `Lagos` (encendido)
 
 ### Leyenda
 
 ```
-TEJIDO   rios 2 (9 tramos)   carreteras 7 tramos
+TEJIDO   rios 2 (9 tramos, 1 lagos)   carreteras 7 tramos
 ```
 
 ### Probar sin BeatStep
 
 1. `Tema` ciudad. Pon `Nota` 64 y pulsa `Sembrarzona` dos veces; pon `Nota` 70 (el meridiano opuesto) y pulsa otras dos. Aparece la carretera que une las dos capitales. Con `Sembrar` en una nota suelta (3 veces, para llegar a `Minvia`) la red se rehace y la incluye.
-2. `Tema` naturaleza. `Sembrarzona2` dos veces y `Sembrar2` una docena de veces en el centro (`Nota2`): el río baja de la cumbre hasta la primera celda vacía. Dos zonas cercanas pueden dar dos ríos que confluyen.
+2. `Tema` naturaleza. `Sembrarzona2` dos veces y `Sembrar2` una docena de veces en el centro (`Nota2`): el río azul baja de la cumbre por las laderas hasta el llano. Dos zonas cercanas pueden dar dos ríos que confluyen.
 
-Con zonas de 7 celdas los ríos son cortos: acaban en cuanto encuentran una celda vacía. Se alargan cuando el relieve queda rodeado de territorio ocupado.
+Con zonas de 7 celdas los ríos son cortos: acaban en cuanto llegan al llano. Se alargan en las cordilleras y cuando bajan a una hondonada.
 
 ### Autoprueba
 
@@ -299,12 +382,36 @@ Comprueba:
   - el cálculo se reutiliza si la ocupación no cambia;
   - el árbol es el de menor longitud total, comparado con todos los demás posibles;
   - `Carreteras` apagado quita las carreteras.
-- **Ríos:**
-  - el río nace en la capital del relieve y en cada paso baja a la vecina menos ocupada;
-  - acaba en una celda vacía, en otro río o al tope de longitud;
-  - en una confluencia suma el caudal aguas abajo;
+- **Ríos (v2, las pruebas del encargo):**
+  - el río nace en una cumbre y en cada paso baja por el suelo real a la vecina más baja, hasta un llano, una hondonada, otro río o el tope de longitud;
+  - en una cordillera con valles los ríos son cintas azules (el color de `Colorrio`, sin tintes), apoyadas en el terreno con un pequeño desfase;
+  - una nota del SEQ1 sobre una celda con río enciende su loseta y el río sigue azul y fuera de ella;
+  - veinte conchas apiladas: ninguna del azul de los ríos (la banda está reservada);
+  - en la cara de sombra el agua lleva su emisivo (`Emisivorio`) y no toma los tintes del borde;
+  - dos ríos que confluyen: el tramo de abajo es más ancho;
+  - un río que acaba en una hondonada la llena (lago); `Lagos` apagado, sin lago;
   - `Maxrio` corta la longitud y `Rios` apagado los quita.
-- **Dibujo:** los tramos van a ras del suelo, `i_tejido` recibe las filas con el canal `a`, y la leyenda tiene la línea `TEJIDO`.
+- **Dibujo:** `i_rios` recibe las cintas con el canal `a`, y la leyenda tiene la línea `TEJIDO` con los lagos.
+
+### Ríos azules (fase 13 v2, motor v46, comun v33)
+
+**Qué pasaba.** Los ríos no se veían azules, así que no se entendía que eran ríos.
+
+**Diagnóstico** (en el orden del encargo, con lo que se encontró):
+1. **Color por instancia sobrescrito:** no. Los tramos llevaban su azul (`COL_RIO`) y ningún tinte de celda, de pad ni de concha los tocaba.
+2. **Ocultos: sí, la causa principal.** Iban de centro a centro de celda a 6 milésimas del suelo: por debajo de las formaciones que cruzaban y justo bajo la loseta de luz de la celda (`luz_celda`, 2 centésimas por encima del suelo y hasta 0,28 de alto), que además es aditiva y los teñía.
+3. **Paleta de conchas: sí.** Las conchas 4 (251°) y 7 (145°) de la paleta de generaciones eran azul y verde: el río desaparecía sobre ellas.
+4. **Lado de sombra: sí.** Usaban el material mineral sin emisivo: en la cara oscura del globo el azul (y además oscuro: `(0,12 0,26 0,56)`) se volvía negro.
+
+**Qué cambia.**
+- **Azul reservado:** OKLCH 0,55 · 0,15 · 255 (`Colorrio`), distinto del cian de las cicatrices y del ámbar del SEQ2. Su banda (235°–275°) sale de la paleta de conchas, como el cian y el ámbar.
+- **Sin tintes:** los ríos van en su geometría (`rios`) con su material (`mat_piel_agua`, familia 4 del shader): ignoran el tinte de celda, de pad y de concha y el borde tintado de la naturaleza.
+- **Cinta, no caja:** una cinta continua (una curva Catmull-Rom troceada en tramos planos de 6 milésimas) apoyada en el suelo local más el relieve, con un desfase de 2,5 centésimas (algo más en las laderas). Cruza cada celda por sus bordes y a 0,36 anchos de celda de su centro: **bordea** la formación y la loseta de luz en vez de pasar por debajo. En los bosques, las copas que pisarían el río no se dibujan.
+- **Ancho por caudal:** cada tramo suma los ríos que confluyen en él: de `Anchorio` a `Anchomaxrio`.
+- **Lagos:** la hondonada (laguna de la fase 8) donde acaba un río se llena hasta su borde más bajo con el mismo azul (`Lagos`).
+- **Brillo:** especular alto (rugosidad 0,1) y emisivo bajo (`Emisivorio` 0,25): se lee también en la cara de sombra.
+- **Pendiente:** bajan por el suelo real, así que nacen en las cumbres de la fase 11 v5 y bajan entre montes.
+- Las cintas solo se recalculan cuando cambian el tejido, el terreno o el suelo; las filas se guardan.
 
 ---
 
@@ -611,12 +718,16 @@ Cada medio segundo dibuja las instancias y mide la densidad, las piezas y lo que
 | ciudad | erosión (motor v42) | 2 (74 y 209) | 4 | 8,5 | 319 | 54 % | 13 / 115 px | 3,6 / 6,0 ms |
 | ciudad | impulso, capacidad (motor v43) | 11 (34–81) | 4 | 11,0 | 485 | 64 % (1 % del tiempo) | 10 / 90 px | 5,5 / 9,4 ms |
 | ciudad | impulso, pulsos (motor v45) | 17 (23–57) | 4 | 11,0 | 500 | 62 % (1 % del tiempo) | 10 / 90 px | 6,1 / 9,0 ms |
+| naturaleza | naturaleza legible (motor v46) | 15 | 4 | 11,0 | 815 | 59 % | 10 / 90 px | 13,0 / 30,2 ms |
+| ciudad | naturaleza legible (motor v46) | 17 | 4 | 11,0 | 500 | 62 % (1 % del tiempo) | 10 / 90 px | 6,5 / 8,4 ms |
 
 Las seis cumplen los cuatro criterios. Con el bombo erosionando, las eras de la ciudad duraban unos 10 minutos: la batería no dejaba madurar el mundo (*el breakdown entierra el mundo*).
 
 **Con el bombo en impulso (fase 7 v12) las eras se acortan,** al revés de lo que esperaba el encargo. Todas las de la naturaleza y 8 de las 11 de la ciudad se cierran por estancamiento (las otras 3, por edad máxima). El bombo era la principal fuente de novedad mientras sonaba; ahora hincha la celda y le da capacidad, pero no cambia su forma, así que el mundo madura y se asienta antes. La capacidad retrasa el desborde, pero en esta sesión pesa más la novedad que se pierde. Hay casi el doble de piezas y más densidad (la ciudad pasa del 60 % un 1 % del tiempo, dentro del criterio del 5 %), y `build_instances` tarda el doble, con fotogramas estables. Sin compensar, como pide el encargo: a vigilar con el aparato (prueba pendiente 11 de `MONTAJE_FASES_3_10.md`).
 
 **Con los pulsos de ocupación (fase 7 v14) se acortan más,** como avisaba el encargo: cada bombo suma 3 triggers y el tom 2, así que las celdas maduran antes y el mundo se asienta antes. Todas las eras de las dos escenas se cierran por estancamiento: 15 en la naturaleza y 17 en la ciudad, de 23 a 62 compases (un minuto largo cada una). La densidad y las piezas apenas cambian respecto a la capacidad. Sin compensar: a vigilar con el aparato.
+
+**Con la naturaleza legible (motor v46)** las dos escenas siguen cumpliendo los cuatro criterios. La ciudad no cambia. La naturaleza tiene más piezas (815: las copas del borde del dosel) y su `build_instances` de muestra tarda el doble que antes (13 ms de mediana) porque cada muestra, medio segundo después de la anterior, encuentra casi siempre la ocupación de alguna montaña cambiada y rehace el mapa de alturas. En un fotograma sin cambios, como la mayoría en TouchDesigner, la naturaleza tarda 3,9 ms frente a 3,5 ms de la ciudad (sesión de 5 minutos). La primera versión del dosel colonizaba el cluster entero en cada cambio y llegaba a 180 ms de p95: se corrigió (ver *La naturaleza legible*).
 
 ### Parámetros (página Fase18)
 
@@ -767,6 +878,21 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | ¿Duración de un paso? | 60 / (BPM × 4): `Pasospornegra` ya no existe (fase 6) |
 | ¿Cómo se deshace una obra? | Sola, una etapa cada `Pasosetapa` pasos, sin esperar gates |
 
+**Fase 11 v5 · naturaleza legible.** Causa encontrada: los modelos de naturaleza eran compuestos del juego del caos sobre un L-system de 30° y el árbol madre, y el latido mezclaba al 75 % el tinte del secuenciador o del pad en su albedo; la paleta de conchas generaba verdes que camuflaban el bosque. La concha no pasaba al albedo de los modelos.
+
+| Decisión | Alternativa descartada | Motivo |
+|---|---|---|
+| Por encima del bosque sube el terreno | Más piezas apiladas (árbol madre, caos) | A escala de globo el apilado es ruido |
+| Pisos por altura relativa al suelo local | Por radio absoluto | El planeta crece y los pisos se moverían |
+| Tinte del SEQ al borde (fresnel, focos uTinte) | Tinte en el albedo | El verde es lo que dice «naturaleza» |
+| Dosel por colonización del espacio, una parte por celda abierta a sus vecinas del cluster | Copas sueltas por celda; colonizar el cluster entero de golpe | Masa única sin solapes; el cluster entero tardaba ~100 ms en cada cambio |
+| Cordillera como malla por cluster | Columnas por celda | Silueta continua legible |
+| Una sola esfera desplazada en el shader por un mapa de alturas (Script TOP) | Un Script SOP que rehace la malla en Python | Sin reconstruir geometría: solo una textura cuando cambia la ocupación |
+| El mapa se rehace con la ocupación, no con el stop-motion | Seguir la altura visible fotograma a fotograma | Rehacerlo 24 veces por segundo no cabe en el fotograma; la cumbre salta a su altura nueva |
+| Escalera por los umbrales (`Umbralram`, `Umbralfusion`) y `Umbralmonte` aparte | Los números del encargo (4–5, 6–7) | Como en el resto de la piel: cambiar un umbral cambia la piel |
+| Puntos de atracción por hash determinista | El mapa logístico | Sus ternas casi se repiten: la cúpula de una celda suelta quedaba vacía |
+| Banda verde reservada desde 120° | Desde 100° (todo el verde amarillento) | Con menos tono libre dos conchas seguidas dejarían de diferir 60° |
+
 ---
 
 ### Decisiones tomadas en la fase 12
@@ -792,6 +918,16 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | ¿Qué es una formación suelta? | Una formación (no satélite) que no está en ningún cluster |
 | ¿Distancia de Kruskal? | Saltos por la retícula (camino más corto) |
 | ¿Ríos en la ciudad o carreteras en la naturaleza? | No: cada tema tiene su tejido |
+
+**Fase 13 v2 · ríos azules.** Causa encontrada: ocultos (bajo las formaciones y bajo la loseta de luz, que además los teñía), la paleta de conchas con azules y verdes, y sin emisivo en la cara de sombra. El color por instancia no estaba sobrescrito.
+
+| Decisión | Alternativa descartada | Motivo |
+|---|---|---|
+| Azul reservado y excluido de la paleta | Azul libre | Se camuflaba con conchas azules |
+| Cinta que bordea | Caja que pasa por debajo | Quedaba tapada |
+| Bajada por el suelo real | Hacia la vecina menos ocupada | Hoy el planeta tiene relieve |
+| Emisivo bajo | Solo difuso | Se perdía en la cara de sombra |
+| Geometría y material propios (`rios`, `mat_piel_agua`) | Seguir en `tejido` con el mineral | Ningún tinte ni borde puede tocarlos |
 
 ### Decisiones tomadas en la fase 14
 
@@ -886,6 +1022,7 @@ xvfb-run -a python3 pruebas/glsl_piel.py   # compila y dibuja el shader de la pi
 - **Fase 17**: una ciudad con las ventanas ámbar encendidas por edificio y un planeta de naturaleza con la banda de nubes del frente a mitad de camino, dibujados con el shader real. Al pasar un proyecto de la fase 16 a la 17, `luz_principal` toma su color del motor y `uVentanas` pasa a 1.
 - **Fase 18**: la sesión de 20 minutos por escena (ver arriba) cumple los cuatro criterios de cierre.
 - **Fase 19**: el shader de la piel con la niebla de distancia y con las fracturas y el glitch, dibujado con OpenGL.
+- **Fase 11 v5 y fase 13 v2**: el shader con la malla del terreno (la esfera desplazada por el mapa de alturas real del motor, con la rampa de los pisos), los ríos y los focos de tinte, dibujado con OpenGL: una cordillera de 5 celdas con cumbres nevadas, roca facetada y laderas verdes, copas sobre las laderas bajo el límite del bosque y el río azul bajando. La sesión de 20 minutos de la fase 18 sirvió para encontrar el coste de colonizar el dosel por cluster (ver *La naturaleza legible*).
 - **Medidas**: el arreglo de la caja y el prisma unidad corrige un Tube SOP con el radio por defecto y no toca uno correcto; un catálogo editado se conserva y avisa de los modelos que no existen.
 
 Lo que la simulación no puede comprobar: el aspecto real en el render, los nombres de los parámetros de los SOP (Tube, Transform, Select, Merge) y del GLSL MAT (Vertex/Pixel Shader, página Vectors), que TouchDesigner declare sus funciones de shader como las imitamos, y el tiempo real por fotograma.
@@ -906,6 +1043,8 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 12. **Tiempo (fase 17)**: que el balanceo del dosel y el tráfico van a tempo y se paran con STOP; que el BeatStep manda All Notes Off al cambiar de pattern (si no, solo funciona `Frenteprueba`); que el frente se ve cruzar y que la luz de un pattern conocido vuelve. Si tienes `master_beat`, pon su ruta en `Masterbeat`.
 13. **Escenas (fase 18)**: que cada escena se ve como se espera y que guardar y cargar no tocan el mundo; que los focos de obra, las brasas y el polvo se leen como luz (mezcla aditiva de `mat_luz_local`) y no tapan nada; con la sesión real de 20 minutos, los fotogramas con el máximo de piezas.
 14. **Modular (fase 19)**: decidir cómo llegan los voltajes (OSC o un CHOP) y comprobar en la leyenda `MODULAR` que llegan y en qué rango. Que la niebla de la cámara existe (página Fog de `camara`; si no, solo la piel tiene niebla) y que el glitch no molesta a la lectura con saturación baja.
+15. **Naturaleza legible (fase 11 v5)**: que `mat_piel_tierra` compila (clic derecho → Info) y que su página Samplers tiene `sAlturas` = `alturas` y `sRampa` = `rampa_hipso`; que `alturas` es de 32 bits float y que las montañas salen hacia fuera y en su sitio (si salen del revés en latitud, el Script TOP voltea la imagen: dímelo y lo invierto); que `modelos/veg_conifera/cono` tiene la punta arriba; a distancia de globo, que una cordillera nevada se distingue de un bosque y que el borde se enciende con la nota. Medir los fotogramas cuando cambia la ocupación de una montaña (se rehace el mapa).
+16. **Ríos azules (fase 13 v2)**: que se ven azules desde la cámara de globo, también en la cara de sombra (si no, sube `Emisivorio`), y que los lagos llenan las hondonadas sin tapar las cicatrices.
 
 ### Problemas frecuentes
 
@@ -943,4 +1082,8 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | Pantalla negra (solo la leyenda) tras relanzar una fase | Giro y pivote guardados en `camara` al navegar en su visor | Relanza cualquier fase con comun v28 (los pone a cero); mira el planeta en el visor del render |
 | `midiout`: `Could not open the MIDI interface` | El mapeador MIDI de TouchDesigner (no es de los scripts) | Nada: la entrada MIDI funciona igual; si molesta, quita la salida en Dialogs → MIDI Device Mapper |
 | Fase 12: pulido y rugoso iguales | La geometría no lee el canal `a` | En la geometría `mod_...`: Instance 2 → Color A = `a`. El informe lo avisa con `FALLO ... no lee la rugosidad` |
+| Fase 11 v5: no se levanta ninguna montaña | Sin el mapa de alturas o sin el shader: el Script TOP `alturas` no tiene numpy o no está enlazado (página Samplers de `mat_piel_tierra`), o `terreno` no está en el render | Mira las líneas `..` del informe de la fase 11 (`alturas`, `samplers`); relanza `fase11_piel.py` |
+| Fase 11 v5: las montañas salen en otra latitud o del revés | El Script TOP voltea la imagen respecto al motor | Dímelo: se invierte la fila en `alturas_array` |
+| Fase 11 v5: el bosque sale con el color de la concha o de la nota | Proyecto con motor anterior al v46 | Relanza `fase11_piel.py` (o cualquier fase): la línea `motor cargado (motor v46)` |
+| Fase 13 v2: los ríos no se ven | `rios` no está en el render o `Rios` apagado | Relanza `fase13_tejido.py`: la línea `render dibuja: ... rios ...` |
 | Fase 12: el gate no cambia nada | Sin note off (el aparato no lo envía) o `Gateprueba` en los botones | Mira la línea `MOD`: sin `gate` es que no llega el note off |

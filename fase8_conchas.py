@@ -18,7 +18,9 @@ Al terminar cada ciclo de ecosistema (fase 6: lo cierra el mundo):
      se leen en el color. Las formaciones de esa capa se descartan.
      PALETA (motor v26): cada concha de un color. Tono por el angulo
      aureo desde Paletatono, saltando el cian de la cicatriz y el ambar
-     del SEQ2; claro y oscuro alternos; croma de mineral (Paletacroma).
+     del SEQ2 (desde el motor v46, tambien los verdes de los pisos y el
+     azul de los rios: 120-275); claro y oscuro alternos; croma de
+     mineral (Paletacroma).
      Calculado de la generacion: cambiar la paleta recolorea lo enterrado.
      Paleta = mineral vuelve a la anterior (ambar y grises).
   2. El planeta engorda el GROSOR de la concha. Con Grosortiempo es
@@ -75,7 +77,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v10  (la corteza se compacta: Cortezamax; Grosormax 1,5)'
+VERSION = 'fase8 v11  (autoprueba: la paleta tambien reserva los verdes de los pisos y el azul de los rios)'
 banner(VERSION)
 
 base = require_base(8)
@@ -253,12 +255,12 @@ def prueba(t):
                         360 - abs(oklch(n, 0)[1] - oklch(n + 1, 0)[1])) >= 60
                     and abs(oklch(n, 0)[0] - oklch(n + 1, 0)[0]) >= 0.1 - 1e-9 for n in range(200))
     t.check('paleta: dos conchas seguidas difieren 60 grados de tono y 0,1 de luminosidad', contraste)
-    t.check('paleta: ningun tono en las bandas reservadas (cian 165-235, ambar 55-100)',
+    t.check('paleta: ningun tono en las bandas reservadas (ambar 55-100; verdes, cian y azul de los rios 120-275)',
             not any(m._en_banda(m.palette_hue(n, cp['paleta_tono'])) for n in range(200)))
     gama = all(m.oklch_to_srgb(oklch(n, o)[0], cp['paleta_croma'], oklch(n, o)[1])[1]
                for n in range(200) for o in (0, 1))
     t.check('paleta: todos los colores dentro de sRGB sin recortar', gama)
-    ref = ['#904D4E', '#8884C1', '#5A6B2D', '#B37699', '#396695', '#BB7A60', '#72548A', '#699B6A']
+    ref = ['#904D4E', '#A47AAF', '#6D651F', '#B8758D', '#685891', '#BC7867', '#824F79', '#889352']
     hx = lambda col: '#%02X%02X%02X' % tuple(int(round(v * 255)) for v in col)
     t.check('paleta: los colores de referencia', [hx(m.generation_color(cp, n, False)) for n in range(8)] == ref)
     t.check('paleta: la loseta ocupada, mas clara que la vacia',

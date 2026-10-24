@@ -1,6 +1,6 @@
 """
 Vista previa del catalogo de la fase 11 sin TouchDesigner: dibuja cada
-modelo del motor (sus cajas y prismas, con luz plana) en una hoja de
+modelo del motor (sus cajas, prismas, bolas y conos, con luz plana) en una hoja de
 contactos PNG.
 
     python3 pruebas/vista_previa.py [salida.png]
@@ -50,12 +50,45 @@ def _hexa_malla():
 HEXA_V, HEXA_F = _hexa_malla()
 
 
+def _bola_malla(filas=6, cols=10):
+    """La bola unidad (Sphere SOP de pocas caras: se lee de lejos)."""
+    v, f = [[0.0, -0.5, 0.0]], []
+    for r in range(1, filas):
+        phi = math.pi * r / filas - math.pi / 2
+        for k in range(cols):
+            a = 2 * math.pi * k / cols
+            v.append([0.5 * math.cos(phi) * math.cos(a), 0.5 * math.sin(phi), 0.5 * math.cos(phi) * math.sin(a)])
+    v.append([0.0, 0.5, 0.0])
+    top = len(v) - 1
+    idx = lambda r, k: 1 + (r - 1) * cols + k % cols
+    for k in range(cols):
+        f.append((0, idx(1, k + 1), idx(1, k)))
+        f.append((top, idx(filas - 1, k), idx(filas - 1, k + 1)))
+    for r in range(1, filas - 1):
+        for k in range(cols):
+            f.append((idx(r, k), idx(r, k + 1), idx(r + 1, k + 1), idx(r + 1, k)))
+    return np.array(v), f
+
+
+def _cono_malla(cols=8):
+    """El cono unidad: base de diametro 1 en y = -0,5 y punta en y = 0,5."""
+    v = [[0.5 * math.cos(2 * math.pi * k / cols), -0.5, 0.5 * math.sin(2 * math.pi * k / cols)]
+         for k in range(cols)] + [[0.0, 0.5, 0.0]]
+    f = [(k, cols, (k + 1) % cols) for k in range(cols)] + [tuple(range(cols))[::-1]]
+    return np.array(v), f
+
+
+BOLA_V, BOLA_F = _bola_malla()
+CONO_V, CONO_F = _cono_malla()
+MALLAS = dict(caja=(CAJA_V, CAJA_F), hexa=(HEXA_V, HEXA_F), bola=(BOLA_V, BOLA_F), cono=(CONO_V, CONO_F))
+
+
 def mallas_de(m, prims, M=None, T=None, S=None):
     """Triangulos (n, 3, 3) de las piezas de un modelo, opcionalmente con una
     transformacion de instancia (S escala, M giro, T traslado)."""
     tris = []
     for p in prims:
-        V, F = (CAJA_V, CAJA_F) if p[0] == 'caja' else (HEXA_V, HEXA_F)
+        V, F = MALLAS[p[0]]
         R = np.array(m._rot_xyz(p[7], p[8], p[9]))
         P = (V * np.array(p[4:7])) @ R.T + np.array(p[1:4])
         if S is not None:
