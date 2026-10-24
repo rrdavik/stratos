@@ -20,7 +20,10 @@ QUE HACE
                Son cintas de agua (geometria 'rios', mat_piel_agua): azul
                reservado (Colorrio, fuera de la paleta de conchas), sin tintes
                de celda, de pad ni de concha, especular alto (rugosidad 0,1) y
-               un emisivo bajo (Emisivorio) para la cara de sombra. Van sobre
+               un emisivo (Emisivorio) para la cara de sombra. v4, mas vivos:
+               azul claro y saturado (OKLCH 0,65 0,18 250), una orilla azul
+               muy clara 1,8 veces mas ancha debajo que los recorta sobre el
+               verde, Emisivorio 0,6 y Anchominpx 4. Van sobre
                el terreno, con un pequeno desfase, por los bordes de las celdas
                y lejos de su centro: bordean la formacion y la loseta de luz.
                Ancho por caudal: de Anchorio a Anchomaxrio.
@@ -64,7 +67,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v3  (rios que se ven: diagnostico de la cadena, Anchominpx, Pendientemin, Pruebario)'
+VERSION = 'fase13 v4  (rios mas vivos: azul claro y saturado, orilla clara, emisivo 0,6, 4 px)'
 banner(VERSION)
 
 base = require_base(13)
@@ -91,13 +94,18 @@ add_par(base, page, 'int', 'Maxrio', 'Longitud maxima de un rio (celdas)', 12, 1
 add_par(base, page, 'rgb', 'Colorrio', 'Color de los rios (azul reservado)', m.COL_RIO)
 add_par(base, page, 'float', 'Anchorio', 'Ancho minimo de un rio', 0.10, 0.01, 1.0)
 add_par(base, page, 'float', 'Anchomaxrio', 'Ancho maximo de un rio (caudal)', 0.34, 0.01, 1.5)
-add_par(base, page, 'float', 'Emisivorio', 'Emisivo del agua (cara de sombra)', 0.25, 0.0, 1.0)
+add_par(base, page, 'float', 'Emisivorio', 'Emisivo del agua (cara de sombra)', 0.6, 0.0, 1.0)
 add_par(base, page, 'toggle', 'Lagos', 'Lagos en las hondonadas', True)
-add_par(base, page, 'float', 'Anchominpx', 'Ancho minimo del rio en pantalla (px, camara de globo)', 2.0, 0.0, 10.0)
+add_par(base, page, 'float', 'Anchominpx', 'Ancho minimo del rio en pantalla (px, camara de globo)', 4.0, 0.0, 10.0)
 add_par(base, page, 'float', 'Pendientemin', 'Relieve minimo de una fuente (x el limite)', 0.01, 0.0, 0.5)
 add_par(base, page, 'pulse', 'Pruebario', 'Cordillera de prueba y su rio (en Nota2)')
+# v4: rios mas vivos; los valores de antes que no se tocaron pasan a los nuevos
+renew_default(base, 'Emisivorio', 0.25, 0.6)
+renew_default(base, 'Anchominpx', 2.0, 4.0)
+for k, ch in enumerate('rgb'):
+    renew_default(base, 'Colorrio' + ch, m.COL_RIO_V50[k], m.COL_RIO[k])
 ok('pagina Fase13: Rios, Carreteras, Minvia 2, Grosorvia 0,18 (carreteras), Maxrio 12; v2: Colorrio '
-   '(OKLCH 0,55 0,15 255), Anchorio 0,10, Anchomaxrio 0,34, Emisivorio 0,25, Lagos; v3: Anchominpx 2, '
+   '(v4: OKLCH 0,65 0,18 250), Anchorio 0,10, Anchomaxrio 0,34, Emisivorio 0,6, Lagos; v3: Anchominpx 4, '
    'Pendientemin 0,01, Pruebario')
 
 # -----------------------------------------------------------------------------
@@ -298,12 +306,15 @@ def _prueba(t, m):
         cel = max(range(m.N), key=lambda x: sum(d[q] * m.NORMALS[x][q] for q in range(3)))
         sobre.append(r_ - m.suelo(W, c, cel) - m.alto_en(ter, d))
     t.check('cordillera con valles: los rios son cintas azules (%d tramos) apoyadas en el terreno, sin tintes'
-            % len(filas), filas and all(tuple(f[9:12]) == tuple(azul) for f in filas)
+            % len(filas), filas and all(tuple(f[9:12]) in (tuple(azul), tuple(m.COL_ORILLA)) for f in filas)
+            and sum(1 for f in filas if tuple(f[9:12]) == tuple(m.COL_ORILLA)) * 2 == len(filas)
             and all(-0.02 <= x <= 0.25 for x in sobre) and all(f[7] < 0.01 for f in filas)
             and not m._CACHE['inst'].get('tejido'), 'desfase %.3f a %.3f' % (min(sobre or [0]), max(sobre or [0])))
     h_hue = m.palette_hue
-    t.check('el azul de los rios es OKLCH 0,55 0,15 255 y esta fuera de la paleta de conchas',
-            m._en_banda(255.0) and all(abs(a - b) < 1e-6 for a, b in zip(m.COL_RIO, m.oklch_to_srgb(0.55, 0.15, 255.0)[0])))
+    t.check('el azul de los rios es OKLCH 0,65 0,18 250 (v4, mas vivo), con su orilla clara, y esta fuera de la '
+            'paleta de conchas',
+            m._en_banda(250.0) and m._en_banda(245.0)
+            and all(abs(a - b) < 1e-6 for a, b in zip(m.COL_RIO, m.oklch_to_srgb(0.65, 0.18, 250.0)[0])))
     # 4. una nota del SEQ1 en una celda con rio: la celda se ilumina y el rio sigue azul y fuera de la loseta
     ca = m.cauces(W, c)
     cel = next(iter(sorted(ca['por_celda']))) if ca['por_celda'] else -1
@@ -375,7 +386,7 @@ def _prueba_v3(t, m):
     t.check('Pruebario: cordillera de 5 celdas y un rio azul de la cumbre al valle (%d tramos, %.1f px)'
             % (rr.get('tramos', 0), rr.get('px', 0.0)),
             ter['cordilleras'] == 1 and rr.get('tramos', 0) > 0 and baja and inst.get('rios')
-            and all(tuple(f[9:12]) == tuple(m.color_rio(c)) for f in inst['rios'])
+            and all(tuple(f[9:12]) in (tuple(m.color_rio(c)), tuple(m.COL_ORILLA)) for f in inst['rios'])
             and rr.get('px', 0.0) >= c['ancho_min_px'] - 1e-6)
     # 2. Anchominpx: con el planeta grande (rios estrechos en pantalla) el rio no baja de esos px
     base.par.Anchominpx = 6.0
