@@ -29,7 +29,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v44'
+MOTOR_VERSION = 'motor v45'
 
 import math
 
@@ -75,13 +75,13 @@ TIPOS_DEFECTO = ['impulso', 'corte', 'impulso', 'aranazo',
 TIPOS_V11 = ['temblor', 'corte', 'corte profundo', 'aranazo',
              'aranazo', 'aranazo', 'aranazo', 'aranazo']
 # Fase 7 v12: un pad erosiona o da impulso. El impulso (bombo y tom) no
-# destruye: amplia la capacidad de la celda que golpea (la celda se porta
-# como si fuera 'capacidad' veces mas grande) y la hincha al golpe
-# (pumping). Ignora reduccion, radio y profundidad.
+# destruye: desde la v14 suma pulsos de ocupacion a la celda que golpea (el
+# bombo 3, el tom 2) y la hincha al golpe (pumping, solo visual). Ignora
+# reduccion, radio y profundidad.
 MODOS_PAD = ['erosion', 'impulso']
 MODOS_DEFECTO = ['impulso', 'erosion', 'impulso', 'erosion',
                  'erosion', 'erosion', 'erosion', 'erosion']
-CAPACIDAD_DEFECTO = [3.0, 1.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+PULSOS_DEFECTO = [3, 1, 2, 1, 1, 1, 1, 1]
 # Fase 7 v13: segundos de caida del pumping de cada pad (columna pump_rel):
 # el bombo, 0,20; el tom, 0,12; los demas, 0,15 si pasan a impulso.
 PUMP_REL_DEFECTO = [0.20, 0.15, 0.12, 0.15, 0.15, 0.15, 0.15, 0.15]
@@ -120,10 +120,10 @@ def es_impulso(cfg, pad):
     return modos[int(pad) % len(modos)] == 'impulso'
 
 
-def capacidad_pad(cfg, pad):
-    """Multiplicador de capacidad de un pad de impulso (al menos 1)."""
-    caps = cfg.get('capacidades') or CAPACIDAD_DEFECTO
-    return max(1.0, float(caps[int(pad) % len(caps)]))
+def pulsos_pad(cfg, pad):
+    """Pulsos de ocupacion de un golpe de impulso del pad (al menos 1)."""
+    ps = cfg.get('pulsos') or PULSOS_DEFECTO
+    return max(1, int(round(float(ps[int(pad) % len(ps)]))))
 
 
 def pads_impulso(cfg):
@@ -151,9 +151,9 @@ DEFAULT_CFG = dict(
     # fase 7
     dens_umbral=0.60, rad_mult=2.0, target_mode=2,
     perfiles=PERFILES_DEFECTO, tipos=TIPOS_DEFECTO,
-    # fase 7 v12: impulso (capacidad de la celda y pumping)
-    modos=MODOS_DEFECTO, capacidades=CAPACIDAD_DEFECTO,
-    cap_modo=0, cap_dur=16, pump_amt=1.0, pump_horz=0.30, pump_hold=0.04, pump_velmin=0.6,
+    # fase 7 v14: impulso (pulsos de ocupacion y pumping)
+    modos=MODOS_DEFECTO, pulsos=PULSOS_DEFECTO,
+    pump_amt=1.0, pump_horz=0.30, pump_hold=0.04, pump_velmin=0.6, pump_tope=2.0,
     pump_rels=PUMP_REL_DEFECTO, pump_on=1,
     # fase 8
     herencia=0.25, max_shells=24, grosor_tiempo=1, grosor_max=1.5, colmatacion=0.0,
@@ -477,8 +477,7 @@ def new_world():
         luz={},                 # celda -> {pad: [t, peso]}: luz de la bateria
         ero_resto=[0.0] * N,    # fraccion de nota de erosion pendiente
         # impulso (fase 7 v12)
-        cap=[1.0] * N,          # capacidad de cada celda (1: la normal)
-        cap_t=[-99.0] * N,      # ultimo golpe de impulso en la celda
+        imp_t={},               # celda -> ultimo golpe de impulso
         bomba={},               # celda -> {t0, pico, rel, hold, n, t2, tope}: el pumping en curso
         foto_dt=0.0,            # lo que dura un fotograma (el ultimo medido)
         # ciclo (fase 6): lo cierra el mundo
@@ -570,8 +569,8 @@ def ensure(W):
     for k, v in base.items():
         if k not in W:
             W[k] = v
-    if len(W['cap']) != len(W['occ']):  # la reticula cambio: capacidades normales
-        W['cap'], W['cap_t'], W['bomba'] = [1.0] * len(W['occ']), [-99.0] * len(W['occ']), {}
+    for k in ('cap', 'cap_t'):          # la capacidad de los motores v43 y v44
+        W.pop(k, None)
     if any(not isinstance(b, dict) for b in W['bomba'].values()):
         W['bomba'] = {}                 # pumping del motor v43 (otra envolvente)
     for k, v in base['seq_off'].items():
@@ -583,32 +582,6 @@ def ensure(W):
 
 def limit(cfg):
     return cfg['height_factor'] * cfg['shell_thick']
-
-
-def cfg_celda(W, cfg, i):
-    """La configuracion con que crece la celda i. Con capacidad k (fase 7
-    v12: un golpe de impulso) la celda se porta como si fuera k veces mas
-    grande: limite de altura x k y umbrales de ramificacion, fusion,
-    coronacion y cumbre x k. La semilla y lo que sube cada senal siguen
-    siendo los de la celda normal (Semillafrac y Growstep x el limite de
-    siempre): la energia que antes se desbordaba sube en vertical hasta el
-    limite nuevo. Con capacidad 1, la misma cfg."""
-    base = cfg.get('_base', cfg)
-    caps = W.get('cap')
-    k = caps[i] if caps and 0 <= i < len(caps) else 1.0
-    if k <= 1.0 + 1e-9:
-        return base
-    c = dict(base)
-    c.update(_base=base, _cap=k, height_factor=base['height_factor'] * k,
-             seed_frac=base['seed_frac'] / k, grow_frac=base['grow_frac'] / k)
-    for t in ('th_branch', 'th_fusion', 'th_crown', 'th_cumbre'):
-        c[t] = int(round(base[t] * k))
-    return c
-
-
-def estado_celda(W, cfg, i):
-    """estado_idx de la celda i con sus umbrales (su capacidad)."""
-    return estado_idx(cfg_celda(W, cfg, i), W['occ'][i])
 
 
 def height_for(cfg, occ):
@@ -807,9 +780,7 @@ def _charge(W, cfg, i, now):
     Suma 1 a su carga y la hace subir un trozo de escalon: Growstep /
     coste, asi que cada nota sube menos conforme la formacion se acerca
     al limite (la frenada). Cuando la carga llega al coste se dispara el
-    trigger: la ocupacion sube 1. Devuelve (trigger, incremento). Con los
-    umbrales y el limite de su capacidad (cfg_celda)."""
-    cfg = cfg_celda(W, cfg, i)
+    trigger: la ocupacion sube 1. Devuelve (trigger, incremento)."""
     lim = limit(cfg)
     o = W['occ'][i]
     k = cost(cfg, o)
@@ -824,8 +795,8 @@ def _charge(W, cfg, i, now):
         return False, inc
     W['carga'][i] = 0
     W['occ'][i] = o + 1
-    if o + 1 >= cfg['th_branch'] and not sat:   # lo ganado con mas capacidad no se recorta
-        W['h'][i] = max(W['h'][i], lim)
+    if o + 1 >= cfg['th_branch'] and not sat:
+        W['h'][i] = lim
     return True, inc
 
 
@@ -856,10 +827,9 @@ def grow(W, cfg, i, s, vel, now):
     trig, inc = _charge(W, cfg, i, now)
     out = dict(celda=i, trigger=trig)
     o = W['occ'][i]
-    cc = cfg_celda(W, cfg, i)           # fase 7 v12: con mas capacidad se desborda mas tarde
-    if trig and o >= cc['th_branch'] and lvl >= 4:
+    if trig and o >= cfg['th_branch'] and lvl >= 4:
         out['desborde'] = overflow(W, cfg, i, s, vel, now)
-    out['estado'] = state_name(cc, o, lvl)
+    out['estado'] = state_name(cfg, o, lvl)
     out['inc'] = inc
     return out
 
@@ -868,9 +838,8 @@ def overflow(W, cfg, i, s, vel, now):
     nb = NEIGH[i]
     k = int(vel) if cfg['neigh_mode'] == 0 else int(vel) + W['occ'][i]
     j = nb[k % len(nb)]
-    cj = cfg_celda(W, cfg, j)           # el satelite, con su capacidad
-    lim = limit(cj)
-    grow_h = cj['grow_frac'] * lim
+    lim = limit(cfg)
+    grow_h = cfg['grow_frac'] * lim
     o = W['occ'][j]
     if o == 0:
         W['occ'][j] = 1
@@ -881,7 +850,7 @@ def overflow(W, cfg, i, s, vel, now):
         W['sp'][j] = W['own'][i]
         W['traza'][j] = _bit(W['own'][i])
         W['vel'][j] = int(vel)
-        W['h'][j] = cj['seed_frac'] * lim
+        W['h'][j] = cfg['seed_frac'] * lim
         W['huella'][j] = 0.0
         W['t_nac'][j] = now
         W['vig'][j] = 1.0
@@ -889,7 +858,7 @@ def overflow(W, cfg, i, s, vel, now):
     elif W['par'][j] == i:
         W['occ'][j] = o + 1
         W['lat'][j] = now
-        W['h'][j] = max(W['h'][j], min(cj['sat_limit'] * lim, W['h'][j] + grow_h))   # sin recortar
+        W['h'][j] = min(cfg['sat_limit'] * lim, W['h'][j] + grow_h)
         kind = 'satelite crece'
     else:
         # presion sobre una formacion ajena: suma a su carga, sin cascada
@@ -927,11 +896,9 @@ def _gate_altura(W, cfg, p, now, tempo):
     factor = max(0.0, now - t_on) / step
     # gate al 50 % = incremento normal; ligado como mucho Gatemax veces
     m = max(0.25, min(max(1.0, cfg['gate_max']), 2.0 * factor))
-    cc = cfg_celda(W, cfg, i)           # fase 7 v12: el techo de su capacidad
-    lim = limit(cc)
-    lo = cc['seed_frac'] * lim
-    top = max(_ceiling(W, cc, i), W['h'][i])    # lo ganado con mas capacidad no se recorta
-    W['h'][i] = max(lo, min(top, W['h'][i] + inc * (m - 1.0)))
+    lim = limit(cfg)
+    lo = cfg['seed_frac'] * lim
+    W['h'][i] = max(lo, min(_ceiling(W, cfg, i), W['h'][i] + inc * (m - 1.0)))
     return m
 
 
@@ -955,7 +922,7 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     gate_piel(W, cfg, i, now)           # fase 11: el gate adelanta las obras
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
     W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now,
-                             carga=W['carga'][i], coste=cost(cfg_celda(W, cfg, i), W['occ'][i]))
+                             carga=W['carga'][i], coste=cost(cfg, W['occ'][i]))
     return res
 
 
@@ -1060,7 +1027,7 @@ def snapshot(W, cfg):
             out.append([0, 0, 0, 0, hu])
             continue
         sat = W['par'][i] >= 0
-        out.append([W['own'][i], min(o, form_cap(cfg_celda(W, cfg, i), sat)),
+        out.append([W['own'][i], min(o, form_cap(cfg, sat)),
                     1 if W['sp'][i] == HIB else 0, 1 if sat else 0, hu])
     return out
 
@@ -1084,7 +1051,7 @@ def measure(W, cfg, foto):
             if a != b:
                 changed += 1
     forms = [i for i in range(N) if W['occ'][i] > 0 and W['par'][i] < 0]
-    mature = sum(1 for i in forms if W['occ'][i] >= cfg_celda(W, cfg, i)['th_branch'])
+    mature = sum(1 for i in forms if W['occ'][i] >= cfg['th_branch'])
     return changed / float(max(1, alive)), mature / float(max(1, len(forms)))
 
 
@@ -1221,12 +1188,10 @@ def _undo_note(W, cfg, i):
     """Deshace una nota de construccion en la celda i: la misma moneda que
     _charge, al reves. Baja la carga y la altura lo que subio esa nota
     (Growstep / coste del escalon); al agotarse la carga baja un escalon y
-    la carga queda llena menos una. Una semilla sola se borra y deja huella.
-    Con los umbrales de su capacidad (cfg_celda)."""
+    la carga queda llena menos una. Una semilla sola se borra y deja huella."""
     o = W['occ'][i]
     if o <= 0:
         return False
-    cfg = cfg_celda(W, cfg, i)
     sat = W['par'][i] >= 0
     lim = limit(cfg)
     if sat:                             # los satelites crecen por desbordes
@@ -1324,48 +1289,58 @@ def erosion(W, cfg, pad, vel, now):
     return ev
 
 
-# --- impulso (fase 7 v12) ------------------------------------------------------
+# --- impulso (fase 7 v14) ------------------------------------------------------
 # El bombo es la respiracion del planeta: cada golpe empuja la corteza desde
 # dentro; el tom, un latido mas corto. Un pad de impulso:
-#   - fija la capacidad de la celda que golpea (donde cae, como la erosion:
-#     Objetivo y la velocidad, que la desplaza un semitono) al maximo entre la
-#     que tenga y la del pad: un tom no rebaja un x3 del bombo y dos bombos no
-#     dan x9. Cada golpe renueva la duracion (Capmodo: decae tras Capdur pasos
-#     sin golpes; sostenido, hasta el entierro). Lo construido no se recorta.
-#   - hincha lo que hay en la celda (pumping), en seco (motor v44): salta al
-#     pico con el golpe, lo sostiene Pumphold s (y al menos BOMBA_FOTOS
-#     fotogramas) y vuelve a 1 en los segundos de su pad (pump_rel), deprisa
-#     al principio y plana al final. Un golpe durante la caida salta otra vez
-#     al pico. Es un factor visual: no cambia la altura real.
-#   - no resta ocupacion, no deja huella, no corta y no entra en el
-#     presupuesto de densidad. La luz de su pad se ve en la celda sin tapar
-#     la del secuenciador, y el destello sigue la curva del pumping.
-CAP_MODOS = ['decae', 'sostenido']
+#   - suma 'pulsos' triggers completos a la celda que golpea (donde cae, como
+#     la erosion: Objetivo y la velocidad, que la desplaza un semitono), uno
+#     detras de otro y como si ya hubiera pagado su coste en notas: el bombo
+#     3, el tom 2. Cada pulso sigue las reglas de siempre: crecimiento hasta
+#     el limite y, por encima, desborde a las vecinas, fusion, corona y
+#     cumbre; en una celda vacia el primero siembra. La estructura queda al
+#     tamano que le toca por su ocupacion, y esa altura se pone de golpe. El
+#     limite de altura y los umbrales no cambian.
+#   - hincha lo dibujado en esa celda (pumping): un factor visual sobre el
+#     tamano ya asentado que salta al pico con el golpe, lo sostiene Pumphold
+#     s (y al menos BOMBA_FOTOS fotogramas) y vuelve a 1 en los segundos de su
+#     pad (pump_rel), deprisa al principio y plano al final, sin pasar de
+#     Pumptope x el limite. Un golpe durante la caida salta otra vez al pico.
+#     Los satelites que nacen en las vecinas son de esas celdas: no se hinchan.
+#   - enciende la luz de la celda con el color del pad, con la misma curva.
+#   - no resta, no deja huella, no corta y no entra en el presupuesto de
+#     densidad. La luz de su pad no tapa la del secuenciador.
 BOMBA_DESTELLO = 0.35       # el destello de un impulso, suave
 BOMBA_FOTOS = 2             # fotogramas completos en el pico, como minimo
 BOMBA_TOPE = 0.8            # pico + caida <= 0,8 x el tiempo desde el golpe anterior en la celda
 FOTO_DEF = 1.0 / 60.0       # un fotograma, hasta medirlo (TouchDesigner va a 60 fps)
 
 
-def bomba_nivel(W, cfg, i, now):
-    """(valor, pico) del pumping de la celda i en now: la escala vertical es
-    1 + valor. En seco: el pico desde el golpe, sin rampa; se sostiene
-    Pumphold s y al menos BOMBA_FOTOS fotogramas dibujados; luego cae a 0
-    en 'rel' s, deprisa al principio y plano al final:
-        valor = pico x (1 - t / rel)^3
+def bomba_frac(W, i, now):
+    """Fraccion 0-1 del pumping de la celda i en now. En seco: 1 desde el
+    golpe, sin rampa, sostenido Pumphold s y al menos BOMBA_FOTOS fotogramas
+    dibujados; luego cae deprisa al principio y plano al final:
+        (1 - t / rel)^3
     y llega a 0 justo en rel."""
     b = W.get('bomba', {}).get(i)
     if not b:
-        return 0.0, 0.0
+        return 0.0
     if b['t2'] is None:                 # aun no se han dibujado dos fotogramas
-        return b['pico'], b['pico']
+        return 1.0
     fin = max(b['t0'] + b['hold'], b['t2'])
     if now <= fin:
-        return b['pico'], b['pico']
+        return 1.0
     x = (now - fin) / max(1e-9, b['rel'])
     if x >= 1.0:
-        return 0.0, b['pico']
-    return b['pico'] * (1.0 - x) ** 3, b['pico']
+        return 0.0
+    return (1.0 - x) ** 3
+
+
+def bomba_nivel(W, cfg, i, now):
+    """(valor, pico) del pumping de la celda i: la escala vertical es 1 + valor."""
+    b = W.get('bomba', {}).get(i)
+    if not b:
+        return 0.0, 0.0
+    return b['pico'] * bomba_frac(W, i, now), b['pico']
 
 
 def vel_bomba(cfg, vel):
@@ -1382,37 +1357,80 @@ def pump_rel_pad(cfg, pad):
     return max(0.0, float(rels[int(pad) % len(rels)]))
 
 
+def seq_de_objetivo(W, cfg, pad):
+    """El secuenciador (GEO o ARQ) cuya celda sigue el golpe (como en
+    pick_target): da la especie de la celda vacia que siembra un impulso."""
+    mode = int(cfg['target_mode'])
+    l1, l2 = W['last'].get(1), W['last'].get(2)
+    if mode == 1 or (mode == 2 and int(pad) % 2 == 1):
+        return ARQ if l2 else GEO
+    return GEO if l1 or not l2 else ARQ
+
+
+def pulso(W, cfg, i, s, vel, now):
+    """Un pulso de impulso en la celda i: un trigger completo (ocupacion + 1)
+    sin pagar notas, con las reglas de siempre. En una celda vacia siembra
+    (especie s, pulida o porosa por la velocidad). No cambia la especie ni
+    coloniza. Devuelve la celda del desborde, si lo hay."""
+    if W['occ'][i] <= 0:
+        grow(W, cfg, i, s, vel, now)
+        return None
+    if W['par'][i] >= 0:                # un satelite que recibe senal directa se independiza
+        W['par'][i] = -1
+    o = W['occ'][i] + 1
+    W['occ'][i] = o
+    W['carga'][i] = 0
+    W['h'][i] = max(W['h'][i], height_for(cfg, o))     # la altura de su ocupacion
+    if o >= cfg['th_branch'] and cfg['nivel'] >= 4:
+        return overflow(W, cfg, i, W['own'][i], vel, now)
+    return None
+
+
 def impulso(W, cfg, pad, vel, now):
     pad = int(pad) % len(cfg['perfiles'])
-    k = capacidad_pad(cfg, pad)
+    n = pulsos_pad(cfg, pad)
     target = pick_target(W, cfg, pad, vel)
     W['t'] = W['t'] if W['t'] is not None else now
-    # el pumping: pico (vertical - 1) por la capacidad y la velocidad, y caida
+    occ0 = W['occ'][target]
+    s = W['own'][target] if occ0 > 0 and W['own'][target] else seq_de_objetivo(W, cfg, pad)
+    desbordes = []
+    for _ in range(n):                  # uno detras de otro, con las reglas de siempre
+        j = pulso(W, cfg, target, s, vel, now)
+        if j is not None:
+            desbordes.append(j)
+    W['ruina'][target] = 0              # fase 14: construir sobre la huella la borra
+    W['rebrote'][target] = 0            # fase 15: completa el rebrote
+    # la altura nueva, de golpe: sin suavizado ni stop-motion (y sin el rebote
+    # de nacimiento: el golpe lo hace el pumping)
+    W['vh'][target] = W['h_obj'][target] = W['h0'][target] = W['h'][target]
+    W['t_h'][target] = now
+    if occ0 <= 0:                       # sembrada por el golpe: sin rebote ni latido de una nota
+        W['t_nac'][target] = -99.0
+        W['lat'][target] = -99.0
+    gate_piel(W, cfg, target, now)      # fase 11: el golpe adelanta la obra, como una nota
+    # el pumping: pico (vertical - 1) por los pulsos y la velocidad, y caida
     # del pad con un tope por el ritmo: el golpe entero (pico sostenido y
     # caida) cabe en 0,8 x el tiempo desde el golpe anterior en la celda, para
     # que vuelva a 1 antes del siguiente (en una rafaga, 0,8 x el paso)
-    pico = (k - 1.0) * max(0.0, cfg['pump_amt']) * vel_bomba(cfg, vel)
+    pico = (n - 1.0) * max(0.0, cfg['pump_amt']) * vel_bomba(cfg, vel)
     rel = pump_rel_pad(cfg, pad)
     hold = max(0.0, cfg['pump_hold'])
     b = W['bomba'].get(target)
     if b and b['n'] == 0:               # en el mismo fotograma (bombo y tom a la vez): el mayor
         b['pico'] = max(b['pico'], pico)
         b['rel'] = max(b['rel'], min(rel, b['tope']))
-    elif pico > 0.0:                    # retrigger en seco: otra vez al pico
+    else:                               # retrigger en seco: otra vez al pico
         sostiene = max(hold, BOMBA_FOTOS * (W.get('foto_dt') or FOTO_DEF))
-        tope = max(0.0, BOMBA_TOPE * (now - W['cap_t'][target]) - sostiene)
+        tope = max(0.0, BOMBA_TOPE * (now - W['imp_t'].get(target, -99.0)) - sostiene)
         W['bomba'][target] = dict(t0=now, pico=pico, rel=min(rel, tope), hold=hold, n=0, t2=None,
                                   tope=tope)
-    W['cap'][target] = max(W['cap'][target], k)
-    W['cap_t'][target] = now
+    W['imp_t'][target] = now
     light_cell(W, cfg, target, pad, 1.0, now)
     W['hits'][3] = W['hits'].get(3, 0) + 1
     W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
-    modo = int(cfg.get('cap_modo', 0))
-    ev = dict(pad=pad, modo='impulso', tipo='impulso', capacidad=k, cap=W['cap'][target],
-              celda=target, pasos=int(cfg['cap_dur']) if modo == 0 else None, bomba=pico,
-              caida=W['bomba'][target]['rel'] if target in W['bomba'] else 0.0,
-              vacia=W['occ'][target] <= 0, red=0, notas=0.0, rad=0, prof=0, quitado=0,
+    ev = dict(pad=pad, modo='impulso', tipo='impulso', pulsos=n, celda=target, occ0=occ0,
+              occ=W['occ'][target], desbordes=desbordes, bomba=pico, caida=W['bomba'][target]['rel'],
+              vacia=occ0 <= 0, red=0, notas=0.0, rad=0, prof=0, quitado=0,
               dens=occupied(W) / float(N), doble=False, t=now)
     W['ev']['erosion'] = ev
     if cfg['nivel'] >= 9:
@@ -1422,27 +1440,15 @@ def impulso(W, cfg, pad, vel, now):
 
 
 def impulso_tick(W, cfg, now):
-    """La capacidad vuelve a 1 tras Capdur pasos sin golpes de impulso
-    (Capmodo decae) y se quitan los pumpings acabados."""
-    if int(cfg.get('cap_modo', 0)) == 0:
-        dur = max(1, int(cfg['cap_dur'])) * (W.get('paso') or 0.125)
-        caps, ts = W['cap'], W['cap_t']
-        for i in range(len(caps)):
-            if caps[i] > 1.0 and now - ts[i] >= dur - 1e-9:
-                caps[i] = 1.0
+    """Cada fotograma: cuenta los del pico de cada pumping y quita los acabados."""
     bomba = W.get('bomba')
-    for i in list(bomba or {}):         # cada fotograma: cuenta los del pico y quita los acabados
+    for i in list(bomba or {}):
         b = bomba[i]
         b['n'] += 1
         if b['n'] == BOMBA_FOTOS:
             b['t2'] = now
         if b['t2'] is not None and now >= max(b['t0'] + b['hold'], b['t2']) + b['rel']:
             del bomba[i]
-
-
-def celdas_cap(W):
-    """Celdas con capacidad mayor que 1."""
-    return sum(1 for k in W.get('cap', []) if k > 1.0)
 
 
 def cut(W, cfg, target, depth, rad, now):
@@ -1652,9 +1658,8 @@ def end_cycle(W, cfg, now, bars=None):
     """Entierra el mundo (desde el nivel 8). bars: compases que duro; sin
     ellos, la concha tiene Shellthick."""
     W['ev']['ciclo'] = dict(t=now, n=W.get('ciclo_n', 1))
-    W['cap'] = [1.0] * N                # fase 7 v12: la capa nueva empieza con capacidad 1
-    W['cap_t'] = [-99.0] * N
-    W['bomba'] = {}
+    W['bomba'] = {}                     # fase 7: sin pumping pendiente
+    W['imp_t'] = {}
     if cfg['nivel'] < 8:
         return False
     cerrar_obras(W, cfg)                # los transitos se cierran antes de hornear
@@ -1770,7 +1775,7 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         tick_destructores(W, cfg, now)
     if cfg['nivel'] >= 15:
         tick_rebrote(W, cfg, now)
-    if cfg['nivel'] >= 7:               # fase 7 v12: la capacidad decae y el pumping acaba
+    if cfg['nivel'] >= 7:               # fase 7: el pumping cuenta fotogramas y acaba
         if dt > 0:
             W['foto_dt'] = dt
         impulso_tick(W, cfg, now)
@@ -1885,6 +1890,7 @@ class _Bomba(object):
     def __init__(self, W, cfg, now, out):
         self.on = bool(W.get('bomba')) and bool(cfg.get('pump_on', 1)) and cfg['nivel'] >= 7
         self.W, self.cfg, self.now, self.out = W, cfg, now, out
+        self.techo = max(1.0, cfg.get('pump_tope', 2.0)) * limit(cfg)    # v14: Pumptope x el limite
         self.i = None
         self.hechas = {}            # celda -> (vertical, horizontal) aplicadas
 
@@ -1909,18 +1915,22 @@ class _Bomba(object):
         for k, v in self.out.items():
             if k in SIN_BOMBA or not isinstance(v, list):
                 continue
-            ex, _, ez = _ext_modelo(modelos[k]) if k in modelos else CAJA_EXT
+            ex, ey, ez = _ext_modelo(modelos[k]) if k in modelos else CAJA_EXT
             for f in v[self.marcas.get(k, 0):]:
                 rel = (f[0] - p0[0], f[1] - p0[1], f[2] - p0[2])
                 h = _dot(rel, n)
                 lado = max(ex * abs(f[6]), ez * abs(f[8]))
-                filas.append((f, h, _add(rel, n, -h), abs(_dot(rel, e)) + lado, abs(_dot(rel, t)) + lado))
+                filas.append((f, h, _add(rel, n, -h), abs(_dot(rel, e)) + lado, abs(_dot(rel, t)) + lado,
+                              h + ey * abs(f[7])))
         if not filas:
             return
-        tope = min(min(0.5 * self.cw / max(1e-9, a), 0.5 * self.cl / max(1e-9, b)) for _, _, _, a, b in filas)
-        sh = min(self.sh, max(1.0, tope))
-        sv = self.sv
-        for f, h, hor, _, _ in filas:
+        # de alto, sin pasar de Pumptope x el limite (si ya lo pasa, no se hincha)
+        alto = max(x[5] for x in filas)
+        sv = min(self.sv, max(1.0, self.techo / alto)) if alto > 1e-9 else self.sv
+        # de ancho, lo que pida el alto, sin pasar del ancho de la celda
+        tope = min(min(0.5 * self.cw / max(1e-9, x[3]), 0.5 * self.cl / max(1e-9, x[4])) for x in filas)
+        sh = min(1.0 + (sv - 1.0) * max(0.0, self.cfg['pump_horz']), max(1.0, tope))
+        for f, h, hor, _, _, _ in filas:
             q = _add(_add(p0, n, h * sv), hor, sh)
             f[0], f[1], f[2] = q[0], q[1], q[2]
             f[6] *= sh
@@ -2061,15 +2071,14 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                     lst.append(_row(p, dd, ww, 0.35 * vh, ww, _tint(COL_GEO, 1.05)))
         if lvl >= 4:
             o = W['occ'][i]
-            cc = cfg_celda(W, cfg, i)       # fase 7 v12: los umbrales de su capacidad
-            fused = (not sat and o >= cc['th_fusion']) or \
-                    (sat and W['occ'][W['par'][i]] >= cfg_celda(W, cfg, W['par'][i])['th_fusion'])
+            fused = (not sat and o >= cfg['th_fusion']) or \
+                    (sat and W['occ'][W['par'][i]] >= cfg['th_fusion'])
             if fused:
                 kk = 0.80 if not sat else 0.70
                 lst.append(_row(p0, n, kk * cw, 0.30 * lim, kk * cl, _tint(base_col, 0.7)))
-            if not sat and o >= cc['th_crown']:
+            if not sat and o >= cfg['th_crown']:
                 # cumbre: cada trigger alarga la corona un 25 %, hasta Tramoscumbre
-                tr = cumbre_tramos(cc, o)
+                tr = cumbre_tramos(cfg, o)
                 kl, kw = 1.0 + 0.25 * tr, 1.0 + 0.15 * tr
                 if own == GEO:
                     out['coronas'].append(_row(top, d, 0.06 * kw * cl, 0.70 * kl * lim,
@@ -2242,7 +2251,7 @@ def light_cell(W, cfg, c, pad, w, now):
     luz = W.setdefault('luz', {})
     pads = luz.setdefault(c, {})
     old = pads.get(int(pad))
-    if old is not None and light_level(cfg, old, now) > w + 1e-9:
+    if old is not None and not es_impulso(cfg, pad) and light_level(cfg, old, now) > w + 1e-9:
         return
     pads[int(pad)] = [now, float(w)]
 
@@ -2268,6 +2277,16 @@ def seq_lights(W, cfg, now):
     return out
 
 
+def nivel_pad(W, cfg, c, pd, h, now):
+    """Intensidad 0-1 de la luz del pad pd ([t, peso]) en la celda c. La de un
+    golpe de erosion se apaga en Vidabalizadrum; la de un impulso (fase 7
+    v14) sigue la curva del pumping de la celda: plena en el pico, desde el
+    mismo fotograma del golpe, y cae con el."""
+    if es_impulso(cfg, pd):
+        return h[1] * bomba_frac(W, c, now) if now >= h[0] - 1e-9 else 0.0
+    return light_level(cfg, h, now)
+
+
 def drum_light(W, cfg, c, now):
     """(intensidad, pad) de la luz de bateria mas fuerte en la celda c, o
     (0, None). La celda del golpe a plena luz, su radio mas tenue."""
@@ -2279,7 +2298,7 @@ def drum_light(W, cfg, c, now):
     k = max(0.0, cfg['luz_drum'])
     best, bp = 0.0, None
     for pd, h in pads.items():
-        I = min(1.0, light_level(cfg, h, now) * k)
+        I = min(1.0, nivel_pad(W, cfg, c, pd, h, now) * k)
         if I > best or (I == best and bp is not None and h[0] > pads[bp][0]):
             best, bp = I, pd
     return (best, bp) if best > 0.02 else (0.0, None)
@@ -2301,7 +2320,7 @@ def cell_lights(W, cfg, now):
     luz = W.get('luz', {})
     for c in list(luz):
         pads = luz[c]
-        for pd in [pd for pd in pads if light_level(cfg, pads[pd], now) <= 0.0]:
+        for pd in [pd for pd in pads if nivel_pad(W, cfg, c, pd, pads[pd], now) <= 0.0]:
             del pads[pd]
         if not pads:
             del luz[c]
@@ -3103,7 +3122,7 @@ def objetivos(W, cfg, cl=None):
         cf, cc = cadenas_de(cfg, tema, especie_de(tema, W['own'][i]))
         if cl['de'][i] >= 0:
             tf[i] = len(cf)
-        if W['par'][i] < 0 and W['occ'][i] >= cfg_celda(W, cfg, i)['th_crown']:
+        if W['par'][i] < 0 and W['occ'][i] >= cfg['th_crown']:
             tc[i] = len(cc)
     return tf, tc
 
@@ -3555,8 +3574,7 @@ def build_piel(W, cfg, now, out):
         cf, cc = cadenas_de(cfg, tema, esp)
         sat = W['par'][i] >= 0
         o = W['occ'][i]
-        cc_ = cfg_celda(W, cfg, i)          # fase 7 v12: los umbrales de su capacidad
-        est = estado_idx(cc_, o)
+        est = estado_idx(cfg, o)
         pulido = W['vel'][i] >= cfg['vel_umbral']
         if doce:                                    # el material del tema, por la velocidad
             rug = rugosidad(cfg, W['vel'][i])
@@ -3588,7 +3606,7 @@ def build_piel(W, cfg, now, out):
         dy = 0.0
         q_c = [avance_etapa(W, i, 'et_c', k + 1, now, paso) for k in range(len(cc))]
         if not sat and q_c and q_c[0] > 0:
-            tr = cumbre_tramos(cc_, o)
+            tr = cumbre_tramos(cfg, o)
             kc = CORONA_K + CORONA_TRAMO * tr
             modelo = (modelos_de(cfg, tema, esp, 'coronacion') or [None])[0]
             if 'emerger' in cc:                     # el arbol madre emerge del dosel
@@ -4044,7 +4062,7 @@ def victima(W, cfg, objetivo):
                 mejor = (k, c)
     if mejor is None:
         return None
-    return mejor[1], estado_celda(W, cfg, mejor[1])
+    return mejor[1], estado_idx(cfg, W['occ'][mejor[1]])
 
 
 def bajar_ocupacion(W, cfg, i):
@@ -4062,9 +4080,9 @@ def bajar_ocupacion(W, cfg, i):
 def bajar_estado(W, cfg, i, e0=None):
     """La formacion de la celda i baja de su estado e0 al anterior (una
     semilla se vacia). Devuelve las notas quitadas."""
-    e0 = estado_celda(W, cfg, i) if e0 is None else e0
+    e0 = estado_idx(cfg, W['occ'][i]) if e0 is None else e0
     k = 0
-    while W['occ'][i] > 0 and estado_celda(W, cfg, i) >= e0:
+    while W['occ'][i] > 0 and estado_idx(cfg, W['occ'][i]) >= e0:
         q = bajar_ocupacion(W, cfg, i)
         if q <= 0:
             break
@@ -4141,7 +4159,7 @@ def destructor(W, cfg, pad, vel, now, ev, antes):
     elif antes['victima'] is not None and W['own'][antes['victima'][0]]:
         v, e0 = antes['victima']
         esp = especie_de(tema_de(cfg), W['own'][v])
-        if W['occ'][v] > 0 and estado_celda(W, cfg, v) >= e0:
+        if W['occ'][v] > 0 and estado_idx(cfg, W['occ'][v]) >= e0:
             ev['quitado'] += bajar_estado(W, cfg, v, e0)
         acc = dict(tipo=ACCIDENTE[esp], especie=esp, celda=v, t=now)
         if esp == 'vegetacion':
@@ -4396,7 +4414,7 @@ def registro_concha(W, cfg):
     for i in range(N):
         if W['occ'][i] > 0 and W['own'][i]:
             esp[i] = 1 + RUINA_ESP.index(especie_de(tema, W['own'][i]))
-            est[i] = estado_celda(W, cfg, i)
+            est[i] = estado_idx(cfg, W['occ'][i])
             clu[i] = cl['de'][i]
     t = tejido(W, cfg) if cfg['nivel'] >= 13 else {}
     vias = sorted([min(a, b), max(a, b)] for a, b in t.get('vias', []))
@@ -5021,7 +5039,7 @@ def build_tiempo(W, cfg, now, out):
         for i in range(N):
             if W['occ'][i] <= 0 or W['own'][i] != GEO or W['vh'][i] <= 0.005:
                 continue
-            if estado_celda(W, cfg, i) < 2:
+            if estado_idx(cfg, W['occ'][i]) < 2:
                 continue
             n = normal_i(i)
             base = base_radius(W, cfg, i)
@@ -5369,14 +5387,14 @@ def _menu(name, options, default):
 
 
 def _perfiles():
-    """(perfiles, tipos, modos, capacidades, caidas del pumping) de la tabla
+    """(perfiles, tipos, modos, pulsos, caidas del pumping) de la tabla
     perfiles_erosion, leidos por nombre de columna (la columna rol es solo
-    para leer). Sin las columnas modo y capacidad (una tabla de antes de la
-    fase 7 v12), las de por defecto: bombo x3 y tom x2 en impulso; sin
+    para leer). Sin las columnas modo y pulsos (o capacidad, su nombre en
+    la v12 y la v13), las de por defecto: bombo 3 y tom 2 en impulso; sin
     pump_rel (antes de la v13), 0,20 s el bombo y 0,12 el tom."""
     t = parent().op('perfiles_erosion')
     if t is None or t.numRows < 2:
-        return (list(PERFILES_DEFECTO), list(TIPOS_DEFECTO), list(MODOS_DEFECTO), list(CAPACIDAD_DEFECTO),
+        return (list(PERFILES_DEFECTO), list(TIPOS_DEFECTO), list(MODOS_DEFECTO), list(PULSOS_DEFECTO),
                 list(PUMP_REL_DEFECTO))
     out, tipos, modos, caps, rels = [], [], [], [], []
     for r in range(1, min(t.numRows, 9)):
@@ -5392,9 +5410,10 @@ def _perfiles():
             md = ''
         modos.append(md if md in MODOS_PAD else MODOS_DEFECTO[r - 1])
         try:
-            caps.append(max(1.0, float(t[r, 'capacidad'].val)))
+            col = 'pulsos' if t[0, 'pulsos'] is not None else 'capacidad'
+            caps.append(max(1, int(round(float(t[r, col].val)))))
         except Exception:
-            caps.append(CAPACIDAD_DEFECTO[r - 1])
+            caps.append(PULSOS_DEFECTO[r - 1])
         try:
             rels.append(max(0.0, float(t[r, 'pump_rel'].val)))
         except Exception:
@@ -5408,7 +5427,7 @@ def _perfiles():
         out.append(PERFILES_DEFECTO[len(out)])
         tipos.append(TIPOS_DEFECTO[len(tipos)])
         modos.append(MODOS_DEFECTO[len(modos)])
-        caps.append(CAPACIDAD_DEFECTO[len(caps)])
+        caps.append(PULSOS_DEFECTO[len(caps)])
         rels.append(PUMP_REL_DEFECTO[len(rels)])
     return out, tipos, modos, caps, rels
 
@@ -5504,7 +5523,7 @@ def cfg():
         flash=_p('Destello', c['flash']),
     )
     if c['nivel'] >= 7:
-        c['perfiles'], c['tipos'], c['modos'], c['capacidades'], c['pump_rels'] = _perfiles()
+        c['perfiles'], c['tipos'], c['modos'], c['pulsos'], c['pump_rels'] = _perfiles()
         c['colores_drum'] = _colores_drum()
         c.update(balizas_drum=int(_p('Balizasdrum', True)),
                  luz_drum=_p('Luzdrum', c['luz_drum']),
@@ -5512,12 +5531,11 @@ def cfg():
                  vel_ref=_p('Velref', c['vel_ref']),
                  vida_baliza_drum=_p('Vidabalizadrum', c['vida_baliza_drum']),
                  # fase 7 v12: impulso
-                 cap_modo=_menu('Capmodo', CAP_MODOS, 0),
-                 cap_dur=max(1, int(_p('Capdur', c['cap_dur']))),
                  pump_amt=max(0.0, _p('Pumpamt', c['pump_amt'])),
                  pump_horz=max(0.0, _p('Pumphorz', c['pump_horz'])),
                  pump_hold=max(0.0, _p('Pumphold', c['pump_hold'])),       # v13: golpe seco
                  pump_velmin=max(0.0, min(1.0, _p('Pumpvelmin', c['pump_velmin']))),
+                 pump_tope=max(1.0, _p('Pumptope', c['pump_tope'])),          # v14
                  pump_on=int(_p('Pumpon', True)))
     if c['nivel'] >= 11:
         c.update(tema=_menu('Tema', TEMAS, 0),
@@ -5720,7 +5738,8 @@ def midi_note_on(ch, note, vel):
         if 0 <= pad < 8:
             ev = erosion(W, c, pad, vel, now)
             if ev['modo'] == 'impulso':
-                res = 'IMPULSO pad %d x%g celda %d cap %g' % (pad + 1, ev['capacidad'], ev['celda'], ev['cap'])
+                res = 'IMPULSO pad %d +%d celda %d ocupacion %d->%d' % (pad + 1, ev['pulsos'], ev['celda'],
+                                                                      ev['occ0'], ev['occ'])
             else:
                 res = 'EROSION pad %d %s celda %d' % (pad + 1, ev['tipo'], ev['celda'])
         else:
@@ -5902,9 +5921,9 @@ def on_pulse(name):
     elif name == 'Erosionar':
         ev = erosion(W, c, _p('Padprueba', 1) - 1, _p('Velprueba', 100), now)
         if ev['modo'] == 'impulso':
-            print('IMPULSO  pad %d x%g -> celda %d%s, capacidad %g (%s)'
-                  % (ev['pad'] + 1, ev['capacidad'], ev['celda'], ' (vacia)' if ev['vacia'] else '',
-                     ev['cap'], '%d pasos' % ev['pasos'] if ev.get('pasos') else 'sostenido'))
+            print('IMPULSO  pad %d +%d -> celda %d, ocupacion %d -> %d%s'
+                  % (ev['pad'] + 1, ev['pulsos'], ev['celda'], ev['occ0'], ev['occ'],
+                     ', %d desbordes' % len(ev['desbordes']) if ev['desbordes'] else ''))
         else:
             print('EROSION  pad %d (%s) -> celda %d, radio %d, notas deshechas %d%s'
                   % (ev['pad'] + 1, ev['tipo'], ev['celda'], ev['rad'], ev['quitado'], _texto_destructor(ev)))
@@ -6113,9 +6132,8 @@ def flash_light():
     if not f or c['nivel'] < 9:
         return (0.0, 0.0, 0.0, 0.0) + FLASH_COL
     env = math.exp(-max(0.0, absTime.seconds - f['t']) / 0.25) * f['k']
-    if f.get('bomba'):                  # fase 7 v12: el de un impulso, suave y con el pumping
-        v, pico = bomba_nivel(W, c, f['cell'], absTime.seconds)
-        env = f['k'] * (v / pico if pico > 0 else 0.0)
+    if f.get('bomba'):                  # fase 7: el de un impulso, suave y con la curva del pumping
+        env = f['k'] * bomba_frac(W, f['cell'], absTime.seconds)
     try:
         ang = _ritmo().rotation(absTime.frame)
         tilt = float(parent().par.Tilt)
@@ -6459,9 +6477,8 @@ def _legend():
     lines = [''] + _legend_nota(W, c, absTime.seconds)
     occ = occupied(W)
     mx = max(W['occ'])
-    lines.append('  MUNDO    ocupadas %d/%d (%d%%)   max %d   fase %d%s'
-                 % (occ, N, int(occ * 100 / N), mx, lvl,
-                    '   cap+ %d' % celdas_cap(W) if lvl >= 7 else ''))
+    lines.append('  MUNDO    ocupadas %d/%d (%d%%)   max %d   fase %d'
+                 % (occ, N, int(occ * 100 / N), mx, lvl))
     lines.append('  RANGO    %s %d (polo sur) a %s %d (polo norte)   %d celdas   fuera: %s'
                  % (note_name(GRID['lo']), GRID['lo'], note_name(GRID['hi']), GRID['hi'],
                     N, FUERA_MODES[GRID['mode']]))
@@ -6472,10 +6489,9 @@ def _legend():
                      % (SPECIES_NAME.get(u['s'], '?'), u['celda'], u['occ'], u['estado'], ctxt))
     if lvl >= 4:
         sats = sum(1 for i in range(N) if W['par'][i] >= 0 and W['occ'][i] > 0)
-        cc = [cfg_celda(W, c, i) for i in range(N)]     # fase 7 v12: con su capacidad
-        fus = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= cc[i]['th_fusion'])
-        cor = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= cc[i]['th_crown'])
-        cum = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= cc[i]['th_cumbre'])
+        fus = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= c['th_fusion'])
+        cor = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= c['th_crown'])
+        cum = sum(1 for i in range(N) if W['par'][i] < 0 and W['occ'][i] >= c['th_cumbre'])
         d = W['ev'].get('desborde')
         dtxt = '%d -> %d' % (d['de'], d['a']) if d else '-'
         lines.append('  DESBORDE %-9s satelites %d   fusiones %d   coronas %d   cumbres %d'
@@ -6504,10 +6520,10 @@ def _legend():
         e = W['ev'].get('erosion')
         dens = occupied(W) / float(N)
         flag = '  x%g' % c['rad_mult'] if dens > c['dens_umbral'] else ''
-        if e and e.get('modo') == 'impulso':     # fase 7 v12: en lugar de la linea EROSION
-            lines.append('  IMPULSO  pad %d x%g celda %d cap %g (%s)'
-                         % (e['pad'] + 1, e['capacidad'], e['celda'], W['cap'][e['celda']],
-                            '%d pasos' % e['pasos'] if e.get('pasos') else 'sostenido'))
+        if e and e.get('modo') == 'impulso':     # fase 7: en lugar de la linea EROSION
+            lines.append('  IMPULSO  pad %d +%d celda %d ocupacion %s->%s%s'
+                         % (e['pad'] + 1, e.get('pulsos', 0), e['celda'], e.get('occ0', '-'), e.get('occ', '-'),
+                            '   desbordes %d' % len(e['desbordes']) if e.get('desbordes') else ''))
         elif e:
             acc = e.get('accidente') if lvl >= 14 else None
             lines.append('  EROSION  pad %d   %s   -%.1f notas   radio %d   celda %d   densidad %d%%%s%s'
