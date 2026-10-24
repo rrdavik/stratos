@@ -179,7 +179,8 @@ DEFAULT_CFG = dict(
     umbral_monte=8, max_caos_nat=5, limite_bosque=0.65, limite_nieve=0.90, altura_monte=1.0,
     lod_nat=80.0, tinte_borde_nat=0.8, superficie=0,
     # fase 11 v8 (motor v52): brotes, arboles y terrazas
-    biomas=1, variantes=4, var_angulo=12.0, cuantizar30=0, inclinacion=8.0, densidad_hoja=6,
+    ligero=1, refresco_nat=0.25,
+    biomas=1, variantes=2, var_angulo=12.0, cuantizar30=0, inclinacion=8.0, densidad_hoja=6,
     traslucidez=0.35, timidez=0.12, emergentes=0.1, orla=1, mezcla=0.3, impostores=1,
     terrazas_por_nota=1, max_terrazas=8, paso_terraza=0.12, muro_terraza=0.25, riego=1,
     color_cultivo=(0.66, 0.80, 0.22), altura_meseta=0.15, max_niveles=3, marco=1, setos=1,
@@ -2031,7 +2032,7 @@ def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True)
     return n, _add(p0, n, vh)
 
 
-def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
+def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False):
     lvl = cfg['nivel']
     _TERRENO['sello'] = _TERRENO.get('sello', 0) + 1     # un fotograma: el terreno se mira una vez
     lim = limit(cfg)
@@ -2111,7 +2112,7 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True):
                     out['coronas'].append(_row(top, n, 0.20 * cl, 0.05 * lim, 0.20 * cl, COL_CROWN))
     bomba.cerrar()
     if piel:
-        W['piel'] = build_piel(W, cfg, now, out)
+        W['piel'] = build_piel_refresco(W, cfg, now, out) if refresco else build_piel(W, cfg, now, out)
     if lvl >= 13:                   # fase 13: carreteras (tejido) y rios (fase 13 v2, su geometria)
         out['tejido'], W['tejido'] = build_tejido(W, cfg)
         out['rios'], W['rios_res'] = build_rios(W, cfg)
@@ -2779,6 +2780,7 @@ HOJA_DE = dict(conifera='aguja', pagoda='ancha', parasol='ancha', drago='espada'
                graminea='lamina', enebro='aguja', palmito='abanico')
 TIPOS_HOJA = ['aguja', 'ancha', 'lanceolada', 'espada', 'fronda', 'abanico', 'lamina', 'menuda']
 DERIVACIONES = 3             # el arbol: 1 brinzal, 2 joven, 3 adulto (derivacion completa)
+DERIVACION_JOVEN = 2
 ANGULO_PLANTA = dict(conifera=84.0, pagoda=88.0, parasol=45.0, drago=34.0, frondosa=36.0, palmera=12.0,
                      sauce=38.0, retama=22.0, brezo=40.0, helecho=55.0, graminea=50.0, enebro=80.0,
                      palmito=45.0)   # angulo de rama con el eje del padre (grados), antes de Varangulo
@@ -3125,8 +3127,10 @@ _BIBLIO = {}
 
 
 def etapas_de(modelo):
-    """Derivaciones guardadas: los arboles, 1 a DERIVACIONES; los matorrales, 1."""
-    return list(range(1, DERIVACIONES + 1)) if modelo in ARBOLES else [1]
+    """Derivaciones guardadas: los arboles, el joven (2) y el adulto (DERIVACIONES);
+    los matorrales, 1. (El brinzal, 1, existe en la biblioteca pero no tiene
+    geometria en TouchDesigner: ahorra 7 x Variantes x 2 geometrias.)"""
+    return [DERIVACION_JOVEN, DERIVACIONES] if modelo in ARBOLES else [1]
 
 
 def _clave_biblio(cfg):
@@ -3877,7 +3881,12 @@ def geometrias_piel(cfg=None):
     """[(geometria, modelo, material)]: en la fase 11, pulida (mat_pulido) y
     porosa (mat_poroso); desde la fase 12, una por modelo con el material de
     su familia."""
-    doble = (cfg or DEFAULT_CFG)['nivel'] < 12
+    cfg = cfg or DEFAULT_CFG
+    clave = (cfg['nivel'] < 12, variantes(cfg), VARIANTES_TD)
+    v = _GEOS_CACHE.get(clave)
+    if v is not None:
+        return v
+    doble = cfg['nivel'] < 12
     out = []
     for mo in sorted(MODELOS):
         if mo.startswith('ciu_'):
@@ -3887,9 +3896,13 @@ def geometrias_piel(cfg=None):
             out.append((geometria_de(mo, False), mo, 'mat_poroso'))
         else:
             out.append((geometria_de(mo, doble=False), mo, MAT_FAMILIA[familia_de(mo)]))
-    for mo in ejemplares_de(cfg or DEFAULT_CFG):     # fase 11 v8: la biblioteca, una geometria por ejemplar
+    for mo in ejemplares_de(cfg):     # fase 11 v8: la biblioteca, una geometria por ejemplar
         out.append((geometria_de(mo), mo, 'mat_pulido' if doble else MAT_FAMILIA['dosel']))
+    _GEOS_CACHE[clave] = out           # se pide en cada fotograma: se guarda
     return out
+
+
+_GEOS_CACHE = {}
 
 
 def _ejes(n, giro=0.0, incl=0.0, rumbo=0.0):
@@ -4038,6 +4051,42 @@ def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo, escala
         out.append(_row(p, n, s_, s_ * (2.0 if modo == 'obreros' else 1.0), s_, col))
 
 
+_REFRESCO = {}
+
+
+def build_piel_refresco(W, cfg, now, out):
+    """build_piel con la naturaleza a saltos (fase 11 v8, Refresconat): entre dos
+    refrescos se copian las mismas filas, asi que los Script CHOP de los modelos no
+    se recuecen. El balanceo, el latido, el stop-motion y el pumping avanzan a
+    saltos de Refresconat segundos; una celda que cambia de ocupacion, de especie o
+    de dueno refresca enseguida. Solo en el fotograma de TouchDesigner."""
+    dt = float(cfg.get('refresco_nat', 0.0))
+    if dt <= 0 or tema_de(cfg) != 'naturaleza' or cfg['nivel'] < 11:
+        return build_piel(W, cfg, now, out)
+    firma = (id(W), tuple(W['occ']), tuple(W['own']), tuple(W['sp']), tuple(W['par']), GRID['lo'], GRID['hi'],
+             tuple(cfg.get(x) for x in NAT_CFG), cfg.get('tema'), _clave_biblio(cfg))
+    v = _REFRESCO.get('v')
+    if v is not None and v['firma'] == firma and 0.0 <= now - v['t'] < dt:
+        for g, filas in v['filas'].items():
+            out.setdefault(g, []).extend([list(r) for r in filas])     # filas iguales: el CHOP no se recuece
+        return v['res']
+    marcas = dict((g, len(f)) for g, f in out.items() if isinstance(f, list))
+    res = build_piel(W, cfg, now, out)
+    filas = dict((g, f[marcas.get(g, 0):]) for g, f in out.items()
+                 if isinstance(f, list) and len(f) > marcas.get(g, 0) and g in _GEOS_PIEL(cfg))
+    _REFRESCO['v'] = dict(firma=firma, t=now, filas=filas, res=res)
+    return res
+
+
+def _GEOS_PIEL(cfg):
+    """Las listas de out que escribe la piel (los modelos y las particulas)."""
+    clave = (cfg['nivel'], variantes(cfg))
+    v = _REFRESCO.get('geos')
+    if v is None or v[0] != clave:
+        v = _REFRESCO['geos'] = (clave, set(g for g, _, _ in geometrias_piel(cfg)) | {'particulas'})
+    return v[1]
+
+
 def build_piel(W, cfg, now, out):
     """Las formaciones como modelos del tema: compuesto, puentes del cluster,
     pieza protagonista, cadenas de transito y particulas. Devuelve el resumen
@@ -4078,7 +4127,8 @@ def build_piel(W, cfg, now, out):
         cult = cultivos(W, cfg, ter, por_celda, now, paso)     # fase 11 v8: bancales, riego y acequias
         ctx = dict(cl=cl, ter=ter, bases=suelos, cauces=por_celda,
                    sway=(lambda i: balanceo(W, cfg, i, bq)) if tiempo else (lambda i: (0.0, 0.0)),
-                   cerca=lambda i: lod_cerca(W, cfg, i) and not (cfg.get('impostores', 1) and _PRESUPUESTO['lleno']),
+                   cerca=lambda i: (cfg.get('superficie') if cfg.get('ligero', 1) else lod_cerca(W, cfg, i))
+                   and not (cfg.get('impostores', 1) and _PRESUPUESTO['lleno']),
                    rio_cerca=lambda i: any(c in por_celda for c in [i] + list(NEIGH[i])),
                    res=dict(hojas=0, todas=0, ejemplares=0, emergentes=0, frutales={},
                             biomas=dict((b, 0) for b in BIOMAS)))
@@ -4311,7 +4361,7 @@ def build_piel(W, cfg, now, out):
     if natural:
         _, ln = _limites_pisos(cfg)
         r_ = ctx['res']
-        _PRESUPUESTO['lleno'] = r_['todas'] > HOJAS_TOPE    # el fotograma siguiente: impostores si no caben
+        _PRESUPUESTO['lleno'] = r_['todas'] > (HOJAS_LIGERO if cfg.get('ligero', 1) else HOJAS_TOPE)
         res.update(ejemplares=r_['ejemplares'], hojas=r_['hojas'], emergentes=r_['emergentes'],
                    biomas=dict(r_['biomas']), frutales=r_['frutales'], hibridos=ter.get('hibridos', {}),
                    inundados=cult['inundados'], parcelas=cult['parcelas'])
@@ -4759,8 +4809,11 @@ def _hibridos_clave(W, cfg, cl):
     """(arrozales ((celda, bancales)...), mesetas ((celda, nivel)...), capitales, parametros)."""
     if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza':
         return ((), (), (), ())
-    arroz = tuple((i, bancales(W, cfg, i)) for i in range(N) if bancales(W, cfg, i))
-    mes = tuple((i, niveles_meseta(W, cfg, i)) for i in range(N) if niveles_meseta(W, cfg, i))
+    hib = [i for i in range(N) if W['sp'][i] == HIB and W['occ'][i] > 0]
+    if not hib:
+        return ((), (), (), ())
+    arroz = tuple((i, b) for i, b in ((i, bancales(W, cfg, i)) for i in hib) if b)
+    mes = tuple((i, nv) for i, nv in ((i, niveles_meseta(W, cfg, i)) for i in hib) if nv)
     caps = ()
     if mes:
         cl = cl or clusters(W, cfg)
@@ -4901,6 +4954,8 @@ def cultivos(W, cfg, ter, por_celda, now, paso, cl=None):
 
 HOJAS_TOPE = 300000         # el presupuesto de hojas: si no caben, todo con tarjetas de racimo (Impostores)
 _PRESUPUESTO = dict(lleno=False)
+HOJAS_LIGERO = 100000       # con Ligero, el presupuesto baja
+LIGERO_ARBOLES = 6          # con Ligero, arboles como mucho por celda de bosque
 RUTA_HOJAS = 'SOP'          # las hojas van en la malla de cada ejemplar (Script SOP), no en POPs
 PARCELA_TEX = 16            # una parcela de la meseta: 16 x 16 texeles del mapa (los setos, en el shader)
 
@@ -5418,6 +5473,8 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         otra = otra_planta(cfg, i, arbol_mo)
         rq = math.exp(round(math.log(r / S) / 0.04) * 0.04)          # a saltos del 4 %: el disco se guarda
         pts = _poisson(i, cw / S, cl_ / S, rq, round(0.75 + 0.25 * kp, 1), int(cfg.get('variantes', 4)))
+        if cfg.get('ligero', 1) and len(pts) > LIGERO_ARBOLES:     # Ligero: 6 del disco (siempre los mismos)
+            pts = sorted(pts, key=lambda p: _hash01(i, int(1e4 * p[0]), int(1e4 * p[1]), 47))[:LIGERO_ARBOLES]
         for q, (x, z) in enumerate((x * S, z * S) for x, z in pts):     # en unidades de la celda: no se rehace al crecer
             u = _hash01(i, q, 41)
             mo = otra if otra and _hash01(i, q, 42) < cfg['mezcla'] else arbol_mo
@@ -5432,7 +5489,7 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
                     continue
                 dj = _hacia(n, n, normal_i(j))
                 bx, bz = _dot(dj, e), _dot(dj, t)
-                for s in (-1, 1):
+                for s in ((0,) if cfg.get('ligero', 1) else (-1, 1)):
                     x = 0.40 * cw * bx - 0.18 * s * cw * bz
                     z = 0.40 * cl_ * bz + 0.18 * s * cl_ * bx
                     plantar(mata_mo, 1, x, z, vh * MATORRAL_K * 0.9, 120.0 * s + giro0, 0.0, 0.0, var0 + s)
@@ -5453,7 +5510,7 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         for q, (x, z) in enumerate(pts):
             esc = 1.0 if q == 0 else 0.55 + 0.4 * _hash01(i, q, 53)
             plantar(arbol_mo, deriv_full, x, z, vh * esc * esc0, giro0 + 97.0 * q, incl0, rumbo0, var0 + q)
-        for q in range(len(pts) - 1):               # matorral entre ellos
+        for q in range(min(len(pts) - 1, 2) if cfg.get('ligero', 1) else len(pts) - 1):    # matorral entre ellos
             (x0, z0), (x1, z1) = pts[q], pts[q + 1]
             plantar(mata_mo, 1, 0.5 * (x0 + x1), 0.5 * (z0 + z1), vh * MATORRAL_K * 0.8, 53.0 * q, 0.0, 0.0,
                     var0 + q)
@@ -5512,7 +5569,7 @@ def iou(a, b):
 _NAT_CACHE = {}
 NAT_MEMO = 48                # estados guardados por celda
 VH_SALTO = 0.02              # la altura de la vegetacion va a saltos del 2 % del limite
-NAT_CFG = ('nivel', 'caos', 'max_caos_nat', 'th_branch', 'th_fusion', 'th_crown', 'limite_bosque', 'biomas',
+NAT_CFG = ('nivel', 'caos', 'ligero', 'max_caos_nat', 'th_branch', 'th_fusion', 'th_crown', 'limite_bosque', 'biomas',
            'variantes', 'var_angulo', 'cuantizar30', 'inclinacion', 'densidad_hoja', 'timidez', 'emergentes',
            'orla', 'mezcla', 'impostores', 'marco', 'sat_size', 'avance', 'pasos_etapa', 'max_niveles',
            'rug_min', 'rug_max', 'limite_nieve', 'respaldo', 'lod_nat', 'superficie')
@@ -5609,9 +5666,9 @@ def derivacion(W, cfg, i, now, paso):
     completa el adulto. Avance = gates: cada gate que sube la ocupacion anade una
     derivacion; Avance = pasos: la nueva aparece Pasosetapa pasos despues."""
     o = W['occ'][i]
-    obj = max(1, min(DERIVACIONES, o))
+    obj = max(DERIVACION_JOVEN, min(DERIVACIONES, o))
     if int(cfg.get('avance', 0)) == 1 and now - W['t_h'][i] < cfg['pasos_etapa'] * paso:
-        return max(1, obj - 1)
+        return max(DERIVACION_JOVEN, obj - 1)
     return obj
 
 
@@ -7624,6 +7681,8 @@ def cfg():
                  tinte_borde_nat=max(0.0, _p('Tintebordenat', c['tinte_borde_nat'])),
                  superficie=int(str(_p('Modocamara', 'globo')) == 'superficie'),
                  # fase 11 v8: brotes, arboles y terrazas
+                 ligero=int(bool(_p('Ligero', True))),
+                 refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
                  biomas=int(bool(_p('Biomas', True))),
                  variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
                  var_angulo=max(0.0, min(45.0, _p('Varangulo', c['var_angulo']))),
@@ -7954,7 +8013,7 @@ def frame_tick():
     pk = palette_key(c)                 # cambiar la paleta recolorea todo lo enterrado
     dirty = W.get('dirty', True) or _CACHE.get('tiles') is None or _CACHE.get('pal') != pk
     _CACHE['pal'] = pk
-    inst = build_instances(W, c, now, hide_beacons=performance(), tiles=dirty)
+    inst = build_instances(W, c, now, hide_beacons=performance(), tiles=dirty, refresco=True)
     if dirty:
         _CACHE['tiles'] = inst['estratos']
     else:

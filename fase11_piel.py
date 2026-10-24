@@ -146,8 +146,11 @@ add_par(base, page, 'float', 'Lodnat', 'Detalle de la naturaleza desde (px por c
 add_par(base, page, 'float', 'Tintebordenat', 'Tinte del secuenciador en el borde (fresnel)', 0.8, 0.0, 3.0)
 # v8: brotes, arboles y terrazas (los arboles de pisos de la v6 y la v7 se van)
 quitados = [nm for nm in ('Pisoscopa', 'Anchocopa', 'Angulorama', 'Troncofrac') if remove_par(base, nm)]
+add_par(base, page, 'toggle', 'Ligero', 'Naturaleza ligera (maquina modesta)', True)
+add_par(base, page, 'float', 'Refresconat', 'La naturaleza se recalcula cada (s; 0 cada fotograma)', 0.25, 0.0, 2.0)
 add_par(base, page, 'toggle', 'Biomas', 'Biomas por latitud (frio, templado, calido)', True)
-add_par(base, page, 'int', 'Variantes', 'Variantes por modelo (biblioteca)', 4, 1, 8, clamp=True)
+add_par(base, page, 'int', 'Variantes', 'Variantes por modelo (biblioteca)', 2, 1, 8, clamp=True)
+renew_default(base, 'Variantes', 4, 2)          # v8 ligera: 2 variantes (menos geometrias)
 add_par(base, page, 'float', 'Varangulo', 'Variacion del angulo de rama (grados)', 12.0, 0.0, 45.0)
 add_par(base, page, 'toggle', 'Cuantizar30', 'Angulos de rama a 30 grados (comparar)', False)
 add_par(base, page, 'float', 'Inclinacion', 'Inclinacion hacia la luz (grados)', 8.0, 0.0, 30.0)
@@ -172,7 +175,7 @@ add_par(base, page, 'toggle', 'Setos', 'Setos entre las parcelas de la meseta', 
 ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
    'Maxpiezas 6, Avance (gates), Pasosetapa 2, Rebote 0,2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
    'Maxcaosnat 5, Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
-   'Biomas, Variantes 4, Varangulo 12, Cuantizar30 no, Inclinacion 8, Densidadhoja 6, Traslucidez 0,35, '
+   'Ligero, Refresconat 0,25, Biomas, Variantes 2, Varangulo 12, Cuantizar30 no, Inclinacion 8, Densidadhoja 6, Traslucidez 0,35, '
    'Timidez 0,12, Emergentes 0,1, Orla, Mezcla 0,3, Impostores, Terrazaspornota 1, Maxterrazas 8, '
    'Pasoterraza 0,12, Muroterraza 0,25, Riego, Colorcultivo, Alturameseta 0,15, Maxniveles 3, Marco '
    '(tresbolillo), Setos')
@@ -235,7 +238,9 @@ leeme(base, 11, """FASE 11 - LA PIEL
   lejos, tarjetas de racimo (Impostores). Hibridos: arrozal (Terrazaspornota,
   Maxterrazas, Pasoterraza, Muroterraza, Riego, Colorcultivo) y
   meseta-jardin (Alturameseta, Maxniveles, Marco, Setos); textura
-  'cultivos' para el shader.""")
+  'cultivos' para el shader. Ligero (por defecto): la naturaleza se
+  recalcula cada Refresconat s (a saltos), 6 arboles por celda de bosque y
+  tarjetas de racimo con la camara de globo.""")
 
 print_report()
 
@@ -745,7 +750,8 @@ def _prueba_natural(t, m):
     t.check('el arbol se inclina hacia el lado sin vecinas (%.1f grados, <= Inclinacion %.0f); de lejos, '
             'tarjetas de racimo si Impostores (%d)' % (ang, c['inclinacion'], len(lejos)),
             0.5 < ang <= c['inclinacion'] + c.get('sway_max', 0.0) + 0.6
-            and (bool(lejos) != bool(m.lod_cerca(Wi, c, i)) or not c['impostores']))
+            and (bool(lejos) != bool(c.get('superficie') if c['ligero'] else m.lod_cerca(Wi, c, i))
+                 or not c['impostores']))
     # 13. la erosion sobre un monte baja el terreno y el bosque baja con el
     W = mundo([i], m.GEO, 12)
     inst0 = m.build_instances(W, c, absTime.seconds + 10.0)
@@ -768,10 +774,12 @@ def _prueba_natural(t, m):
             W['own'][x] = W['sp'][x] = m.ARQ
         m.build_instances(W, cc, absTime.seconds + 10.0)      # la biblioteca, el mapa y el presupuesto
         m.build_instances(W, cc, absTime.seconds + 10.0)
-        t0 = time.time()
-        for _ in range(5):
+        ts = []
+        for _ in range(5):                  # el minimo de 5: la medida con menos ruido de la maquina
+            t0 = time.time()
             m.build_instances(W, cc, absTime.seconds + 10.0)
-        tiempos[tema] = (time.time() - t0) / 5.0
+            ts.append(time.time() - t0)
+        tiempos[tema] = min(ts)
         if tema == 'naturaleza':
             hojas = W['piel']['hojas']
     base.par.Tema = 'naturaleza'
@@ -779,6 +787,18 @@ def _prueba_natural(t, m):
             '%d (presupuesto %d)' % (m.N, 1000 * tiempos['naturaleza'], 1000 * tiempos['ciudad'], hojas,
                                      m.HOJAS_TOPE),
             tiempos['naturaleza'] <= 1.1 * tiempos['ciudad'] + 0.002 and hojas <= m.HOJAS_TOPE)
+    # 15. Refresconat: entre dos refrescos las filas de la vegetacion no cambian (los CHOP no se recuecen)
+    cq = m.cfg()
+    cq['refresco_nat'] = 0.25
+    Wq = mundo([i] + list(m.NEIGH[i]), m.GEO, 7)
+    t0 = absTime.seconds + 50.0
+    f0 = m.build_instances(Wq, cq, t0, refresco=True)
+    f1 = m.build_instances(Wq, cq, t0 + 0.1, refresco=True)
+    veg = lambda inst: dict((g, v) for g, v in inst.items() if g.startswith('mod_veg_'))
+    Wq['occ'][i] = 8
+    f2 = m.build_instances(Wq, cq, t0 + 0.15, refresco=True)
+    t.check('Refresconat %.2f s: entre dos refrescos la vegetacion copia sus filas; una ocupacion nueva '
+            'refresca enseguida' % cq['refresco_nat'], veg(f0) == veg(f1) and veg(f0) and veg(f2) != veg(f1))
     m.reset_world()
     m.on_pulse('Sembrarzona')
     m.on_pulse('Sembrarzona')
