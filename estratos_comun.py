@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v34'
+VERSION_COMUN = 'comun v35'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -205,7 +205,7 @@ def diagnostico_rios(base, m, version=None):
     mat = nombre_op(geo.par.material.eval()) if has_par(geo, 'material') else '?'
     errs = _errs(base.op('mat_piel_agua')) if base.op('mat_piel_agua') is not None else 'no existe'
     col = m.color_rio(c)
-    azules = all(tuple(f[9:12]) == tuple(col) for f in filas)
+    azules = all(tuple(f[9:12]) in (tuple(col), tuple(m.COL_ORILLA)) for f in filas)
     tapados = 0
     cauces = m.cauces(W, c)['por_celda']
     for g, fs in inst.items():          # copas de arbol que caen sobre la cinta
@@ -905,8 +905,9 @@ void main()
     float fres = pow(1.0 - max(dot(n, v), 0.0), 5.0);
     vec3 col = dif + spec;
     if (agua) {
-        // agua: el azul se lee tambien en la cara de sombra (emisivo bajo)
-        col += base * uAgua.x + fres * vec3(0.10, 0.14, 0.20);
+        // agua: el azul se lee tambien en la cara de sombra (emisivo) y brilla en el
+        // borde y con la luz (comun v35: mas vivo)
+        col += base * uAgua.x + fres * vec3(0.25, 0.35, 0.45) + spec * 0.5;
     } else if (vegetal) {
         // a contraluz la copa deja pasar la luz: brillo verde, sin reflejo de vidrio
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);

@@ -31,7 +31,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v50'
+MOTOR_VERSION = 'motor v51'
 
 import math
 
@@ -181,8 +181,8 @@ DEFAULT_CFG = dict(
     gate_prueba=0.5, respaldo=0,
     # fase 13: tejido conectivo
     rios=1, carreteras=1, min_via=2, grosor_via=0.18, max_rio=12,
-    color_rio=None, ancho_rio=0.10, ancho_max_rio=0.34, emisivo_rio=0.25, lagos=1,     # fase 13 v2
-    ancho_min_px=2.0, pendiente_min=0.01, encuadre=0.85,                                # fase 13 v3
+    color_rio=None, ancho_rio=0.10, ancho_max_rio=0.34, emisivo_rio=0.6, lagos=1,      # fase 13 v2 (v4: 0,6)
+    ancho_min_px=4.0, pendiente_min=0.01, encuadre=0.85,                                # fase 13 v3 (v4: 4 px)
     # fase 14: destructores
     ventana_escalada=8, golpes_escalada=2, pasos_fuego=6, max_fuego=6, pasos_polvo=8,
     # fase 15: el ciclo como era
@@ -4594,7 +4594,10 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
 # de las formaciones), en dos medios tramos que siguen la curva del planeta.
 # Se recalculan solo cuando cambia la ocupacion (los rios, tambien el relieve).
 
-COL_RIO = oklch_to_srgb(0.55, 0.15, 255.0)[0]   # azul reservado (fuera de la paleta de conchas)
+COL_RIO = oklch_to_srgb(0.65, 0.18, 250.0)[0]   # azul reservado, vivo (motor v51; hasta la v50, L 0,55 C 0,15 h 255)
+COL_RIO_V50 = oklch_to_srgb(0.55, 0.15, 255.0)[0]
+COL_ORILLA = oklch_to_srgb(0.86, 0.06, 245.0)[0]   # la orilla: azul muy claro que recorta el rio sobre el verde
+ORILLA_K = 1.8                     # la orilla, 1,8 veces el ancho del rio (motor v51)
 COL_VIA = (0.17, 0.17, 0.19)       # asfalto
 RUG_RIO, RUG_VIA = 0.10, 0.75      # el agua brilla; el asfalto, mate
 TEJIDO_LIFT = 0.006                # sobre el suelo de la celda
@@ -4786,8 +4789,8 @@ def build_rios(W, cfg):
     res['px'] = max(w for lista in ca['muestras'] for _, _, w in lista) * px_unidad(W, cfg) \
         if ca['muestras'] else 0.0
     clave = (id(ca), _CAUCES.get('clave'), cfg.get('respaldo', 0), color_rio(cfg))
-    if _CAUCES.get('filas_clave') == clave:         # las cintas no se mueven: se guardan
-        return [list(f) for f in _CAUCES['filas']], res
+    if _CAUCES.get('filas_clave') == clave:         # las cintas no se mueven: se guardan (sin copiar:
+        return _CAUCES['filas'], res                # nadie las modifica despues)
     ter = terreno(W, cfg)
     col = color_rio(cfg)
     hmax = ter['hmax']
@@ -4811,6 +4814,10 @@ def build_rios(W, cfg):
             ww = 0.5 * (w + w2)
             filas.append([mid[0], mid[1], mid[2], rx, ry, rz, ww, RIO_ALTO, L + 0.5 * ww,
                           col[0], col[1], col[2], rug])
+            # v51: la orilla, una cinta clara mas ancha justo debajo: el rio se recorta sobre el verde
+            po = _add(mid, Y, -0.6 * RIO_ALTO)
+            filas.append([po[0], po[1], po[2], rx, ry, rz, ww * ORILLA_K, RIO_ALTO, L + 0.5 * ww * ORILLA_K,
+                          COL_ORILLA[0], COL_ORILLA[1], COL_ORILLA[2], rug])
     for c in ca['lagos']:                   # la hondonada se llena hasta su borde mas bajo
         S = suelo(W, cfg, c)
         borde = min(suelo(W, cfg, j) for j in NEIGH[c]) - 0.01
@@ -4819,7 +4826,7 @@ def build_rios(W, cfg):
             continue
         cw, cl_ = _cell_sizes(S, c)
         filas.append(_row(_mul(NORMALS[c], S), NORMALS[c], 1.02 * cw, h, 1.02 * cl_, col) + [rug])
-    _CAUCES['filas_clave'], _CAUCES['filas'] = clave, [list(f) for f in filas]
+    _CAUCES['filas_clave'], _CAUCES['filas'] = clave, filas
     return filas, res
 
 
