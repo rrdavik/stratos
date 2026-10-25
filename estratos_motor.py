@@ -22,7 +22,8 @@
 #                 motor v52: la vegetacion sale de una biblioteca de ejemplares
 #                 con biomas por latitud, y los hibridos son mesetas construidas:
 #                 arrozal en terrazas y meseta-jardin; motor v53: conchas
-#                 discretas, el suelo oscuro y la tapa neutra).
+#                 discretas, el suelo oscuro y la tapa neutra; motor v54: el
+#                 SEQ2 con Filtrar2 y Nota2, como el SEQ1 con Filtrar y Nota).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -35,7 +36,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v53'
+MOTOR_VERSION = 'motor v54'
 
 import math
 
@@ -7986,6 +7987,28 @@ def _seq1_beacon(note):
         pass
 
 
+def _seq2_beacon(note):
+    """La ultima nota del SEQ2 queda en Nota2 (pagina Fase2, junto a Nota), igual
+    que la del SEQ1 queda en Nota: es la que siembra Sembrar2."""
+    try:
+        parent().par.Nota2 = int(note)
+    except Exception:
+        pass
+
+
+def _es_seq2(ch, lvl):
+    """El canal es del SEQ2 (desde la fase 5): el de Canal2 o, con Filtrar2
+    apagado, cualquiera que no sea el del SEQ1 (que se comprueba antes) ni el
+    de la bateria."""
+    if lvl < 5:
+        return False
+    if ch == _p('Canal2', 14):
+        return True
+    if _p('Filtrar2', True):
+        return False
+    return not (lvl >= 7 and ch == _p('Canaldrum', 16))
+
+
 def midi_note_on(ch, note, vel):
     c = cfg()
     lvl = c['nivel']
@@ -7997,7 +8020,8 @@ def midi_note_on(ch, note, vel):
         _seq1_beacon(note)
         r = note_on(W, c, GEO, note, vel, now, tempo())
         res = 'SEQ1 %s' % r['estado']
-    elif lvl >= 5 and ch == _p('Canal2', 14):
+    elif _es_seq2(ch, lvl):
+        _seq2_beacon(note)
         r = note_on(W, c, ARQ, note, vel, now, tempo())
         res = 'SEQ2 %s' % r['estado']
     elif lvl >= 7 and ch == _p('Canaldrum', 16):
@@ -8024,7 +8048,7 @@ def midi_note_off(ch, note):
     s = None
     if (not _p('Filtrar', True)) or ch == _p('Canal', 13):
         s = GEO
-    elif c['nivel'] >= 5 and ch == _p('Canal2', 14):
+    elif _es_seq2(ch, c['nivel']):
         s = ARQ
     if s:
         note_off(W, c, s, note, absTime.seconds, tempo())
