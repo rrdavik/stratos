@@ -240,6 +240,13 @@ class Page(object):
     def appendRGB(self, name, label=None):
         return [self._append(name + c, 'float', label, 0.0)[0] for c in 'rgb']
 
+    def destroy(self):
+        """Como TouchDesigner: quita la pagina y los parametros que le quedan."""
+        for p in [p for p in self.owner.par._custom() if p.page is self]:
+            p.destroy()
+        if self in self.owner._pages:
+            self.owner._pages.remove(self)
+
 
 # -----------------------------------------------------------------------------
 # OPERADORES

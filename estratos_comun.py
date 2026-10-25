@@ -482,7 +482,7 @@ MIDI_CB = r'''# Router MIDI de Estratos (instalado por estratos_comun.py).
 #   Bn cc vv  controlador                       F0 ... F7 SysEx (MMC)
 #   FA        START                             FC        STOP
 # n = canal - 1. El motor decide que hacer con cada canal: SEQ1 (Canal),
-# SEQ2 (Canal2, desde la fase 5) y bateria (Canaldrum, desde la fase 7).
+# SEQ2 (Canal2 y Filtrar2, desde la fase 5) y bateria (Canaldrum, desde la fase 7).
 
 
 def _raw(values):
@@ -2399,6 +2399,10 @@ class Prueba(object):
             self.nota = int(base.par.Nota)
         except Exception:
             self.nota = None
+        try:
+            self.nota2 = int(base.par.Nota2)
+        except Exception:
+            self.nota2 = None
 
     def check(self, label, cond, detail=''):
         self.checks.append((bool(cond), label, detail))
@@ -2429,6 +2433,11 @@ class Prueba(object):
         if self.nota is not None:
             try:
                 self.base.par.Nota = self.nota
+            except Exception:
+                pass
+        if self.nota2 is not None:
+            try:
+                self.base.par.Nota2 = self.nota2
             except Exception:
                 pass
         log = self.base.op('midi_log')

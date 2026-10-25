@@ -22,7 +22,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar; la v29, la calibración de la vista (`Ciclomin` 16, `Compasesquietos` 3, `Grosormax` 1,5 si seguían por defecto, y `Cortezamax`); la v30, la fase 17 (ventanas por edificio, color de la luz desde el motor); la v31, la fase 18; la v32, la fase 19 (niebla y glitch en el shader); la v33, el terreno, los pisos, el borde tintado y el agua (fase 11 v5 y fase 13 v2); la v34, el diagnóstico de los ríos (fase 13 v3); la v35, el agua más viva (fase 13 v4) | `comun v35` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11) | `fase3 v12` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
-| `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2 | `fase5 v2` |
+| `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2; v3: `Filtrar2` y `Nota2`; v4: los parámetros del SEQ2 pasan a la página Fase2 y desaparece la página Fase5 | `fase5 v4` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v14` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46); v12: conchas discretas (suelo oscuro, poco contraste ocupada/vacía, tapa neutra; `Paletaluz`, `Paletaalterna`, `Contrasteocupada`, `Tapaneutra`, `Tapaluz`, motor v53) | `fase8 v12` |
@@ -212,9 +212,13 @@ El material lo sigue decidiendo la nota fundadora.
 
 **Luz del SEQ2** (fase 5 v2): cada nota del SEQ2 enciende el centro de su celda en ámbar, con pulso y tenue hasta la siguiente. Ya no hay esfera. Si el SEQ1 está en la misma celda, el centro se parte en dos.
 
-**Página Fase5:** `Canal2` 14 · `Nota2` · `Sembrar2`
+**Parámetros del SEQ2** (fase 5 v4): ya no hay página Fase5. Viven en la **página Fase2**, debajo de los del SEQ1: `Canal` 13 · `Filtrar` · `Nota` · `Canal2` 14 · `Filtrar2` · `Nota2` · `Sembrar2`. Los tres del SEQ2 son los mismos que los del SEQ1. Un proyecto anterior se migra solo al relanzar la fase 5: los parámetros se mueven conservando su valor y la página Fase5, ya vacía, se quita. Con dos secuenciadores en la página, las etiquetas de `Filtrar`, `Nota`, `Filtrar2` y `Nota2` llevan (SEQ1) o (SEQ2).
 
-**Por confirmar:** el canal del SEQ2. Si sus notas salen en el Textport como `ignorado: canal X`, pon X en `Canal2`.
+- `Canal2`: canal MIDI del SEQ2.
+- `Filtrar2` ("Solo ese canal (SEQ2)", encendido): apagado, cualquier canal cuenta como SEQ2, salvo el del SEQ1 (`Canal`, si `Filtrar` está encendido) y el de la batería (`Canaldrum`).
+- `Nota2` ("Última nota SEQ2"): la actualiza cada nota que llega del SEQ2; también se puede mover a mano, y es la que siembra `Sembrar2`.
+
+**Por confirmar:** el canal del SEQ2. Si sus notas salen en el Textport como `ignorado: canal X`, pon X en `Canal2` (página Fase2).
 
 **Leyenda:** `SEQ2 canal 14 notas 37 hibridas 3`
 
@@ -765,7 +769,7 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | El planeta da tumbos en vez de balancearse | El Rotate Order de la geometría (pestaña Xform) no es `Ry Rx Rz` | El informe lo avisa con `..`; ponlo a mano en esa geometría |
 | Todas las formaciones, coronas, estratos o marcas de la retícula del mismo color | Geometría creada antes de comun v10, o retícula de `fase12_base.py` v2: el color por instancia se enlazaba a `instancecolorr/g/b`, que no existe | Relanza cualquier fase (comun v12): repara el color de todas las geometrías instanciadas sin tocar el mundo, y el informe dice cuáles. Si persiste: Instance 2 → Color R/G/B = `r` `g` `b`, Color Mode = Replace |
 | Pulidas y porosas iguales | Los parámetros de brillo del Phong no se pudieron fijar | Sube Specular y Shininess en `mat_pulido` a mano |
-| SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase5) o `Canaldrum` (Fase7) |
+| SEQ2 o batería `ignorado: canal X` | Canal distinto del de por defecto | `Canal2` (Fase2) o `Canaldrum` (Fase7); para el SEQ2, también apagar `Filtrar2` |
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
 | La luz sale de un solo color | `luz_celda` no lee el color por instancia | Relanza cualquier fase (la recrea). Si persiste, en `luz_celda`: Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace. El informe lo avisa con `FALLO luz_celda no lee el color por instancia` |
 | No se ve dónde caen las notas con muchas conchas | El centro de la celda es pequeño desde la cámara de globo y se pierde entre las bandas de las losetas | Comprueba que `Luzconchas` esté encendido; sube `Luzconchaspulso` (y `Luzconchasreposo` para ver dónde está cada secuenciador entre notas) o `Luzconchasalcance` para que se tiñan más losetas. Si no se ve nada, relanza cualquier fase (crea `luz_conchas` y la mete en el render) y mira que `mat_luz_conchas` tenga la mezcla aditiva |
