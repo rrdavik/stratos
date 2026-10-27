@@ -4,7 +4,7 @@
 
 Fuentes leídas para este plan:
 
-- el repositorio `rrdavik/stratos` (rama `main` al 27 de octubre de 2026, último commit `25ea2be`), que es el contenido de `C:/Users/DareDave/Downloads/est`: `estratos_motor.py`, `estratos_comun.py`, los scripts de fase, `MONTAJE_FASE1.md`, `MONTAJE_FASES_3_10.md`, `MONTAJE_FASES_11_18.md` y `pruebas/`;
+- el repositorio `rrdavik/stratos` (rama `main` al 27 de octubre de 2026, commit `8fe3543`, etiqueta `v4.0`: el merge del PR #32, el conversor CV → OSC de `modular/`; revisadas también todas las ramas y PR abiertos), que es el contenido de `C:/Users/DareDave/Downloads/est`: `estratos_motor.py`, `estratos_comun.py`, los scripts de fase, `MONTAJE_FASE1.md`, `MONTAJE_FASES_3_10.md`, `MONTAJE_FASES_11_18.md` y `pruebas/`;
 - el documento *Estratos — Marco conceptual v4: El estrato humano* (Drive, 14 de octubre de 2026);
 - las dos hojas *Estratos_parametros* de Drive (24 y 25 de octubre de 2026).
 
@@ -14,7 +14,7 @@ Fuentes leídas para este plan:
 
 El inventario (apartado 1) encuentra **cinco desajustes** entre lo que el encargo da por existente y lo que hay en el repositorio. No los resuelvo aquí: los señalo, y el plan se apoya en ellos como dependencias.
 
-1. **Nada de v4 está en el repositorio.** No hay cámara cenital (Femto Bolt, Orbbec TOP), casilla probable, densidad suavizada, micrófono de sala, balance erosión/creación, DMX, colapso, testigos ni proyector del histórico. El repositorio llega a la **fase 19** (`motor v54`, `comun v36`). Si esas piezas existen en la carpeta local y no se han subido, hay que subirlas antes de la fase 21; si no existen, son dependencias por construir (D1 a D5, apartado 1.7).
+1. **Nada de la sala de v4 está en el repositorio.** No hay cámara cenital (Femto Bolt, Orbbec TOP), casilla probable, densidad suavizada, micrófono de sala, balance erosión/creación, DMX, colapso, testigos ni proyector del histórico, ni en `main` ni en ninguna rama o PR abierto. El repositorio llega a la **fase 19** (`motor v54`, `comun v36`), más el conversor CV → OSC de la fase 19 (`modular/`, PR #32, etiqueta `v4.0`). La etiqueta `v4.0` marca esa versión del repositorio, no las piezas del marco v4. Si esas piezas existen en la carpeta local y no se han subido, hay que subirlas antes de la fase 21; si no existen, son dependencias por construir (D1 a D5, apartado 1.7).
 2. **No hay fase 20.** El encargo habla de «fases 11–20» y prevé numerar desde la 21. En el repositorio la siguiente libre es la **20**. Numero desde la **21**, como pide el encargo, y dejo la 20 reservada para lo que haya en local (o para la primera dependencia de v4, si se decide construirla).
 3. **Las fases 11–19 no usan POPs.** Lo visual va por instancias: Script CHOP → Geometry COMP instanciado, Script SOP para la biblioteca de ejemplares, Script TOP para los mapas y GLSL MAT (`mat_piel_*`) con familias de material. El propio motor lo dice: `RUTA_HOJAS = 'SOP'  # las hojas van en la malla de cada ejemplar (Script SOP), no en POPs`, y `MONTAJE_FASES_11_18.md` lo justifica: «los nombres de los parámetros de POPs no se pueden comprobar aquí». La convención del encargo («POPs para lo visual, como en las fases 11 en adelante») no se cumple hoy. Ver la decisión pendiente **P1**.
 4. **No existe la tabla `ocupacion`.** El estado del mundo vive en el diccionario `W`, en el *storage* del Text DAT `motor` (se guarda con el `.toe`). No hay ningún Table DAT llamado `ocupacion`. Las únicas tablas del motor son `ciclos`, `perfiles_erosion`, `colores_drum`, `catalogo`, `escenas`, `midi_log` y las de la rampa.
@@ -49,6 +49,7 @@ El inventario (apartado 1) encuentra **cinco desajustes** entre lo que el encarg
 | `fase18_escenas.py` | `fase18 v1` |
 | `fase19_modular.py` | `fase19 v2` |
 | `ajuste_vista.py` | `ajuste_vista v1` (no es una fase) |
+| `modular/` (`cv_osc/cv_osc.ino`, `puente_osc.py`, `esquema.svg`) | Sin versión en el informe (no es una fase). El hardware de la fase 19: Doepfer A-180-9 → ESP32 u Arduino → OSC por USB (SLIP) → `puente_osc.py` → UDP 9000 → `modular_osc`. Cierra la decisión abierta de la fase 19 (cómo llegan los voltajes). Prueba: `pruebas/prueba_cv_osc.py`, OK. Los canales 5–8 (`/estratos/cv5`…`cv8`) llegan pero nadie los usa. v5 no los necesita |
 | `fase1_tempo_beatstep.py`, `fase2_seq1_baliza.py`, `fix_render_fase2.py` | obsoletos: los sustituye `fase12_base.py` |
 
 ### 1.2 Motor y estado por celda
