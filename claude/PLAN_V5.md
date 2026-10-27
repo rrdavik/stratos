@@ -10,6 +10,8 @@ Fuentes leídas para este plan:
 
 ---
 
+> **Renumeración (27 de octubre de 2026).** Lo que falta del marco v4 entra antes como fases 21 (micrófono), 22 (cámara) y 23 (luz de sala por DMX); ver los docs «Requerimiento v4 · micrófono, cámara y DMX» y «Tareas técnicas v4 · micrófono, cámara y DMX». Las fases de este plan pasan de 21–28 a **24–31** (21 → 24, …, 28 → 31), D2 pasa a ser la fase 21, D1 la 22 y D3 la 23, y la simulación de personas (`Simcasilla`, `Simponer`, `Simquitar`, `Simvaciar`) la crea ya la 22. La fase 20 (POPs) está hecha y sin fusionar; las fases nuevas se apoyan en la 19. El resto del texto conserva la numeración antigua hasta que se apruebe.
+
 ## 0. Lo que hay que saber antes de leer
 
 El inventario (apartado 1) encuentra **cinco desajustes** entre lo que el encargo da por existente y lo que hay en el repositorio. No los resuelvo aquí: los señalo, y el plan se apoya en ellos como dependencias.
