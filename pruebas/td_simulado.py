@@ -7,10 +7,16 @@ operadores y rutas, parametros (con expresiones), paginas propias, el
 storage, el modulo de los Text DAT, Script CHOP y TOP, Table DAT, absTime y el
 componente de tiempo del proyecto (/local/time).
 
-Los COMP (base, geometry, camera, light, null) solo aceptan los parametros
-que tienen en TouchDesigner: un nombre equivocado devuelve None, como alli,
-y el script lo avisa con '..'. Los SOP, MAT, TOP, CHOP y DAT aceptan
-cualquier nombre (no comprobamos sus parametros).
+Los COMP (base, geometry, camera, light, null) y los operadores de sala de
+la fase 21 (Audio Device In CHOP y Switch CHOP y TOP) solo aceptan los
+parametros que tienen en TouchDesigner: un nombre equivocado devuelve None,
+como alli, y el script lo avisa con '..'. Los demas SOP, MAT, TOP, CHOP y
+DAT aceptan cualquier nombre (no comprobamos sus parametros).
+
+Audio: el Audio Device In CHOP no tiene dispositivo (sin canales, como un
+ordenador sin microfono). numpyArray() da las muestras de un CHOP (canales x
+muestras): un Script CHOP se cocina antes, una vez por fotograma, y un
+Switch pasa la entrada de su index. En un TOP, lo que se le copio.
 
 Lo que no puede comprobar: el aspecto de la imagen, los nombres exactos de
 los parametros de SOP y MAT, y el rendimiento real.
@@ -54,7 +60,15 @@ STRICT = {
     'cameraCOMP': list(_XFORM) + ['xord', 'rord', 'fov', 'viewanglemethod', 'focal',
                                   'aperture', 'near', 'far', 'projection'],
     'lightCOMP': list(_XFORM) + ['xord', 'rord', 'dimmer', 'cr', 'cg', 'cb', 'lighttype'],
+    # fase 21 (sala): los parametros de su pagina principal
+    'audiodeviceinCHOP': ['active', 'driver', 'device', 'rate', 'bufferlength'],
+    'switchCHOP': ['index'],
+    'switchTOP': ['index', 'blend'],
 }
+# los valores por defecto de estos, solo en ellos (no en los demas operadores)
+_SALA = {'audiodeviceinCHOP': dict(active=True, driver='default', device='', rate=44100.0, bufferlength=0.1),
+         'switchCHOP': dict(index=0.0), 'switchTOP': dict(index=0.0, blend=False)}
+_MENUS_SALA = dict(driver=['default', 'asio'])
 
 
 class AbsTime(object):
@@ -175,10 +189,17 @@ class ParCollection(object):
             for n in STRICT[owner.OPType]:
                 kind = 'menu' if n in _MENUS else ('str' if n in ('material', 'instanceop', 'lookat')
                                                    or n.startswith('instancerotto') else 'float')
-                if n in ('render', 'instancing'):
+                if n in ('render', 'instancing', 'active'):
                     kind = 'toggle'
-                self._pars[n] = Par(owner, n, _DEFAULTS.get(n, '' if kind == 'str' else 0.0),
-                                    kind=kind)
+                if n == 'device':
+                    kind = 'str'
+                if n in _MENUS_SALA:
+                    kind = 'menu'
+                defs = _SALA.get(owner.OPType, _DEFAULTS)
+                self._pars[n] = Par(owner, n, defs.get(n, '' if kind == 'str' else 0.0), kind=kind)
+                if n in _MENUS_SALA:
+                    self._pars[n].menuNames = list(_MENUS_SALA[n])
+                    self._pars[n].menuLabels = list(_MENUS_SALA[n])
 
     def __getattr__(self, name):
         if name.startswith('__'):
@@ -327,6 +348,8 @@ class OP(object):
         self._rows = []
         self._chans = []
         self._n = 1
+        self.rate = 60.0
+        self._cocinado = None
         self.nodeX = self.nodeY = 0
         self.render = self.display = True
         self.allowCooking = True
@@ -573,6 +596,7 @@ class OP(object):
     # cocinar
     def cook(self, force=False, recurse=False):
         self.cooks += 1
+        self._cocinado = self.sim.absTime.frame
         if self.OPType in ('scriptCHOP', 'scriptTOP'):
             dat = None
             for nm in ('callbacks', 'callbackdat', 'dat'):
@@ -589,12 +613,28 @@ class OP(object):
                 if self.sim.estricto:
                     raise
 
-    # TOP
+    # TOP y CHOP
     def copyNumpyArray(self, a):
         self._np = a
 
     def numpyArray(self):
-        return getattr(self, '_np', None)
+        if not self.OPType.endswith('CHOP'):
+            return getattr(self, '_np', None)
+        import numpy
+        if self.OPType == 'switchCHOP':
+            ins = self.inputs
+            if not ins:
+                return numpy.zeros((0, 0))
+            k = max(0, min(len(ins) - 1, int(float(self.par.index.eval()))))
+            src = ins[k]
+            self.rate = src.rate
+            return src.numpyArray()
+        if self.OPType == 'scriptCHOP' and self._cocinado != self.sim.absTime.frame:
+            self._cocinado = self.sim.absTime.frame
+            self.cook()
+        if not self._chans:
+            return numpy.zeros((0, self._n), dtype=numpy.float32)
+        return numpy.array([ch.vals for ch in self._chans], dtype=numpy.float32)
 
     @property
     def width(self):

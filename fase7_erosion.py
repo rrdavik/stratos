@@ -157,7 +157,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v14  (bombo y tom: pulsos de ocupacion; el pumping, solo visual)'
+VERSION = 'fase7 v15  (relanzada sobre la fase 21, conserva la fila del microfono, pad 9)'
 banner(VERSION)
 
 base = require_base(7)
@@ -217,6 +217,15 @@ def filas_tabla(t):
             for r in range(t.numRows)]
 
 
+def es_fila_mic(f, cab):
+    """La fila es la del pad 9 o mas alla: el microfono (fase 21), que esta
+    fase no escribe ni compara."""
+    try:
+        return int(float(f[cab.index('pad')])) > 8
+    except Exception:
+        return False
+
+
 def clasificar_perfiles(filas, mm):
     """'v1' / 'v3' / 'v5' / 'v11' / 'v12' / 'v13' si la tabla sigue con los
     valores de esas versiones (sin editar), 'nueva' si ya tiene los de la
@@ -226,6 +235,7 @@ def clasificar_perfiles(filas, mm):
     if not filas:
         return 'v1'
     cab = [str(x).strip() for x in filas[0]]
+    filas = [filas[0]] + [f for f in filas[1:] if not es_fila_mic(f, cab)]
     try:
         ix = [cab.index(n) for n in ('reduccion', 'radio', 'profundidad')]
     except ValueError:
@@ -287,12 +297,19 @@ def poner_roles(t, mm):
 
 
 def escribir_perfiles(t, mm):
+    """Los ocho pads por defecto. La fila del microfono (pad 9, fase 21), si
+    la hay, se conserva al final (sus columnas, por nombre)."""
+    filas = filas_tabla(t)
+    cab = [str(x).strip() for x in filas[0]] if filas else []
+    mic = [dict(zip(cab, f)) for f in filas[1:] if es_fila_mic(f, cab)]
     t.clear()
     t.appendRow(COLS)
     for k in range(8):
         red, rad, prof = mm.PERFILES_DEFECTO[k]
         t.appendRow([k + 1, red, rad, prof, mm.MODOS_DEFECTO[k], '%d' % mm.PULSOS_DEFECTO[k],
                      '%g' % mm.PUMP_REL_DEFECTO[k], mm.TIPOS_DEFECTO[k], mm.ROLES_DEFECTO[k]])
+    for f in mic:
+        t.appendRow([f.get(c, '') for c in COLS])
 
 
 def anadir_columnas(t, mm):
@@ -456,9 +473,9 @@ def prueba(t):
             W['hits'].get(3, 0) == 2 and W['ev']['erosion'].get('modo') == 'erosion')
     cf = m.cfg()
     t.check('perfiles leidos de la tabla, con modo, pulsos y pump_rel',
-            len(cf['perfiles']) == 8 and len(cf['tipos']) == 8
-            and cf['modos'] == list(m.MODOS_DEFECTO) and cf['pulsos'] == list(m.PULSOS_DEFECTO)
-            and cf['pump_rels'] == list(m.PUMP_REL_DEFECTO), '%s %s' % (cf['modos'], cf['pulsos']))
+            len(cf['perfiles']) == len(cf['tipos']) == (9 if cf['nivel'] >= 21 else 8)
+            and cf['modos'][:8] == list(m.MODOS_DEFECTO) and cf['pulsos'][:8] == list(m.PULSOS_DEFECTO)
+            and cf['pump_rels'][:8] == list(m.PUMP_REL_DEFECTO), '%s %s' % (cf['modos'], cf['pulsos']))
     cd = dict(m.cfg())
     cd['nivel'] = min(cd['nivel'], 13)            # la erosion de la fase 7, sin los accidentes de la 14
     cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
