@@ -50,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase14 v2  (destructores: aranazos tematicos, escalada, incendio y derrumbes; el impulso no es aranazo)'
+VERSION = 'fase14 v3  (destructores: aranazos tematicos, escalada, incendio y derrumbes; autoprueba con el pad 9)'
 banner(VERSION)
 
 base = require_base(14)
@@ -131,7 +131,7 @@ def _prueba(t, m):
     t.check('aranazos: los pads de erosion sin profundidad (%s); ni los cortes ni los impulsos'
             % ' '.join(str(k + 1) for k in pads),
             pads and all(k not in m.pads_corte(c) and k not in m.pads_impulso(c) for k in pads)
-            and len(pads) + len(m.pads_corte(c)) + len(m.pads_impulso(c)) == 8)
+            and len(pads) + len(m.pads_corte(c)) + len(m.pads_impulso(c)) == len(c['perfiles']))
     pad = pads[0]
 
     def zona(tema, s, nota, veces=2, centro=0):

@@ -2,11 +2,12 @@
 Ejecuta los scripts de fase en un TouchDesigner simulado y resume lo que
 dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
-    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 19
+    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 23 (las que haya)
     python3 pruebas/correr_fases.py -v         # con todo el Textport
 
 Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
-camino del MIDI real, fotograma a fotograma) y evalua todas las expresiones.
+camino del MIDI real, fotograma a fotograma; desde la fase 21, onsets del
+microfono por su senal sintetica) y evalua todas las expresiones.
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
 """
@@ -24,7 +25,8 @@ import td_simulado  # noqa: E402
 FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_especies.py',
          'fase6_ciclo.py', 'fase7_erosion.py', 'fase8_conchas.py', 'fase9_arqueologia.py',
          'fase10_direccion.py', 'fase11_piel.py', 'fase12_moduladores.py',
-         'fase13_tejido.py', 'fase14_destructores.py', 'fase15_era.py', 'fase16_cortes.py', 'fase17_tiempo.py', 'fase18_escenas.py', 'fase19_modular.py']
+         'fase13_tejido.py', 'fase14_destructores.py', 'fase15_era.py', 'fase16_cortes.py', 'fase17_tiempo.py', 'fase18_escenas.py', 'fase19_modular.py',
+         'fase21_microfono.py', 'fase22_camara.py', 'fase23_sala.py']
 
 
 def correr(sim, archivo, verbose=False):
@@ -59,7 +61,8 @@ def correr(sim, archivo, verbose=False):
 
 def sesion(sim, compases=48, fps=30.0):
     """SEQ1 en semicorcheas, SEQ2 cada 3 pasos y bateria en negras, por los
-    bytes MIDI, fotograma a fotograma a 120 BPM."""
+    bytes MIDI, fotograma a fotograma a 120 BPM. Desde la fase 21, un clic
+    sintetico (Simonset) cada dos negras, por la cadena del microfono."""
     base = sim.op('/project1/FASE1')
     mm = base.op('midi_callbacks').module
     paso = 60.0 / 120.0 / 4
@@ -83,6 +86,8 @@ def sesion(sim, compases=48, fps=30.0):
                 n2 = notas2[(p // 3) % len(notas2)]
                 mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes([0x9D, n2, 70]))
                 pend.append([0x8D, n2, 0])
+            if p % 8 == 2 and getattr(base.par, 'Simonset', None) is not None:
+                base.par.Simonset.pulse()
             if p % 16 == 4 and (p // 64) % 2 == 1:
                 mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes([0x9F, 36 + (p // 16) % 4, 100]))
     return sim.expresiones()
@@ -107,8 +112,9 @@ def main():
         malas = sesion(sim)
     m = sim.op('/project1/FASE1/motor').module
     W = m.world()
-    print('       mundo tras la sesion: %d celdas ocupadas, %d conchas, nivel %d'
-          % (m.occupied(W), m.n_shells(W), m.cfg()['nivel']))
+    print('       mundo tras la sesion: %d celdas ocupadas, %d conchas, nivel %d%s'
+          % (m.occupied(W), m.n_shells(W), m.cfg()['nivel'],
+             ', %d onsets del microfono' % W['mic']['n'] if m.cfg()['nivel'] >= 21 else ''))
     print('%-6s sesion simulada: %d expresiones con error' % ('OK' if not malas else 'FALLO', len(malas)))
     for m_ in malas[:10]:
         print('         %s.%s: %s' % m_)

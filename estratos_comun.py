@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v36'
+VERSION_COMUN = 'comun v37'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -446,9 +446,13 @@ def require_base(fase):
         if base.op(n) is None:
             raise RuntimeError('Falta %s en FASE1: aplica fase12_base.py.' % n)
     lvl = current_level(base)
-    if fase > 3 and lvl < fase - 1:
+    # la fase 21 va encima de la 19 o de la 20 (POPs, sin fusionar: D1)
+    minimo = 19 if fase == 21 else fase - 1
+    if fase > 3 and lvl < minimo:
         raise RuntimeError('FASE1 esta en la fase %d. Aplica antes la fase %d.'
-                           % (lvl, fase - 1))
+                           % (lvl, minimo))
+    if fase == 21:
+        ok('base: proyecto en la fase %d%s' % (lvl, ' (con los POPs de la fase 20)' if lvl == 20 else ''))
     return base
 
 

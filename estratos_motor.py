@@ -23,7 +23,9 @@
 #                 con biomas por latitud, y los hibridos son mesetas construidas:
 #                 arrozal en terrazas y meseta-jardin; motor v53: conchas
 #                 discretas, el suelo oscuro y la tapa neutra; motor v54: el
-#                 SEQ2 con Filtrar2 y Nota2, como el SEQ1 con Filtrar y Nota).
+#                 SEQ2 con Filtrar2 y Nota2, como el SEQ1 con Filtrar y Nota;
+#                 fase 21, motor v55: el microfono de la sala, un pad 9 de
+#                 erosion que golpea con los onsets del publico).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -36,7 +38,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v54'
+MOTOR_VERSION = 'motor v55'
 
 import math
 
@@ -110,6 +112,25 @@ def _hex(h):
 # (SEQ2, coronas), blanco (SEQ1 desde la fase 9) y los minerales.
 COLORES_DRUM = [_hex(h) for h in ('#D7263D', '#E83E8C', '#7C3AED', '#3B5BDB',
                                   '#12B76A', '#A3E635', '#F9A8D4', '#C4B5FD')]
+
+
+# Fase 21: el microfono es el pad 9 (indice 8) de erosion. No llega por MIDI:
+# lo golpean los onsets del publico. Su perfil (reduccion, radio, profundidad)
+# va en la novena fila de perfiles_erosion, pero la reduccion la da
+# Reduccionmic y cuenta ESCALONES enteros, no notas (D3). Su color, un gris
+# calido claro (D10): no es el blanco del SEQ1, ni el ambar del SEQ2, ni el
+# cian de las cicatrices.
+PAD_MIC = 8
+PERFIL_MIC = (1, 0, 0)
+COLOR_MIC = _hex('#D8CCB8')
+ROL_MIC = 'micro'
+PERFILES_PADS = PERFILES_DEFECTO + [PERFIL_MIC]
+TIPOS_PADS = TIPOS_DEFECTO + [ROL_MIC]
+MODOS_PADS = MODOS_DEFECTO + ['erosion']
+PULSOS_PADS = PULSOS_DEFECTO + [1]
+PUMP_REL_PADS = PUMP_REL_DEFECTO + [0.15]
+ROLES_PADS = ROLES_DEFECTO + [ROL_MIC]
+COLORES_PADS = COLORES_DRUM + [COLOR_MIC]
 
 
 def tipo_perfil(red, rad, depth):
@@ -209,6 +230,9 @@ DEFAULT_CFG = dict(
     # fase 19: las senales del modular
     fuente_modular=1, rango_modular=0, suavizado=0.15, viento_max=12.0, respiracion=0.75,
     smog=1.0, niebla=1.0, glitch=1.0, modular=None,
+    # fase 21: el microfono
+    umbral_onset=0.6, refractario_mic=0.12, reduccion_mic=1.0, ventana_ruido=60.0, umbral_corte=20.0,
+    prof_mic=3, fuente_mic=2, canal_mic=0,
 )
 
 
@@ -560,6 +584,10 @@ def new_world():
         frente=None,            # frente en curso: {beat0, de, a, pattern, conocido}
         # las senales del modular (fase 19), suavizadas, 0-1
         modular=dict(lfo=0.5, ruido=0.0, espacio=0.0, saturacion=0.0, t=-99.0, crudo=None, activo=False),
+        # el microfono (fase 21): el ultimo onset, los que llevamos y los descartados
+        mic=dict(t=-99.0, n=0, descartados=0, flujo=0.0, ultimo=None),
+        ruido=dict(onsets=[], cortes=0, ultimo=None),   # onsets de la ventana: [t, flujo, celda]
+        sala=dict(destellos=[]),            # instantes de los destellos propios (fase 23)
         aviso='',
         ev={},
         t=None,
@@ -1239,6 +1267,39 @@ def _undo_note(W, cfg, i):
     return True
 
 
+def bajar_escalon(W, cfg, i):
+    """Fase 21 (D3): un onset del microfono baja la celda i un escalon de
+    ocupacion entero, no una nota: queda al principio del escalon de abajo
+    (carga 0, la altura de esa ocupacion). Una semilla se borra y deja
+    huella; un satelite pierde uno de sus desbordes."""
+    o = W['occ'][i]
+    if o <= 0:
+        return False
+    if W['par'][i] >= 0 or (o == 1):
+        while W['occ'][i] >= o and _undo_note(W, cfg, i):
+            pass
+        return True
+    o -= 1
+    W['occ'][i] = o
+    W['carga'][i] = 0
+    W['h'][i] = min(W['h'][i], height_for(cfg, o))
+    return True
+
+
+def bajar_escalones(W, cfg, i, k):
+    """k escalones en el orden de degrade: primero los satelites, luego la celda."""
+    hechos = 0
+    for _ in range(int(k)):
+        sats = satellites_of(W, i)
+        j = max(sats, key=lambda x: W['occ'][x]) if sats else i
+        if not bajar_escalon(W, cfg, j):
+            break
+        hechos += 1
+    if hechos and W['sp'][i] == HIB:
+        _quitar_colona(W, i, W.get('t'))
+    return hechos
+
+
 def degrade(W, cfg, i, k):
     """Deshace k notas en orden inverso a la promocion: primero los
     satelites, luego la altura de la celda, al final la huella."""
@@ -1285,7 +1346,8 @@ def erosion(W, cfg, pad, vel, now):
     removed = 0
     W['t'] = W['t'] if W['t'] is not None else now
     resto = W['ero_resto']
-    notas = erosion_notes(cfg, red, vel)
+    mic = pad == PAD_MIC                # fase 21: el microfono baja escalones enteros
+    notas = erosion_notes(cfg, red, vel) if not mic else float(red)
     tematico = cfg['nivel'] >= 14 and es_aranazo(cfg, pad)
     antes = antes_del_golpe(W, cfg, target, now) if tematico else None
     for c, d in rings(target, rad_eff):
@@ -1293,7 +1355,7 @@ def erosion(W, cfg, pad, vel, now):
         x = notas * w + resto[c]
         k = int(math.floor(x + 1e-9))
         resto[c] = x - k
-        removed += degrade(W, cfg, c, k)
+        removed += bajar_escalones(W, cfg, c, k) if mic else degrade(W, cfg, c, k)
         light_cell(W, cfg, c, pad, w, now)
     W['hits'][3] = W['hits'].get(3, 0) + 1
     W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
@@ -7548,6 +7610,175 @@ def niebla(W, cfg, d, R):
     return min(1.0, e), cerca, lejos
 
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - el microfono de la sala (fase 21)
+# -----------------------------------------------------------------------------
+# El microfono entra como un pad 9 de erosion (PAD_MIC): el motor ya sabe
+# erosionar, cortar, iluminar la celda y escalar, asi que aqui solo se detecta.
+# Cada bloque de audio se reparte en BANDAS_MIC bandas (energia en dB, con un
+# suelo de PISO_MIC dB); el flujo espectral es la suma de lo que sube cada
+# banda respecto al maximo de los HIST_MIC bloques anteriores, en decenas de dB
+# por banda: un sonido que empieza (una palmada, una tos, unos pasos) sube de
+# golpe; un drone sostenido, no. Un onset es un flujo por encima de
+# Umbralonset, separado del anterior por Refractariomic s, y que no cae en la
+# ventana de un destello propio (W['sala']['destellos'], que llena la fase 23).
+#   onset           erosion() con el pad 9 en la celda del objetivo (Objetivo,
+#                   como los pads): baja Reduccionmic escalones enteros (D3),
+#                   enciende la luz de la celda con su color y, desde la fase
+#                   14, cuenta como aranazo: dos en la misma zona escalan (D9).
+#   ruido de sala   la energia (el flujo) de los onsets de los ultimos
+#                   Ventanaruido s; al pasar Umbralcorte abre un corte de
+#                   Profundidadmic conchas y radio 1 en la celda del ultimo
+#                   onset, y la cuenta vuelve a cero.
+# Sin azar: la senal sintetica de prueba (clic, ruido y drone) sale de un hash
+# del numero de muestra.
+
+BANDAS_MIC = 16
+FREC_MIC = (200.0, 12000.0)     # las bandas, repartidas en escala logaritmica
+PISO_MIC = -60.0                # dB: el silencio
+HIST_MIC = 3                    # bloques anteriores con los que se compara
+DESCARTE_DESTELLO = 0.15        # s tras un destello propio en que un onset no cuenta
+FUENTES_MIC = ['microfono', 'simulacion', 'ambos']
+_MIC = dict(hist=[], muestra=0, clic=0)
+
+
+def mic_reset():
+    """Olvida los bloques anteriores y la senal sintetica pendiente."""
+    _MIC.update(hist=[], muestra=0, clic=0)
+
+
+def bandas_mic(bloque, rate):
+    """Energia (dB) de cada banda de un bloque de muestras, o None si el
+    bloque es demasiado corto o no hay numpy."""
+    np = _np()
+    if np is None or bloque is None:
+        return None
+    x = np.asarray(bloque, dtype=float).ravel()
+    if x.size < 32 or rate <= 0:
+        return None
+    X = np.abs(np.fft.rfft(x)) ** 2 / x.size
+    f = np.fft.rfftfreq(x.size, 1.0 / float(rate))
+    lim = np.geomspace(FREC_MIC[0], min(FREC_MIC[1], 0.5 * float(rate)), BANDAS_MIC + 1)
+    e = np.empty(BANDAS_MIC)
+    for b in range(BANDAS_MIC):
+        sel = X[(f >= lim[b]) & (f < lim[b + 1])]
+        e[b] = sel.mean() if sel.size else 0.0
+    return np.maximum(PISO_MIC, 10.0 * np.log10(e + 1e-12))
+
+
+def flujo_espectral(prev, actual):
+    """Suma de las subidas de energia por banda entre dos bloques (prev puede
+    ser una lista de bloques: se compara con su maximo), en decenas de dB por
+    banda: 1 es que todas las bandas han subido 10 dB."""
+    np = _np()
+    if prev is None or actual is None or np is None:
+        return 0.0
+    p = np.max(np.asarray(prev, dtype=float).reshape(-1, len(actual)), axis=0)
+    return float(np.maximum(0.0, np.asarray(actual, dtype=float) - p).sum()) / (10.0 * len(actual))
+
+
+def detectar_onset(W, cfg, flujo, now):
+    """El flujo es un onset: pasa Umbralonset, Refractariomic s despues del
+    anterior y fuera de la ventana de un destello propio (este cuenta como
+    descartado)."""
+    mc = W['mic']
+    if flujo < cfg['umbral_onset'] or now - mc['t'] < cfg['refractario_mic']:
+        return False
+    sala = W['sala']
+    sala['destellos'] = [t for t in sala['destellos'] if now - t <= 5.0]
+    if any(0.0 <= now - t <= DESCARTE_DESTELLO for t in sala['destellos']):
+        mc['descartados'] += 1
+        return False
+    mc['t'] = now
+    mc['n'] += 1
+    return True
+
+
+def erosion_mic(W, cfg, now, flujo=0.0):
+    """Un onset: erosion() con el pad 9 en la celda del objetivo, y su energia
+    al ruido de sala. Devuelve el evento de la erosion (con 'flujo' y, si el
+    ruido ha abierto un corte, 'corte_ruido')."""
+    if len(cfg['perfiles']) <= PAD_MIC:
+        return None
+    ev = erosion(W, cfg, PAD_MIC, int(cfg.get('vel_ref', 100)), now)
+    ev['flujo'] = flujo
+    W['mic']['ultimo'] = dict(t=now, flujo=flujo, celda=ev['celda'])
+    W['ruido']['onsets'].append([now, float(flujo), ev['celda']])
+    ev['corte_ruido'] = ruido_tick(W, cfg, now)
+    W['ev']['micro'] = ev
+    return ev
+
+
+def ruido_tick(W, cfg, now):
+    """El ruido de sala: la energia de los onsets de los ultimos Ventanaruido s.
+    Al pasar Umbralcorte, un corte de Profundidadmic conchas y radio 1 en la
+    celda del ultimo onset (corte_tematico desde la fase 16; cut antes) y la
+    cuenta a cero. Devuelve el corte, o None."""
+    r = W['ruido']
+    v = max(0.0, cfg['ventana_ruido'])
+    r['onsets'] = [o for o in r['onsets'] if 0.0 <= now - o[0] <= v]
+    total = sum(o[1] for o in r['onsets'])
+    r['total'] = total
+    if not r['onsets'] or total < cfg['umbral_corte']:
+        return None
+    celda = r['onsets'][-1][2]
+    prof = max(1, int(cfg['prof_mic']))
+    union = None
+    if cfg['nivel'] >= 16:
+        fuera, union = corte_tematico(W, cfg, celda, prof, 1, now)
+    else:
+        fuera = cut(W, cfg, celda, prof, 1, now)
+    r['onsets'] = []
+    r['total'] = 0.0
+    r['cortes'] += 1
+    r['ultimo'] = dict(t=now, celda=celda, conchas=fuera, energia=total, prof=prof, union=union)
+    W['ev']['ruido'] = r['ultimo']
+    W['flash'] = dict(t=now, cell=celda, k=1.0, pad=PAD_MIC)
+    W['aviso'] = 'ruido de sala: corte de %d conchas en la celda %d' % (fuera, celda)
+    W['dirty'] = True
+    return r['ultimo']
+
+
+def mic_bloque(W, cfg, bloque, rate, now):
+    """Un bloque de audio: su flujo y, si es un onset, la erosion. Devuelve
+    {flujo, onset (el evento o None)} o None si el bloque no vale."""
+    b = bandas_mic(bloque, rate)
+    if b is None:
+        return None
+    hist = _MIC['hist']
+    fl = flujo_espectral(hist, b) if hist else 0.0
+    hist.append(b)
+    del hist[:-HIST_MIC]
+    W['mic']['flujo'] = fl
+    ev = erosion_mic(W, cfg, now, fl) if detectar_onset(W, cfg, fl, now) else None
+    return dict(flujo=fl, onset=ev)
+
+
+def _hash_muestras(np, i):
+    return (np.sin(i * 12.9898 + 78.233) * 43758.5453) % 1.0 * 2.0 - 1.0
+
+
+def mic_sim_bloque(n, rate, s0, clic=False, ruido=0.0, drone=False):
+    """n muestras de la senal sintetica desde la muestra s0, sin azar: un clic
+    (10 ms de ruido que se apaga, como una palmada), ruido de sala (amplitud
+    0-1) y un drone de 110 Hz con dos armonicos."""
+    np = _np()
+    n = max(0, int(n))
+    i = np.arange(n, dtype=float) + float(s0)
+    x = np.zeros(n)
+    if ruido > 0:
+        x += float(ruido) * _hash_muestras(np, i)
+    if drone:
+        t = i / float(rate)
+        x += 0.12 * (np.sin(2 * math.pi * 110.0 * t) + 0.5 * np.sin(2 * math.pi * 220.0 * t)
+                     + 0.3 * np.sin(2 * math.pi * 330.0 * t))
+    if clic:
+        m = min(n, int(0.01 * rate))
+        j = np.arange(m, dtype=float)
+        x[:m] += 0.8 * _hash_muestras(np, i[:m] + 7.0) * np.exp(-j / (0.0018 * rate))
+    return x
+
+
 # =============================================================================
 # 2. ADAPTADOR TOUCHDESIGNER
 # =============================================================================
@@ -7602,49 +7833,50 @@ def _menu(name, options, default):
         return default
 
 
-def _perfiles():
-    """(perfiles, tipos, modos, pulsos, caidas del pumping) de la tabla
+def _perfiles(n=8):
+    """(perfiles, tipos, modos, pulsos, caidas del pumping) de los n primeros
+    pads (9 desde la fase 21: el noveno es el microfono) de la tabla
     perfiles_erosion, leidos por nombre de columna (la columna rol es solo
     para leer). Sin las columnas modo y pulsos (o capacidad, su nombre en
     la v12 y la v13), las de por defecto: bombo 3 y tom 2 en impulso; sin
     pump_rel (antes de la v13), 0,20 s el bombo y 0,12 el tom."""
     t = parent().op('perfiles_erosion')
     if t is None or t.numRows < 2:
-        return (list(PERFILES_DEFECTO), list(TIPOS_DEFECTO), list(MODOS_DEFECTO), list(PULSOS_DEFECTO),
-                list(PUMP_REL_DEFECTO))
+        return (list(PERFILES_PADS[:n]), list(TIPOS_PADS[:n]), list(MODOS_PADS[:n]), list(PULSOS_PADS[:n]),
+                list(PUMP_REL_PADS[:n]))
     out, tipos, modos, caps, rels = [], [], [], [], []
-    for r in range(1, min(t.numRows, 9)):
+    for r in range(1, min(t.numRows, n + 1)):
         try:
             p = (int(float(t[r, 'reduccion'].val)), int(float(t[r, 'radio'].val)),
                  int(float(t[r, 'profundidad'].val)))
         except Exception:
-            p = PERFILES_DEFECTO[r - 1]
+            p = PERFILES_PADS[r - 1]
         out.append(p)
         try:
             md = t[r, 'modo'].val.strip().lower()
         except Exception:
             md = ''
-        modos.append(md if md in MODOS_PAD else MODOS_DEFECTO[r - 1])
+        modos.append(md if md in MODOS_PAD else MODOS_PADS[r - 1])
         try:
             col = 'pulsos' if t[0, 'pulsos'] is not None else 'capacidad'
             caps.append(max(1, int(round(float(t[r, col].val)))))
         except Exception:
-            caps.append(PULSOS_DEFECTO[r - 1])
+            caps.append(PULSOS_PADS[r - 1])
         try:
             rels.append(max(0.0, float(t[r, 'pump_rel'].val)))
         except Exception:
-            rels.append(PUMP_REL_DEFECTO[r - 1])
+            rels.append(PUMP_REL_PADS[r - 1])
         try:
             tp = t[r, 'tipo'].val.strip()
         except Exception:
             tp = ''
         tipos.append(tp or ('impulso' if modos[-1] == 'impulso' else tipo_perfil(*p)))
-    while len(out) < 8:
-        out.append(PERFILES_DEFECTO[len(out)])
-        tipos.append(TIPOS_DEFECTO[len(tipos)])
-        modos.append(MODOS_DEFECTO[len(modos)])
-        caps.append(PULSOS_DEFECTO[len(caps)])
-        rels.append(PUMP_REL_DEFECTO[len(rels)])
+    while len(out) < n:
+        out.append(PERFILES_PADS[len(out)])
+        tipos.append(TIPOS_PADS[len(tipos)])
+        modos.append(MODOS_PADS[len(modos)])
+        caps.append(PULSOS_PADS[len(caps)])
+        rels.append(PUMP_REL_PADS[len(rels)])
     return out, tipos, modos, caps, rels
 
 
@@ -7671,16 +7903,17 @@ def _catalogo():
     return cat
 
 
-def _colores_drum():
-    """Colores de las balizas de la bateria (tabla colores_drum: pad r g b)."""
+def _colores_drum(n=8):
+    """Colores de las balizas de la bateria (tabla colores_drum: pad r g b) de
+    los n primeros pads (9 desde la fase 21: el microfono)."""
     t = parent().op('colores_drum')
-    out = list(COLORES_DRUM)
+    out = list(COLORES_PADS[:n])
     if t is None or t.numRows < 2:
         return out
     for r in range(1, t.numRows):
         try:
             k = int(float(t[r, 'pad'].val)) - 1
-            if 0 <= k < 8:
+            if 0 <= k < n:
                 out[k] = tuple(max(0.0, min(1.0, float(t[r, ch].val))) for ch in ('r', 'g', 'b'))
         except Exception:
             pass
@@ -7744,8 +7977,9 @@ def cfg():
         flash=_p('Destello', c['flash']),
     )
     if c['nivel'] >= 7:
-        c['perfiles'], c['tipos'], c['modos'], c['pulsos'], c['pump_rels'] = _perfiles()
-        c['colores_drum'] = _colores_drum()
+        pads = PAD_MIC + 1 if c['nivel'] >= 21 else 8        # fase 21: el pad 9 es el microfono
+        c['perfiles'], c['tipos'], c['modos'], c['pulsos'], c['pump_rels'] = _perfiles(pads)
+        c['colores_drum'] = _colores_drum(pads)
         c.update(balizas_drum=int(_p('Balizasdrum', True)),
                  luz_drum=_p('Luzdrum', c['luz_drum']),
                  erosion_vel=int(_p('Erosionvel', True)),
@@ -7859,6 +8093,17 @@ def cfg():
                  respiracion=max(0.0, min(1.0, _p('Respiracion', c['respiracion']))),
                  smog=max(0.0, _p('Smog', c['smog'])), niebla=max(0.0, min(1.0, _p('Niebla', c['niebla']))),
                  glitch=max(0.0, min(1.0, _p('Glitch', c['glitch']))))
+    if c['nivel'] >= 21:
+        c.update(umbral_onset=max(0.0, _p('Umbralonset', c['umbral_onset'])),
+                 refractario_mic=max(0.0, _p('Refractariomic', c['refractario_mic'])),
+                 reduccion_mic=max(0.0, _p('Reduccionmic', c['reduccion_mic'])),
+                 ventana_ruido=max(0.0, _p('Ventanaruido', c['ventana_ruido'])),
+                 umbral_corte=max(1e-6, _p('Umbralcorte', c['umbral_corte'])),
+                 prof_mic=max(1, int(_p('Profundidadmic', c['prof_mic']))),
+                 fuente_mic=_menu('Fuentemic', FUENTES_MIC, c['fuente_mic']),
+                 canal_mic=max(0, int(_p('Canalmic', c['canal_mic']))))
+        red, rad, prof = c['perfiles'][PAD_MIC]           # la reduccion del pad 9, de Reduccionmic
+        c['perfiles'][PAD_MIC] = (c['reduccion_mic'], rad, prof)
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -8118,6 +8363,8 @@ def frame_tick():
         dt = max(0.0, min(0.25, now - md.get('t_fotograma', now)))
         md['t_fotograma'] = now
         modular_tick(W, c, leer_modular(c, now), dt, now)
+    if c['nivel'] >= 21:                # fase 21: el microfono, antes del mundo
+        mic_tick(W, c, now)
     res = tick(W, c, now, tempo(), playing())
     _CACHE['nivel'] = c['nivel']        # fase 17: para la luz y las ventanas del shader
     _CACHE['modular'] = dict(W['modular']) if c['nivel'] >= 19 else None
@@ -8412,12 +8659,152 @@ def on_pulse(name):
                   % ('SEQ1' if s == GEO else 'SEQ2', note_name(note), ci, len(NEIGH[ci]),
                      'cluster de %d celdas, capital %d' % (len(cl['celdas'][k]), cl['capital'][k])
                      if k >= 0 else 'sin cluster todavia (pulsa otra vez)'))
+    elif name == 'Simonset':            # fase 21: un clic sintetico en el proximo bloque
+        _MIC['clic'] += 1
+        if c['fuente_mic'] == 0:
+            print('MICRO  Simonset: con Fuentemic = microfono la senal sintetica no llega al detector')
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
         reset_world()
         print('MUNDO  vaciado')
     W['dirty'] = True
+
+
+# --- el microfono (fase 21) ---------------------------------------------------
+
+MIC_RATE = 44100                # la senal sintetica
+
+
+def mic_tick(W, c, now):
+    """Cada fotograma: mic_sim genera su bloque y mic_flujo lee el de
+    mic_fuente y avisa al motor; luego el ruido de sala olvida lo
+    que sale de su ventana."""
+    _CACHE['mic'] = (absTime.frame, W, c, now)
+    for nm in ('mic_sim', 'mic_flujo'):  # la senal sintetica, aunque nada cambie en su entrada
+        o = parent().op(nm)
+        if o is not None:
+            try:
+                o.cook(force=True)
+            except Exception as e:
+                _say(nm, 'AVISO  %s: %s' % (nm, e))
+    ruido_tick(W, c, now)
+
+
+def _mic_ctx():
+    m = _CACHE.get('mic')
+    if m and m[0] == absTime.frame:
+        return m[1], m[2], m[3]
+    return world(), cfg(), absTime.seconds
+
+
+def _canal(arr, k):
+    if arr is None or getattr(arr, 'ndim', 0) < 1 or arr.size == 0:
+        return None
+    if arr.ndim == 1:
+        return arr
+    return arr[min(int(k), arr.shape[0] - 1)]
+
+
+def mic_cook(scriptOp):
+    """onCook del Script CHOP mic_flujo: el flujo del bloque de su entrada
+    (mic_fuente), el onset y, si lo hay, la erosion. Saca dos canales: flujo
+    y onset."""
+    W, c, now = _mic_ctx()
+    src = scriptOp.inputs[0] if scriptOp.inputs else parent().op('mic_fuente')
+    res = None
+    try:
+        x = _canal(src.numpyArray(), c['canal_mic']) if src is not None else None
+        rate = float(getattr(src, 'rate', MIC_RATE) or MIC_RATE)
+        res = mic_bloque(W, c, x, rate, now) if x is not None else None
+    except Exception as e:
+        _say('micb', 'AVISO  microfono: %s' % e)
+    scriptOp.clear()
+    scriptOp.numSamples = 1
+    scriptOp.appendChan('flujo')[0] = res['flujo'] if res else 0.0
+    scriptOp.appendChan('onset')[0] = 1.0 if res and res['onset'] else 0.0
+    if res and res['onset']:
+        _log_onset(W, res['onset'])
+
+
+def _log_onset(W, ev):
+    txt = 'MICRO onset flujo %.2f celda %d' % (ev['flujo'], ev['celda'])
+    if ev.get('escalada'):
+        txt += ' ESCALADA %s' % ev['escalada']
+    cr = ev.get('corte_ruido')
+    if cr:
+        txt += ' + corte por ruido de %d conchas' % cr['conchas']
+    _log([absTime.frame, 'mic', '-', '%.2f' % ev['flujo'], txt])
+    _say('onset', txt)
+    if cr:
+        print('AVISO  %s' % W['aviso'])
+
+
+def mic_sim_cook(scriptOp):
+    """onCook del Script CHOP mic_sim: el bloque sintetico de este fotograma
+    (las muestras desde el anterior), con el clic de Simonset, Simruido y
+    Simdrone; con Fuentemic = ambos, sumado a su entrada (mic_in)."""
+    W, c, now = _mic_ctx()
+    t0 = _MIC.get('t_sim')
+    dt = (now - t0) if t0 is not None and now > t0 else 1.0 / 60.0
+    _MIC['t_sim'] = now
+    n = max(32, min(MIC_RATE // 4, int(round(dt * MIC_RATE))))
+    clic = _MIC['clic'] > 0
+    if clic:
+        _MIC['clic'] -= 1
+    x = mic_sim_bloque(n, MIC_RATE, _MIC['muestra'], clic=clic,
+                       ruido=max(0.0, min(1.0, float(_p('Simruido', 0.0)))), drone=bool(_p('Simdrone', False)))
+    _MIC['muestra'] += n
+    if c['fuente_mic'] == 2 and scriptOp.inputs:
+        try:
+            y = _canal(scriptOp.inputs[0].numpyArray(), c['canal_mic'])
+            if y is not None:
+                k = min(n, y.size)
+                x[n - k:] += y[y.size - k:]
+        except Exception:
+            pass
+    scriptOp.clear()
+    scriptOp.rate = MIC_RATE
+    scriptOp.numSamples = n
+    scriptOp.appendChan('mic').vals = [float(v) for v in x]
+
+
+def microfono_encontrado():
+    """(si, texto) del Audio Device In CHOP mic_in: con canales y sin errores."""
+    o = parent().op('mic_in')
+    if o is None:
+        return False, 'sin mic_in'
+    try:
+        err = o.errors()
+    except Exception:
+        err = ''
+    nch = getattr(o, 'numChans', 0)
+    if err or not nch:
+        return False, (err.splitlines()[0] if err else 'sin canales')
+    try:
+        dev = str(o.par.device.eval())
+    except Exception:
+        dev = '?'
+    return True, '%s, %d canal%s' % (dev or 'por defecto', nch, '' if nch == 1 else 'es')
+
+
+def _legend_micro(W, c):
+    """MICRO (fase 21): la fuente, los onsets, el ultimo y el ruido de sala."""
+    mc, r = W['mic'], W['ruido']
+    fuente = FUENTES_MIC[int(c['fuente_mic']) % len(FUENTES_MIC)]
+    if fuente != 'simulacion' and not microfono_encontrado()[0]:
+        fuente += ' (sin microfono)'
+    u = mc.get('ultimo')
+    ult = ('flujo %.2f celda %d hace %.1f s' % (u['flujo'], u['celda'], max(0.0, absTime.seconds - u['t']))
+           if u else '-')
+    txt = ('  MICRO    %s   flujo %.2f/%.2f   onsets %d   ultimo %s   ruido %.1f/%g en %g s'
+           % (fuente, mc.get('flujo', 0.0), c['umbral_onset'], mc['n'], ult, r.get('total', 0.0),
+              c['umbral_corte'], c['ventana_ruido']))
+    if r['cortes']:
+        txt += '   cortes %d' % r['cortes']
+    if mc['descartados']:
+        txt += '   descartados %d' % mc['descartados']
+    return txt
 
 
 def on_value(name, val):
@@ -9077,6 +9464,8 @@ def _legend():
         lines.append(_legend_escena(W, c))
     if lvl >= 19:
         lines.append(_legend_modular(W, c))
+    if lvl >= 21:
+        lines.append(_legend_micro(W, c))
     return '\n'.join(lines)
 
 
