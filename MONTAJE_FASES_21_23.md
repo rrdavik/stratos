@@ -15,9 +15,10 @@ La sala entra en la pieza: desde la fase 21 el micrófono escucha al público, y
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La v55 añade el micrófono: flujo espectral, onsets, el pad 9 de erosión (baja escalones enteros), el corte por ruido de sala y la línea `MICRO` | `motor v55` |
+| `estratos_motor.py` | La v55 añade el micrófono: flujo espectral, onsets, el pad 9 de erosión (baja escalones enteros), el corte por ruido de sala y la línea `MICRO`; la v56, `Fuentemic` = chop (el audio de cualquier CHOP, como la sala virtual) | `motor v56` |
 | `estratos_comun.py` | La v37: `require_base(21)` acepta un proyecto en la fase 19 o en la 20 (los POPs, sin fusionar: D1) y el informe dice cuál encontró | `comun v37` |
-| `fase21_microfono.py` | El micrófono: página Fase21, `mic_in`, `mic_sim`, `mic_fuente` y `mic_flujo`, la fila del pad 9 en `perfiles_erosion` y `colores_drum` | `fase21 v1` |
+| `fase21_microfono.py` | El micrófono: página Fase21, `mic_in`, `mic_sim`, `mic_fuente` y `mic_flujo`, la fila del pad 9 en `perfiles_erosion` y `colores_drum` (v2: `Fuentemic` = chop y `Chopmic`) | `fase21 v2` |
+| `sala_virtual.py` y `sala_motor.py` | No son una fase: la maqueta de la instalación en `/project1/SALA` (ver *Sala virtual*) | `sala_virtual v1`, `sala v1` |
 | `fase7_erosion.py` | v15: relanzada sobre la fase 21, conserva la fila del micrófono (pad 9) de `perfiles_erosion` | `fase7 v15` |
 | `fase14_destructores.py` | v3: solo la autoprueba (cuenta también el pad 9 al repartir los pads en arañazos, cortes e impulsos) | `fase14 v3` |
 | `claude/PLAN_V5.md` | El plan v5, renumerado a las fases 24–31, encima de la 23 | — |
@@ -58,7 +59,7 @@ El motor recuece `mic_sim` y `mic_flujo` en cada fotograma desde `latido`: no ha
 
 ### Parámetros (página Fase21)
 
-`Fuentemic` (micrófono / simulación / ambos; ambos) · `Canalmic` 0 · `Umbralonset` 0,6 · `Refractariomic` 0,12 s · `Reduccionmic` 1 escalón · `Ventanaruido` 60 s · `Umbralcorte` 20 · `Profundidadmic` 3 · `Simonset` · `Simruido` 0 · `Simdrone` apagado
+`Fuentemic` (micrófono / simulación / ambos / chop; ambos) · `Chopmic` (con chop, la ruta del CHOP con el audio) · `Canalmic` 0 · `Umbralonset` 0,6 · `Refractariomic` 0,12 s · `Reduccionmic` 1 escalón · `Ventanaruido` 60 s · `Umbralcorte` 20 · `Profundidadmic` 3 · `Simonset` · `Simruido` 0 · `Simdrone` apagado
 
 La fila 9 de `perfiles_erosion` es la del micrófono (`pad` 9, `modo` erosion, `tipo` y `rol` micro): de ella se leen el radio y la profundidad (0 y 0), pero la **reducción la da `Reduccionmic`**. La fila 9 de `colores_drum` es su color. Al relanzar, una tabla de 8 filas gana la novena sin perder lo editado, y relanzar la fase 7 ya no la borra.
 
@@ -142,3 +143,68 @@ Lo que la simulación no puede comprobar: el audio real (el ruido de la sala, la
 3. **El dispositivo.** Que `mic_in` encuentra la interfaz (la línea `microfono:` del informe y la leyenda sin `(sin microfono)`), y que `Canalmic` es el canal del micrófono.
 4. **La cadena en TouchDesigner.** Que `mic_flujo` saca `flujo` cada fotograma con el micrófono (míralo en su visor) y que `Simonset` con `Fuentemic` = simulación da un onset.
 5. **Clic del estroboscopio** (cuando llegue la fase 23): que el detector no lo toma por público; si lo toma, ensanchar la ventana de descarte (`DESCARTE_DESTELLO` en el motor).
+
+---
+
+## Sala virtual (maqueta de la instalación)
+
+*No es una fase: no cambia `Nivel` ni el mundo. Es una maqueta de la sala en `/project1/SALA`, al lado de FASE1, para probar la pieza como si estuviera montada.*
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
+```
+
+Habla con Estratos **por los mismos sitios que el hardware real**, así que la pieza no sabe si la sala es de verdad:
+
+| Aparato real | En la maqueta | Entra o sale de FASE1 por |
+|---|---|---|
+| Micrófono | `audio_mic`: pasos, palmadas y toses de cada persona, el drone de los cuatro altavoces y el sub y el clic del estrobo, cada uno por 1/d y con su retardo (d / 343 m/s) | `Fuentemic` = chop, `Chopmic` = `/project1/SALA/audio_mic` (lo pone el script con `Usarmic`) |
+| Cámara cenital | `vista_cenital` a 3,5 m (75° de campo, como la Femto Bolt en NFOV), `render_cenital` (320 × 288) y `profundidad` | La fase 22, cuando exista |
+| Focos y estrobo | Una Light COMP por fila de la tabla (`luz_<nombre>`); con `Modoluz` = prueba recorren en un minuto depósito, tensión y erosión dominante | La fase 23 (DMX), cuando exista |
+| Esfera de LEDs | Una esfera de 1 m con la imagen de `FASE1/render` | — |
+
+### La sala
+
+- **8 × 6 m y 4 de alto** (`Ancho`, `Fondo`, `Alto`). Origen en el centro del suelo; mirando desde la entrada, x a la derecha y z hacia la entrada. La entrada, en el centro de la pared de delante; esa pared no se dibuja, para poder mirar dentro.
+- **La zona de la cámara** (5,4 × 4,5 m, `Zonaancho` y `Zonafondo`) dibujada en el suelo, centrada.
+- **La tabla `equipos`** (nombre, tipo, posición, a dónde apunta y tamaño o ángulo del cono) es editable y relanzar no la pisa; `Recolocar` la rehace con las medidas de ahora. Un foco más es una fila más (y relanzar, para crear su luz). Por defecto:
+
+| Equipo | Dónde |
+|---|---|
+| Esfera de LEDs, 1 m | Esquina del fondo a la izquierda, sobre una peana de 0,8 m (centro a 1,3 m) |
+| Subwoofer | Dentro de la peana, bajo la esfera |
+| 4 altavoces | Colgados a 3 m en las cuatro esquinas, apuntando al centro |
+| Micrófono | Colgado a 3 m, hacia el centro (1, 1), a más de 3 m del estrobo y del sub |
+| Cámara | Cenital, a 3,5 m en el centro |
+| 4 focos de baño | Colgados a 3,6 m, conos de 50°. Dos acompañan a la esfera (a su lado y detrás), apuntando al suelo y al público, nunca a ella |
+| Estroboscopio | En el suelo junto a la esfera, cono de 100°, hacia la sala |
+
+La especificación no fija cuántos focos hay («los focos no están decididos»): los 4 + 1 son el punto de partida.
+
+### Personas y ruido
+
+`Personas` (6) entran por la puerta cada `Llegada` s (8), pasean por 3 a 7 puntos parándose de 3 a 12 s en cada uno, salen y vuelven al rato, sin azar (un hash de la persona y del tramo) y lejos de la esfera y del estrobo. Hacen ruido: pisadas al andar (unos 20 dB por debajo de una palmada: solo cuentan las de cerca del micro), y palmadas o toses (`Ruidopublico` por segundo y persona, 0,05; `Reaccion` veces más con el estrobo encendido, 3). En 5 minutos simulados con 6 personas: 48 de 52 palmadas, 27 de 46 toses y 16 de 704 pisadas dan onset, y unos pocos los da el clic del estrobo.
+
+### Parámetros (página Sala de `/project1/SALA`)
+
+`Activa` · `Ancho` 8 · `Fondo` 6 · `Alto` 4 · `Zonaancho` 5,4 · `Zonafondo` 4,5 · `Recolocar` · `Personas` 6 · `Llegada` 8 s · `Ruidopublico` 0,05 · `Reaccion` 3 · `Volumendrone` 0,5 · `Palmada` · `Reiniciarsala` · `Usarmic` · `Modoluz` (apagada / prueba) · `Hzprueba` 2,5 (tope 3) · `Luzcasa` 0,25 · `Vista` (libre / cenital) · `Orbita` 30° · `Distancia` 11 m · `Alturavista` 5 m
+
+### Cómo mirarla
+
+Abre `render_sala`: la sala desde una cámara que orbita (`Orbita`, `Distancia`, `Alturavista`) o, con `Vista` = cenital, lo que ve la cámara del techo. `Palmada` da una palmada junto a la persona más cerca del micro, y la línea `MICRO` de FASE1 cuenta el onset.
+
+### Autoprueba
+
+- los equipos (esfera en una esquina del fondo, sub debajo, 4 altavoces colgados, micro en lo alto, cámara a 3,5 m, 4 focos y 1 estrobo); ningún foco de baño apunta a la esfera; el micro, a más de 3 m del estrobo y del sub; una luz por foco y estrobo;
+- las personas entran por la puerta, pasean y se paran dentro de la sala y lejos de la esfera; la misma sala da la misma historia;
+- el drone de los altavoces y el sub no da onsets en 5 s; una palmada junto al micro da un onset y más flujo que una al otro lado de la sala; el sonido llega con su retardo;
+- la luz de prueba: el estrobo solo en blanco y como mucho 3 destellos en cualquier ventana de 1 s; depósito en ámbar tenue y tensión hacia blanco frío;
+- `render_cenital` y `profundidad`; la esfera con la imagen de FASE1;
+- `Palmada`: FASE1 la oye por `audio_mic` y cuenta un onset.
+
+### Lo que la maqueta no es
+
+- **La esfera real pide un mapa equirectangular 2:1** por HDMI (especificación técnica). Estratos aún no lo saca: renderiza una cámara mirando al globo, que vale para un proyector. En la maqueta, esa imagen envuelve la esfera. Sacar el mapa equirectangular (un Render TOP en cubemap y su conversión) es trabajo de Estratos, no de la maqueta, y no está en ninguna fase del plan.
+- **Sin reverberación ni ruido de fondo de la sala**: por eso `Umbralonset` y `Umbralcorte` se siguen ajustando en la sala real.
+- **La cámara pone «la pared de la pantalla» al norte** (especificación «casilla probable»). Con la esfera en una esquina no hay pared de pantalla: queda por decidir qué lado de la zona es el norte del planeta (lo natural, el del fondo, donde está la esfera).
+- En el simulador de pruebas solo se comprueba que todo se monta y calcula; cómo se ve, solo en TouchDesigner.

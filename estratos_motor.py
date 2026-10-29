@@ -25,7 +25,9 @@
 #                 discretas, el suelo oscuro y la tapa neutra; motor v54: el
 #                 SEQ2 con Filtrar2 y Nota2, como el SEQ1 con Filtrar y Nota;
 #                 fase 21, motor v55: el microfono de la sala, un pad 9 de
-#                 erosion que golpea con los onsets del publico).
+#                 erosion que golpea con los onsets del publico; motor v56:
+#                 Fuentemic = chop, el audio de cualquier CHOP, como la sala
+#                 virtual).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -38,7 +40,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v55'
+MOTOR_VERSION = 'motor v56'
 
 import math
 
@@ -232,7 +234,7 @@ DEFAULT_CFG = dict(
     smog=1.0, niebla=1.0, glitch=1.0, modular=None,
     # fase 21: el microfono
     umbral_onset=0.6, refractario_mic=0.12, reduccion_mic=1.0, ventana_ruido=60.0, umbral_corte=20.0,
-    prof_mic=3, fuente_mic=2, canal_mic=0,
+    prof_mic=3, fuente_mic=2, canal_mic=0, chop_mic='',
 )
 
 
@@ -7638,7 +7640,7 @@ FREC_MIC = (200.0, 12000.0)     # las bandas, repartidas en escala logaritmica
 PISO_MIC = -60.0                # dB: el silencio
 HIST_MIC = 3                    # bloques anteriores con los que se compara
 DESCARTE_DESTELLO = 0.15        # s tras un destello propio en que un onset no cuenta
-FUENTES_MIC = ['microfono', 'simulacion', 'ambos']
+FUENTES_MIC = ['microfono', 'simulacion', 'ambos', 'chop']     # chop: Chopmic (motor v56)
 _MIC = dict(hist=[], muestra=0, clic=0)
 
 
@@ -8101,7 +8103,8 @@ def cfg():
                  umbral_corte=max(1e-6, _p('Umbralcorte', c['umbral_corte'])),
                  prof_mic=max(1, int(_p('Profundidadmic', c['prof_mic']))),
                  fuente_mic=_menu('Fuentemic', FUENTES_MIC, c['fuente_mic']),
-                 canal_mic=max(0, int(_p('Canalmic', c['canal_mic']))))
+                 canal_mic=max(0, int(_p('Canalmic', c['canal_mic']))),
+                 chop_mic=str(_p('Chopmic', '')).strip())
         red, rad, prof = c['perfiles'][PAD_MIC]           # la reduccion del pad 9, de Reduccionmic
         c['perfiles'][PAD_MIC] = (c['reduccion_mic'], rad, prof)
     if c['nivel'] >= 18:
@@ -8682,6 +8685,8 @@ def mic_tick(W, c, now):
     que sale de su ventana."""
     _CACHE['mic'] = (absTime.frame, W, c, now)
     for nm in ('mic_sim', 'mic_flujo'):  # la senal sintetica, aunque nada cambie en su entrada
+        if nm == 'mic_sim' and c['fuente_mic'] not in (1, 2):
+            continue                    # con chop, mic_flujo recuece el CHOP de Chopmic
         o = parent().op(nm)
         if o is not None:
             try:
@@ -8712,6 +8717,13 @@ def mic_cook(scriptOp):
     y onset."""
     W, c, now = _mic_ctx()
     src = scriptOp.inputs[0] if scriptOp.inputs else parent().op('mic_fuente')
+    if c['fuente_mic'] == 3:            # motor v56: el audio de otro CHOP (Chopmic)
+        src = op(c['chop_mic']) if c['chop_mic'] else None
+        if src is not None:
+            try:
+                src.cook(force=True)
+            except Exception:
+                pass
     res = None
     try:
         x = _canal(src.numpyArray(), c['canal_mic']) if src is not None else None
@@ -8792,7 +8804,9 @@ def _legend_micro(W, c):
     """MICRO (fase 21): la fuente, los onsets, el ultimo y el ruido de sala."""
     mc, r = W['mic'], W['ruido']
     fuente = FUENTES_MIC[int(c['fuente_mic']) % len(FUENTES_MIC)]
-    if fuente != 'simulacion' and not microfono_encontrado()[0]:
+    if fuente == 'chop':
+        fuente = 'chop %s' % (c['chop_mic'] or '(sin Chopmic)')
+    elif fuente != 'simulacion' and not microfono_encontrado()[0]:
         fuente += ' (sin microfono)'
     u = mc.get('ultimo')
     ult = ('flujo %.2f celda %d hace %.1f s' % (u['flujo'], u['celda'], max(0.0, absTime.seconds - u['t']))

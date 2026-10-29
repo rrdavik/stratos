@@ -41,13 +41,13 @@ _MENUS = {'rord': ROT_ORDERS, 'xord': XFORM_ORDERS, 'instancerord': ROT_ORDERS,
           'instancexord': XFORM_ORDERS,
           'instancecolormode': ['replace', 'multiply', 'add', 'subtract'],
           'viewanglemethod': ['horzfov', 'vertfov', 'focalaperture'],
-          'projection': ['perspective', 'ortho']}
+          'projection': ['perspective', 'ortho'], 'lighttype': ['point', 'cone', 'distant']}
 _DEFAULTS = {'sx': 1.0, 'sy': 1.0, 'sz': 1.0, 'scale': 1.0, 'rord': 'xyz', 'xord': 'srt',
              'instancerord': 'xyz', 'instancexord': 'srt', 'instancecolormode': 'multiply',
              'fov': 45.0, 'viewanglemethod': 'horzfov', 'focal': 50.0, 'aperture': 36.0,
              'near': 0.1, 'far': 1000.0, 'dimmer': 1.0, 'render': True, 'instancing': False,
              'cr': 1.0, 'cg': 1.0, 'cb': 1.0,
-             'resolutionw': 1280, 'resolutionh': 720}
+             'resolutionw': 1280, 'resolutionh': 720, 'lighttype': 'point'}
 STRICT = {
     'baseCOMP': [],
     'nullCOMP': list(_XFORM),
@@ -59,7 +59,7 @@ STRICT = {
         'instancecolormode', 'instancerottox', 'instancerottoy', 'instancerottoz'],
     'cameraCOMP': list(_XFORM) + ['xord', 'rord', 'fov', 'viewanglemethod', 'focal',
                                   'aperture', 'near', 'far', 'projection'],
-    'lightCOMP': list(_XFORM) + ['xord', 'rord', 'dimmer', 'cr', 'cg', 'cb', 'lighttype'],
+    'lightCOMP': list(_XFORM) + ['xord', 'rord', 'dimmer', 'cr', 'cg', 'cb', 'lighttype', 'coneangle', 'conedelta'],
     # fase 21 (sala): los parametros de su pagina principal
     'audiodeviceinCHOP': ['active', 'driver', 'device', 'rate', 'bufferlength'],
     'switchCHOP': ['index'],
