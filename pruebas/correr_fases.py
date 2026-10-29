@@ -10,6 +10,8 @@ camino del MIDI real, fotograma a fotograma; desde la fase 21, onsets del
 microfono por su senal sintetica) y evalua todas las expresiones.
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
+Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
+sesion la oye por su microfono virtual) y la relanza con ellas.
 """
 
 import contextlib
@@ -27,6 +29,7 @@ FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_espec
          'fase10_direccion.py', 'fase11_piel.py', 'fase12_moduladores.py',
          'fase13_tejido.py', 'fase14_destructores.py', 'fase15_era.py', 'fase16_cortes.py', 'fase17_tiempo.py', 'fase18_escenas.py', 'fase19_modular.py',
          'fase21_microfono.py', 'fase22_camara.py', 'fase23_sala.py']
+SALA = 'sala_virtual.py'           # no es una fase: la maqueta de la instalacion
 
 
 def correr(sim, archivo, verbose=False):
@@ -108,6 +111,9 @@ def main():
         todo = todo and bien
         if hasta and f.startswith(hasta):
             break
+    if os.path.exists(os.path.join(REPO, SALA)) and not hasta:
+        bien, _ = correr(sim, SALA, verbose)
+        todo = todo and bien
     with contextlib.redirect_stdout(io.StringIO()):
         malas = sesion(sim)
     m = sim.op('/project1/FASE1/motor').module
@@ -121,7 +127,7 @@ def main():
     # relanzar sobre el proyecto avanzado: el mundo no se pierde
     antes = (m.occupied(W), list(W['occ']))
     print('relanzando las fases sobre el proyecto en el nivel %d' % m.cfg()['nivel'])
-    for f in FASES[1:]:
+    for f in FASES[1:] + [SALA]:
         if not os.path.exists(os.path.join(REPO, f)):
             continue
         bien, _ = correr(sim, f, verbose)

@@ -55,7 +55,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase21 v1  (microfono: onsets por flujo espectral, pad 9 de erosion y corte por ruido de sala)'
+VERSION = 'fase21 v2  (microfono: Fuentemic = chop, el audio de cualquier CHOP, como la sala virtual)'
 banner(VERSION)
 
 base = require_base(21)
@@ -67,8 +67,20 @@ m = motor.module
 # -----------------------------------------------------------------------------
 
 page = get_page(base, 'Fase21')
+ETIQUETAS_FUENTE = ['Microfono (mic_in)', 'Simulacion (mic_sim)', 'Los dos sumados', 'Otro CHOP (Chopmic)']
 add_par(base, page, 'menu', 'Fuentemic', 'De donde llega el sonido de la sala', 'ambos', menu=m.FUENTES_MIC,
-        menu_labels=['Microfono (mic_in)', 'Simulacion (mic_sim)', 'Los dos sumados'])
+        menu_labels=ETIQUETAS_FUENTE)
+try:                                    # v2: el menu de un proyecto en la v1 gana chop
+    fp = base.par.Fuentemic
+    if list(fp.menuNames) != list(m.FUENTES_MIC):
+        actual = fp.eval()
+        fp.menuNames = list(m.FUENTES_MIC)
+        fp.menuLabels = ETIQUETAS_FUENTE
+        fp.val = actual
+        ok('Fuentemic: nueva opcion chop (el audio del CHOP de Chopmic)')
+except Exception:
+    pass
+add_par(base, page, 'str', 'Chopmic', 'CHOP con el audio (Fuentemic = chop)', '')
 add_par(base, page, 'int', 'Canalmic', 'Canal del microfono (0: el primero)', 0, 0, 31, clamp=True)
 add_par(base, page, 'float', 'Umbralonset', 'Umbral de onset del microfono', 0.6, 0.0, 5.0, clamp=True)
 add_par(base, page, 'float', 'Refractariomic', 'Tiempo muerto entre onsets (s)', 0.12, 0.02, 1.0, clamp=True)
@@ -79,7 +91,7 @@ add_par(base, page, 'int', 'Profundidadmic', 'Profundidad del corte por ruido', 
 add_par(base, page, 'pulse', 'Simonset', 'Probar: clic')
 add_par(base, page, 'float', 'Simruido', 'Probar: ruido de sala', 0.0, 0.0, 1.0, clamp=True)
 add_par(base, page, 'toggle', 'Simdrone', 'Probar: drone', False)
-ok('pagina Fase21: Fuentemic (ambos), Canalmic 0, Umbralonset 0,6, Refractariomic 0,12, Reduccionmic 1, '
+ok('pagina Fase21: Fuentemic (ambos), Chopmic, Canalmic 0, Umbralonset 0,6, Refractariomic 0,12, Reduccionmic 1, '
    'Ventanaruido 60, Umbralcorte 20, Profundidadmic 3, Simonset, Simruido, Simdrone')
 
 # -----------------------------------------------------------------------------
@@ -228,7 +240,7 @@ class TablaPrueba(object):
 def prueba(t):
     m = t.m
     guarda = {}
-    for nm in ('Fuentemic', 'Canalmic', 'Umbralonset', 'Refractariomic', 'Reduccionmic', 'Ventanaruido',
+    for nm in ('Fuentemic', 'Chopmic', 'Canalmic', 'Umbralonset', 'Refractariomic', 'Reduccionmic', 'Ventanaruido',
                'Umbralcorte', 'Profundidadmic', 'Simruido', 'Simdrone', 'Objetivo', 'Tema', 'Temaenciclo',
                'Nota', 'Velprueba', 'Umbraldensidad', 'Golpesescalada', 'Ventanaescalada'):
         try:
@@ -422,6 +434,17 @@ def _prueba(t, m):
     filas = [log[r, log.numCols - 1].val for r in range(log.numRows)] if log is not None else []
     t.check('midi_log: una fila MICRO por onset', any(f.startswith('MICRO onset flujo') for f in filas))
     t.check('leyenda MICRO', 'MICRO' in m.legend() and 'onsets 1' in m.legend())
+
+    # 8. Fuentemic = chop: el audio de otro CHOP (aqui, el mismo mic_sim)
+    W, c = nuevo()
+    base.par.Fuentemic = 'chop'
+    base.par.Chopmic = base.op('mic_sim').path
+    for _ in range(5):
+        m.mic_tick(W, m.cfg(), reloj[0])
+    m.on_pulse('Simonset')
+    m.mic_tick(W, m.cfg(), reloj[0])
+    t.check('Fuentemic chop: el detector lee el CHOP de Chopmic', W['mic']['n'] == 1
+            and 'chop ' in m.legend(), 'onsets %d' % W['mic']['n'])
 
 
 run_test(base, prueba)
