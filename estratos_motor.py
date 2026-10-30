@@ -27,7 +27,8 @@
 #                 fase 21, motor v55: el microfono de la sala, un pad 9 de
 #                 erosion que golpea con los onsets del publico; motor v56:
 #                 Fuentemic = chop, el audio de cualquier CHOP, como la sala
-#                 virtual).
+#                 virtual; motor v57: mic_sim y mic_flujo fuera del modo Time
+#                 Slice de su entrada).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -40,7 +41,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v56'
+MOTOR_VERSION = 'motor v57'
 
 import math
 
@@ -8711,6 +8712,16 @@ def _canal(arr, k):
     return arr[min(int(k), arr.shape[0] - 1)]
 
 
+def _sin_timeslice(scriptOp):
+    """Un Script CHOP con el Audio Device In aguas arriba hereda su modo Time
+    Slice, y en el no puede fijar numSamples: mic_sim y mic_flujo sacan un
+    bloque (o una muestra) por cocinado, asi que salen de el (motor v57)."""
+    try:
+        scriptOp.isTimeSlice = False
+    except Exception:
+        pass
+
+
 def mic_cook(scriptOp):
     """onCook del Script CHOP mic_flujo: el flujo del bloque de su entrada
     (mic_fuente), el onset y, si lo hay, la erosion. Saca dos canales: flujo
@@ -8731,6 +8742,7 @@ def mic_cook(scriptOp):
         res = mic_bloque(W, c, x, rate, now) if x is not None else None
     except Exception as e:
         _say('micb', 'AVISO  microfono: %s' % e)
+    _sin_timeslice(scriptOp)
     scriptOp.clear()
     scriptOp.numSamples = 1
     scriptOp.appendChan('flujo')[0] = res['flujo'] if res else 0.0
@@ -8775,6 +8787,7 @@ def mic_sim_cook(scriptOp):
                 x[n - k:] += y[y.size - k:]
         except Exception:
             pass
+    _sin_timeslice(scriptOp)
     scriptOp.clear()
     scriptOp.rate = MIC_RATE
     scriptOp.numSamples = n

@@ -139,7 +139,11 @@ def main():
     with contextlib.redirect_stdout(io.StringIO()):
         malas2 = sesion(sim, compases=4)
     print('%-6s sesion tras relanzar: %d expresiones con error' % ('OK' if not malas2 else 'FALLO', len(malas2)))
-    return 0 if todo and not malas and not malas2 and igual else 1
+    avisos = sorted(set(sim.avisos))
+    print('%-6s avisos de TouchDesigner: %d' % ('OK' if not avisos else 'FALLO', len(avisos)))
+    for ruta, texto in avisos[:10]:
+        print('         %s: %s' % (ruta, texto))
+    return 0 if todo and not malas and not malas2 and igual and not avisos else 1
 
 
 if __name__ == '__main__':

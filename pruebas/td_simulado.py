@@ -14,7 +14,10 @@ como alli, y el script lo avisa con '..'. Los demas SOP, MAT, TOP, CHOP y
 DAT aceptan cualquier nombre (no comprobamos sus parametros).
 
 Audio: el Audio Device In CHOP no tiene dispositivo (sin canales, como un
-ordenador sin microfono). numpyArray() da las muestras de un CHOP (canales x
+ordenador sin microfono) y va en modo Time Slice, como alli: un CHOP que lo
+tenga aguas arriba tambien, y un Script CHOP en ese modo no puede fijar
+numSamples (deja el aviso de TouchDesigner en Sim.avisos) salvo que ponga
+isTimeSlice = False. numpyArray() da las muestras de un CHOP (canales x
 muestras): un Script CHOP se cocina antes, una vez por fotograma, y un
 Switch pasa la entrada de su index. En un TOP, lo que se le copio.
 
@@ -350,6 +353,7 @@ class OP(object):
         self._n = 1
         self.rate = 60.0
         self._cocinado = None
+        self._timeslice = None              # None: lo decide su entrada
         self.nodeX = self.nodeY = 0
         self.render = self.display = True
         self.allowCooking = True
@@ -576,9 +580,26 @@ class OP(object):
 
     @numSamples.setter
     def numSamples(self, n):
+        if self.OPType == 'scriptCHOP' and self.isTimeSlice:
+            self.sim.avisos.append((self.path, 'tdWarning: Editing numSamples is not supported in Time Slice '
+                                    'mode. Disable Time Slice mode by setting CHOP.isTimeSlice=False'))
         self._n = int(n)
         for ch in self._chans:
             ch._vals = (ch._vals + [0.0] * self._n)[:self._n]
+
+    @property
+    def isTimeSlice(self):
+        """Como en TouchDesigner: el Audio Device In va en Time Slice, y un CHOP
+        con una entrada en Time Slice tambien (salvo que se diga lo contrario)."""
+        if self._timeslice is not None:
+            return self._timeslice
+        if self.OPType == 'audiodeviceinCHOP':
+            return True
+        return any(getattr(i, 'isTimeSlice', False) for i in self.inputs if i.OPType.endswith('CHOP'))
+
+    @isTimeSlice.setter
+    def isTimeSlice(self, v):
+        self._timeslice = bool(v)
 
     @property
     def numChans(self):
@@ -693,6 +714,7 @@ class Sim(object):
         self.absTime = AbsTime()
         self.estricto = False
         self.callbacks_pars = True
+        self.avisos = []                    # [(ruta, texto)] de lo que TouchDesigner avisaria
         self.root = OP(self, 'baseCOMP', '', None)
         self.root._name = ''
         local = self.root.create('baseCOMP', 'local')
