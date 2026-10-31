@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v39'
+VERSION_COMUN = 'comun v40'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1197,6 +1197,52 @@ def fase4_al_dia(base):
     return True
 
 
+# --- la pagina Fase6, mas corta (comun v40, motor v60) ------------------------
+# De 12 parametros a 9: las negras por compas son las de la linea de tiempo
+# (Signature, las mismas con las que gira el planeta); Giromin 1 apaga el
+# giro vivo (antes Girovivo); la memoria del territorio queda en 8 compases.
+
+GIROMIN_LABEL = 'Factor de giro minimo (1 = el giro no se frena)'
+
+
+def fase6_al_dia(base):
+    """Quita Negrasporcompas, Girovivo y Compasesterritorio de un proyecto
+    anterior a la fase 6 v6. Girovivo apagado da Giromin 1."""
+    quitados = []
+    if has_par(base, 'Girovivo'):
+        try:
+            if not bool(base.par.Girovivo.eval()) and has_par(base, 'Giromin'):
+                base.par.Giromin = 1.0
+        except Exception:
+            pass
+        if remove_par(base, 'Girovivo'):
+            quitados.append('Girovivo (ahora Giromin 1)')
+    if has_par(base, 'Negrasporcompas'):
+        try:
+            viejo = int(base.par.Negrasporcompas.eval())
+            linea = int(base.op('ritmo').module.beats_per_bar())
+            if viejo != linea:
+                info('Negrasporcompas era %d y la linea de tiempo tiene %d negras por compas: '
+                     'el ciclo cuenta ahora %d (cambia Signature en la linea de tiempo si no es '
+                     'lo que quieres)' % (viejo, linea, linea))
+        except Exception:
+            pass
+        if remove_par(base, 'Negrasporcompas'):
+            quitados.append('Negrasporcompas (las de la linea de tiempo)')
+    if has_par(base, 'Compasesterritorio'):
+        try:
+            if int(base.par.Compasesterritorio.eval()) != 8:
+                info('Compasesterritorio era %d: el territorio recuerda ahora 8 compases'
+                     % int(base.par.Compasesterritorio.eval()))
+        except Exception:
+            pass
+        if remove_par(base, 'Compasesterritorio'):
+            quitados.append('Compasesterritorio (8 compases)')
+    _relabel(base, 'Giromin', GIROMIN_LABEL)
+    if quitados:
+        ok('pagina Fase6: quitados %s' % ', '.join(quitados))
+
+
 def fase3_al_dia(base):
     """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
     Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
@@ -1343,6 +1389,7 @@ def install_core(base, carpeta, fase):
     add_grid_pars(base)
     fase3_al_dia(base)
     fase4_al_dia(base)
+    fase6_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)

@@ -27,17 +27,27 @@ maduro y deja de cambiar, o cuando alcanza su edad maxima.
                      pattern) o Forzarciclo. Nunca antes de Ciclomin,
                      salvo Forzarciclo.
   TERRITORIO (v4)    las celdas que han tocado las notas del SEQ1 y del
-                     SEQ2 en los ultimos Compasesterritorio compases (8),
+                     SEQ2 en los ultimos 8 compases,
                      mas sus vecinas (hasta donde llegan los desbordes).
                      La edad maxima solo entierra si al menos
                      Umbralterritorio (80 %) de ese territorio esta
                      ocupado. Sin tope de seguridad: mientras la bateria
                      deshaga mas de lo que se construye, el mundo sigue.
   GIRO VIVO          el planeta se frena a medida que el mundo deja de
-                     cambiar y vuelve a acelerar con la novedad.
+                     cambiar, hasta Giromin, y vuelve a acelerar con la
+                     novedad. Giromin 1: no se frena.
   TABLA ciclos       una fila por ciclo cerrado: para afinar los umbrales.
 
 Barsperturn vuelve a ser manual.
+
+PAGINA MAS CORTA (v6): 9 parametros en vez de 12. Fuera:
+  Negrasporcompas     el compas es el de la linea de tiempo (Signature),
+                      el mismo con el que gira el planeta
+  Girovivo            Giromin 1 = el giro no se frena
+  Compasesterritorio  el territorio recuerda siempre 8 compases
+Relanzar cualquier fase los quita de un proyecto anterior: Girovivo
+apagado da Giromin 1, y el informe avisa si Negrasporcompas no coincidia
+con la linea de tiempo o Compasesterritorio no era 8.
 
 PRUEBA PENDIENTE CON EL APARATO
 -------------------------------
@@ -56,7 +66,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase6 v5  (eras mas largas: Ciclomin 16, Compasesquietos 3)'
+VERSION = 'fase6 v6  (pagina mas corta: el compas de la linea de tiempo, Giromin 1 sin giro vivo)'
 banner(VERSION)
 
 base = require_base(6)
@@ -84,16 +94,12 @@ except Exception:
     pass
 add_par(base, page, 'float', 'Umbralterritorio', 'Territorio ocupado para la edad maxima', 0.8,
         0.0, 1.0)
-add_par(base, page, 'int', 'Compasesterritorio', 'Compases de memoria del territorio', 8, 1, 64,
-        clamp=True)
-add_par(base, page, 'int', 'Negrasporcompas', 'Negras por compas', 4, 1, 16, clamp=True)
 add_par(base, page, 'toggle', 'Cambioentierra', 'Cambio de pattern entierra el mundo', False)
-add_par(base, page, 'toggle', 'Girovivo', 'El giro se frena sin novedad', True)
-add_par(base, page, 'float', 'Giromin', 'Factor de giro minimo', 0.25, 0.0, 1.0)
+add_par(base, page, 'float', 'Giromin', GIROMIN_LABEL, 0.25, 0.0, 1.0)
 add_par(base, page, 'pulse', 'Forzarciclo', 'Terminar el ciclo ahora')
 ok('pagina Fase6: Umbralmadurez, Umbralnovedad, Compasesquietos, Ciclomin, Ciclomax, '
-   'Umbralterritorio, Compasesterritorio, '
-   'Negrasporcompas, Cambioentierra, Girovivo, Giromin, Forzarciclo')
+   'Umbralterritorio, Cambioentierra, Giromin, Forzarciclo (compas: %d negras, el de la '
+   'linea de tiempo)' % motor.module.cfg()['beats_per_bar'])
 try:
     if int(base.par.Ciclomax) < int(base.par.Ciclomin):
         info('Ciclomax (%d) < Ciclomin (%d): se usa Ciclomax = Ciclomin'
@@ -124,12 +130,13 @@ leeme(base, 6, """FASE 6 - EL CICLO LO CIERRA EL MUNDO
     madurez = formaciones en el limite / formaciones
   El mundo se entierra cuando lleva Compasesquietos compases maduro
   (Umbralmadurez) y quieto (Umbralnovedad), a partir de Ciclomin.
-  Territorio = celdas tocadas por SEQ1/SEQ2 en los ultimos
-  Compasesterritorio compases y sus vecinas. Pasado Ciclomax solo se
+  Territorio = celdas tocadas por SEQ1/SEQ2 en los ultimos 8
+  compases y sus vecinas. Pasado Ciclomax solo se
   entierra si el territorio esta ocupado (Umbralterritorio); si no, la
   leyenda dice 'esperando territorio' y el mundo sigue (sin tope).
   Cambioentierra: una rafaga de All Notes Off sin STOP tambien entierra.
-  Girovivo: el planeta se frena cuando el mundo deja de cambiar.
+  Giromin: el planeta se frena hasta ahi cuando el mundo deja de
+  cambiar (1: no se frena). El compas es el de la linea de tiempo.
   Tabla ciclos: compases, motivo, madurez, novedad, grosor y territorio.""")
 
 print_report()
@@ -217,7 +224,7 @@ def prueba(t):
     dentro = m.territory_cells(W, c) == set([a] + list(m.NEIGH[a]))
     W['bar_n'] = 10 + int(c['compases_territorio'])
     t.check('territorio: la celda tocada y sus vecinas; deja de contar a los '
-            'Compasesterritorio compases', dentro and not m.territory_cells(W, c))
+            '8 compases', dentro and not m.territory_cells(W, c))
     # 3. parado: sin notas el reloj no avanza
     W = m.new_world()
     fins = tocar(W, cmax + 2, lambda k: [])
@@ -247,6 +254,16 @@ def prueba(t):
             'x%.2f .. x%.2f' % (lo, W['giro_factor']))
     t.check('ritmo multiplica el giro por el giro vivo',
             'giro_factor()' in base.op('ritmo').text)
+    # v6: la pagina mas corta
+    fuera = [nm for nm in ('Negrasporcompas', 'Girovivo', 'Compasesterritorio') if has_par(base, nm)]
+    t.check('pagina Fase6 sin Negrasporcompas, Girovivo ni Compasesterritorio', not fuera,
+            'siguen: %s' % ', '.join(fuera) if fuera else '')
+    t.check('el compas del ciclo es el de la linea de tiempo',
+            m.cfg()['beats_per_bar'] == int(base.op('ritmo').module.beats_per_bar()))
+    W1 = m.new_world()
+    W1['novedad'] = 0.0
+    c1 = dict(c, giro_min=1.0, giro_vivo=0)
+    t.check('Giromin 1: el giro no se frena', m.giro_step(W1, c1, 1.0, 120.0) == 1.0)
     # 6. por el camino real: Forzarciclo, START y CC 123
     tabla = base.op('ciclos')
     filas = [[cell.val for cell in tabla.row(r)] for r in range(tabla.numRows)]

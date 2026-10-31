@@ -23,7 +23,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11; v13: la página Fase3 con 16 parámetros en vez de 22, ver «Página Fase3») | `fase3 v13` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11; v8: la página Fase4 con 4 parámetros en vez de 8, ver «Página Fase4») | `fase4 v8` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2; v3: `Filtrar2` y `Nota2`; v4: los parámetros del SEQ2 pasan a la página Fase2 y desaparece la página Fase5 | `fase5 v4` |
-| `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
+| `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3; v6: la página Fase6 con 9 parámetros en vez de 12, ver «Página Fase6») | `fase6 v6` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v14` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46); v12: conchas discretas (suelo oscuro, poco contraste ocupada/vacía, tapa neutra; `Paletaluz`, `Paletaalterna`, `Contrasteocupada`, `Tapaneutra`, `Tapaluz`, motor v53) | `fase8 v12` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar; v10: el bombo y el tom ya no cortan, su destello es suave y sigue el pumping; v11: la autoprueba, con el pumping en seco) | `fase9 v11` |
@@ -265,7 +265,7 @@ El material lo sigue decidiendo la nota fundadora.
 
 | Escucha | Origen | Para qué |
 |---|---|---|
-| Pulso de tempo | Tempo del proyecto (`ritmo.tempo()`), que fija el BeatStep vía midicontrolx, el mismo desde la fase 1 | Contar compases (`Negrasporcompas`) y suavizar `giro_factor` en un compás |
+| Pulso de tempo | Tempo del proyecto (`ritmo.tempo()`), que fija el BeatStep vía midicontrolx, el mismo desde la fase 1 | Contar compases (las negras de la línea de tiempo) y suavizar `giro_factor` en un compás |
 | Transporte | Play o pausa de la línea de tiempo | El reloj del ciclo solo avanza en play |
 | STOP | Mensaje de transporte MIDI | Para el reloj si llega después de la última nota; distingue la ráfaga de All Notes Off que acompaña a un STOP |
 | START / MMC Play | `FA` o MMC Play | Solo reanuda la marcha; ya no pone ningún paso a 0 |
@@ -287,7 +287,7 @@ Deja de escuchar, respecto a la v1: el intervalo entre notas como medida del pas
 
 **El bombo y el ciclo.** Cada temblor del bombo (fase 7) cambia la forma de muchas celdas a la vez, las que están por debajo de la corona. Mientras suena, la novedad no baja del umbral y el mundo no se estanca. Desde la fase 6 v4 tampoco se entierra por edad máxima mientras la batería no deje llenar el territorio: un mundo medio vacío ya no se entierra solo por llevar `Ciclomax` compases. Al quitar el bombo, el mundo se asienta y se entierra por estancamiento. Dicho en términos de directo: **el breakdown entierra el mundo**. En simulación (fase 6 v4, `Umbralnovedad` 0,15, `Compasesquietos` 2), el mundo se entierra unos 24 compases después de 16 compases de bombo a negras, porque antes vuelve a crecer lo erosionado.
 
-**Reloj de compases.** Cuenta compases con el tempo del proyecto, el mismo que hace girar el núcleo (`ritmo.tempo()`). Un compás son `Negrasporcompas` negras (4). Solo avanza con el secuenciador en marcha: línea de tiempo en play, ningún STOP posterior a la última nota y alguna nota en los últimos 4 compases. START y MMC Play se siguen recibiendo, pero ya no ponen ningún paso a 0.
+**Reloj de compases.** Cuenta compases con el tempo del proyecto, el mismo que hace girar el núcleo (`ritmo.tempo()`). Un compás son las negras por compás de la línea de tiempo (`Signature`, 4 por defecto), las mismas con las que gira el planeta; hasta la fase 6 v5 era el parámetro `Negrasporcompas`. Solo avanza con el secuenciador en marcha: línea de tiempo en play, ningún STOP posterior a la última nota y alguna nota en los últimos 4 compases. START y MMC Play se siguen recibiendo, pero ya no ponen ningún paso a 0.
 
 **Las dos medidas.** En cada compás que avanza el reloj, el motor toma una foto de la forma de cada celda:
 
@@ -305,11 +305,11 @@ madurez = formaciones con ocupación >= Umbralram / formaciones (sin contar sat�
 **Territorio** (fase 6 v4). La edad máxima solo entierra un mundo lleno:
 
 ```
-territorio = celdas tocadas por SEQ1 o SEQ2 en los últimos Compasesterritorio compases, más sus vecinas
+territorio = celdas tocadas por SEQ1 o SEQ2 en los últimos 8 compases, más sus vecinas
 ocupación  = celdas del territorio con ocupación > 0 / celdas del territorio   (0 si el territorio está vacío)
 ```
 
-- Cada nota de un secuenciador apunta su celda con el compás en que llegó. Al pasar `Compasesterritorio` compases (8) sin volver a tocarla, la celda deja de contar.
+- Cada nota de un secuenciador apunta su celda con el compás en que llegó. Al pasar 8 compases sin volver a tocarla, la celda deja de contar.
 - La batería no crea territorio: solo lo vacía. Con batería constante, el territorio no se llena y el mundo sigue pasado `Ciclomax`. La leyenda lo dice con `esperando territorio`.
 - **No hay tope de seguridad.** Si el territorio no se llena, el mundo no se entierra por edad máxima; lo enterrarán el estancamiento al quitar la batería, `Cambioentierra` o `Forzarciclo`.
 - En cuanto el territorio llega a `Umbralterritorio`, el ciclo se cierra en ese mismo compás.
@@ -330,7 +330,7 @@ Con `Nivel` 6 o 7 el evento solo informa: el mundo no se entierra, así que pued
 
 **Cambio de pattern.** Ahora solo se detecta por la ráfaga de All Notes Off (CC 123 en 8 canales o más en 0,12 s) sin STOP. Ya no se detecta por las notas: eso dependía de la biblioteca, que desaparece. Con `Cambioentierra` apagado, la ráfaga solo da el AVISO.
 
-**Giro vivo.** `Barsperturn` vuelve a ser manual para siempre; si tenías `Turnauto`, se queda el valor que tuviera. Con `Girovivo`, el giro del núcleo se multiplica por un factor:
+**Giro vivo.** `Barsperturn` vuelve a ser manual para siempre; si tenías `Turnauto`, se queda el valor que tuviera. Con `Giromin` por debajo de 1, el giro del núcleo se multiplica por un factor (con `Giromin` 1 no se frena; hasta la v5 lo apagaba `Girovivo`):
 
 ```
 objetivo    = clamp(novedad / (4 × Umbralnovedad), Giromin, 1)
@@ -341,7 +341,15 @@ El planeta se frena a medida que el mundo deja de cambiar (justo antes de enterr
 
 **Tabla `ciclos`.** Una fila por ciclo cerrado: `ciclo`, `compases`, `segundos`, `motivo`, `madurez`, `novedad`, `grosor` (desde la fase 8) y `territorio` (fase 6 v4: la ocupación del territorio al cerrar). Guarda las últimas 200. Al relanzar la fase 6, una tabla antigua gana las columnas que le faltan sin perder filas. Sirve para afinar los umbrales con el aparato.
 
-**Página Fase6:** `Umbralmadurez` 0,6 · `Umbralnovedad` 0,15 · `Compasesquietos` 3 · `Ciclomin` 16 · `Ciclomax` 64 (*Edad maxima (si el territorio esta lleno)*) · `Umbralterritorio` 0,8 (*Territorio ocupado para la edad maxima*) · `Compasesterritorio` 8 (*Compases de memoria del territorio*) · `Negrasporcompas` 4 · `Cambioentierra` (apagado) · `Girovivo` (encendido) · `Giromin` 0,25 · `Forzarciclo`
+**Página Fase6:** `Umbralmadurez` 0,6 · `Umbralnovedad` 0,15 · `Compasesquietos` 3 · `Ciclomin` 16 · `Ciclomax` 64 (*Edad maxima (si el territorio esta lleno)*) · `Umbralterritorio` 0,8 (*Territorio ocupado para la edad maxima*) · `Cambioentierra` (apagado) · `Giromin` 0,25 (1 = el giro no se frena) · `Forzarciclo`
+
+**Quitados en la v6** (relanzar cualquier fase los quita de un proyecto anterior):
+
+| Antes | Ahora |
+|---|---|
+| `Negrasporcompas` | Las negras por compás de la línea de tiempo (`Signature`), las mismas con las que gira el planeta. Si no coincidían, el informe avisa con `..` |
+| `Girovivo` | `Giromin` 1. Si estaba apagado, `Giromin` pasa a 1 |
+| `Compasesterritorio` | 8 compases fijos (aviso si tenías otro valor) |
 
 Al relanzar la fase 6 v4, `Umbralnovedad` pasa de 0,05 a 0,15 y `Compasesquietos` de 4 a 2 solo si seguían en el valor anterior por defecto (desde la fase 6 v5 y comun v29, `Ciclomin` pasa de 8 a 16 y `Compasesquietos` de 2 a 3, también solo si seguían por defecto, al relanzar cualquier fase); `Umbralmadurez` sigue en 0,6. La fase 6 v2 quita los parámetros obsoletos: `Repsporciclo`, `Modociclo`, `Turnauto`, `Longmanual`, `Longfija`, `Longmin`, `Pasosporcompas`, `Pasospornegra` y `Resetpatterns`.
 
@@ -821,7 +829,7 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | El planeta engorda demasiado rápido | Sin compactación (`Cortezamax` 0, o motor anterior al v37), el engorde es `Shellthick` por cada `Ciclomin` compases | Relanza cualquier fase con comun v29 (crea `Cortezamax` 4) y baja `Cortezamax` si aún es mucho. Lo ya enterrado no adelgaza de golpe: `Resetmundo` para empezar de cero |
 | La formación se queda baja y salta al límite de golpe | Motor anterior a la v58 con `Growstep` pequeño para `Semillafrac` y `Umbralram` | Relanza cualquier fase: desde la fase 3 v13 el escalón lo calcula el motor y no hay salto |
 | `Cambioentierra` no hace nada | El BeatStep no envía All Notes Off al cambiar de pattern | Prueba pendiente con el aparato |
-| El planeta no frena aunque el mundo esté quieto | `ritmo` sin el giro vivo, o `Girovivo` apagado | Relanza la última fase aplicada (parchea `ritmo`); mira que salga `ritmo: el giro se multiplica…` |
+| El planeta no frena aunque el mundo esté quieto | `ritmo` sin el giro vivo, o `Giromin` en 1 | Relanza la última fase aplicada (parchea `ritmo`); mira que salga `ritmo: el giro se multiplica…` |
 | La retícula no sube con las conchas | `reticula_chop` no se recocina | Se recocina sola en cada cambio de radio; si no, relanza la fase 8 |
 | La cámara no mira al planeta (fase 10) | No se fijó Look At | En `camara`: Look At = `objetivo` |
 | Rendimiento bajo con muchas conchas | Demasiadas losetas | Baja `Maxconchas` |
@@ -842,9 +850,9 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 4 | ¿Desborde en los polos? | El polo desborda a cualquiera de las celdas de su anillo |
 | 5 | Canal del SEQ2 | 14 (`Canal2`), por confirmar |
 | 6 | ¿Qué es un ciclo de ecosistema? | Lo cierra el mundo: maduro y quieto (`Umbralmadurez`, `Umbralnovedad`, `Compasesquietos`) desde `Ciclomin`, o lleno pasado `Ciclomax` |
-| 6 | ¿Cuándo entierra la edad máxima? | Solo cuando el territorio (celdas tocadas por los secuenciadores en los últimos `Compasesterritorio` compases y sus vecinas) está ocupado (`Umbralterritorio` 0,8). Sin tope de seguridad; la novedad no cuenta |
+| 6 | ¿Cuándo entierra la edad máxima? | Solo cuando el territorio (celdas tocadas por los secuenciadores en los últimos 8 compases y sus vecinas) está ocupado (`Umbralterritorio` 0,8). Sin tope de seguridad; la novedad no cuenta |
 | 6 | ¿Cómo se cuenta el tiempo? | En compases del tempo del proyecto (`ritmo.tempo()`); ya no se deduce el paso de cada nota |
-| 6 | ¿Una vuelta por ciclo? | No: `Barsperturn` manual y `Girovivo` |
+| 6 | ¿Una vuelta por ciclo? | No: `Barsperturn` manual y giro vivo (`Giromin`) |
 | 6 | ¿Los satélites cuentan para la madurez? | No: madurez = formaciones propias en el límite. Su forma se recorta al llegar a `Satelite` |
 | 7 | Canal y pads de la batería | Canal 16 (confirmado), pads desde 36 (`Notabase`), por confirmar |
 | 3–7 | ¿Balizas? | Sin balizas: secuenciadores y batería se ven igual, con la loseta del centro de la celda y la formación del color de quien acaba de tocarla; si coinciden, la luz más intensa |
@@ -891,12 +899,12 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
   - `Forzarciclo` cierra al instante (`forzado`) y escribe en la tabla `ciclos`.
   - `Cambioentierra`: una ráfaga antes de `Ciclomin` se aplaza hasta `Ciclomin`, una después cierra en el compás siguiente, y con el toggle apagado solo sale el AVISO.
   - Grosor proporcional con sus dos límites; radio = núcleo + suma de grosores; fondo y paredes de los cortes con grosores distintos.
-  - `Girovivo` acotado entre `Giromin` y 1.
+  - El giro vivo, acotado entre `Giromin` y 1; con `Giromin` 1 no se frena.
   - Un mundo del motor v7-v10 carga y sigue funcionando.
 - **La edad máxima de la fase 6 v4** (motor v22):
   - Territorio ocupado y un cambio en cada compás: cierre por `edad maxima` en `Ciclomax`.
   - Territorio sin ocupar: pasado `Ciclomax` el mundo sigue, con `esperando territorio`; en cuanto se ocupa, se cierra en ese compás.
-  - El territorio es la celda tocada y sus vecinas, y deja de contar a los `Compasesterritorio` compases.
+  - El territorio es la celda tocada y sus vecinas, y deja de contar a los 8 compases.
   - 200 compases de SEQ1 con batería constante (bombo a negras y caja en 2 y 4, o un bombo por compás): ningún cierre ni error; territorio entre 0 % y 16 %, y la leyenda dice `esperando territorio`.
   - Sin batería: cierres por `estancado` cada 10-18 compases.
   - Bombo a negras durante 16 compases sobre un mundo maduro: ningún cierre; al quitarlo, cierre por `estancado` 24 compases después.
