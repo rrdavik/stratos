@@ -623,7 +623,7 @@ Los arañazos de la batería (fase 7) reciben forma temática, y la insistencia 
   - **nunca sale del cluster** (decisión del plan) y **como mucho `Maxfuego` celdas activas a la vez** entre todas las catástrofes;
   - si su zona ya tiene una catástrofe en curso, no empieza otra.
 - **Implosión.** La torre (la planificada más alta de la vecindad) cae entera de golpe, con una nube grande de polvo.
-- **Presupuesto.** La escalada cuenta como erosión: lo que quema es ocupación que se pierde. Con la densidad por encima de `Umbraldensidad` (fase 7, 60 %), la catástrofe empieza **más grande**: en la celda y en sus vecinas del cluster, como la erosión con `Multradio`.
+- **Presupuesto.** La escalada cuenta como erosión: lo que quema es ocupación que se pierde. Con la densidad por encima de `Umbraldensidad` (fase 7, 60 %), la catástrofe empieza **más grande**: en la celda y en sus vecinas del cluster, como la erosión, que duplica su radio.
 - **Huellas.** Una celda que se vacía en una catástrofe deja la huella de su especie: un modelo bajo a ras del suelo. La quita la siguiente nota de construcción en esa celda. Un corte (fase 9) también la quita, y no se dibuja con el otro tema activo.
 - **Derribo.** Una obra a medias (cadena de fusión o de coronación sin terminar) que recibe un arañazo en su vecindad se derriba:
   - toda la obra de su cluster retrocede ya una etapa y sigue hacia atrás, una etapa cada `Pasosetapa` pasos, hasta el principio;

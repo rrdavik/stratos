@@ -24,7 +24,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11; v8: la página Fase4 con 4 parámetros en vez de 8, ver «Página Fase4») | `fase4 v8` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2; v3: `Filtrar2` y `Nota2`; v4: los parámetros del SEQ2 pasan a la página Fase2 y desaparece la página Fase5 | `fase5 v4` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3; v6: la página Fase6 con 9 parámetros en vez de 12, ver «Página Fase6») | `fase6 v6` |
-| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v14` |
+| `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v16` |
 | `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46); v12: conchas discretas (suelo oscuro, poco contraste ocupada/vacía, tapa neutra; `Paletaluz`, `Paletaalterna`, `Contrasteocupada`, `Tapaneutra`, `Tapaluz`, motor v53) | `fase8 v12` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar; v10: el bombo y el tom ya no cortan, su destello es suave y sigue el pumping; v11: la autoprueba, con el pumping en seco) | `fase9 v11` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v10: `Encuadre`, el alto del planeta en la pantalla; v11: sin `Planofinal`) | `fase10 v11` |
@@ -141,7 +141,7 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
   - **Rendimiento:** solo se calculan las losetas de las celdas en pulso o en reposo (como mucho 8 filas por fotograma). Las dos mil losetas de las conchas no se recalculan.
   - Se ve también en modo actuación. `Luzconchas` apagado deja las conchas como antes.
 - **Sin transparencias en la superficie:** cada zona del centro lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo. La única capa aditiva es la luz de las conchas, que se dibuja la última.
-- **Interruptores:** `Luzseq` (página Fase3) para el centro, `Luzconchas` (página Fase3) para las conchas y `Balizasdrum` (página Fase7) para la batería. Las tres luces son parte del mundo y se ven también en modo actuación.
+- **Interruptores:** `Luzseq` (página Fase3) para el centro, `Luzconchas` (página Fase3) para las conchas y `Luzdrum` 0 (página Fase7; hasta la fase 7 v15, `Balizasdrum`) para la batería. Las tres luces son parte del mundo y se ven también en modo actuación.
 
 **Página Fase3** (16 parámetros desde la v13):
 
@@ -440,7 +440,7 @@ Las 8 pistas de batería son las 8 señales de la batería. Cada pad tiene un **
 
 **Ojo:** el mismo fallo afecta a todas las geometrías instanciadas creadas antes de comun v10: formaciones, coronas y estratos. También a la retícula de `fase12_base.py`, que no se relanza. Probablemente por eso pulidas y porosas se distinguían poco por color. Para que cojan su color hay que relanzar las fases que las crean (3, 4, 5 y 8), o poner a mano en cada una Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace.
 
-**Velocidad** (fase 7 v7). Con `Erosionvel` (encendido por defecto), la reducción escala con la velocidad del golpe:
+**Velocidad** (fase 7 v7). La reducción escala con la velocidad del golpe:
 
 ```
 notas = max(min(reduccion, 1), reduccion × velocidad / Velref)
@@ -450,12 +450,12 @@ notas = max(min(reduccion, 1), reduccion × velocidad / Velref)
 - **Mínimo:** un golpe siempre deshace al menos una nota en su celda (o la reducción, si es menor), así que uno flojo nunca queda en nada.
 - **Fracciones:** se acumulan en cada celda como las de las vecinas, así que N golpes iguales deshacen siempre lo mismo.
 - **Solo escala la reducción:** el radio y la profundidad no cambian con la velocidad, y el desplazamiento de celda (`vel % 3`) sigue como estaba.
-- **Con `Erosionvel` apagado,** la reducción es la de la tabla, sin más.
+- **Con `Velref` 0,** la reducción es la de la tabla, sin más (desde la fase 7 v16; antes `Erosionvel` apagado).
 - **Propuesta, sin implementar:** que la luz del golpe también crezca con la velocidad.
 
-**Página Fase7, velocidad:** `Erosionvel` (encendido) · `Velref` 100
+**Página Fase7, velocidad:** `Velref` 100 (0 = la velocidad no cuenta)
 
-**Presupuesto de densidad.** Por encima de `Umbraldensidad` (60 % de celdas ocupadas), el radio de todos los eventos se multiplica por `Multradio` (×2), y un radio 0 pasa a 1 para que también los arañazos ayuden a aligerar. La leyenda marca `x2` mientras dura.
+**Presupuesto de densidad.** Por encima de `Umbraldensidad` (60 % de celdas ocupadas), el radio de todos los eventos se duplica (×2; hasta la fase 7 v15 era `Multradio`), y un radio 0 pasa a 1 para que también los arañazos ayuden a aligerar. La leyenda marca `x2` mientras dura.
 
 **Decisión: dónde cae la erosión.** Los pads no tienen altura, así que no dicen celda. Opciones de `Objetivo`:
 
@@ -465,7 +465,28 @@ notas = max(min(reduccion, 1), reduccion × velocidad / Velref)
 
 En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al otro o a ninguno. La destrucción persigue a la construcción.
 
-**Página Fase7:** `Canaldrum` 16 (confirmado con el aparato) · `Notabase` 36 · `Objetivo` · `Umbraldensidad` 0,6 · `Multradio` 2 · `Padprueba` · `Erosionar` · `Balizasdrum` (encendido: luz de la batería) · `Luzdrum` 1 (intensidad) · `Vidabalizadrum` 0,8. Al relanzar la fase 7:
+**Página Fase7** (12 parámetros desde la v16):
+
+| Para qué | Parámetros |
+|---|---|
+| Montaje: el aparato | `Canaldrum` 16 (confirmado con el aparato) · `Notabase` 36 · `Velref` 100 (0 = la velocidad no cuenta) |
+| Dónde y cuánto destruye | `Objetivo` · `Umbraldensidad` 0,6 (1 = sin presupuesto) |
+| Luz del golpe | `Luzdrum` 1 (0 = apagada) · `Vidabalizadrum` 0,8 |
+| Impulso (pumping) | `Pumpamt` 1 (0 = sin pumping) · `Pumphorz` 0,30 · `Pumptope` 2 |
+| Pruebas | `Padprueba` · `Erosionar` |
+
+**Quitados en la v16** (relanzar cualquier fase los quita de un proyecto anterior):
+
+| Antes | Ahora |
+|---|---|
+| `Balizasdrum` | `Luzdrum` 0. Si estaba apagado, `Luzdrum` pasa a 0 |
+| `Erosionvel` | `Velref` 0. Si estaba apagado, `Velref` pasa a 0 |
+| `Pumpon` | `Pumpamt` 0. Si estaba apagado, `Pumpamt` pasa a 0 |
+| `Multradio` | Fijo en 2 |
+| `Pumphold` | Fijo en 0,04 s |
+| `Pumpvelmin` | Fijo en 0,6 |
+
+Si los tres fijos tenían otro valor, el informe lo avisa con `..`. Al relanzar la fase 7:
 
 - `Canaldrum` pasa a 16 solo si seguía en 10, y `Vidabalizadrum` a 0,8 solo si seguía en 0,6 o 1,0;
 - se retiran `Tambalizadrum` y `Anillobalizadrum`. Las balizas (`balizas_drum`, `luz_drum` de la v5…) las retira cualquier fase al relanzarse.
@@ -486,7 +507,7 @@ En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al o
 
 **Qué cambió en la v14.** En la v12 y la v13, el ×3 y el ×2 eran una **capacidad**: `cap` multiplicaba el límite de altura y los umbrales de satélites, fusión y corona, y las estructuras crecían de más. Además, el pumping se medía contra una altura que aún se estaba suavizando y no se aplicaba a lo que acababa de nacer, así que apenas se veía el golpe. Desde la v14 el ×3 y el ×2 son **pulsos de ocupación**, el límite y los umbrales no se tocan, y el pumping es un hinchado puramente visual sobre el tamaño ya asentado. Desaparecen `cap`, `Capmodo` y `Capdur`.
 
-**Un pad en impulso** ignora reducción, radio y profundidad: no resta ocupación, no deja huella, no abre cortes ni cicatriz y no entra en el presupuesto de densidad (`Multradio` no le afecta). Cae donde caería la erosión: lo decide `Objetivo` y la velocidad lo desplaza un semitono. Con `alterna`, el bombo (1) y el tom (3) son impares y caen los dos donde está el SEQ1.
+**Un pad en impulso** ignora reducción, radio y profundidad: no resta ocupación, no deja huella, no abre cortes ni cicatriz y no entra en el presupuesto de densidad (el ×2 no le afecta). Cae donde caería la erosión: lo decide `Objetivo` y la velocidad lo desplaza un semitono. Con `alterna`, el bombo (1) y el tom (3) son impares y caen los dos donde está el SEQ1.
 
 **1 · Pulsos.** Un golpe de bombo suma **3 pulsos** a la celda; uno de tom, **2** (columna `pulsos` de `perfiles_erosion`). Cada pulso es un **trigger completo** (ocupación + 1), como si la celda ya hubiera pagado su coste en notas:
 
@@ -504,16 +525,16 @@ En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al o
 - **tope visual:** la altura con pumping no pasa de `Pumptope` × el límite de altura (2), para que una estructura alta no se dispare. Si ya lo pasa, no se hincha;
 - **escala horizontal** = 1 + (pico vertical − 1) × `Pumphorz` (0,30), recortada para que ninguna pieza invada la celda vecina (la regla de los anillos polares). Si alguna pieza ya llega al borde (un puente del cluster, una planta que ocupa la celda), la celda no se ensancha;
 - **ataque instantáneo:** el pico se ve en el mismo fotograma del golpe;
-- **pico sostenido:** `Pumphold` (0,04 s), y como mínimo **2 fotogramas dibujados** (los cuenta el motor);
+- **pico sostenido:** 0,04 s (fijo desde la v16; antes `Pumphold`), y como mínimo **2 fotogramas dibujados** (los cuenta el motor);
 - **caída** en los segundos de su pad (columna `pump_rel`: el bombo 0,20 s, el tom 0,12 s), deprisa al principio y plana al final, y llega a 1 justo al acabar:
   ```
   escala(t) = 1 + (pico − 1) · (1 − t / pump_rel)^3
   ```
 - **tope por el ritmo** (como en la v13): el golpe entero (pico sostenido y caída) cabe en 0,8 × el tiempo desde el golpe anterior de impulso en esa celda, así que vuelve a 1 antes del siguiente. En una ráfaga de semicorcheas es 0,8 × el paso; con el bombo a negras, no recorta. Ver «Decisiones»;
 - **retrigger en seco:** un golpe durante la caída salta otra vez al pico, sin partir de la escala actual. Dos golpes en el mismo fotograma (bombo y tom a la vez) dan el pico mayor;
-- **velocidad:** escala el pico entre `Pumpvelmin` (0,6, a velocidad 1) y 1 (a 127); nunca por debajo;
+- **velocidad:** escala el pico entre 0,6 (a velocidad 1; fijo desde la v16, antes `Pumpvelmin`) y 1 (a 127); nunca por debajo;
 - se evalúa **en cada fotograma del render**, después de la altura, sin filtro ni interpolación. La altura real no cambia con él;
-- con `Pumpon` apagado no hay pumping; los pulsos suman igual.
+- con `Pumpamt` 0 no hay pumping; los pulsos suman igual.
 
 Con el bombo a negras a 120 BPM y 30 fps: dos fotogramas en ×3 y luego 2,16, 1,59, 1,25, 1,07, 1,01 y 1.
 
@@ -523,11 +544,8 @@ Con el bombo a negras a 120 BPM y 30 fps: dos fotogramas en ×3 y luego 2,16, 1,
 
 | Parámetro | Etiqueta en el panel | Por defecto | Qué hace | Qué condiciona |
 |---|---|---|---|---|
-| `Pumpon` | Pumping de bombo y toms | encendido | Enciende el hinchado visual al golpe de los pads en modo impulso | formas_pulidas / formas_porosas, coronas, luz_celda |
-| `Pumpamt` | Fuerza del pumping | 1,0 | Pico vertical = 1 + (pulsos − 1) × Pumpamt. Con 1: bombo ×3, tom ×2 | formas_pulidas / formas_porosas, coronas |
+| `Pumpamt` | Fuerza del pumping de bombo y toms (0 = sin pumping) | 1,0 | Pico vertical = 1 + (pulsos − 1) × Pumpamt. Con 1: bombo ×3, tom ×2. Con 0 no hay hinchado (antes `Pumpon` apagado) | formas_pulidas / formas_porosas, coronas |
 | `Pumphorz` | Anchura del pumping | 0,30 | Cuánto del pico vertical se traslada a la anchura; recortada al ancho de la celda | formas_pulidas / formas_porosas, coronas |
-| `Pumphold` | Pico sostenido (s) | 0,04 | Segundos que se mantiene el pico antes de caer (mínimo 2 fotogramas) | formas_pulidas / formas_porosas, coronas, luz_celda |
-| `Pumpvelmin` | Velocidad minima del pico | 0,6 | Fracción mínima del pico con un golpe flojo | formas_pulidas / formas_porosas, coronas |
 | `Pumptope` | Altura maxima con pumping (x limite) | 2,0 | Tope de la altura con pumping, en múltiplos del límite de altura | formas_pulidas / formas_porosas, coronas |
 
 Las etiquetas van sin tildes, como las demás del panel. Columnas de `perfiles_erosion`: `modo`, `pulsos` (bombo 3, tom 2) y `pump_rel` (bombo 0,20 s, tom 0,12 s; los demás pads, 0,15 si pasan a impulso). Al relanzar la fase 7 v14 se quitan `Capmodo` y `Capdur` (y `Pumpataque` y `Pumprelease`, si quedaban de la v12), y la columna `capacidad` de la v12 y la v13 pasa a llamarse `pulsos` con sus números.
@@ -810,10 +828,10 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | Batería `pad fuera de 1-8` | Los pads no empiezan en do2 (36) | `Notabase` (Fase7) = la nota del pad 1 |
 | La luz sale de un solo color | `luz_celda` no lee el color por instancia | Relanza cualquier fase (la recrea). Si persiste, en `luz_celda`: Instance 2 → Color R/G/B = `r` `g` `b` y Color Mode = Replace. El informe lo avisa con `FALLO luz_celda no lee el color por instancia` |
 | No se ve dónde caen las notas con muchas conchas | El centro de la celda es pequeño desde la cámara de globo y se pierde entre las bandas de las losetas | Comprueba que `Luzconchas` esté encendido; sube `Luzconchaspulso` (y `Luzconchasreposo` para ver dónde está cada secuenciador entre notas) o `Luzconchasalcance` para que se tiñan más losetas. Si no se ve nada, relanza cualquier fase (crea `luz_conchas` y la mete en el render) y mira que `mat_luz_conchas` tenga la mezcla aditiva |
-| No se ve la luz de una celda | `Luzseq` (secuenciadores) o `Balizasdrum` (batería) apagados, `Luzdrum` a 0, la batería o el secuenciador no llegan (mira las líneas `EROSION` y `NOTA`), o `luz_celda` fuera del render | Revisa esos; relanzar cualquier fase vuelve a meter `luz_celda` en el render |
+| No se ve la luz de una celda | `Luzseq` (secuenciadores) apagado, `Luzdrum` a 0 (batería), la batería o el secuenciador no llegan (mira las líneas `EROSION` y `NOTA`), o `luz_celda` fuera del render | Revisa esos; relanzar cualquier fase vuelve a meter `luz_celda` en el render |
 | El mundo nunca se entierra por estancamiento | La batería está destruyendo: cada golpe genera novedad (hasta la fase 7 v11, también el bombo) | Es lo esperado; quita la batería para que el mundo se asiente |
 | El bombo o el tom no erosionan ni cortan | Desde la fase 7 v12 son impulso: suman pulsos de ocupación (v14) y hinchan la celda un instante | Es lo esperado. Para que uno vuelva a erosionar, pon `erosion` en su `modo` de `perfiles_erosion` |
-| La celda golpeada no se hincha | `Pumpon` apagado, `Pumpamt` 0, 1 pulso en la tabla, o la estructura ya pasa de `Pumptope` × el límite | Revisa esos; la leyenda dice dónde cayó (`IMPULSO ... celda N`) |
+| La celda golpeada no se hincha | `Pumpamt` 0, 1 pulso en la tabla, o la estructura ya pasa de `Pumptope` × el límite | Revisa esos; la leyenda dice dónde cayó (`IMPULSO ... celda N`) |
 | Nacen varios satélites de golpe | Un bombo sobre una celda en el límite son 3 desbordes seguidos (fase 7 v14) | Es lo esperado. La vecina la elige velocidad + ocupación, así que se reparten; si salen apelotonados, baja los `pulsos` del pad |
 | El mundo no se entierra nunca (la leyenda dice `esperando territorio`) | La batería no deja que se llene el territorio: cada golpe lo vacía, y la edad máxima solo entierra un mundo con el territorio ocupado | Quita la batería (el mundo se asienta y se entierra por estancamiento) o baja `Umbralterritorio`. Mira la columna `territorio` de la tabla `ciclos` |
 | Los ciclos siempre acaban por edad máxima | Umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
@@ -863,7 +881,7 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 | 7 | ¿El impulso adelanta las obras de la piel? (v14) | Sí, una etapa por golpe, como una nota (`Avance` gates) |
 | 7 | ¿Pumping a saltos de stop-motion? (v12) | No: continuo. Desde la v13, un golpe seco (pico al instante, sostenido y caída cúbica en segundos) |
 | 7 | ¿Tope de la caída por tempo? (v13; se mantiene en la v14) | El encargo pedía 0,8 × el paso (y el de la v14 lo repite). A 120 BPM eso es 0,1 s y dejaría el bombo (0,20) y el tom (0,12) iguales, cuando tienen que verse distintos. Además, con el pico sostenido la celda no llegaría a 1 antes del paso siguiente. Decisión: el golpe entero (pico y caída) cabe en 0,8 × el tiempo desde el golpe anterior de impulso en esa celda. En una ráfaga de semicorcheas es el tope por paso; con el bombo a negras, no recorta. El primer golpe de una ráfaga no sabe que viene otro: cae con su `pump_rel` y el segundo lo pilla a medio camino y salta otra vez al pico |
-| 7 | ¿La velocidad y `Erosionvel`? (v13) | La velocidad escala siempre el pico del pumping (de `Pumpvelmin` a 1); `Erosionvel` sigue siendo solo de la erosión |
+| 7 | ¿La velocidad y `Erosionvel`? (v13) | La velocidad escala siempre el pico del pumping (de 0,6 a 1); `Velref` (antes `Erosionvel`) es solo de la erosión |
 | 7 | ¿Dónde cae la erosión? | Alterna entre SEQ1 y SEQ2, desplazada por la velocidad (`Objetivo`) |
 | 7 | ¿Radio 0 × 2? | Pasa a 1 |
 | 8 | ¿Dónde se deposita el mundo enterrado? | Sobre la columna de cada celda: las hondonadas se tapizan. `Colmatacion` 0 (1 reproduce lo anterior) |
@@ -888,7 +906,7 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
   - otro construido con la versión anterior al PR #7 (con baliza, `baliza2` y `balizas_drum`), con un mundo en marcha, y relanzado con las fases 3, 5, 7, 9 y 10.
 
   Los dos quedan con los mismos nodos, parámetros y lista del render, sin ninguna baliza, con el color por instancia enlazado en la retícula, las formaciones, las coronas, los estratos y la luz de celda, y con todas las expresiones evaluándose sin error. El mundo relanzado conserva su ocupación y sus conchas. Todas las autopruebas salen OK, incluida la de la fase 3 relanzada a nivel 10, que antes fallaba porque esperaba que no hubiera desborde. En ese TouchDesigner simulado, el Geometry COMP solo acepta los parámetros que tiene en TouchDesigner, para que un nombre equivocado no pase desapercibido.
-- **Velocidad (fase 7 v7):** un golpe fuerte deshace más que uno flojo; el mínimo de una nota se respeta a velocidad 1; sin `Erosionvel` no cambia nada; N golpes iguales deshacen siempre lo mismo.
+- **Velocidad (fase 7 v7):** un golpe fuerte deshace más que uno flojo; el mínimo de una nota se respeta a velocidad 1; con `Velref` 0 no cambia nada; N golpes iguales deshacen siempre lo mismo.
 
 - **El motor:** 18 pruebas. Orientación de las piezas sobre la normal de cada celda, vecindad simétrica, crecimiento y límite, gate, desborde y estados, híbridos, ráfagas con y sin STOP, ciclos y conchas, orden de la erosión y presupuesto, cortes y cicatrices, herencia y continentes, y que el mundo se pueda guardar.
 - **El ciclo de la fase 6 v2** (motor v11):
