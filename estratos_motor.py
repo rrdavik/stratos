@@ -37,7 +37,10 @@
 #                 satelite y la vecina la eligen siempre velocidad + ocupacion;
 #                 motor v60: la pagina Fase6 con 9 parametros: el compas sale
 #                 de la linea de tiempo, Giromin 1 apaga el giro vivo y la
-#                 memoria del territorio queda en 8 compases).
+#                 memoria del territorio queda en 8 compases; motor v61: la
+#                 pagina Fase7 con 12 parametros: Luzdrum 0, Velref 0 y
+#                 Pumpamt 0 apagan la luz, la velocidad y el pumping, y
+#                 Multradio, Pumphold y Pumpvelmin quedan fijos).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -50,7 +53,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v60'
+MOTOR_VERSION = 'motor v61'
 
 import math
 
@@ -1342,10 +1345,10 @@ def degrade(W, cfg, i, k):
 
 
 def erosion_notes(cfg, red, vel):
-    """Notas que deshace un golpe en su celda. Con Erosionvel, la reduccion
-    de la tabla vale a la velocidad Velref (100) y escala en proporcion
-    (x1,27 a 127). Minimo: una nota (o la reduccion, si es menor), para que
-    un golpe flojo siempre deje huella. Sin Erosionvel, la de la tabla."""
+    """Notas que deshace un golpe en su celda. La reduccion de la tabla vale
+    a la velocidad Velref (100) y escala en proporcion (x1,27 a 127).
+    Minimo: una nota (o la reduccion, si es menor), para que un golpe flojo
+    siempre deje huella. Con Velref 0, la de la tabla."""
     red = float(red)
     if not cfg.get('erosion_vel', 0) or red <= 0:
         return red
@@ -2060,7 +2063,7 @@ def _modelo_de_geo(cfg):
 
 def escalas_bomba(W, cfg, i, now):
     """(vertical, horizontal pedida) del pumping de la celda i: 1 + valor y
-    1 + valor x Pumphorz. Sin pumping (o con Pumpon apagado), (1, 1)."""
+    1 + valor x Pumphorz. Sin pumping (o con Pumpamt 0), (1, 1)."""
     if not cfg.get('pump_on', 1) or cfg['nivel'] < 7:
         return 1.0, 1.0
     v, _ = bomba_nivel(W, cfg, i, now)
@@ -7972,7 +7975,6 @@ def cfg():
         giro_vivo=int(_p('Giromin', c['giro_min']) < 1.0),    # v60: Giromin 1 = sin giro vivo
         giro_min=_p('Giromin', c['giro_min']),
         dens_umbral=_p('Umbraldensidad', c['dens_umbral']),
-        rad_mult=_p('Multradio', c['rad_mult']),
         target_mode=_menu('Objetivo', TARGET_MODES, 2),
         herencia=_p('Herencia', c['herencia']),
         paleta=_menu('Paleta', PALETAS, 0),
@@ -8003,18 +8005,18 @@ def cfg():
         pads = PAD_MIC + 1 if c['nivel'] >= 21 else 8        # fase 21: el pad 9 es el microfono
         c['perfiles'], c['tipos'], c['modos'], c['pulsos'], c['pump_rels'] = _perfiles(pads)
         c['colores_drum'] = _colores_drum(pads)
-        c.update(balizas_drum=int(_p('Balizasdrum', True)),
-                 luz_drum=_p('Luzdrum', c['luz_drum']),
-                 erosion_vel=int(_p('Erosionvel', True)),
-                 vel_ref=_p('Velref', c['vel_ref']),
+        # v61: cada intensidad a 0 apaga lo suyo (antes Balizasdrum,
+        # Erosionvel y Pumpon); Multradio, Pumphold y Pumpvelmin, fijos
+        luz = max(0.0, _p('Luzdrum', c['luz_drum']))
+        vr = int(_p('Velref', c['vel_ref']))
+        amt = max(0.0, _p('Pumpamt', c['pump_amt']))
+        c.update(balizas_drum=int(luz > 0.0), luz_drum=luz,
+                 erosion_vel=int(vr > 0), vel_ref=vr if vr > 0 else c['vel_ref'],
                  vida_baliza_drum=_p('Vidabalizadrum', c['vida_baliza_drum']),
                  # fase 7 v12: impulso
-                 pump_amt=max(0.0, _p('Pumpamt', c['pump_amt'])),
+                 pump_amt=amt, pump_on=int(amt > 0.0),
                  pump_horz=max(0.0, _p('Pumphorz', c['pump_horz'])),
-                 pump_hold=max(0.0, _p('Pumphold', c['pump_hold'])),       # v13: golpe seco
-                 pump_velmin=max(0.0, min(1.0, _p('Pumpvelmin', c['pump_velmin']))),
-                 pump_tope=max(1.0, _p('Pumptope', c['pump_tope'])),          # v14
-                 pump_on=int(_p('Pumpon', True)))
+                 pump_tope=max(1.0, _p('Pumptope', c['pump_tope'])))          # v14
     if c['nivel'] >= 11:
         c.update(tema=_menu('Tema', TEMAS, 0),
                  peso_vecina=max(0.0, _p('Pesovecina', c['peso_vecina'])),

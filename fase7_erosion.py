@@ -21,7 +21,7 @@ editable):
 
 LA MISMA MONEDA QUE LA CONSTRUCCION (v5)
 ----------------------------------------
-Cada nota del SEQ sube la formacion Growstep / coste y suma 1 a la carga
+Cada nota del SEQ sube la formacion un escalon / coste y suma 1 a la carga
 (fase 3). Cada nota de erosion hace lo contrario: baja la carga y la
 altura lo mismo; al agotarse la carga baja un escalon y la carga queda
 llena menos una. Lo que costo mas notas cuesta mas golpes deshacerlo,
@@ -33,15 +33,16 @@ reduccion 1, cada vecina pierde una nota cada dos golpes.
 
 LA VELOCIDAD (v7)
 -----------------
-Con Erosionvel (encendido), la reduccion de la tabla es la de un golpe a
-velocidad Velref (100) y escala en proporcion: a 50, la mitad; a 127, x1,27.
+La reduccion de la tabla es la de un golpe a velocidad Velref (100) y
+escala en proporcion: a 50, la mitad; a 127, x1,27.
 Minimo: un golpe siempre deshace al menos una nota en su celda (o la
 reduccion, si es menor), para que un golpe flojo no quede en nada. Las
 fracciones de nota se acumulan en cada celda: N golpes iguales deshacen
 siempre lo mismo. Solo escala la reduccion; radio y profundidad no.
-Apagado, la reduccion es la de la tabla, sin mas.
-    Erosionvel   la velocidad escala la erosion (encendido)
-    Velref       velocidad a la que valen los numeros de la tabla (100)
+Con Velref 0 (v16; antes Erosionvel apagado), la reduccion es la de la
+tabla, sin mas.
+    Velref       velocidad a la que valen los numeros de la tabla (100);
+                 0 = la velocidad no cuenta
 
 PERFILES POR DEFECTO (v6, elegidos por el usuario; v12, bombo y tom impulso)
 ----------------------------------------------------------------------------
@@ -96,19 +97,18 @@ impares, caen donde esta el SEQ1) y:
      tiempo desde el golpe anterior en la celda (en una rafaga de
      semicorcheas, 0,8 x el paso). Un golpe durante la caida salta otra vez
      al pico, en seco. Es la transformacion final, en cada fotograma: no
-     cambia la altura real. La velocidad escala el pico entre Pumpvelmin
-     (0,6) y 1. Los satelites que nacen en las vecinas no se hinchan.
+     cambia la altura real. La velocidad escala el pico entre 0,6 y 1. Los satelites que nacen en las vecinas no se hinchan.
   3. LUZ. luz_celda de la celda golpeada, con el color del pad, sube a su
      intensidad maxima en el mismo fotograma del pico y cae con la misma
      curva: el golpe se lee aunque la estructura sea pequena. No tapa al
      secuenciador (si suena en la celda, el centro se parte). El destello
      (fase 9) es suave y sigue la misma curva.
-    Pumpon       pumping de bombo y toms (encendido)
-    Pumpamt      fuerza del pumping (1: el bombo x3, el tom x2)
+    Pumpamt      fuerza del pumping (1: el bombo x3, el tom x2); 0 = sin
+                 pumping (v16; antes Pumpon)
     Pumphorz     anchura del pumping (0,30 del pico vertical)
-    Pumphold     pico sostenido, en segundos (0,04; al menos 2 fotogramas)
-    Pumpvelmin   el pico de un golpe a velocidad 1 (0,6 del maximo)
     Pumptope     altura maxima con pumping, en veces el limite (2)
+  Fijos desde la v16: el pico sostenido (0,04 s; antes Pumphold) y el de
+  un golpe a velocidad 1 (0,6 del maximo; antes Pumpvelmin).
 Leyenda: IMPULSO pad 1 +3 celda 40 ocupacion 2->5, en lugar de la linea
 EROSION.
 A vigilar (sin compensar todavia): sobre una celda en el limite, un bombo
@@ -126,13 +126,20 @@ un cuarto en el segundo. Se apaga en Vidabalizadrum segundos. Si en la
 celda hay un secuenciador, manda la luz mas intensa en ese instante (el
 golpe, mientras dura); al apagarse vuelve la del secuenciador. Se ve con
 formacion, vacia o con huella, y en modo actuacion.
-    Balizasdrum     luz de la bateria encendida / apagada
-    Luzdrum         intensidad de la luz (1)
+    Luzdrum         intensidad de la luz (1); 0 la apaga (v16; antes
+                    Balizasdrum)
     Vidabalizadrum  segundos hasta apagarse (0,8)
 
 PRESUPUESTO DE DENSIDAD: si mas del 60 % de las celdas esta ocupado, el
 radio de todos los eventos se duplica (un radio 0 pasa a 1) hasta volver
-por debajo del umbral. La escena se aligera cuando pesa.
+por debajo del umbral. La escena se aligera cuando pesa. Umbraldensidad 1
+lo apaga; el x2 es fijo desde la v16 (antes Multradio).
+
+PAGINA MAS CORTA (v16): 12 parametros en vez de 18. Fuera Balizasdrum
+(Luzdrum 0), Erosionvel (Velref 0), Pumpon (Pumpamt 0), Multradio (2),
+Pumphold (0,04 s) y Pumpvelmin (0,6). Relanzar cualquier fase los quita de
+un proyecto anterior: un interruptor apagado pone su intensidad a 0, y el
+informe avisa si los fijos tenian otro valor.
 
 DONDE CAE LA EROSION (decision tomada)
 --------------------------------------
@@ -157,7 +164,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v15  (relanzada sobre la fase 21, conserva la fila del microfono, pad 9)'
+VERSION = 'fase7 v16  (pagina mas corta: cada intensidad a 0 apaga lo suyo)'
 banner(VERSION)
 
 base = require_base(7)
@@ -171,27 +178,22 @@ add_par(base, page, 'menu', 'Objetivo', 'Donde cae la erosion', 'alterna',
         menu=['seq1', 'seq2', 'alterna', 'velocidad'],
         menu_labels=['Donde esta el SEQ1', 'Donde esta el SEQ2',
                      'Alterna SEQ1 / SEQ2', 'La velocidad elige celda'])
-add_par(base, page, 'float', 'Umbraldensidad', 'Presupuesto de densidad', 0.60, 0.1, 1.0)
-add_par(base, page, 'float', 'Multradio', 'Multiplicador de radio', 2.0, 1.0, 4.0)
+add_par(base, page, 'float', 'Umbraldensidad', 'Presupuesto de densidad (1 = sin presupuesto)',
+        0.60, 0.1, 1.0)
 add_par(base, page, 'int', 'Padprueba', 'Pad de prueba', 1, 1, 8, clamp=True)
 add_par(base, page, 'pulse', 'Erosionar', 'Erosionar con el pad de prueba')
-add_par(base, page, 'toggle', 'Balizasdrum', 'Luz de la bateria en las celdas', True)
-add_par(base, page, 'float', 'Luzdrum', 'Intensidad de la luz de la bateria', 1.0, 0.0, 2.0)
+add_par(base, page, 'float', 'Luzdrum', FASE7_LABELS['Luzdrum'], 1.0, 0.0, 2.0)
 add_par(base, page, 'float', 'Vidabalizadrum', 'Vida de la luz (s)', 0.8, 0.05, 5.0)
-add_par(base, page, 'toggle', 'Erosionvel', 'La velocidad escala la erosion', True)
-add_par(base, page, 'int', 'Velref', 'Velocidad a la que vale la tabla', 100, 1, 127, clamp=True)
+add_par(base, page, 'int', 'Velref', FASE7_LABELS['Velref'], 100, 0, 127, clamp=True)
 renew_default(base, 'Vidabalizadrum', 0.6, 0.8)
 renew_default(base, 'Vidabalizadrum', 1.0, 0.8)
-add_par(base, page, 'toggle', 'Pumpon', 'Pumping de bombo y toms', True)
-add_par(base, page, 'float', 'Pumpamt', 'Fuerza del pumping', 1.0, 0.0, 2.0)
+add_par(base, page, 'float', 'Pumpamt', FASE7_LABELS['Pumpamt'], 1.0, 0.0, 2.0)
 add_par(base, page, 'float', 'Pumphorz', 'Anchura del pumping', 0.30, 0.0, 1.0)
 renew_default(base, 'Pumphorz', 0.15, 0.30)
-add_par(base, page, 'float', 'Pumphold', 'Pico sostenido (s)', 0.04, 0.0, 0.5)
-add_par(base, page, 'float', 'Pumpvelmin', 'Velocidad minima del pico', 0.6, 0.0, 1.0)
 add_par(base, page, 'float', 'Pumptope', 'Altura maxima con pumping (x limite)', 2.0, 1.0, 4.0)
-ETIQUETAS = dict(Pumpon='Pumping de bombo y toms', Pumpamt='Fuerza del pumping',
-                 Pumphorz='Anchura del pumping', Pumphold='Pico sostenido (s)',
-                 Pumpvelmin='Velocidad minima del pico', Pumptope='Altura maxima con pumping (x limite)')
+ETIQUETAS = dict(FASE7_LABELS, Pumphorz='Anchura del pumping',
+                 Pumptope='Altura maxima con pumping (x limite)',
+                 Umbraldensidad='Presupuesto de densidad (1 = sin presupuesto)')
 for nm, et in ETIQUETAS.items():         # v14: las etiquetas de la hoja de parametros
     try:
         getattr(base.par, nm).label = et
@@ -202,9 +204,8 @@ if viejos:
     ok('impulso v14: fuera %s (sin capacidad ni rampa; la caida, por pad en perfiles_erosion)'
        % ', '.join(viejos))
 ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
-   'Multradio, Padprueba, Erosionar, Balizasdrum, Luzdrum, Vidabalizadrum, Erosionvel, Velref')
-ok('pagina Fase7 (impulso): Pumpon, Pumpamt (1), Pumphorz (0,30), Pumphold (0,04 s), '
-   'Pumpvelmin (0,6), Pumptope (2)')
+   'Padprueba, Erosionar, Luzdrum, Vidabalizadrum, Velref (0: sin velocidad)')
+ok('pagina Fase7 (impulso): Pumpamt (1; 0: sin pumping), Pumphorz (0,30), Pumptope (2)')
 
 COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'modo', 'pulsos', 'pump_rel', 'tipo', 'rol']
 COLS_V13 = ['pad', 'reduccion', 'radio', 'profundidad', 'modo', 'capacidad', 'pump_rel', 'tipo', 'rol']
@@ -411,10 +412,10 @@ leeme(base, 7, """FASE 7 - EROSION E IMPULSO
   completos a la celda golpeada, con las reglas de siempre (ocupacion 2 +
   bombo = 5); la altura nueva, de golpe. El limite y los umbrales no
   cambian. Y la hincha un instante (pumping, solo visual: pico al momento,
-  Pumphold s y caida de pump_rel s; Pumpamt, Pumphorz, Pumpvelmin,
-  Pumptope, Pumpon), con la luz de la celda siguiendo la misma curva.
-  Erosionvel: la tabla vale a velocidad Velref (100) y escala con la del
-  golpe; como minimo, una nota por golpe.
+  0,04 s y caida de pump_rel s; Pumpamt, 0 lo apaga; Pumphorz, Pumptope),
+  con la luz de la celda siguiendo la misma curva.
+  La tabla vale a velocidad Velref (100) y escala con la del golpe; como
+  minimo, una nota por golpe. Velref 0: la velocidad no cuenta.
   Una nota de erosion deshace lo que hizo una nota del SEQ: baja la carga
   y la altura; al agotarse la carga, baja un escalon. Orden: satelites,
   altura, huella.
@@ -422,8 +423,8 @@ leeme(base, 7, """FASE 7 - EROSION E IMPULSO
   3 tom impulso +2, 4-8 aranazos.
   El golpe se ve como una nota: el centro de la celda y la formacion con
   el color de su pad (colores_drum), en las celdas que erosiona; se apaga
-  en Vidabalizadrum s. Luzdrum: intensidad.
-  Presupuesto: por encima de Umbraldensidad, radios x Multradio.
+  en Vidabalizadrum s. Luzdrum: intensidad (0 la apaga).
+  Presupuesto: por encima de Umbraldensidad, radios x2.
   Prueba: Padprueba + Erosionar.""")
 
 print_report()
@@ -1046,6 +1047,20 @@ def prueba_impulso(t, m, cd):
             if max(range(m.N), key=lambda x: sum(f[q] * m.normal_i(x)[q] for q in range(3))) == i]
     t.check('la luz del impulso no tapa la del SEQ1: el centro se parte en los dos colores',
             len(cent) == 2, str(len(cent)))
+    # v16: la pagina mas corta; cada intensidad a 0 apaga lo suyo
+    fuera = [nm for nm in ('Balizasdrum', 'Erosionvel', 'Pumpon', 'Multradio', 'Pumphold',
+                           'Pumpvelmin') if has_par(base, nm)]
+    t.check('pagina Fase7 sin Balizasdrum, Erosionvel, Pumpon, Multradio, Pumphold ni Pumpvelmin',
+            not fuera, 'siguen: %s' % ', '.join(fuera) if fuera else '')
+    antes = (float(base.par.Luzdrum), int(base.par.Velref), float(base.par.Pumpamt))
+    try:
+        base.par.Luzdrum, base.par.Velref, base.par.Pumpamt = 0.0, 0, 0.0
+        c0 = m.cfg()
+        t.check('Luzdrum 0, Velref 0 y Pumpamt 0 apagan luz, velocidad y pumping',
+                (c0['balizas_drum'], c0['erosion_vel'], c0['pump_on']) == (0, 0, 0)
+                and c0['vel_ref'] == 100)
+    finally:
+        base.par.Luzdrum, base.par.Velref, base.par.Pumpamt = antes
 
 
 run_test(base, prueba)

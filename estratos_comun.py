@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v40'
+VERSION_COMUN = 'comun v41'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1243,6 +1243,60 @@ def fase6_al_dia(base):
         ok('pagina Fase6: quitados %s' % ', '.join(quitados))
 
 
+# --- la pagina Fase7, mas corta (comun v41, motor v61) ------------------------
+# De 18 parametros a 12. Cada interruptor es su intensidad a 0: Luzdrum 0
+# (antes Balizasdrum), Velref 0 (antes Erosionvel) y Pumpamt 0 (antes
+# Pumpon). Multradio (2), Pumphold (0,04 s) y Pumpvelmin (0,6) quedan fijos.
+
+FASE7_LABELS = dict(
+    Luzdrum='Intensidad de la luz de la bateria (0 = apagada)',
+    Velref='Velocidad a la que vale la tabla (0 = la velocidad no cuenta)',
+    Pumpamt='Fuerza del pumping de bombo y toms (0 = sin pumping)')
+FASE7_FIJOS = (('Multradio', 2.0, 'los radios se duplican por encima de Umbraldensidad'),
+               ('Pumphold', 0.04, 'el pico sostenido, 0,04 s'),
+               ('Pumpvelmin', 0.6, 'el pico de un golpe flojo, 0,6 del maximo'))
+
+
+def fase7_al_dia(base):
+    """Pasa un proyecto anterior a la fase 7 v16: los interruptores apagados
+    ponen su intensidad a 0; los tres ajustes fijos avisan si los habias
+    cambiado."""
+    quitados = []
+    for toggle, par, cero in (('Balizasdrum', 'Luzdrum', 0.0), ('Erosionvel', 'Velref', 0),
+                              ('Pumpon', 'Pumpamt', 0.0)):
+        if not has_par(base, toggle):
+            continue
+        try:
+            if not bool(getattr(base.par, toggle).eval()) and has_par(base, par):
+                if par == 'Velref':
+                    base.par.Velref.min = base.par.Velref.normMin = 0
+                setattr(base.par, par, cero)
+        except Exception:
+            pass
+        if remove_par(base, toggle):
+            quitados.append('%s (ahora %s 0)' % (toggle, par))
+    for nm, defecto, que in FASE7_FIJOS:
+        if not has_par(base, nm):
+            continue
+        try:
+            v = float(getattr(base.par, nm).eval())
+            if abs(v - defecto) > 1e-6:
+                info('%s era %s: ahora fijo (%s)' % (nm, str(round(v, 3)).replace('.', ','), que))
+        except Exception:
+            pass
+        if remove_par(base, nm):
+            quitados.append(nm)
+    if has_par(base, 'Velref'):           # 0 = la velocidad no cuenta
+        try:
+            base.par.Velref.min = base.par.Velref.normMin = 0
+        except Exception:
+            pass
+    for nm, lb in FASE7_LABELS.items():
+        _relabel(base, nm, lb)
+    if quitados:
+        ok('pagina Fase7: quitados %s' % ', '.join(quitados))
+
+
 def fase3_al_dia(base):
     """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
     Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
@@ -1390,6 +1444,7 @@ def install_core(base, carpeta, fase):
     fase3_al_dia(base)
     fase4_al_dia(base)
     fase6_al_dia(base)
+    fase7_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
