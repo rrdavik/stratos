@@ -32,8 +32,9 @@ QUE CAMBIA
   CORTEZA   Cortezamax 4 y Grosormax 1,5: la concha nueva compacta las
             viejas (motor v37) y el planeta tiende a nucleo + 4; a los 20
             minutos, radio ~11 en vez de 24-42.
-  ALTURAS   Growstep = (1 - Semillafrac) / (Umbralram - 1): la formacion
-            sube a escalones iguales de la semilla al limite, sin salto.
+  ALTURAS   desde el motor v58 ya no hace falta: Growstep no es un
+            parametro y el motor sube siempre a escalones iguales de la
+            semilla al limite, (1 - Semillafrac) / (Umbralram - 1).
 No toca nada mas (Shellthick, Alturafactor, umbrales de la fase 4,
 camara, tema...).
 
@@ -49,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'ajuste_vista v1  (eras mas largas, corteza que se compacta, alturas sin salto)'
+VERSION = 'ajuste_vista v2  (eras mas largas y corteza que se compacta; las alturas ya las calcula el motor)'
 banner(VERSION)
 
 base = require_base(3)
@@ -58,9 +59,6 @@ m = motor.module
 
 AJUSTE = [('Ciclomin', 16), ('Compasesquietos', 3), ('Umbralnovedad', 0.15), ('Ciclomax', 64),
           ('Herencia', 0.25), ('Cortezamax', CORTEZA_DEF), ('Grosormax', 1.5)]
-if has_par(base, 'Semillafrac') and has_par(base, 'Umbralram'):
-    AJUSTE.append(('Growstep', round(growstep_coherente(float(base.par.Semillafrac),
-                                                         int(base.par.Umbralram)), 3)))
 
 cambios = []
 for nombre, valor in AJUSTE:

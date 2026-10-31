@@ -15,8 +15,8 @@ La sala entra en la pieza: desde la fase 21 el micrófono escucha al público, y
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La v55 añade el micrófono: flujo espectral, onsets, el pad 9 de erosión (baja escalones enteros), el corte por ruido de sala y la línea `MICRO`; la v56, `Fuentemic` = chop (el audio de cualquier CHOP, como la sala virtual); la v57 saca `mic_sim` y `mic_flujo` del modo Time Slice de su entrada (en TouchDesigner avisaban «Editing numSamples is not supported in Time Slice mode») | `motor v57` |
-| `estratos_comun.py` | La v37: `require_base(21)` acepta un proyecto en la fase 19 o en la 20 (los POPs, sin fusionar: D1) y el informe dice cuál encontró | `comun v37` |
+| `estratos_motor.py` | La v55 añade el micrófono: flujo espectral, onsets, el pad 9 de erosión (baja escalones enteros), el corte por ruido de sala y la línea `MICRO`; la v56, `Fuentemic` = chop (el audio de cualquier CHOP, como la sala virtual); la v57 saca `mic_sim` y `mic_flujo` del modo Time Slice de su entrada (en TouchDesigner avisaban «Editing numSamples is not supported in Time Slice mode»); la v58, la página Fase3 con seis parámetros menos (fase 3 v13, ver «Página Fase3» en `MONTAJE_FASES_3_10.md`) | `motor v58` |
+| `estratos_comun.py` | La v37: `require_base(21)` acepta un proyecto en la fase 19 o en la 20 (los POPs, sin fusionar: D1) y el informe dice cuál encontró; la v38 quita de la página Fase3 `Growstep`, `Gatemode`, `Rotextra` y los tres ajustes de la luz de las conchas, conservando lo que hacían | `comun v38` |
 | `fase21_microfono.py` | El micrófono: página Fase21, `mic_in`, `mic_sim`, `mic_fuente` y `mic_flujo`, la fila del pad 9 en `perfiles_erosion` y `colores_drum` (v2: `Fuentemic` = chop y `Chopmic`) | `fase21 v2` |
 | `sala_virtual.py` y `sala_motor.py` | No son una fase: la maqueta de la instalación en `/project1/SALA` (ver *Sala virtual*) | `sala_virtual v1`, `sala v1` |
 | `fase7_erosion.py` | v15: relanzada sobre la fase 21, conserva la fila del micrófono (pad 9) de `perfiles_erosion` | `fase7 v15` |

@@ -9,8 +9,11 @@ QUE HACE
 Cada nota del SEQ1 suma 1 a la CARGA de su celda. Cuando la carga llega
 al COSTE se dispara un trigger de construccion y la OCUPACION sube 1. El
 coste crece con la altura: 1 nota abajo, Costemax (5) en el limite. Cada
-nota sube la formacion Growstep / coste: cuanto mas alta, mas despacio
-(la frenada). Cada nota hace latir la formacion aunque no construya.
+nota sube la formacion un escalon / coste: cuanto mas alta, mas despacio
+(la frenada). Cada nota hace latir la formacion aunque no construya. El
+escalon no es un parametro (v13): lo calcula el motor para que la
+formacion suba a escalones iguales de la semilla (Semillafrac) al limite,
+que se alcanza en la ocupacion Umbralram (5, pagina Fase4).
 
     ocupacion 1     semilla (20 % del limite)                    1 nota
     ocupacion 2     brote (40 %)                                 2 notas
@@ -20,7 +23,7 @@ nota sube la formacion Growstep / coste: cuanto mas alta, mas despacio
                     (el desbordamiento llega en la fase 4)
 El gate decide cuanto sube cada nota: corto, hasta 1/4; ligado, como
 mucho Gatemax veces (1,25). Nunca adelanta la altura al escalon que se
-esta construyendo.
+esta construyendo. Gatemax 1: el gate no cuenta (v13; antes Gatemode).
 
 El MATERIAL lo fija la velocidad de la primera nota y no vuelve a cambiar:
 velocidad alta = pulido, casi metalico; baja = poroso y mate.
@@ -37,9 +40,17 @@ la pagina Fase3. Cambiar el rango rehace la reticula y vacia el mundo.
 BALANCEO DEL EJE (v2): ademas del giro al tempo, el eje del planeta se
 balancea lentamente hacia la camara y en contra (rx), para ver los dos
 polos. Ajeno al reloj del secuenciador; se congela con Pausa.
-    Rotextra      encendido / apagado (entra y sale en 3 s, sin saltos)
-    Balanceo      amplitud en grados (60)
+    Balanceo      amplitud en grados (60); 0 lo apaga (entra y sale en
+                  3 s, sin saltos; v13: antes Rotextra)
     Balanceoper   segundos por vaiven completo (90)
+
+PAGINA MAS CORTA (v13): 16 parametros en vez de 22. Fuera Growstep (lo
+calcula el motor), Gatemode (Gatemax 1), Rotextra (Balanceo 0) y los tres
+ajustes de la luz de las conchas: Luzconchas pasa de interruptor a
+intensidad (0 apagada, 1 = pulso 0,35 y reposo 0,10; alcance fijo, 4).
+Relanzar cualquier fase los quita de un proyecto anterior conservando lo
+que hacian: Gatemode apagado da Gatemax 1, Rotextra apagado Balanceo 0, y
+Luzconchas sale de Luzconchaspulso (0,35 = 1).
 
 QUE INSTALA
 -----------
@@ -77,7 +88,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v12  (carga y frenada, luz de celda, material, balanceo, polos y anillos)'
+VERSION = 'fase3 v13  (pagina mas corta: carga y frenada, luz de celda, material, balanceo, polos)'
 banner(VERSION)
 
 base = require_base(3)
@@ -91,19 +102,16 @@ page = get_page(base, 'Fase3')
 add_par(base, page, 'float', 'Shellthick', 'Grosor de concha', 0.5, 0.05, 2.0)
 add_par(base, page, 'float', 'Alturafactor', 'Limite de altura (x grosor)', 3.75, 1.0, 8.0)
 add_par(base, page, 'float', 'Semillafrac', 'Altura de la semilla (x limite)', 0.20, 0.05, 1.0)
-add_par(base, page, 'float', 'Growstep', 'Crecimiento por trigger (x limite)', 0.20, 0.05, 1.0)
 add_par(base, page, 'int', 'Costemax', 'Notas por trigger en el limite', 5, 1, 12, clamp=True)
 renew_default(base, 'Alturafactor', 3.0, 3.75)
 renew_default(base, 'Semillafrac', 0.25, 0.20)
-renew_default(base, 'Growstep', 0.30, 0.20)
-add_par(base, page, 'toggle', 'Gatemode', 'El gate decide el crecimiento', True)
-add_par(base, page, 'float', 'Gatemax', 'Gate ligado: crecimiento max. (x)', 1.25, 1.0, 2.0)
+add_par(base, page, 'float', 'Gatemax', GATEMAX_LABEL, 1.25, 1.0, 2.0)
 add_par(base, page, 'int', 'Umbralvel', 'Velocidad: pulido a partir de', 64, 1, 127, clamp=True)
 add_par(base, page, 'int', 'Velprueba', 'Velocidad de prueba', 100, 1, 127, clamp=True)
 add_par(base, page, 'pulse', 'Sembrar', 'Sembrar en Nota (prueba)')
 add_par(base, page, 'pulse', 'Resetmundo', 'Vaciar el mundo')
-ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Growstep, Costemax, Gatemode, Gatemax, '
-   'Umbralvel, Velprueba, Sembrar, Resetmundo, Rotextra, Balanceo, Balanceoper')
+ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Costemax, Gatemax, '
+   'Umbralvel, Velprueba, Sembrar, Resetmundo, Balanceo, Balanceoper')
 
 # -----------------------------------------------------------------------------
 # MATERIALES Y GEOMETRIA
@@ -123,12 +131,13 @@ leeme(base, 3, """FASE 3 - LA SEMILLA
     1 semilla, 2 brote, 3 crecimiento, 4 madurez, 5+ limite (3,75 x Shellthick).
     Notas: 1, 2, 4, 7 y 11. Costemax 1 = una nota por trigger.
   Gate ligado: como mucho Gatemax (1,25) veces; nunca pasa del escalon.
-  El gate largo crece mas que el corto (Gatemode). El material lo fija la
-  velocidad de la primera nota (Umbralvel): pulido o poroso.
+  El gate largo crece mas que el corto; Gatemax 1, el gate no cuenta.
+  El material lo fija la velocidad de la primera nota (Umbralvel):
+  pulido o poroso.
   Prueba sin BeatStep: elige Nota (pagina Fase2) y pulsa Sembrar.
   Resetmundo vacia el planeta.
-  Rotextra balancea el eje (Balanceo grados, cada Balanceoper s) para
-  ver los polos.""")
+  Balanceo inclina el eje (grados, cada Balanceoper s) para ver los
+  polos; 0 lo apaga.""")
 
 print_report()
 
@@ -231,6 +240,24 @@ def prueba(t):
     m.wobble_step(st, 0.25, True, False, 60.0, 4.0)      # periodo minimo 5 s
     w = m.wobble_step(st, 1.0 / 60, True, False, 60.0, 5.0)
     t.check('balanceo dentro de la amplitud', 0 < w <= 60.0, '%.1f grados' % w)
+    # v13: la pagina mas corta
+    fuera = [nm for nm in ('Growstep', 'Gatemode', 'Rotextra', 'Luzconchaspulso',
+                           'Luzconchasreposo', 'Luzconchasalcance') if has_par(base, nm)]
+    t.check('pagina Fase3 sin Growstep, Gatemode, Rotextra ni los ajustes de la luz de las conchas',
+            not fuera, 'siguen: %s' % ', '.join(fuera) if fuera else '')
+    t.check('Luzconchas es una intensidad (1 = pulso 0,35)',
+            abs(m.cfg()['luz_conchas_pulso'] - 0.35 * float(base.par.Luzconchas)) < 1e-9)
+    t.check('escalones iguales de la semilla al limite (sin salto en Umbralram)',
+            abs(c['seed_frac'] + (c['th_branch'] - 1) * c['grow_frac'] - 1.0) < 1e-9,
+            'Growstep calculado %.3f' % c['grow_frac'])
+    cg = dict(c, gate_max=1.0)
+    cg['gate_mode'] = int(cg['gate_max'] > 1.0 + 1e-6)
+    Wq = m.new_world()
+    m.note_on(Wq, cg, m.GEO, 64, 100, 0.0)
+    m.note_on(Wq, cg, m.GEO, 64, 100, 1.0)
+    h_q = Wq['h'][i]
+    m.note_off(Wq, cg, m.GEO, 64, 1.01, 120.0)       # gate cortisimo
+    t.check('Gatemax 1: el gate no cuenta', abs(Wq['h'][i] - h_q) < 1e-9)
     v = m.world_dir((0.0, 1.0, 0.0), 0.0, 0.0, 90.0)
     t.check('balanceo de 90: el polo mira a la camara', abs(v[2] - 1.0) < 1e-6)
     lo, hi = m.GRID['lo'], m.GRID['hi']

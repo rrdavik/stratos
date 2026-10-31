@@ -27,7 +27,7 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 | `fase18_escenas.py` | Escenas por tema (tabla `escenas`, `Escena`, `Guardarescena`, `Cargarescena`), luz local (`luz_local`), capas de diagnóstico (`diagnostico`), página Fase18 | `fase18 v1` |
 | `fase19_modular.py` | Señales del modular (OSC, un CHOP, a mano o de prueba): viento, respiración de las ventanas, esporas, smog, niebla y glitch; página Fase19 y OSC In CHOP `modular_osc` (v2: rango -10..10 V) | `fase19 v2` |
 | `modular/` | El conversor CV → OSC para la fase 19: circuito (`esquema.svg`), firmware para ESP32 o Arduino (`cv_osc/cv_osc.ino`) y puente USB → UDP (`puente_osc.py`); ver `modular/README.md` | — |
-| `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v1` |
+| `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v2` |
 | `pruebas/sesion_escena.py` | La sesión de 20 minutos por escena de la fase 18, sobre el motor: densidad, piezas, coste por fotograma y criterios de cierre | — |
 | `pruebas/` | TouchDesigner simulado (desde la fase 11 v5, también Script TOP y parámetros RGB), vista previa del catálogo (bolas y conos) y comprobación del shader con OpenGL, con el terreno y los ríos (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
@@ -1025,15 +1025,15 @@ Medido con el motor en una sesión simulada de 20 minutos a 120 BPM (SEQ1 de 16 
 | `Grosormax` (Fase8) | 2,0 | 1,5 | La concha de un mundo largo no domina el corte (48 compases o más) |
 | `Cortezamax` (Fase8, nuevo) | — | 4 | **Compactación:** la concha nueva aplasta las viejas; la corteza tiende a 4 y el planeta deja de engordar (ver fase 8 en `MONTAJE_FASES_3_10.md`) |
 | `Umbralnovedad`, `Ciclomax`, `Herencia` | 0,15 · 64 · 0,25 | igual | Los valores por defecto ya eran buenos; `ajuste_vista.py` los devuelve ahí |
-| `Growstep` | — | (1 − `Semillafrac`) / (`Umbralram` − 1) | Escalones iguales de la semilla al límite; con los valores por defecto ya lo es (0,2) |
+| `Growstep` | — | (1 − `Semillafrac`) / (`Umbralram` − 1) | Escalones iguales de la semilla al límite; con los valores por defecto ya lo es (0,2). Desde el motor v58 no es un parámetro: lo calcula siempre el motor |
 
-**Cómo llega a un proyecto en marcha.** Relanzar cualquier fase (comun v29) cambia `Ciclomin`, `Compasesquietos` y `Grosormax` solo si seguían en el valor por defecto viejo, crea `Cortezamax` en la página Fase8 y avisa con `..` si la altura salta al límite. Lo ajustado a mano no se toca. Para ponerlo todo en los valores calibrados, incluido lo tocado a mano, está `ajuste_vista.py`:
+**Cómo llega a un proyecto en marcha.** Relanzar cualquier fase (comun v29) cambia `Ciclomin`, `Compasesquietos` y `Grosormax` solo si seguían en el valor por defecto viejo, crea `Cortezamax` en la página Fase8 Lo ajustado a mano no se toca. Para ponerlo todo en los valores calibrados, incluido lo tocado a mano, está `ajuste_vista.py`:
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/ajuste_vista.py').read())
 ```
 
-No cambia el nivel ni el mundo. Pone `Ciclomin` 16, `Compasesquietos` 3, `Umbralnovedad` 0,15, `Ciclomax` 64, `Herencia` 0,25, `Cortezamax` 4, `Grosormax` 1,5 y el `Growstep` sin salto. Dice qué ha cambiado (`antes -> ahora`) y escribe la línea para volver a lo de antes. No toca `Shellthick`, `Alturafactor`, los umbrales de la fase 4, la cámara ni el tema. Lo ya enterrado no adelgaza de golpe, porque el radio nunca baja; para verlo desde el principio, `Resetmundo` (página Fase3).
+No cambia el nivel ni el mundo. Pone `Ciclomin` 16, `Compasesquietos` 3, `Umbralnovedad` 0,15, `Ciclomax` 64, `Herencia` 0,25, `Cortezamax` 4, `Grosormax` 1,5 (desde la v2 ya no toca `Growstep`, que calcula el motor). Dice qué ha cambiado (`antes -> ahora`) y escribe la línea para volver a lo de antes. No toca `Shellthick`, `Alturafactor`, los umbrales de la fase 4, la cámara ni el tema. Lo ya enterrado no adelgaza de golpe, porque el radio nunca baja; para verlo desde el principio, `Resetmundo` (página Fase3).
 
 ### Resultado (simulación, 20 minutos)
 
