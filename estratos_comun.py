@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v43'
+VERSION_COMUN = 'comun v44'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -122,7 +122,7 @@ def diagnostico_render(base):
     print('-' * 66)
 
 
-RIOS_PARS = ('Colorrior', 'Anchorio', 'Anchomaxrio', 'Emisivorio', 'Lagos')
+RIOS_PARS = ('Colorrior', 'Anchorio', 'Emisivorio', 'Lagos')      # v44: sin Anchomaxrio
 
 
 def diagnostico_rios(base, m, version=None):
@@ -167,8 +167,8 @@ def diagnostico_rios(base, m, version=None):
         elif ter.get('E') is None:
             motivo = 'el mapa de alturas esta vacio (sin numpy en TouchDesigner?)'
         elif alto <= umbral:
-            motivo = ('el relieve mas alto mide %.3f y una fuente pide Pendientemin x el limite = %.3f: '
-                      'baja Pendientemin' % (alto, umbral))
+            motivo = ('el relieve mas alto mide %.3f y una fuente pide 0,01 x el limite = %.3f: '
+                      'levanta el relieve (Sembrar2 o Pruebario)' % (alto, umbral))
         else:
             motivo = ('hay cumbres (relieve max %.3f) pero ninguna vecina mas baja: el relieve no tiene '
                       'pendiente hacia ningun lado' % alto)
@@ -1363,6 +1363,44 @@ def fase11_al_dia(base):
         ok('pagina Fase11: quitados %s (valores fijos)' % ', '.join(quitados))
 
 
+# --- la pagina Fase13, mas corta (comun v44, motor v64) -----------------------
+# De 14 parametros a 12: el ancho maximo de un rio (caudal) es 3,4 x Anchorio
+# (antes Anchomaxrio, 0,34 = 3,4 x 0,10) y el relieve minimo de una fuente
+# queda en 0,01 x el limite (antes Pendientemin). Grosorvia es solo de las
+# carreteras: los rios tienen su ancho desde la fase 13 v2.
+
+GROSORVIA_LABEL = 'Ancho de las carreteras'
+ANCHORIO_LABEL = 'Ancho minimo de un rio (el maximo, 3,4 x)'
+
+
+def fase13_al_dia(base):
+    """Quita Anchomaxrio y Pendientemin de un proyecto anterior a la fase
+    13 v6; avisa si los habias cambiado."""
+    quitados = []
+    try:
+        if has_par(base, 'Anchomaxrio') and has_par(base, 'Anchorio'):
+            mx, mn = float(base.par.Anchomaxrio.eval()), float(base.par.Anchorio.eval())
+            if abs(mx - 3.4 * mn) > 1e-3:
+                info('Anchomaxrio era %s: el rio mas caudaloso mide ahora 3,4 x Anchorio = %s'
+                     % (str(round(mx, 3)).replace('.', ','), str(round(3.4 * mn, 3)).replace('.', ',')))
+    except Exception:
+        pass
+    if remove_par(base, 'Anchomaxrio'):
+        quitados.append('Anchomaxrio (3,4 x Anchorio)')
+    try:
+        if has_par(base, 'Pendientemin') and abs(float(base.par.Pendientemin.eval()) - 0.01) > 1e-6:
+            info('Pendientemin era %s: ahora fijo en 0,01'
+                 % str(round(float(base.par.Pendientemin.eval()), 3)).replace('.', ','))
+    except Exception:
+        pass
+    if remove_par(base, 'Pendientemin'):
+        quitados.append('Pendientemin (0,01)')
+    _relabel(base, 'Grosorvia', GROSORVIA_LABEL)
+    _relabel(base, 'Anchorio', ANCHORIO_LABEL)
+    if quitados:
+        ok('pagina Fase13: quitados %s' % ', '.join(quitados))
+
+
 def fase3_al_dia(base):
     """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
     Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
@@ -1513,6 +1551,7 @@ def install_core(base, carpeta, fase):
     fase7_al_dia(base)
     fase8_al_dia(base)
     fase11_al_dia(base)
+    fase13_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)

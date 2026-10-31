@@ -26,7 +26,8 @@ QUE HACE
                verde, Emisivorio 0,6 y Anchominpx 4. Van sobre
                el terreno, con un pequeno desfase, por los bordes de las celdas
                y lejos de su centro: bordean la formacion y la loseta de luz.
-               Ancho por caudal: de Anchorio a Anchomaxrio.
+               Ancho por caudal: de Anchorio a 3,4 x Anchorio (v6; antes
+               Anchomaxrio).
   CARRETERAS (ciudad)
                arbol de expansion minima (Kruskal) entre las capitales de
                cluster y las formaciones sueltas con ocupacion de Minvia o
@@ -51,12 +52,20 @@ RIOS QUE SE VEN (v3)
   (ancho en pixeles, material, color, copas encima). La leyenda lleva la
   linea RIOS (tramos, fuentes, lagos, caudal max, ancho en px).
   Anchominpx  el rio nunca mide menos de esos pixeles con la camara de globo
-  Pendientemin relieve minimo de una fuente (x el limite); la celda mas alta
-              de cada cluster de relieve es fuente siempre
+  El relieve minimo de una fuente es 0,01 x el limite (v6; antes
+  Pendientemin); la celda mas alta de cada cluster de relieve es fuente
+  siempre.
   Pruebario   levanta una cordillera de 5 celdas en el anillo de Nota2 y
               dice el rio que baja de su cumbre: si no se ve azul desde el
               globo, el fallo esta en la representacion, no en el motor
   Los pisos de los arboles no tapan la cinta: se recortan a su lado.
+
+PAGINA MAS CORTA (v6)
+---------------------
+  12 parametros en vez de 14. Fuera Anchomaxrio (el rio mas caudaloso es
+  3,4 x Anchorio: 0,34, como antes) y Pendientemin (0,01). Grosorvia es
+  solo el ancho de las carreteras. Relanzar cualquier fase los quita de un
+  proyecto anterior y avisa si los habias cambiado.
 
 COMO USARLO
 -----------
@@ -67,7 +76,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v5  (autoprueba: las copas de los ejemplares de la fase 11 v8 no tapan el rio)'
+VERSION = 'fase13 v6  (pagina mas corta: el ancho maximo del rio sale de Anchorio)'
 banner(VERSION)
 
 base = require_base(13)
@@ -89,15 +98,13 @@ add_par(base, page, 'toggle', 'Rios', 'Rios (naturaleza)', True)
 add_par(base, page, 'toggle', 'Carreteras', 'Carreteras (ciudad)', True)
 add_par(base, page, 'int', 'Minvia', 'Ocupacion minima de una formacion suelta con carretera', 2, 1, 16,
         clamp=True)
-add_par(base, page, 'float', 'Grosorvia', 'Ancho de rios y carreteras', 0.18, 0.02, 1.0)
+add_par(base, page, 'float', 'Grosorvia', GROSORVIA_LABEL, 0.18, 0.02, 1.0)
 add_par(base, page, 'int', 'Maxrio', 'Longitud maxima de un rio (celdas)', 12, 1, 60, clamp=True)
 add_par(base, page, 'rgb', 'Colorrio', 'Color de los rios (azul reservado)', m.COL_RIO)
-add_par(base, page, 'float', 'Anchorio', 'Ancho minimo de un rio', 0.10, 0.01, 1.0)
-add_par(base, page, 'float', 'Anchomaxrio', 'Ancho maximo de un rio (caudal)', 0.34, 0.01, 1.5)
+add_par(base, page, 'float', 'Anchorio', ANCHORIO_LABEL, 0.10, 0.01, 1.0)
 add_par(base, page, 'float', 'Emisivorio', 'Emisivo del agua (cara de sombra)', 0.6, 0.0, 1.0)
 add_par(base, page, 'toggle', 'Lagos', 'Lagos en las hondonadas', True)
 add_par(base, page, 'float', 'Anchominpx', 'Ancho minimo del rio en pantalla (px, camara de globo)', 4.0, 0.0, 10.0)
-add_par(base, page, 'float', 'Pendientemin', 'Relieve minimo de una fuente (x el limite)', 0.01, 0.0, 0.5)
 add_par(base, page, 'pulse', 'Pruebario', 'Cordillera de prueba y su rio (en Nota2)')
 # v4: rios mas vivos; los valores de antes que no se tocaron pasan a los nuevos
 renew_default(base, 'Emisivorio', 0.25, 0.6)
@@ -105,8 +112,8 @@ renew_default(base, 'Anchominpx', 2.0, 4.0)
 for k, ch in enumerate('rgb'):
     renew_default(base, 'Colorrio' + ch, m.COL_RIO_V50[k], m.COL_RIO[k])
 ok('pagina Fase13: Rios, Carreteras, Minvia 2, Grosorvia 0,18 (carreteras), Maxrio 12; v2: Colorrio '
-   '(v4: OKLCH 0,65 0,18 250), Anchorio 0,10, Anchomaxrio 0,34, Emisivorio 0,6, Lagos; v3: Anchominpx 4, '
-   'Pendientemin 0,01, Pruebario')
+   '(v4: OKLCH 0,65 0,18 250), Anchorio 0,10 (el maximo, 3,4 x), Emisivorio 0,6, Lagos; v3: Anchominpx 4, '
+   'Pruebario')
 
 # -----------------------------------------------------------------------------
 # GEOMETRIA: el tejido, cajas a ras del suelo con el shader de la piel
@@ -129,13 +136,13 @@ leeme(base, 13, """FASE 13 - TEJIDO CONECTIVO
   (suelo + relieve) a la vecina mas baja, hasta un llano, otro rio o Maxrio;
   en una hondonada, lago (Lagos). Cintas azules (geometria rios,
   mat_piel_agua: Colorrio, Emisivorio) que bordean el centro de las celdas;
-  ancho por caudal (Anchorio a Anchomaxrio).
+  ancho por caudal (Anchorio a 3,4 x Anchorio).
   Ciudad: carreteras por Kruskal entre capitales y formaciones sueltas con
   ocupacion >= Minvia, por el camino mas corto de la reticula.
   A ras del suelo, bajo las formaciones (geometria tejido). Grosorvia.
   Prueba: Sembrarzona en dos zonas separadas.
   v3: Pruebario (cordillera de 5 celdas en Nota2 y su rio); Anchominpx
-  (ancho minimo en pantalla); Pendientemin (relieve minimo de una fuente).
+  (ancho minimo en pantalla).
   Al aplicar la fase: DIAGNOSTICO DE LOS RIOS en el Textport; leyenda RIOS.""")
 
 print_report()
@@ -155,7 +162,7 @@ def prueba(t):
     m = t.m
     guarda = {}
     for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Rios', 'Carreteras', 'Minvia', 'Maxrio', 'Lagos',
-               'Anchominpx', 'Pendientemin'):
+               'Anchominpx'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -423,7 +430,7 @@ def _prueba_v3(t, m):
                 tapan += 1
     t.check('un bosque alrededor: ninguna copa de arbol encima de la cinta (%d copas)' % copas,
             tapan == 0 and copas > 0, '%d copas encima' % tapan)
-    # 5. un mundo casi plano: con Pendientemin bajo, la celda mas alta del cluster de relieve es fuente
+    # 5. un mundo casi plano: con el relieve minimo bajo (0,01), la celda mas alta del cluster de relieve es fuente
     Wp = m.new_world()
     zona_ = [i] + list(m.NEIGH[i])
     for x in zona_:
@@ -436,11 +443,18 @@ def _prueba_v3(t, m):
     sin = m.rios(Wp, cp)[0]
     cp['pendiente_min'] = 0.01
     con = m.rios(Wp, cp)[0]
-    t.check('mundo casi plano (relieve %.2f): con Pendientemin 0,5 %s; con 0,01 la cumbre del cluster es '
+    t.check('mundo casi plano (relieve %.2f): con relieve minimo 0,5 %s; con 0,01 la cumbre del cluster es '
             'fuente (%d rios)' % (alto_, 'tambien' if sin else 'no hay rios', len(con)),
             con and any(r_[0] == max(zona_, key=lambda x: m.terreno(Wp, cp)['centro'][x]) for r_ in con))
     t.check('leyenda RIOS (tramos, fuentes, lagos, caudal max, ancho en px)',
             'RIOS     tramos' in m.legend() and 'px' in m.legend())
+    # v6: la pagina mas corta
+    fuera = [nm for nm in ('Anchomaxrio', 'Pendientemin') if has_par(base, nm)]
+    t.check('pagina Fase13 sin Anchomaxrio ni Pendientemin', not fuera,
+            'siguen: %s' % ', '.join(fuera) if fuera else '')
+    cf = m.cfg()
+    t.check('el rio mas caudaloso, 3,4 x Anchorio; el relieve minimo de una fuente, 0,01',
+            abs(cf['ancho_max_rio'] - 3.4 * float(base.par.Anchorio)) < 1e-9 and cf['pendiente_min'] == 0.01)
 
 run_test(base, prueba)
 print('  Ahora: con Tema ciudad, Sembrarzona en dos notas lejanas: la carretera')

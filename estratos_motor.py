@@ -44,7 +44,9 @@
 #                 pagina Fase8 con 11: Paletaalterna y Contrasteocupada
 #                 fijos, y la luminosidad de la tapa sale de Paletaluz; motor
 #                 v63: la pagina Fase11 con 35: Rebote, Maxcaosnat, Varangulo,
-#                 Cuantizar30, Inclinacion, Densidadhoja y Muroterraza, fijos).
+#                 Cuantizar30, Inclinacion, Densidadhoja y Muroterraza, fijos;
+#                 motor v64: la pagina Fase13 con 12: el ancho maximo de un
+#                 rio es 3,4 x Anchorio y Pendientemin queda en 0,01).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -57,7 +59,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v63'
+MOTOR_VERSION = 'motor v64'
 
 import math
 
@@ -5967,6 +5969,9 @@ def px_unidad(W, cfg):
     return cfg.get('encuadre', ENCUADRE_DEF) * ALTO_CUADRO / (2.0 * (top_radius(W, cfg) + RETICULA_SOBRE_DEF))
 
 
+ANCHO_MAX_RIO_K = 3.4      # motor v64: ancho maximo = 3,4 x Anchorio (antes Anchomaxrio, 0,34)
+
+
 def ancho_rio(cfg, q):
     """Ancho de un tramo por el que pasan q rios: Anchorio con uno, hasta
     Anchomaxrio con cuatro o mas (se ensancha aguas abajo)."""
@@ -7999,6 +8004,8 @@ def cfg():
     # escalones iguales de la semilla al limite. Gatemax 1 apaga el gate.
     c['grow_frac'] = growstep_coherente(c['seed_frac'], c['th_branch'])
     c['gate_mode'] = int(c['gate_max'] > 1.0 + 1e-6)
+    # motor v64: el rio mas caudaloso, ANCHO_MAX_RIO_K veces el mas fino
+    c['ancho_max_rio'] = ANCHO_MAX_RIO_K * c['ancho_rio']
     # motor v62: el gris de la tapa sigue a la luminosidad de las conchas
     c['tapa_luz'] = TAPA_LUZ_K * c['paleta_luz']
     # motor v59: fusion, corona y cumbre, a Pasoumbral ocupaciones una de otra
@@ -8078,12 +8085,10 @@ def cfg():
                  color_rio=(max(0.0, _p('Colorrior', COL_RIO[0])), max(0.0, _p('Colorriog', COL_RIO[1])),
                             max(0.0, _p('Colorriob', COL_RIO[2]))),
                  ancho_rio=max(0.005, _p('Anchorio', c['ancho_rio'])),
-                 ancho_max_rio=max(0.005, _p('Anchomaxrio', c['ancho_max_rio'])),
                  emisivo_rio=max(0.0, _p('Emisivorio', c['emisivo_rio'])),
                  lagos=int(_p('Lagos', True)),
                  # fase 13 v3: rios que se ven desde el globo
                  ancho_min_px=max(0.0, _p('Anchominpx', c['ancho_min_px'])),
-                 pendiente_min=max(0.0, _p('Pendientemin', c['pendiente_min'])),
                  encuadre=max(0.3, min(1.0, _p('Encuadre', c['encuadre']))))
     if c['nivel'] >= 14:
         c.update(ventana_escalada=max(1, int(_p('Ventanaescalada', c['ventana_escalada']))),

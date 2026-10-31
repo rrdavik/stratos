@@ -19,7 +19,7 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 | `estratos_comun.py` | Piezas compartidas; la v17 mete en el render las geometrías de los modelos (`mod_...`) y las partículas, y sabe instanciar un modelo con un Select SOP; la v18 trae el shader de la piel y crea las geometrías de los modelos para el nivel en que esté el proyecto; la v19 mete el `tejido` en el render; la v20 corrige el color de las luces de los uniformes del shader; la v21 añade `nombre_op`; la v22 gira las marcas de la retícula desde el motor; la v23, shader vegetal y `piel_al_dia` (al relanzar cualquier fase, cada geometría de modelo toma el material de su familia); la v24 añade `Holguraaltura`; la v25 trae de la fase 11 la construcción de los modelos (`construir_modelos`) y el catálogo (`catalogo_al_dia`), para que la fase 14 añada los suyos; la v26 pone a las conchas el shader de la piel desde la fase 15 (`conchas_al_dia`); la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre` (`camara_al_dia`); la v28 pone a cero el giro y el pivote de la cámara al relanzar (`camara_neutra`); la v29, la calibración de la vista (`calibracion_al_dia`: valores nuevos donde seguían por defecto, `Cortezamax` y el aviso de alturas con salto); la v30, las ventanas de la ciudad por edificio en el shader, el color de `luz_principal` desde el motor (`tiempo_al_dia`) y parámetros de texto; la v31, `luz_local` y `diagnostico` en el render y `Escena` en los pulsos; la v32, niebla de distancia y glitch en el shader de la piel (`uNiebla`, `uNieblaCol`, `uGlitch`) y la niebla de la cámara (`modular_al_dia`); la v33, el terreno (`terreno_al_dia`, `mapas_terreno`: Script TOP `alturas`, Ramp TOP `rampa_hipso`), bolas y conos en los modelos, y en el shader las familias tierra y agua, los pisos, el sombreado rasante y el borde tintado ; la v34, el diagnóstico de los ríos (`diagnostico_rios`, fase 13 v3); la v35, el agua más viva en el shader (fresnel y especular más fuertes, fase 13 v4); la v36, la biblioteca de ejemplares en TD (un Script SOP por ejemplar, `ejemplar_callbacks`), el Script TOP `cultivos` y en el shader la hoja facetada, la corteza mate, la traslucidez del borde de la copa (`uHojas`), los bancales y la meseta (`sCultivo`, `uCultivo`, `uBancal`, `uRiego`); el atributo `uv` de los ejemplares pasa del vertex al pixel shader | `comun v36` |
 | `fase11_piel.py` | La piel: tabla `catalogo`, modelos en `modelos`, geometrías de los modelos, partículas, página Fase11 (v2: relanzable en la fase 12; v3: la autoprueba cuenta los huecos del dosel; v4: usa `construir_modelos` y `catalogo_al_dia` de comun; v5: la naturaleza legible; v6: árboles de pisos; v7: las ramas, desde el tercio superior del tronco visible; v8: brotes, árboles y terrazas; v9: la página Fase11 con 35 parámetros en vez de 42, ver «Página Fase11 (v9)») | `fase11 v9` |
 | `fase12_moduladores.py` | Velocidad → material (shader de la piel, una geometría por modelo), gate → vigor y plantas, página Fase12. No confundir con `fase12_base.py` (fases 1 y 2). v2: comprueba que los uniformes se evalúan; v3: la autoprueba compara el material por su nombre (en TouchDesigner, `material` devuelve el operador); v4: autoprueba del material vegetal; v5: solo la autoprueba (la naturaleza toma el color de los pisos y el relieve es la malla); v6: solo la autoprueba (el material de la velocidad va a la copa de los árboles); v7: solo la autoprueba (cuenta las geometrías de la biblioteca de ejemplares) | `fase12 v7` |
-| `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometrías `tejido` y (v2) `rios`, página Fase13 (v2: ríos azules por el suelo real, lagos; v3: diagnóstico de la cadena, `Anchominpx`, `Pendientemin`, `Pruebario`; v4: ríos más vivos; v5: solo la autoprueba (las copas de los ejemplares no tapan el río)) | `fase13 v5` |
+| `fase13_tejido.py` | Ríos (naturaleza) y carreteras (ciudad), geometrías `tejido` y (v2) `rios`, página Fase13 (v2: ríos azules por el suelo real, lagos; v3: diagnóstico de la cadena, `Anchominpx`, `Pendientemin`, `Pruebario`; v4: ríos más vivos; v5: solo la autoprueba (las copas de los ejemplares no tapan el río); v6: la página Fase13 con 12 parámetros en vez de 14) | `fase13 v6` |
 | `fase14_destructores.py` | Arañazos temáticos y escalada: accidentes, incendio y derrumbes, huellas, derribo de obras, página Fase14 (v2: un pad de impulso no es arañazo) | `fase14 v2` |
 | `fase15_era.py` | El ciclo como era: entierro temático, registro de cada concha, herencia (banco de semillas y trazas), tema por ciclo, página Fase15 (v2: la autoprueba no depende de la `Herencia` del proyecto) | `fase15 v2` |
 | `fase16_cortes.py` | Arqueología temática: lo que enseñan los cortes (fondo y paredes), unión de cortes (cañón y galería de metro), página Fase16 (v2: solo cambia el texto; corta la caja) | `fase16 v2` |
@@ -497,7 +497,7 @@ Une las formaciones con algo que ninguna señal pide: el sistema lo deduce del e
   - Nacen en las cumbres: las celdas con relieve más altas que todas sus vecinas, y las capitales de los clusters de relieve.
   - Bajan por el **suelo real** (el suelo de la celda más el relieve de la fase 11 v5 en su centro) hacia la vecina más baja (en empate, la de índice menor), sin volver por donde han pasado. Hasta la v1 bajaban hacia la vecina menos ocupada.
   - Acaban en una hondonada o un llano (ninguna vecina más baja), al llegar a otro río (confluyen), tras `Maxrio` tramos o si no les queda vecina libre.
-  - Se trazan de la cumbre más alta a la más baja. Un río que llega a otro acaba ahí, y aguas abajo de la confluencia el río que lo recibe se ensancha: de `Anchorio` con un río a `Anchomaxrio` con cuatro o más.
+  - Se trazan de la cumbre más alta a la más baja. Un río que llega a otro acaba ahí, y aguas abajo de la confluencia el río que lo recibe se ensancha: de `Anchorio` con un río a 3,4 × `Anchorio` con cuatro o más (desde la v6; antes `Anchomaxrio`).
 - **Carreteras (ciudad).**
   - Los nodos son las capitales de los clusters y las formaciones sueltas (sin cluster ni satélites) con ocupación de `Minvia` o más.
   - La distancia entre dos nodos es el número de saltos por la retícula. Kruskal elige el árbol de expansión mínima (en empate, por los índices).
@@ -508,7 +508,9 @@ Une las formaciones con algo que ninguna señal pide: el sistema lo deduce del e
 
 ### Parámetros (página Fase13)
 
-`Rios` (encendido) · `Carreteras` (encendido) · `Minvia` 2 · `Grosorvia` 0,18 (carreteras) · `Maxrio` 12 (tramos) · v2: `Colorrio` (v4: OKLCH 0,65 · 0,18 · 250; hasta la v3, 0,55 · 0,15 · 255) · `Anchorio` 0,10 · `Anchomaxrio` 0,34 · `Emisivorio` 0,6 (hasta la v3, 0,25) · `Lagos` (encendido)
+`Rios` (encendido) · `Carreteras` (encendido) · `Minvia` 2 · `Grosorvia` 0,18 (carreteras) · `Maxrio` 12 (tramos) · v2: `Colorrio` (v4: OKLCH 0,65 · 0,18 · 250; hasta la v3, 0,55 · 0,15 · 255) · `Anchorio` 0,10 (el máximo, 3,4 ×) · `Emisivorio` 0,6 (hasta la v3, 0,25) · `Lagos` (encendido)
+
+**Página Fase13 (v6).** 12 parámetros en vez de 14. `Anchomaxrio` sale de `Anchorio` (3,4 ×: el mismo 0,34 con el valor por defecto) y `Pendientemin` queda fijo en 0,01. `Grosorvia` es solo el ancho de las carreteras (los ríos tienen su ancho desde la v2). Relanzar cualquier fase los quita de un proyecto anterior y avisa con `..` si los habías cambiado.
 
 ### Leyenda
 
@@ -557,7 +559,7 @@ Comprueba:
 - **Azul reservado:** OKLCH 0,55 · 0,15 · 255 (`Colorrio`), distinto del cian de las cicatrices y del ámbar del SEQ2. Su banda (235°–275°) sale de la paleta de conchas, como el cian y el ámbar.
 - **Sin tintes:** los ríos van en su geometría (`rios`) con su material (`mat_piel_agua`, familia 4 del shader): ignoran el tinte de celda, de pad y de concha y el borde tintado de la naturaleza.
 - **Cinta, no caja:** una cinta continua (una curva Catmull-Rom troceada en tramos planos de 6 milésimas) apoyada en el suelo local más el relieve, con un desfase de 2,5 centésimas (algo más en las laderas). Cruza cada celda por sus bordes y a 0,36 anchos de celda de su centro: **bordea** la formación y la loseta de luz en vez de pasar por debajo. En los bosques, las copas que pisarían el río no se dibujan.
-- **Ancho por caudal:** cada tramo suma los ríos que confluyen en él: de `Anchorio` a `Anchomaxrio`.
+- **Ancho por caudal:** cada tramo suma los ríos que confluyen en él: de `Anchorio` a 3,4 × `Anchorio`.
 - **Lagos:** la hondonada (laguna de la fase 8) donde acaba un río se llena hasta su borde más bajo con el mismo azul (`Lagos`).
 - **Brillo:** especular alto (rugosidad 0,1) y emisivo (`Emisivorio` 0,6 desde la v4): se lee también en la cara de sombra.
 - **Pendiente:** bajan por el suelo real, así que nacen en las cumbres de la fase 11 v5 y bajan entre montes.
@@ -582,8 +584,8 @@ DIAGNOSTICO DE LOS RIOS
 
 Recorre los puntos del encargo en orden y **para en el primero que falla** (marcado `FALLA`: es el estado del mundo, no un fallo del script):
 1. **¿Fase 13 aplicada?** `Nivel` antes de relanzar (`ANTES DE RELANZAR`) y después.
-2. **¿Fix de los ríos azules?** La versión de la fase y si estaban `Colorrio`, `Anchorio`, `Anchomaxrio`, `Emisivorio` y `Lagos` antes de relanzar.
-3. **¿Genera tramos el motor?** Si no, dice por qué: no hay relieve (ninguna celda del SEQ2), el mapa de alturas está vacío (sin numpy), el relieve más alto no llega a `Pendientemin` × el límite, o no hay ninguna vecina más baja. Enterrar una concha no borra los ríos: se recalculan con cada mundo y vuelven en cuanto hay relieve.
+2. **¿Fix de los ríos azules?** La versión de la fase y si estaban `Colorrio`, `Anchorio`, `Emisivorio` y `Lagos` antes de relanzar.
+3. **¿Genera tramos el motor?** Si no, dice por qué: no hay relieve (ninguna celda del SEQ2), el mapa de alturas está vacío (sin numpy), el relieve más alto no llega a 0,01 × el límite, o no hay ninguna vecina más baja. Enterrar una concha no borra los ríos: se recalculan con cada mundo y vuelven en cuanto hay relieve.
 4. **¿Llegan a la geometría?** Instancias de `i_rios` y si `rios` está en la lista del render. `DIAGNOSTICO DEL RENDER` también revisa `i_rios` y `mat_piel_agua`.
 5. **¿Se ven?** El ancho en píxeles de la cinta más ancha con la cámara de globo, el material (`mat_piel_agua`) y sus errores, el azul de cada cinta y si algún piso de árbol cae encima.
 
@@ -593,13 +595,13 @@ Recorre los puntos del encargo en orden y **para en el primero que falla** (marc
 - **`Anchominpx`** (2 px): el río nunca mide menos en pantalla con la cámara de globo (el planeta a `Encuadre` del alto de un cuadro de 720 px), se calcule como se calcule su ancho en mundo.
 - **Por encima de todo lo bajo:** la cinta sigue a 2,5 centésimas sobre el suelo y el relieve (más en las laderas), sobre la loseta y lejos del centro de la celda. Nuevo: **los pisos de los árboles se recortan** para no pasar por encima del río (como mucho hasta su orilla), y ningún tronco lo pisa.
 - **Azul que se lee:** el color reservado (`Colorrio`) y el emisivo (`Emisivorio`), sin cambios.
-- **`Pendientemin`** (0,01 × el límite; antes fijo en 0,05): el relieve mínimo de una fuente. Y la celda más alta de cada cluster de relieve es fuente siempre, aunque el mundo sea casi plano.
+- **Relieve mínimo de una fuente** (0,01 × el límite; antes fijo en 0,05; de la v3 a la v5, el parámetro `Pendientemin`): el relieve mínimo de una fuente. Y la celda más alta de cada cluster de relieve es fuente siempre, aunque el mundo sea casi plano.
 - **`Pruebario`** (pulso): levanta una cordillera de 5 celdas en el anillo de `Nota2` (con notas del SEQ2, como `Sembrar2`) y dice en el Textport el río que baja de su cumbre y su ancho en píxeles. Si con eso no se ve un río azul desde el globo, el fallo está en la representación, no en el motor.
 - **Leyenda:** `RIOS     tramos 6   fuentes 3   lagos 0   caudal max 1   ancho 4.9 px`.
 
 **Autoprueba (v3):** `Pruebario` da una cordillera y un río azul que baja de la cumbre y mide al menos `Anchominpx`; con `Anchominpx` 6 la cinta mide 6 px; tras `Pruebario` los cinco puntos del diagnóstico salen `OK`; con un bosque alrededor ningún piso de árbol queda encima de la cinta; en un mundo casi plano la celda más alta del cluster de relieve es fuente; y la línea `RIOS` de la leyenda.
 
-**Parámetros nuevos (página Fase13):** `Anchominpx` 2 px · `Pendientemin` 0,01 · `Pruebario`.
+**Parámetros nuevos (página Fase13):** `Anchominpx` 2 px · `Pendientemin` 0,01 (fijo desde la v6) · `Pruebario`.
 
 ### Ríos más vivos (fase 13 v4, motor v51, comun v35)
 
