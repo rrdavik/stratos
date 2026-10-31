@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v45'
+VERSION_COMUN = 'comun v46'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1410,9 +1410,55 @@ FASE21_FIJOS = (('Refractariomic', 0.12, 'tiempo muerto entre onsets, en s'),
                 ('Ventanaruido', 60.0, 'ventana del ruido de sala, en s'))
 
 
+# comun v46 (fase 21 v4, motor v66): sin la simulacion. Fuera Simonset,
+# Simruido y Simdrone, los operadores mic_sim y mic_fuente, y las opciones
+# simulacion y ambos de Fuentemic (pasan a microfono). Para probar sin
+# microfono, la sala virtual (sala_virtual.py, Fuentemic = chop).
+
+FUENTEMIC_NOMBRES = ['microfono', 'chop']
+FUENTEMIC_ETIQUETAS = ['Microfono (mic_in)', 'Otro CHOP (Chopmic; la sala virtual)']
+
+
+def fase21_sin_simulacion(base):
+    """Pasa un proyecto anterior a la fase 21 v4: sin mic_sim, mic_fuente
+    ni sus parametros; mic_flujo lee mic_in, y Fuentemic simulacion o ambos
+    pasa a microfono."""
+    quitados = [nm for nm in ('Simonset', 'Simruido', 'Simdrone') if remove_par(base, nm)]
+    fp = getattr(base.par, 'Fuentemic', None)
+    if fp is not None and list(fp.menuNames) != FUENTEMIC_NOMBRES:
+        try:
+            antes = str(fp.eval())
+            fp.menuNames = list(FUENTEMIC_NOMBRES)
+            fp.menuLabels = list(FUENTEMIC_ETIQUETAS)
+            fp.default = 'microfono'
+            fp.val = antes if antes in FUENTEMIC_NOMBRES else 'microfono'
+            if antes not in FUENTEMIC_NOMBRES:
+                info('Fuentemic era %s: ahora microfono (sin simulacion; para probar sin '
+                     'microfono, la sala virtual con Usarmic)' % antes)
+            quitados.append('Fuentemic simulacion y ambos')
+        except Exception as e:
+            info('Fuentemic: no pude quitar simulacion y ambos (%s)' % e)
+    fuera = []
+    for nm in ('mic_sim', 'mic_sim_callbacks', 'mic_fuente'):
+        o = base.op(nm)
+        if o is None:
+            continue
+        try:
+            o.destroy()
+            fuera.append(nm)
+        except Exception as e:
+            info('no pude borrar %s: %s' % (nm, e))
+    if fuera and base.op('mic_flujo') is not None and base.op('mic_in') is not None:
+        connect(base.op('mic_flujo'), base.op('mic_in'), 0)
+    if quitados or fuera:
+        ok('fase 21 sin simulacion: quitados %s; mic_flujo lee mic_in'
+           % ', '.join(quitados + fuera))
+
+
 def fase21_al_dia(base):
     """Quita Refractariomic y Ventanaruido de un proyecto anterior a la
-    fase 21 v3; avisa si los habias cambiado."""
+    fase 21 v3; avisa si los habias cambiado. Y la simulacion (v4)."""
+    fase21_sin_simulacion(base)
     quitados = []
     for nm, defecto, que in FASE21_FIJOS:
         if not has_par(base, nm):

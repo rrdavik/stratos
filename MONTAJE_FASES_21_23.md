@@ -15,9 +15,9 @@ La sala entra en la pieza: desde la fase 21 el micrófono escucha al público, y
 
 | Archivo | Para qué | Versión |
 |---|---|---|
-| `estratos_motor.py` | La v55 añade el micrófono: flujo espectral, onsets, el pad 9 de erosión (baja escalones enteros), el corte por ruido de sala y la línea `MICRO`; la v56, `Fuentemic` = chop (el audio de cualquier CHOP, como la sala virtual); la v57 saca `mic_sim` y `mic_flujo` del modo Time Slice de su entrada (en TouchDesigner avisaban «Editing numSamples is not supported in Time Slice mode»); la v58, la página Fase3 con seis parámetros menos (fase 3 v13, ver «Página Fase3» en `MONTAJE_FASES_3_10.md`); la v59, la página Fase4 con 4 parámetros (fase 4 v8, ver «Página Fase4»); la v60, la página Fase6 con 9 (fase 6 v6: el compás de la línea de tiempo, ver «Página Fase6»); la v61, la página Fase7 con 12 (fase 7 v16: cada intensidad a 0 apaga lo suyo); la v62, la página Fase8 con 11 (fase 8 v13: la luminosidad del suelo en un solo `Paletaluz`); la v63, la página Fase11 con 35 (fase 11 v9: siete ajustes finos de la geometría, fijos); la v64, la página Fase13 con 12 (fase 13 v6: el ancho máximo del río sale de `Anchorio`); la v65, la página Fase21 con 10 (fase 21 v3: tiempo muerto y ventana del ruido, fijos) | `motor v65` |
-| `estratos_comun.py` | La v37: `require_base(21)` acepta un proyecto en la fase 19 o en la 20 (los POPs, sin fusionar: D1) y el informe dice cuál encontró; la v38 quita de la página Fase3 `Growstep`, `Gatemode`, `Rotextra` y los tres ajustes de la luz de las conchas, conservando lo que hacían; la v39 deja la página Fase4 en `Umbralram`, `Pasoumbral`, `Tramoscumbre` y `Satelite`; la v40 quita de la Fase6 `Negrasporcompas`, `Girovivo` y `Compasesterritorio`; la v41, de la Fase7 `Balizasdrum`, `Erosionvel`, `Pumpon`, `Multradio`, `Pumphold` y `Pumpvelmin`; la v42, de la Fase8 `Paletaalterna`, `Contrasteocupada` y `Tapaluz`; la v43, de la Fase11 `Rebote`, `Maxcaosnat`, `Varangulo`, `Cuantizar30`, `Inclinacion`, `Densidadhoja` y `Muroterraza`; la v44, de la Fase13 `Anchomaxrio` y `Pendientemin`; la v45, de la Fase21 `Refractariomic` y `Ventanaruido` | `comun v45` |
-| `fase21_microfono.py` | El micrófono: página Fase21, `mic_in`, `mic_sim`, `mic_fuente` y `mic_flujo`, la fila del pad 9 en `perfiles_erosion` y `colores_drum` (v2: `Fuentemic` = chop y `Chopmic`; v3: la página Fase21 con 10 parámetros en vez de 12) | `fase21 v3` |
+| `estratos_motor.py` | La v55 añade el micrófono: flujo espectral, onsets, el pad 9 de erosión (baja escalones enteros), el corte por ruido de sala y la línea `MICRO`; la v56, `Fuentemic` = chop (el audio de cualquier CHOP, como la sala virtual); la v57 saca `mic_sim` y `mic_flujo` del modo Time Slice de su entrada (en TouchDesigner avisaban «Editing numSamples is not supported in Time Slice mode»); la v58, la página Fase3 con seis parámetros menos (fase 3 v13, ver «Página Fase3» en `MONTAJE_FASES_3_10.md`); la v59, la página Fase4 con 4 parámetros (fase 4 v8, ver «Página Fase4»); la v60, la página Fase6 con 9 (fase 6 v6: el compás de la línea de tiempo, ver «Página Fase6»); la v61, la página Fase7 con 12 (fase 7 v16: cada intensidad a 0 apaga lo suyo); la v62, la página Fase8 con 11 (fase 8 v13: la luminosidad del suelo en un solo `Paletaluz`); la v63, la página Fase11 con 35 (fase 11 v9: siete ajustes finos de la geometría, fijos); la v64, la página Fase13 con 12 (fase 13 v6: el ancho máximo del río sale de `Anchorio`); la v65, la página Fase21 con 10 (fase 21 v3: tiempo muerto y ventana del ruido, fijos); la v66, sin la simulación de la fase 21 (`Fuentemic` micrófono o chop) | `motor v66` |
+| `estratos_comun.py` | La v37: `require_base(21)` acepta un proyecto en la fase 19 o en la 20 (los POPs, sin fusionar: D1) y el informe dice cuál encontró; la v38 quita de la página Fase3 `Growstep`, `Gatemode`, `Rotextra` y los tres ajustes de la luz de las conchas, conservando lo que hacían; la v39 deja la página Fase4 en `Umbralram`, `Pasoumbral`, `Tramoscumbre` y `Satelite`; la v40 quita de la Fase6 `Negrasporcompas`, `Girovivo` y `Compasesterritorio`; la v41, de la Fase7 `Balizasdrum`, `Erosionvel`, `Pumpon`, `Multradio`, `Pumphold` y `Pumpvelmin`; la v42, de la Fase8 `Paletaalterna`, `Contrasteocupada` y `Tapaluz`; la v43, de la Fase11 `Rebote`, `Maxcaosnat`, `Varangulo`, `Cuantizar30`, `Inclinacion`, `Densidadhoja` y `Muroterraza`; la v44, de la Fase13 `Anchomaxrio` y `Pendientemin`; la v45, de la Fase21 `Refractariomic` y `Ventanaruido`; la v46, la simulación de la fase 21 (`mic_sim`, `mic_fuente`, `Simonset`, `Simruido`, `Simdrone`) | `comun v46` |
+| `fase21_microfono.py` | El micrófono: página Fase21, `mic_in` y `mic_flujo`, la fila del pad 9 en `perfiles_erosion` y `colores_drum` (v2: `Fuentemic` = chop y `Chopmic`; v3: la página Fase21 con 10 parámetros en vez de 12; v4: sin la simulación (`mic_sim`, `mic_fuente`, `Simonset`, `Simruido`, `Simdrone`), 7 parámetros) | `fase21 v4` |
 | `sala_virtual.py` y `sala_motor.py` | No son una fase: la maqueta de la instalación en `/project1/SALA` (ver *Sala virtual*) | `sala_virtual v1`, `sala v1` |
 | `fase7_erosion.py` | v15: relanzada sobre la fase 21, conserva la fila del micrófono (pad 9) de `perfiles_erosion`; v16: la página Fase7 con 12 parámetros en vez de 18 (ver «Página Fase7» en `MONTAJE_FASES_3_10.md`) | `fase7 v16` |
 | `fase14_destructores.py` | v3: solo la autoprueba (cuenta también el pad 9 al repartir los pads en arañazos, cortes e impulsos) | `fase14 v3` |
@@ -44,22 +44,20 @@ El micrófono entra como un **pad 9 de erosión**: el motor ya sabía erosionar,
 ### Operadores (en `/project1/FASE1`)
 
 ```
-mic_in (Audio Device In) ──┬─────────────────► mic_fuente (Switch) ──► mic_flujo (Script CHOP) ──► motor
-                           └──► mic_sim (Script CHOP) ──┘
+mic_in (Audio Device In) ──► mic_flujo (Script CHOP) ──► motor
+      (o, con Fuentemic = chop, el CHOP de Chopmic: el micrófono virtual de la sala)
 ```
 
 | Operador | Qué es |
 |---|---|
 | `mic_in` | Audio Device In CHOP: el micrófono. El dispositivo se elige en su parámetro **Device**; el canal, con `Canalmic` (0, el primero) |
-| `mic_sim` | Script CHOP: clic (`Simonset`), ruido (`Simruido`) y drone (`Simdrone`) sintéticos, sin azar; con `Fuentemic` = ambos, sumados a `mic_in` |
-| `mic_fuente` | Switch CHOP: `mic_in` con `Fuentemic` = micrófono; `mic_sim` con simulación o ambos |
-| `mic_flujo` | Script CHOP: lee el bloque de `mic_fuente`, el motor calcula el flujo con numpy y busca el onset. Saca los canales `flujo` y `onset` |
+| `mic_flujo` | Script CHOP: lee el bloque de `mic_in` (o del CHOP de `Chopmic`, con `Fuentemic` = chop), el motor calcula el flujo con numpy y busca el onset. Saca los canales `flujo` y `onset` |
 
-El motor recuece `mic_sim` y `mic_flujo` en cada fotograma desde `latido`: no hace falta que nada los mire.
+El motor recuece `mic_flujo` en cada fotograma desde `latido`: no hace falta que nada lo mire. Hasta la v3 había además `mic_sim` (la simulación) y `mic_fuente` (un Switch entre los dos); relanzar cualquier fase los borra y conecta `mic_flujo` a `mic_in`.
 
 ### Parámetros (página Fase21)
 
-`Fuentemic` (micrófono / simulación / ambos / chop; ambos) · `Chopmic` (con chop, la ruta del CHOP con el audio) · `Canalmic` 0 · `Umbralonset` 0,6 · `Reduccionmic` 1 escalón · `Umbralcorte` 20 (en 60 s) · `Profundidadmic` 3 · `Simonset` · `Simruido` 0 · `Simdrone` apagado. Desde la v3, 10 parámetros: `Refractariomic` (0,12 s) y `Ventanaruido` (60 s) quedan fijos; relanzar cualquier fase los quita de un proyecto anterior y avisa con `..` si los habías cambiado. Cada cuánto abre un corte el ruido de la sala lo decide solo `Umbralcorte`
+`Fuentemic` (micrófono / chop; micrófono) · `Chopmic` (con chop, la ruta del CHOP con el audio) · `Canalmic` 0 · `Umbralonset` 0,6 · `Reduccionmic` 1 escalón · `Umbralcorte` 20 (en 60 s) · `Profundidadmic` 3. Desde la v4, 7 parámetros: fuera `Simonset`, `Simruido` y `Simdrone`, y las opciones simulación y ambos de `Fuentemic` (pasan a micrófono, con un aviso `..`). Desde la v3: `Refractariomic` (0,12 s) y `Ventanaruido` (60 s) quedan fijos; relanzar cualquier fase los quita de un proyecto anterior y avisa con `..` si los habías cambiado. Cada cuánto abre un corte el ruido de la sala lo decide solo `Umbralcorte`
 
 La fila 9 de `perfiles_erosion` es la del micrófono (`pad` 9, `modo` erosion, `tipo` y `rol` micro): de ella se leen el radio y la profundidad (0 y 0), pero la **reducción la da `Reduccionmic`**. La fila 9 de `colores_drum` es su color. Al relanzar, una tabla de 8 filas gana la novena sin perder lo editado, y relanzar la fase 7 ya no la borra.
 
@@ -68,7 +66,7 @@ La fila 9 de `perfiles_erosion` es la del micrófono (`pad` 9, `modo` erosion, `
 ### Leyenda y `midi_log`
 
 ```
-MICRO    ambos   flujo 0.12/0.60   onsets 12   ultimo flujo 0.71 celda 40 hace 1.2 s   ruido 5.3/20 en 60 s
+MICRO    microfono   flujo 0.12/0.60   onsets 12   ultimo flujo 0.71 celda 40 hace 1.2 s   ruido 5.3/20 en 60 s
 MICRO    microfono (sin microfono)   flujo 0.00/0.60   onsets 0   ultimo -   ruido 0.0/20 en 60 s
 ```
 
@@ -81,11 +79,15 @@ MICRO onset flujo 3.10 celda 41 ESCALADA incendio + corte por ruido de 3 conchas
 
 ### Probar sin micrófono
 
-1. `Fuentemic` = simulación (o ambos, el valor por defecto).
-2. `Simonset`: un clic, un onset; la celda del objetivo baja un escalón y se enciende en gris cálido. La línea `MICRO` cuenta el onset.
-3. `Simdrone`: un drone sostenido de 110 Hz que no da ningún onset (el flujo, en la leyenda, se queda bajo).
-4. `Simonset` unas cuantas veces seguidas (unas seis, con clics limpios): el ruido de sala pasa de 20 y se abre un corte.
-5. `Simruido` sube un ruido de sala de fondo: con él, los clics se oyen menos y dan menos flujo.
+Con la sala virtual (desde la fase 21 v4, la única simulación):
+
+1. `exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())`. Con `Usarmic` (página Sala de `/project1/SALA`, encendido) pone `Fuentemic` = chop y `Chopmic` en su micrófono virtual.
+2. `Palmada`: una palmada junto al micrófono, un onset; la celda del objetivo baja un escalón y se enciende en gris cálido. La línea `MICRO` cuenta el onset.
+3. `Volumendrone`: el drone de los altavoces no da ningún onset (el flujo, en la leyenda, se queda bajo).
+4. `Palmada` unas cuantas veces seguidas: el ruido de sala pasa de 20 y se abre un corte.
+5. `Personas` y `Ruidopublico`: el público entero, con sus toses y palmadas.
+
+Para volver al micrófono, `Fuentemic` = micrófono (o `Usarmic` apagado y relanzar la sala).
 
 ### Dónde poner el micrófono
 
@@ -102,7 +104,7 @@ Comprueba, con la señal sintética y sin micrófono:
 - un onset justo tras un destello simulado se descarta;
 - desde el nivel 14, dos onsets en la misma zona escalan (un incendio en un bosque);
 - una tabla de perfiles de 8 filas, editada, gana el pad 9 sin perder nada, y el motor lee 9 pads;
-- `Simonset` llega por `mic_sim`, `mic_fuente` y `mic_flujo` hasta el motor;
+- con `Fuentemic` = chop, un clic en un CHOP de prueba (que la autoprueba crea y borra) llega por `mic_flujo` hasta el motor; no quedan `mic_sim`, `mic_fuente` ni sus parámetros;
 - la fila `MICRO` en `midi_log` y la línea `MICRO` de la leyenda.
 
 ---
@@ -118,7 +120,7 @@ Comprueba, con la señal sintética y sin micrófono:
 | ¿Cómo se detecta? | Flujo espectral en 16 bandas en dB contra el máximo de los tres bloques anteriores, sin ventana (un clic al principio del bloque cuenta), calculado con numpy en el motor. Sin Audio Spectrum CHOP, para poder probarlo en el simulador |
 | ¿Dónde va el objetivo? (D2) | Como los pads (`Objetivo`) hasta la fase 22; desde ella, la casilla más ocupada |
 | ¿Dispositivo y canal? | El dispositivo, en el parámetro Device de `mic_in` (es un menú de los que hay en el ordenador); el canal, con `Canalmic` |
-| ¿Por qué `Fuentemic` = ambos por defecto? | Para que `Simonset` funcione siempre, con o sin micrófono |
+| ¿`Fuentemic` por defecto? | Hasta la v3, ambos, para que `Simonset` funcionara siempre. Desde la v4, micrófono: la simulación es la sala virtual, que pone chop ella misma |
 
 ---
 
@@ -129,19 +131,19 @@ python3 pruebas/correr_fases.py        # base y fases 3 a 21 desde cero, sesión
 ```
 
 - **Desde cero**: `fase12_base.py` y las fases 3 a 19 y 21, todas con `AUTOPRUEBA OK`.
-- **Sesión simulada** de 48 compases con SEQ1, SEQ2, batería y un `Simonset` cada dos negras, fotograma a fotograma por la cadena `mic_sim` → `mic_fuente` → `mic_flujo`: los 96 clics dan 96 onsets y todas las expresiones se evalúan sin error.
+- **Sesión simulada** de 48 compases con SEQ1, SEQ2, batería y, con la sala virtual montada, una `Palmada` cada dos negras, fotograma a fotograma por su micrófono virtual y `mic_flujo` (hasta la v3, un `Simonset` por `mic_sim` y `mic_fuente`): los onsets llegan con los del público virtual y todas las expresiones se evalúan sin error.
 - **Relanzar** las fases 3 a 21 sobre el proyecto en el nivel 21 (también la 7, que conserva la fila 9): todas OK, el mundo se conserva y otra sesión corre sin errores.
 - **D1**: con `Nivel` 20, la fase 21 entra (`base: proyecto en la fase 20`); con 17, pide la 19.
 - **Calibración del detector** con la señal sintética: un clic sobre silencio da un flujo de 3,8; sobre el drone, 1,0; el drone solo no pasa de 0,33 en 5 s; un ruido de sala constante, 0,13.
 
-Lo que la simulación no puede comprobar: el audio real (el ruido de la sala, la reverberación, el drone verdadero), los nombres exactos de los parámetros del Audio Device In CHOP y del Switch CHOP (el simulador usa los que conocemos: `active`, `driver`, `device`, `rate`, `bufferlength` e `index`; si alguno no existe, el informe lo dice con `..`), y que en TouchDesigner un `cook(force=True)` desde Python recueza la cadena en el mismo fotograma.
+Lo que la simulación no puede comprobar: el audio real (el ruido de la sala, la reverberación, el drone verdadero), los nombres exactos de los parámetros del Audio Device In CHOP (el simulador usa los que conocemos: `active`, `driver`, `device`, `rate` y `bufferlength`; si alguno no existe, el informe lo dice con `..`), y que en TouchDesigner un `cook(force=True)` desde Python recueza la cadena en el mismo fotograma.
 
 ### Pruebas pendientes con el aparato
 
 1. **Micrófono y drone.** Con el drone sonando y la sala vacía, subir `Umbralonset` hasta que no salga ningún onset en 5 minutos; luego, que una palmada, una tos y unos pasos sí salgan.
 2. **Ruido acumulado.** Con una sala ruidosa, medir cuánto tarda en abrirse un corte y ajustar `Umbralcorte`.
 3. **El dispositivo.** Que `mic_in` encuentra la interfaz (la línea `microfono:` del informe y la leyenda sin `(sin microfono)`), y que `Canalmic` es el canal del micrófono.
-4. **La cadena en TouchDesigner.** Que `mic_flujo` saca `flujo` cada fotograma con el micrófono (míralo en su visor) y que `Simonset` con `Fuentemic` = simulación da un onset.
+4. **La cadena en TouchDesigner.** Que `mic_flujo` saca `flujo` cada fotograma con el micrófono (míralo en su visor) y que, con la sala virtual, `Palmada` da un onset.
 5. **Clic del estroboscopio** (cuando llegue la fase 23): que el detector no lo toma por público; si lo toma, ensanchar la ventana de descarte (`DESCARTE_DESTELLO` en el motor).
 
 ---
