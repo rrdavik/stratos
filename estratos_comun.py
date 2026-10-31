@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v37'
+VERSION_COMUN = 'comun v38'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1106,26 +1106,42 @@ def add_corteza(base):
                    CORTEZA_DEF, 0.0, 12.0)
 
 
-def growstep_coherente(semilla, umbral_ram):
-    """Growstep con el que la formacion sube a escalones iguales de la
-    semilla al limite: (1 - Semillafrac) / (Umbralram - 1)."""
-    return (1.0 - semilla) / max(1, int(umbral_ram) - 1)
+# --- la pagina Fase3, mas corta (comun v38, motor v58) ------------------------
+# Seis parametros menos: Growstep lo calcula el motor (escalones iguales de
+# la semilla al limite), Gatemode es Gatemax 1, Rotextra es Balanceo 0 y la
+# luz de las conchas es un solo parametro, Luzconchas: su intensidad (0
+# apaga, 1 = pulso 0,35 y reposo 0,10); el alcance queda fijo en 4 losetas.
+
+GATEMAX_LABEL = 'Gate ligado: crecimiento max. (x; 1 = el gate no cuenta)'
+BALANCEO_LABEL = 'Balanceo del eje en grados (0 = apagado)'
 
 
-def alturas_coherentes(base):
-    """Avisa si la formacion salta al limite de golpe: con Growstep pequeno
-    se queda baja hasta Umbralram y entonces sube del tiron."""
-    if not all(has_par(base, n) for n in ('Semillafrac', 'Growstep', 'Umbralram')):
-        return True
-    sf, gs, tb = float(base.par.Semillafrac), float(base.par.Growstep), int(base.par.Umbralram)
-    ideal = growstep_coherente(sf, tb)
-    antes = min(1.0, sf + max(0, tb - 2) * gs)
-    if 1.0 - antes > 2.0 * ideal + 1e-6:
-        info('alturas: con Growstep %.2f la formacion va del %d %% al limite de golpe al llegar a '
-             'Umbralram %d; sin salto: Growstep %.2f (lo pone ajuste_vista.py)'
-             % (gs, int(round(antes * 100)), tb, ideal))
-        return False
-    return True
+def _relabel(base, name, label):
+    try:
+        p = getattr(base.par, name, None)
+        if p is not None and p.label != label:
+            p.label = label
+    except Exception:
+        pass
+
+
+def fase3_al_dia(base):
+    """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
+    Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
+    quitados = []
+    if has_par(base, 'Gatemode'):
+        try:
+            if not bool(base.par.Gatemode.eval()) and has_par(base, 'Gatemax'):
+                base.par.Gatemax = 1.0
+        except Exception:
+            pass
+        if remove_par(base, 'Gatemode'):
+            quitados.append('Gatemode (ahora Gatemax 1)')
+    if remove_par(base, 'Growstep'):
+        quitados.append('Growstep (lo calcula el motor)')
+    _relabel(base, 'Gatemax', GATEMAX_LABEL)
+    if quitados:
+        ok('pagina Fase3: quitados %s' % ', '.join(quitados))
 
 
 def calibracion_al_dia(base):
@@ -1136,7 +1152,6 @@ def calibracion_al_dia(base):
     if has_par(base, 'Grosormax') and add_corteza(base):
         ok('conchas: Cortezamax %s (las conchas viejas se compactan; el planeta deja de engordar)'
            % str(CORTEZA_DEF).replace('.', ','))
-    alturas_coherentes(base)
 
 
 # --- el tiempo en el paisaje (comun v30, motor v39) ---------------------------
@@ -1254,6 +1269,7 @@ def install_core(base, carpeta, fase):
     ok('pulsos: botones de las paginas de fase -> motor')
 
     add_grid_pars(base)
+    fase3_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
@@ -1393,14 +1409,29 @@ def install_luz_celda(base):
 
 def install_luz_conchas(base, page):
     """La luz de los secuenciadores en las conchas de la celda (motor v25):
-    una capa aditiva sobre sus losetas superiores. Se ve desde la fase 8."""
-    add_par(base, page, 'toggle', 'Luzconchas', 'Luz de los secuenciadores en las conchas', True)
-    add_par(base, page, 'float', 'Luzconchaspulso', 'Luz en las conchas: pulso de la nota',
-            0.35, 0.0, 1.0)
-    add_par(base, page, 'float', 'Luzconchasreposo', 'Luz en las conchas: reposo (ultima celda)',
-            0.10, 0.0, 1.0)
-    add_par(base, page, 'int', 'Luzconchasalcance', 'Luz en las conchas: losetas que alcanza',
-            4, 1, 24, clamp=True)
+    una capa aditiva sobre sus losetas superiores. Se ve desde la fase 8.
+    Motor v58: Luzconchas es su intensidad (antes un interruptor y tres
+    ajustes: Luzconchaspulso, Luzconchasreposo, Luzconchasalcance)."""
+    p = getattr(base.par, 'Luzconchas', None)
+    viejo = p is not None and str(getattr(p, 'style', getattr(p, 'kind', ''))).lower() == 'toggle'
+    k = 1.0
+    if viejo:
+        try:
+            k = (float(base.par.Luzconchaspulso.eval()) / 0.35 if has_par(base, 'Luzconchaspulso')
+                 else 1.0) if bool(p.eval()) else 0.0
+        except Exception:
+            k = 1.0
+        remove_par(base, 'Luzconchas')
+    add_par(base, page, 'float', 'Luzconchas',
+            'Luz de los secuenciadores en las conchas (0 apagada, 1 normal)', 1.0, 0.0, 3.0)
+    if viejo:
+        base.par.Luzconchas = round(max(0.0, min(3.0, k)), 3)
+    quitados = [nm for nm in ('Luzconchaspulso', 'Luzconchasreposo', 'Luzconchasalcance')
+                if remove_par(base, nm)]
+    if viejo or quitados:
+        ok('pagina Fase3: Luzconchas es ahora la intensidad de la luz de las conchas (%s)%s'
+           % (str(round(float(base.par.Luzconchas.eval()), 2)).replace('.', ','),
+              '; quitados %s' % ', '.join(quitados) if quitados else ''))
     mat = make_constant(base, 'mat_luz_conchas', 780, 780, (1.0, 1.0, 1.0))
     set_additive(mat)
     geo = make_instanced(base, 'luz_conchas', 520, 780, 'mat_luz_conchas')
@@ -1653,9 +1684,17 @@ def apply_wobble(base):
     """Pone el balanceo en todas las geometrias que giran con el planeta
     (nucleo, reticula, balizas, formas, coronas, estratos)."""
     page = get_page(base, 'Fase3')
-    add_par(base, page, 'toggle', 'Rotextra', 'Balanceo del eje (ver los polos)', True)
-    add_par(base, page, 'float', 'Balanceo', 'Amplitud del balanceo (grados)', 60.0, 0.0, 90.0)
+    add_par(base, page, 'float', 'Balanceo', BALANCEO_LABEL, 60.0, 0.0, 90.0)
     add_par(base, page, 'float', 'Balanceoper', 'Periodo del balanceo (s)', 90.0, 5.0, 600.0)
+    if has_par(base, 'Rotextra'):       # hasta la fase 3 v12: Rotextra apagado = Balanceo 0
+        try:
+            if not bool(base.par.Rotextra.eval()):
+                base.par.Balanceo = 0.0
+        except Exception:
+            pass
+        if remove_par(base, 'Rotextra'):
+            ok('pagina Fase3: quitado Rotextra (Balanceo 0 apaga el balanceo)')
+    _relabel(base, 'Balanceo', BALANCEO_LABEL)
     names, sin_orden = [], []
     for g in list(base.children):
         try:
@@ -1669,7 +1708,7 @@ def apply_wobble(base):
         names.append(g.name)
     piel = [n for n in names if n.startswith(PIEL_PREFIJO)]
     resto = [n for n in names if not n.startswith(PIEL_PREFIJO)]
-    ok('balanceo del eje en %d geometrias (%s%s): Rotextra, Balanceo, Balanceoper'
+    ok('balanceo del eje en %d geometrias (%s%s): Balanceo, Balanceoper'
        % (len(names), ', '.join(resto), ' y %d de modelos' % len(piel) if piel else ''))
     for n in sin_orden:
         info('%s: no pude fijar Rotate Order = Ry Rx Rz; ponlo a mano' % n)

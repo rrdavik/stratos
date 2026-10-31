@@ -28,7 +28,10 @@
 #                 erosion que golpea con los onsets del publico; motor v56:
 #                 Fuentemic = chop, el audio de cualquier CHOP, como la sala
 #                 virtual; motor v57: mic_sim y mic_flujo fuera del modo Time
-#                 Slice de su entrada).
+#                 Slice de su entrada; motor v58: la pagina Fase3 con seis
+#                 parametros menos: Growstep sale de Semillafrac y Umbralram,
+#                 Gatemax 1 apaga el gate, Balanceo 0 apaga el balanceo y
+#                 Luzconchas es la intensidad de la luz de las conchas).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -41,7 +44,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v57'
+MOTOR_VERSION = 'motor v58'
 
 import math
 
@@ -636,6 +639,13 @@ def limit(cfg):
     return cfg['height_factor'] * cfg['shell_thick']
 
 
+def growstep_coherente(semilla, umbral_ram):
+    """Crecimiento por trigger (x limite) con el que la formacion sube a
+    escalones iguales de la semilla al limite: (1 - semilla) / (Umbralram - 1).
+    Desde el motor v58 es siempre este (antes, el parametro Growstep)."""
+    return (1.0 - semilla) / max(1, int(umbral_ram) - 1)
+
+
 def height_for(cfg, occ):
     lim = limit(cfg)
     if occ <= 0:
@@ -939,7 +949,7 @@ def note_off(W, cfg, s, note, now, tempo):
 
 
 def _gate_altura(W, cfg, p, now, tempo):
-    """Fase 3: el gate decide cuanto sube la nota (Gatemode)."""
+    """Fase 3: el gate decide cuanto sube la nota (Gatemax > 1)."""
     if not p or not cfg['gate_mode']:
         return None
     i, t_on, inc, o = p
@@ -7928,16 +7938,14 @@ def cfg():
     c.update(
         nivel=_p('Nivel', 3),
         luz_seq=int(_p('Luzseq', True)),
-        luz_conchas=int(_p('Luzconchas', True)),
-        luz_conchas_pulso=max(0.0, _p('Luzconchaspulso', c['luz_conchas_pulso'])),
-        luz_conchas_reposo=max(0.0, _p('Luzconchasreposo', c['luz_conchas_reposo'])),
-        luz_conchas_alcance=max(1, int(_p('Luzconchasalcance', c['luz_conchas_alcance']))),
+        # v58: Luzconchas es una intensidad (0 apaga; un toggle viejo da 0 o 1)
+        luz_conchas=int(_p('Luzconchas', 1.0) > 0.0),
+        luz_conchas_pulso=c['luz_conchas_pulso'] * max(0.0, _p('Luzconchas', 1.0)),
+        luz_conchas_reposo=c['luz_conchas_reposo'] * max(0.0, _p('Luzconchas', 1.0)),
         shell_thick=_p('Shellthick', c['shell_thick']),
         height_factor=_p('Alturafactor', c['height_factor']),
         seed_frac=_p('Semillafrac', c['seed_frac']),
-        grow_frac=_p('Growstep', c['grow_frac']),
         cost_max=_p('Costemax', c['cost_max']),
-        gate_mode=int(_p('Gatemode', True)),
         gate_max=_p('Gatemax', c['gate_max']),
         vel_umbral=_p('Umbralvel', c['vel_umbral']),
         th_branch=_p('Umbralram', c['th_branch']),
@@ -7979,6 +7987,10 @@ def cfg():
         scar_time=max(0.1, _p('Cicatriz', c['scar_time'])),
         flash=_p('Destello', c['flash']),
     )
+    # motor v58: el crecimiento por trigger ya no es un parametro (Growstep):
+    # escalones iguales de la semilla al limite. Gatemax 1 apaga el gate.
+    c['grow_frac'] = growstep_coherente(c['seed_frac'], c['th_branch'])
+    c['gate_mode'] = int(c['gate_max'] > 1.0 + 1e-6)
     if c['nivel'] >= 7:
         pads = PAD_MIC + 1 if c['nivel'] >= 21 else 8        # fase 21: el pad 9 es el microfono
         c['perfiles'], c['tipos'], c['modos'], c['pulsos'], c['pump_rels'] = _perfiles(pads)
@@ -8951,15 +8963,19 @@ def wobble(frame=None):
 def _wobble():
     """Grados de rx de todas las geometrias del planeta. Inclina el eje
     hacia la camara y en contra, para que se vean los dos polos. Ajeno al
-    reloj del secuenciador. Pagina Fase3: Rotextra, Balanceo, Balanceoper."""
+    reloj del secuenciador. Pagina Fase3: Balanceo (0 = apagado) y
+    Balanceoper."""
     if _CACHE.get('wob_frame') == absTime.frame:
         return _CACHE.get('wob', 0.0)
     t = absTime.seconds
     st = _CACHE.setdefault('wob_st', {'ph': 0.0, 'env': 0.0})
     dt = t - _CACHE.get('wob_t', t)
     _CACHE['wob_t'] = t
-    v = wobble_step(st, dt, _p('Rotextra', True), _p('Pausa', False),
-                    _p('Balanceo', 60.0), _p('Balanceoper', 90.0))
+    amp = max(0.0, _p('Balanceo', 60.0))
+    if amp > 0.0:                       # al poner 0 sale en 3 s con la ultima amplitud
+        st['amp'] = amp
+    v = wobble_step(st, dt, amp > 0.0, _p('Pausa', False),
+                    st.get('amp', amp), _p('Balanceoper', 90.0))
     _CACHE['wob'] = v
     _CACHE['wob_frame'] = absTime.frame
     return v

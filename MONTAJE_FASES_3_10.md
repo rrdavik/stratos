@@ -20,7 +20,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase12_base.py` | Fases 1 y 2 en uno: núcleo, retícula de polo a polo, luz de celda (v3: sin baliza), MIDI, render y leyenda (v5: letra de 9 y `Leyenda` para ocultarla; v6: cámara de globo sobre el núcleo). Lleva dentro el arreglo del render. Su `ritmo` ya sabe del giro vivo (en un proyecto en marcha lo parchea `estratos_comun.py`) | `fase12 v6` |
 | `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`, ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`); la v38, la fase 16; la v39, la fase 17; la v40, la fase 18; la v41, la fase 19; la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12); la v44, el pumping en seco (fase 7 v13); la v45, los pulsos de ocupación del impulso (fase 7 v14); la v46, la naturaleza legible y los ríos azules (fase 11 v5 y fase 13 v2; la paleta de conchas reserva de 120 a 275 grados); la v47 quita `Planofinal` (fase 10 v11); la v48, los árboles de pisos (fase 11 v6); la v49, sus ramas desde el tercio superior del tronco (fase 11 v7); la v50, ríos que se ven (fase 13 v3); la v51, ríos más vivos (fase 13 v4) | `motor v51` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar; la v29, la calibración de la vista (`Ciclomin` 16, `Compasesquietos` 3, `Grosormax` 1,5 si seguían por defecto, y `Cortezamax`); la v30, la fase 17 (ventanas por edificio, color de la luz desde el motor); la v31, la fase 18; la v32, la fase 19 (niebla y glitch en el shader); la v33, el terreno, los pisos, el borde tintado y el agua (fase 11 v5 y fase 13 v2); la v34, el diagnóstico de los ríos (fase 13 v3); la v35, el agua más viva (fase 13 v4) | `comun v35` |
-| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11) | `fase3 v12` |
+| `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11; v13: la página Fase3 con 16 parámetros en vez de 22, ver «Página Fase3») | `fase3 v13` |
 | `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2; v3: `Filtrar2` y `Nota2`; v4: los parámetros del SEQ2 pasan a la página Fase2 y desaparece la página Fase5 | `fase5 v4` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
@@ -97,7 +97,7 @@ formas_pulidas    formas_porosas    coronas        estratos       luz_celda     
 Cada nota del SEQ1 suma 1 a la **carga** de su celda. Cuando la carga llega al **coste**, se dispara un **trigger de construcción**: la ocupación sube 1 y la carga vuelve a 0. La ocupación cuenta triggers, no notas.
 
 - **El coste sube con la altura** (motor v8). Es 1 abajo y `Costemax` (5) en el límite: coste = 1 + ⌊(`Costemax` − 1) × altura / límite⌋, con la altura nominal de la ocupación actual. Desde el límite, cada trigger cuesta `Costemax` (ramificación, fusión, coronación y cumbre).
-- **Frenada:** cada nota sube la formación `Growstep` × límite / coste. Un trigger completo sube siempre un escalón, pero repartido entre más notas conforme la formación crece, así que cuanto más alta, más despacio.
+- **Frenada:** cada nota sube la formación un escalón × límite / coste. El escalón no es un parámetro (desde la v13; antes `Growstep`): lo calcula el motor, (1 − `Semillafrac`) / (`Umbralram` − 1), para que la formación suba a escalones iguales de la semilla al límite sin saltos (0,2 con los valores por defecto). Un trigger completo sube siempre un escalón, pero repartido entre más notas conforme la formación crece, así que cuanto más alta, más despacio.
 - **Latido:** cada nota hincha la formación un 5 % y la aclara durante ~0,2 s, aunque no dispare ningún trigger. Así se ve que la nota ha llegado.
 - `Costemax` 1 deja el comportamiento antiguo: un trigger por nota.
 
@@ -111,14 +111,14 @@ Cada nota del SEQ1 suma 1 a la **carga** de su celda. Cuando la carga llega al *
 
 Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es un 25 % más alto (1,875 en vez de 1,5). Con una nota por pattern (16 pasos a 120 BPM) son ~20 s en vez de 6.
 
-- **El gate decide cuánto crece** (`Gatemode`). Al llegar el note off se mide cuánto duró la nota respecto a un paso: un gate al 50 % da el crecimiento normal, un gate corto la mitad o menos (hasta ¼) y uno ligado como mucho `Gatemax` veces (1,25; antes era el doble). Sin note off, crecimiento normal. Se aplica al trozo de escalón de cada nota y no cambia la carga.
+- **El gate decide cuánto crece** (`Gatemax` > 1; con `Gatemax` 1 el gate no cuenta, lo que antes era `Gatemode` apagado). Al llegar el note off se mide cuánto duró la nota respecto a un paso: un gate al 50 % da el crecimiento normal, un gate corto la mitad o menos (hasta ¼) y uno ligado como mucho `Gatemax` veces (1,25; antes era el doble). Sin note off, crecimiento normal. Se aplica al trozo de escalón de cada nota y no cambia la carga.
 - **Techo del escalón** (motor v9): la altura nunca pasa del escalón que se está construyendo. Ni un gate ligado ni la presión de una vecina adelantan la altura a los triggers. Antes, con gates largos, una formación podía tocar el límite con la mitad de las notas.
 - **Material**: la velocidad de la primera nota decide (`Umbralvel`, 64) y no vuelve a cambiar. Desde motor v10 la diferencia no depende solo del brillo, que en cajas pequeñas apenas se veía:
   - **Pulido** (por encima): color claro y frío, prismas limpios y algo más esbeltos; en arquitectura, plantas casi pegadas (torre de cristal). `mat_pulido` tiene un reflejo blanco ancho y fuerte (especular 1, brillo 14) y algo de ambiente.
   - **Poroso** (por debajo): color oscuro y terroso. Cada pieza se rompe en 2–3 tramos de ancho irregular, con grietas entre ellos y grumos pegados; en arquitectura, plantas desiguales y descolgadas (hormigón). `mat_poroso` no tiene reflejo.
   - Relanzar la fase 3 o la 4 reajusta los dos materiales.
 - **Animación**: la altura visible se acerca a la real en ~0,1 s; las formaciones brotan, no aparecen de golpe.
-- **Balanceo del eje** (v2): además del giro al tempo, el eje se balancea hacia la cámara y en contra, `Balanceo` grados (60) cada `Balanceoper` segundos (90), para ver los dos polos. Va aparte del reloj del secuenciador y se congela con `Pausa`. `Rotextra` lo enciende y lo apaga; entra y sale en 3 s, sin saltos. Lo llevan todas las geometrías que giran con el planeta (núcleo, retícula, luz de celda, formas, coronas, estratos) y la luz de destello. Orden de rotación: `Ry Rx Rz` (giro, balanceo, inclinación).
+- **Balanceo del eje** (v2): además del giro al tempo, el eje se balancea hacia la cámara y en contra, `Balanceo` grados (60) cada `Balanceoper` segundos (90), para ver los dos polos. Va aparte del reloj del secuenciador y se congela con `Pausa`. `Balanceo` 0 lo apaga (desde la v13; antes `Rotextra`); entra y sale en 3 s, sin saltos. Lo llevan todas las geometrías que giran con el planeta (núcleo, retícula, luz de celda, formas, coronas, estratos) y la luz de destello. Orden de rotación: `Ry Rx Rz` (giro, balanceo, inclinación).
 
 **Luz de celda** (fase 3 v9, motor v18). No hay balizas: ni la del SEQ1, ni la del SEQ2, ni las de la batería. Cada celda cuenta con luz lo que le está pasando, en una rejilla de 3 × 3 losetas opacas a ras de su superficie (geometría `luz_celda`, Script CHOP `i_luz_celda`, material `mat_luz_celda`). La crea y la mantiene cualquier fase al relanzarse, que también retira las balizas de las versiones anteriores.
 
@@ -131,25 +131,41 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
   - **En las fases 1 y 2** (`fase12_base.py`) no se escucha el note off: la luz es un pulso de 0,25 s con cada nota, del mismo tamaño y brillo.
 - **La batería se ve igual** (fase 7, motor v21): cada golpe ilumina el centro de la celda y su formación con el color de su pad. Si coinciden en la celda, manda la luz más intensa en ese instante.
 - **La luz del secuenciador llega a las conchas de la celda** (desde la fase 8; motor v25, comun v16). Con muchas conchas, y más con la cámara de globo, el centro de la celda se pierde entre las bandas de las losetas. Por eso una nota también tiñe tenuemente las losetas de su celda, que la ocupan entera:
-  - **Qué se tiñe:** las losetas dibujadas de la columna de la celda, de arriba abajo: la superior con toda la luz y menos en cada una, hasta apagarse en `Luzconchasalcance` (4). En las paredes de un corte se siguen leyendo los colores de cada estrato. El zócalo no se tiñe. En una celda en el fondo de un corte se tiñe la loseta del fondo hacia abajo; las paredes vecinas son de otras celdas y no se tiñen.
-  - **Pulso y reposo**, como el centro: un pulso con cada nota (`Luzconchaspulso`, 0,35) y, mientras es la última celda de ese secuenciador, un reposo tenue (`Luzconchasreposo`, 0,10). Es un tinte, no un foco.
+  - **Qué se tiñe:** las losetas dibujadas de la columna de la celda, de arriba abajo: la superior con toda la luz y menos en cada una, hasta apagarse en la cuarta. En las paredes de un corte se siguen leyendo los colores de cada estrato. El zócalo no se tiñe. En una celda en el fondo de un corte se tiñe la loseta del fondo hacia abajo; las paredes vecinas son de otras celdas y no se tiñen.
+  - **Pulso y reposo**, como el centro: un pulso con cada nota (0,35) y, mientras es la última celda de ese secuenciador, un reposo tenue (0,10). Es un tinte, no un foco. `Luzconchas` es la intensidad: 0 la apaga, 1 da esos valores y 2 el doble (desde la fase 3 v13; antes un interruptor y `Luzconchaspulso`, `Luzconchasreposo` y `Luzconchasalcance`).
   - **Cómo:** es una capa de **luz aditiva** (geometría `luz_conchas`, Script CHOP `i_luz_conchas`, material constante `mat_luz_conchas` con mezcla aditiva) que envuelve las losetas. Suma el color del secuenciador sin tocar el de la generación ni la diferencia entre loseta ocupada y vacía, se ve igual en la cara en sombra y en las paredes de una hondonada, y nunca oscurece ni tapa: el centro de la celda, la luz de la batería y las formaciones siguen encima.
   - **El reposo respira** (entre el 70 % y el 100 %, cada 2,4 s). Una loseta ocupada es más clara pero quieta: el reposo blanco del SEQ1 no se confunde con ella.
   - **La cicatriz manda:** una loseta en cian por un corte reciente no se tiñe.
   - **Los dos secuenciadores en la misma celda:** una loseta tiene un solo color, así que manda el más encendido y, si empatan, el último que ha tocado.
   - **El SEQ2 sobre una concha de tono parecido:** como la luz se suma, el pulso aclara la loseta además de teñirla, y se nota aunque el color sea parecido. Con la paleta de generaciones ninguna concha es ámbar (la banda del SEQ2 está reservada); con `Paleta` mineral, la base sí lo es.
-  - **Rendimiento:** solo se calculan las losetas de las celdas en pulso o en reposo (como mucho 2 × `Luzconchasalcance` filas por fotograma). Las dos mil losetas de las conchas no se recalculan.
+  - **Rendimiento:** solo se calculan las losetas de las celdas en pulso o en reposo (como mucho 8 filas por fotograma). Las dos mil losetas de las conchas no se recalculan.
   - Se ve también en modo actuación. `Luzconchas` apagado deja las conchas como antes.
 - **Sin transparencias en la superficie:** cada zona del centro lleva un color opaco, así que no se mezclan y no hay problemas de orden de dibujo. La única capa aditiva es la luz de las conchas, que se dibuja la última.
 - **Interruptores:** `Luzseq` (página Fase3) para el centro, `Luzconchas` (página Fase3) para las conchas y `Balizasdrum` (página Fase7) para la batería. Las tres luces son parte del mundo y se ven también en modo actuación.
 
-**Página Fase3:** `Luzseq` · `Luzconchas` · `Luzconchaspulso` 0,35 · `Luzconchasreposo` 0,10 · `Luzconchasalcance` 4 · `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Growstep` 0,20 (por trigger) · `Costemax` 5 · `Gatemode` · `Gatemax` 1,25 · `Umbralvel` 64 · `Velprueba` 100 · `Sembrar` · `Resetmundo` · `Rotextra` · `Balanceo` 60 · `Balanceoper` 90 · `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango`
+**Página Fase3** (16 parámetros desde la v13):
+
+| Para qué | Parámetros |
+|---|---|
+| Montaje: el teclado y la retícula | `Notapolosur` 24 · `Notapolonorte` 108 · `Fuerarango` |
+| Montaje: escala y ritmo de crecimiento | `Shellthick` 0,5 · `Alturafactor` 3,75 · `Semillafrac` 0,20 · `Costemax` 5 · `Gatemax` 1,25 (1 = el gate no cuenta) · `Umbralvel` 64 |
+| Montaje: luz y movimiento con el proyector | `Luzseq` · `Luzconchas` 1 (intensidad; 0 apagada) · `Balanceo` 60 (0 = apagado) · `Balanceoper` 90 |
+| Pruebas | `Velprueba` 100 · `Sembrar` · `Resetmundo` |
+
+**Quitados en la v13** (relanzar cualquier fase los borra de un proyecto anterior conservando lo que hacían):
+
+| Antes | Ahora |
+|---|---|
+| `Growstep` | Lo calcula el motor: (1 − `Semillafrac`) / (`Umbralram` − 1). Es lo que ya ponía `ajuste_vista.py` |
+| `Gatemode` | `Gatemax` 1. Si estaba apagado, `Gatemax` pasa a 1 |
+| `Rotextra` | `Balanceo` 0. Si estaba apagado, `Balanceo` pasa a 0 |
+| `Luzconchaspulso`, `Luzconchasreposo`, `Luzconchasalcance` | `Luzconchas` pasa de interruptor a intensidad: `Luzconchaspulso` / 0,35 (0 si estaba apagado). El reposo es siempre 0,10 × `Luzconchas` y el alcance, 4 losetas |
 
 Los tres últimos los crea ya `fase12_base.py` en esta página; si venían de la página Fase1 (versión anterior), la fase 3 los mueve aquí conservando su valor.
 
 **Leyenda:** `MUNDO ocupadas 23/85 (27%) max 4 fase 3`, `RANGO do1 24 (polo sur) a do8 108 (polo norte) 85 celdas fuera: plegar` y `ULTIMA geo celda 40 ocupacion 3 crecimiento carga 1/3`. `Sembrar` también escribe la carga en el Textport.
 
-**Proyecto en marcha:** al relanzar la fase 3 o la 4, `Alturafactor`, `Semillafrac`, `Growstep` y los umbrales de la fase 4 pasan a sus valores nuevos solo si seguían en el valor de antes. Lo que hayas ajustado a mano se queda como está; las líneas `..` del informe dicen qué ha cambiado. En la línea NOTA: `celda 40 de 85 anillo 4`, y `(como do1 24)` si la nota se ha plegado.
+**Proyecto en marcha:** al relanzar la fase 3 o la 4, `Alturafactor`, `Semillafrac` y los umbrales de la fase 4 pasan a sus valores nuevos solo si seguían en el valor de antes. Lo que hayas ajustado a mano se queda como está; las líneas `..` del informe dicen qué ha cambiado. En la línea NOTA: `celda 40 de 85 anillo 4`, y `(como do1 24)` si la nota se ha plegado.
 
 **Probar sin BeatStep:** elige `Nota` (página Fase2) y pulsa `Sembrar` varias veces.
 
@@ -344,7 +360,7 @@ Las 8 pistas de batería son las 8 señales de la batería. Cada pad tiene un **
 - **`radio`:** cuántos anillos de vecinas alcanza. 0 es solo la celda, 1 la celda y sus vecinas, 2 un anillo más.
 - **`profundidad`:** cuántas conchas atraviesa el corte, desde la fase 9. 0 no corta.
 
-**La misma moneda que la construcción** (v5). Cada nota del SEQ sube la formación `Growstep` / coste y suma 1 a la carga (fase 3). Cada nota de erosión hace exactamente lo contrario: baja la carga y la altura lo mismo. Al agotarse la carga baja un escalón, y la carga queda llena menos una.
+**La misma moneda que la construcción** (v5). Cada nota del SEQ sube la formación un escalón / coste y suma 1 a la carga (fase 3). Cada nota de erosión hace exactamente lo contrario: baja la carga y la altura lo mismo. Al agotarse la carga baja un escalón, y la carga queda llena menos una.
 
 - **Simetría:** lo que costó más notas cuesta más golpes deshacerlo, también cerca del límite (la frenada). N notas de construcción seguidas de N de erosión devuelven la celda a como estaba, mientras no haya satélites de por medio.
 - **La carga ya no se vacía de golpe.** Antes, un pad que golpeaba más a menudo de lo que cuesta un escalón dejaba esa celda sin volver a construir nunca. Ahora, si el SEQ toca más notas de las que deshace la batería, la celda sigue creciendo.
@@ -780,7 +796,7 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | Nacen varios satélites de golpe | Un bombo sobre una celda en el límite son 3 desbordes seguidos (fase 7 v14) | Es lo esperado. Con `Vecina` en `velocidadocupacion` se reparten; si salen apelotonados, baja los `pulsos` del pad |
 | El mundo no se entierra nunca (la leyenda dice `esperando territorio`) | La batería no deja que se llene el territorio: cada golpe lo vacía, y la edad máxima solo entierra un mundo con el territorio ocupado | Quita la batería (el mundo se asienta y se entierra por estancamiento) o baja `Umbralterritorio`. Mira la columna `territorio` de la tabla `ciclos` |
 | Los ciclos siempre acaban por edad máxima | Umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
-| Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas), `Umbralnovedad` alto, `Herencia` baja (el mundo nuevo arranca casi vacío) o `Growstep` pequeño (los escalones bajos cuestan pocas notas) | `ajuste_vista.py` (ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`), o sube `Ciclomin` o `Compasesquietos` |
+| Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas), `Umbralnovedad` alto, `Herencia` baja (el mundo nuevo arranca casi vacío) o un `Semillafrac` alto (los escalones bajos cuestan pocas notas) | `ajuste_vista.py` (ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`), o sube `Ciclomin` o `Compasesquietos` |
 | Ciclos sin tocar o que no terminan | Línea de tiempo parada, o un STOP posterior | Play en el proyecto; el ciclo se reanuda con la siguiente nota (la leyenda pone `parado`) |
 | El globo se acerca al borde un instante al enterrar | La concha nueva es gruesa y la transición tarda (nunca se sale) | Baja `Camsuave` o `Encuadre` (Fase10) |
 | El planeta se ve pequeño | `Encuadre` bajo, o motor anterior al v36 | Sube `Encuadre` (1 = de borde a borde); relanza cualquier fase con motor v36 |
@@ -790,7 +806,7 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | La cámara se mueve todo el rato y el mundo se ve a ratos | Motor v32 (encuadraba lo que se dibujaba en cada fotograma) | Relanza cualquier fase con motor v33 |
 | Hondonadas que bajan sin parar | Un pad con profundidad cae en cada mundo sobre las mismas celdas: pierde N losetas y recibe 1 | Sube `Colmatacion` (Fase8) o baja su profundidad en `perfiles_erosion` |
 | El planeta engorda demasiado rápido | Sin compactación (`Cortezamax` 0, o motor anterior al v37), el engorde es `Shellthick` por cada `Ciclomin` compases | Relanza cualquier fase con comun v29 (crea `Cortezamax` 4) y baja `Cortezamax` si aún es mucho. Lo ya enterrado no adelgaza de golpe: `Resetmundo` para empezar de cero |
-| La formación se queda baja y salta al límite de golpe | `Growstep` pequeño para `Semillafrac` y `Umbralram`: no llega al límite antes de la ramificación (el informe lo avisa con `..`) | `Growstep` = (1 − `Semillafrac`) / (`Umbralram` − 1), o `ajuste_vista.py` |
+| La formación se queda baja y salta al límite de golpe | Motor anterior a la v58 con `Growstep` pequeño para `Semillafrac` y `Umbralram` | Relanza cualquier fase: desde la fase 3 v13 el escalón lo calcula el motor y no hay salto |
 | `Cambioentierra` no hace nada | El BeatStep no envía All Notes Off al cambiar de pattern | Prueba pendiente con el aparato |
 | El planeta no frena aunque el mundo esté quieto | `ritmo` sin el giro vivo, o `Girovivo` apagado | Relanza la última fase aplicada (parchea `ritmo`); mira que salga `ritmo: el giro se multiplica…` |
 | La retícula no sube con las conchas | `reticula_chop` no se recocina | Se recocina sola en cada cambio de radio; si no, relanza la fase 8 |
@@ -807,7 +823,7 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 
 | Fase | Pregunta | Decisión |
 |---|---|---|
-| 3 | ¿Incremento de altura por gate o fijo? | Por gate, con el fijo de respaldo (`Gatemode`) |
+| 3 | ¿Incremento de altura por gate o fijo? | Por gate, con el fijo de respaldo (`Gatemax` 1) |
 | 4 | ¿6 vecinas? | Hexagonal desplazada entre anillos completos; solape de arcos en los incompletos |
 | 4 | ¿Quién elige la vecina? | Velocidad + ocupación (`Vecina`) |
 | 4 | ¿Desborde en los polos? | El polo desborda a cualquiera de las celdas de su anillo |
@@ -945,7 +961,7 @@ Lo que la simulación no puede comprobar son los nombres exactos de algunos par�
 6. **Batería constante:** comprobar que la leyenda dice `esperando territorio` pasado `Ciclomax` y apuntar la ocupación del territorio, para afinar `Umbralterritorio`.
 7. **Cuencas:** con la batería real, medir cuánto bajan las cuencas en 10 minutos (`laguna max` en la leyenda) y ajustar `Colmatacion`.
 8. **Cámara de globo:** comprobar en el proyector real que el planeta ocupa el alto que dice `Encuadre` (la leyenda `CAMARA` lo dice) y que se aleja cuando crece una concha. Si la pantalla o la ventana de salida no es 16:9 y recorta la imagen, el planeta puede salirse aunque el render lo encuadre: pon la ventana con la misma proporción que el render (1280 × 720).
-9. **Luz en las conchas:** con la cámara de globo y 10 conchas o más, comprobar que se ve dónde cae cada nota, y ajustar `Luzconchaspulso` y `Luzconchasreposo` con la luz real del proyector.
+9. **Luz en las conchas:** con la cámara de globo y 10 conchas o más, comprobar que se ve dónde cae cada nota, y ajustar `Luzconchas` (la intensidad) con la luz real del proyector.
 10. **Paleta:** con 10 conchas o más y un corte de 4, comprobar desde la cámara de globo que las bandas se distinguen una a una, y que los pads 7 y 8 no se confunden con las conchas.
 11. **Impulso (fase 7 v12–v14):** con el bombo a negras sobre el SEQ1, mirar si cada golpe se ve como un golpe y la celda vuelve a su tamaño entre golpe y golpe; con bombo y tom alternando, si el bombo se nota más grande y algo más largo (ajustar `Pumpamt`, `Pumphold`, `pump_rel`, `Pumphorz` y `Pumptope`), y si los satélites que nacen de golpe salen apelotonados. Copiar la tabla `ciclos` de 20 minutos con y sin bombo para ver cuánto se acortan los mundos.
 

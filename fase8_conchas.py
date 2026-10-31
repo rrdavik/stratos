@@ -67,9 +67,11 @@ Aqui la concha es una capa de losetas instanciadas: igual de barata
 quitando losetas y ver las paredes de cada capa con su color.
 
 LUZ EN LAS CONCHAS (Luzconchas, pagina Fase3): una nota tine tenuemente las
-losetas superiores de su celda (Luzconchasalcance, 4), del color de su
-secuenciador: pulso con la nota (Luzconchaspulso) y reposo que respira
-mientras es su ultima celda (Luzconchasreposo). Es luz aditiva: no tapa el
+4 losetas superiores de su celda, del color de su secuenciador: pulso con
+la nota (0,35) y reposo que respira mientras es su ultima celda (0,10).
+Luzconchas es la intensidad: 0 la apaga, 1 da esos valores, 2 el doble
+(motor v58; antes Luzconchaspulso, Luzconchasreposo y Luzconchasalcance).
+Es luz aditiva: no tapa el
 color de la generacion, se ve en la sombra y la cicatriz manda.
 
 De cada columna se dibujan sus Maxconchas (24) losetas superiores; bajo
