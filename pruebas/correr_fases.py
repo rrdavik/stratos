@@ -7,7 +7,8 @@ dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
 Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
 camino del MIDI real, fotograma a fotograma; desde la fase 21, onsets del
-microfono por su senal sintetica) y evalua todas las expresiones.
+microfono: palmadas de la sala virtual, que la sesion oye por su microfono
+virtual) y evalua todas las expresiones.
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
 Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
@@ -64,9 +65,12 @@ def correr(sim, archivo, verbose=False):
 
 def sesion(sim, compases=48, fps=30.0):
     """SEQ1 en semicorcheas, SEQ2 cada 3 pasos y bateria en negras, por los
-    bytes MIDI, fotograma a fotograma a 120 BPM. Desde la fase 21, un clic
-    sintetico (Simonset) cada dos negras, por la cadena del microfono."""
+    bytes MIDI, fotograma a fotograma a 120 BPM. Con la sala virtual, una
+    palmada (Palmada) cada dos negras, por su microfono virtual y la cadena
+    del microfono (hasta la fase 21 v3, un clic de Simonset)."""
     base = sim.op('/project1/FASE1')
+    sala = sim.op('/project1/SALA')
+    palmada = getattr(sala.par, 'Palmada', None) if sala is not None else None
     mm = base.op('midi_callbacks').module
     paso = 60.0 / 120.0 / 4
     fpp = fps * paso
@@ -89,8 +93,8 @@ def sesion(sim, compases=48, fps=30.0):
                 n2 = notas2[(p // 3) % len(notas2)]
                 mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes([0x9D, n2, 70]))
                 pend.append([0x8D, n2, 0])
-            if p % 8 == 2 and getattr(base.par, 'Simonset', None) is not None:
-                base.par.Simonset.pulse()
+            if p % 8 == 2 and palmada is not None:
+                palmada.pulse()
             if p % 16 == 4 and (p // 64) % 2 == 1:
                 mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes([0x9F, 36 + (p // 16) % 4, 100]))
     return sim.expresiones()

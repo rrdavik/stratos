@@ -48,7 +48,9 @@
 #                 motor v64: la pagina Fase13 con 12: el ancho maximo de un
 #                 rio es 3,4 x Anchorio y Pendientemin queda en 0,01; motor
 #                 v65: la pagina Fase21 con 10: Refractariomic (0,12 s) y
-#                 Ventanaruido (60 s), fijos).
+#                 Ventanaruido (60 s), fijos; motor v66: sin la simulacion
+#                 de la fase 21 (mic_sim): Fuentemic es microfono o chop, y
+#                 la sala virtual hace de publico).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -61,7 +63,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v65'
+MOTOR_VERSION = 'motor v66'
 
 import math
 
@@ -255,7 +257,7 @@ DEFAULT_CFG = dict(
     smog=1.0, niebla=1.0, glitch=1.0, modular=None,
     # fase 21: el microfono
     umbral_onset=0.6, refractario_mic=0.12, reduccion_mic=1.0, ventana_ruido=60.0, umbral_corte=20.0,
-    prof_mic=3, fuente_mic=2, canal_mic=0, chop_mic='',
+    prof_mic=3, fuente_mic=0, canal_mic=0, chop_mic='',
 )
 
 
@@ -7667,15 +7669,18 @@ def niebla(W, cfg, d, R):
 #                   60 s (fijo desde el motor v65); al pasar Umbralcorte abre un corte de
 #                   Profundidadmic conchas y radio 1 en la celda del ultimo
 #                   onset, y la cuenta vuelve a cero.
-# Sin azar: la senal sintetica de prueba (clic, ruido y drone) sale de un hash
-# del numero de muestra.
+# Sin azar: la senal sintetica de las autopruebas (clic, ruido y drone) sale de
+# un hash del numero de muestra. Desde el motor v66 no hay Script CHOP de
+# simulacion (mic_sim): para probar sin microfono, la sala virtual
+# (sala_virtual.py, Fuentemic = chop).
 
 BANDAS_MIC = 16
 FREC_MIC = (200.0, 12000.0)     # las bandas, repartidas en escala logaritmica
 PISO_MIC = -60.0                # dB: el silencio
 HIST_MIC = 3                    # bloques anteriores con los que se compara
 DESCARTE_DESTELLO = 0.15        # s tras un destello propio en que un onset no cuenta
-FUENTES_MIC = ['microfono', 'simulacion', 'ambos', 'chop']     # chop: Chopmic (motor v56)
+FUENTES_MIC = ['microfono', 'chop']     # chop: Chopmic (motor v56); v66: sin simulacion ni ambos
+FUENTE_CHOP = 1
 _MIC = dict(hist=[], muestra=0, clic=0)
 
 
@@ -7796,7 +7801,8 @@ def _hash_muestras(np, i):
 
 
 def mic_sim_bloque(n, rate, s0, clic=False, ruido=0.0, drone=False):
-    """n muestras de la senal sintetica desde la muestra s0, sin azar: un clic
+    """n muestras de la senal sintetica de las autopruebas desde la muestra
+    s0, sin azar: un clic
     (10 ms de ruido que se apaga, como una palmada), ruido de sala (amplitud
     0-1) y un drone de 110 Hz con dos armonicos."""
     np = _np()
@@ -8696,10 +8702,6 @@ def on_pulse(name):
                   % ('SEQ1' if s == GEO else 'SEQ2', note_name(note), ci, len(NEIGH[ci]),
                      'cluster de %d celdas, capital %d' % (len(cl['celdas'][k]), cl['capital'][k])
                      if k >= 0 else 'sin cluster todavia (pulsa otra vez)'))
-    elif name == 'Simonset':            # fase 21: un clic sintetico en el proximo bloque
-        _MIC['clic'] += 1
-        if c['fuente_mic'] == 0:
-            print('MICRO  Simonset: con Fuentemic = microfono la senal sintetica no llega al detector')
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
@@ -8710,23 +8712,20 @@ def on_pulse(name):
 
 # --- el microfono (fase 21) ---------------------------------------------------
 
-MIC_RATE = 44100                # la senal sintetica
+MIC_RATE = 44100                # la senal sintetica de las autopruebas
 
 
 def mic_tick(W, c, now):
-    """Cada fotograma: mic_sim genera su bloque y mic_flujo lee el de
-    mic_fuente y avisa al motor; luego el ruido de sala olvida lo
-    que sale de su ventana."""
+    """Cada fotograma: mic_flujo lee el bloque del microfono (o del CHOP de
+    Chopmic) y avisa al motor; luego el ruido de sala olvida lo que sale de
+    su ventana."""
     _CACHE['mic'] = (absTime.frame, W, c, now)
-    for nm in ('mic_sim', 'mic_flujo'):  # la senal sintetica, aunque nada cambie en su entrada
-        if nm == 'mic_sim' and c['fuente_mic'] not in (1, 2):
-            continue                    # con chop, mic_flujo recuece el CHOP de Chopmic
-        o = parent().op(nm)
-        if o is not None:
-            try:
-                o.cook(force=True)
-            except Exception as e:
-                _say(nm, 'AVISO  %s: %s' % (nm, e))
+    o = parent().op('mic_flujo')        # con chop, mic_flujo recuece el CHOP de Chopmic
+    if o is not None:
+        try:
+            o.cook(force=True)
+        except Exception as e:
+            _say('mic_flujo', 'AVISO  mic_flujo: %s' % e)
     ruido_tick(W, c, now)
 
 
@@ -8747,7 +8746,7 @@ def _canal(arr, k):
 
 def _sin_timeslice(scriptOp):
     """Un Script CHOP con el Audio Device In aguas arriba hereda su modo Time
-    Slice, y en el no puede fijar numSamples: mic_sim y mic_flujo sacan un
+    Slice, y en el no puede fijar numSamples: mic_flujo saca un
     bloque (o una muestra) por cocinado, asi que salen de el (motor v57)."""
     try:
         scriptOp.isTimeSlice = False
@@ -8756,12 +8755,12 @@ def _sin_timeslice(scriptOp):
 
 
 def mic_cook(scriptOp):
-    """onCook del Script CHOP mic_flujo: el flujo del bloque de su entrada
-    (mic_fuente), el onset y, si lo hay, la erosion. Saca dos canales: flujo
-    y onset."""
+    """onCook del Script CHOP mic_flujo: el flujo del bloque del microfono
+    (mic_in) o del CHOP de Chopmic, el onset y, si lo hay, la erosion. Saca
+    dos canales: flujo y onset."""
     W, c, now = _mic_ctx()
-    src = scriptOp.inputs[0] if scriptOp.inputs else parent().op('mic_fuente')
-    if c['fuente_mic'] == 3:            # motor v56: el audio de otro CHOP (Chopmic)
+    src = parent().op('mic_in')         # v66: sin mic_fuente ni mic_sim
+    if c['fuente_mic'] == FUENTE_CHOP:  # motor v56: el audio de otro CHOP (Chopmic)
         src = op(c['chop_mic']) if c['chop_mic'] else None
         if src is not None:
             try:
@@ -8797,36 +8796,6 @@ def _log_onset(W, ev):
         print('AVISO  %s' % W['aviso'])
 
 
-def mic_sim_cook(scriptOp):
-    """onCook del Script CHOP mic_sim: el bloque sintetico de este fotograma
-    (las muestras desde el anterior), con el clic de Simonset, Simruido y
-    Simdrone; con Fuentemic = ambos, sumado a su entrada (mic_in)."""
-    W, c, now = _mic_ctx()
-    t0 = _MIC.get('t_sim')
-    dt = (now - t0) if t0 is not None and now > t0 else 1.0 / 60.0
-    _MIC['t_sim'] = now
-    n = max(32, min(MIC_RATE // 4, int(round(dt * MIC_RATE))))
-    clic = _MIC['clic'] > 0
-    if clic:
-        _MIC['clic'] -= 1
-    x = mic_sim_bloque(n, MIC_RATE, _MIC['muestra'], clic=clic,
-                       ruido=max(0.0, min(1.0, float(_p('Simruido', 0.0)))), drone=bool(_p('Simdrone', False)))
-    _MIC['muestra'] += n
-    if c['fuente_mic'] == 2 and scriptOp.inputs:
-        try:
-            y = _canal(scriptOp.inputs[0].numpyArray(), c['canal_mic'])
-            if y is not None:
-                k = min(n, y.size)
-                x[n - k:] += y[y.size - k:]
-        except Exception:
-            pass
-    _sin_timeslice(scriptOp)
-    scriptOp.clear()
-    scriptOp.rate = MIC_RATE
-    scriptOp.numSamples = n
-    scriptOp.appendChan('mic').vals = [float(v) for v in x]
-
-
 def microfono_encontrado():
     """(si, texto) del Audio Device In CHOP mic_in: con canales y sin errores."""
     o = parent().op('mic_in')
@@ -8852,7 +8821,7 @@ def _legend_micro(W, c):
     fuente = FUENTES_MIC[int(c['fuente_mic']) % len(FUENTES_MIC)]
     if fuente == 'chop':
         fuente = 'chop %s' % (c['chop_mic'] or '(sin Chopmic)')
-    elif fuente != 'simulacion' and not microfono_encontrado()[0]:
+    elif not microfono_encontrado()[0]:
         fuente += ' (sin microfono)'
     u = mc.get('ultimo')
     ult = ('flujo %.2f celda %d hace %.1f s' % (u['flujo'], u['celda'], max(0.0, absTime.seconds - u['t']))

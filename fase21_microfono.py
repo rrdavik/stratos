@@ -25,30 +25,37 @@ QUE HACE
                al pasar Umbralcorte (20) abre un corte de Profundidadmic
                conchas (3, radio 1) en la celda del ultimo onset, y la cuenta
                vuelve a cero.
-  LEYENDA      MICRO  ambos   flujo 0.12/0.60   onsets 12   ultimo flujo 0.71
+  LEYENDA      MICRO  microfono   flujo 0.12/0.60   onsets 12   ultimo flujo 0.71
                celda 40 hace 1.2 s   ruido 5.3/20 en 60 s
   midi_log     una fila por onset: MICRO onset flujo 0.71 celda 40
   PAGINA (v3)  10 parametros en vez de 12: el tiempo muerto entre onsets
                (0,12 s, antes Refractariomic) y la ventana del ruido (60 s,
                antes Ventanaruido) quedan fijos. Relanzar cualquier fase los
                quita de un proyecto anterior y avisa si los habias cambiado.
+  SIN SIMULACION (v4)
+               7 parametros. Fuera la simulacion de la v1: mic_sim (Script
+               CHOP), mic_fuente (Switch CHOP), Simonset, Simruido y Simdrone,
+               y las opciones simulacion y ambos de Fuentemic (pasan a
+               microfono). Hace lo mismo, y mejor, la sala virtual
+               (sala_virtual.py): su microfono virtual entra por Fuentemic =
+               chop. Relanzar cualquier fase la quita de un proyecto anterior.
 
 OPERADORES (en /project1/FASE1)
 -------------------------------
   mic_in       Audio Device In CHOP: el microfono (elige el dispositivo en su
                parametro Device; el canal, con Canalmic).
-  mic_sim      Script CHOP: clic (Simonset), ruido (Simruido) y drone
-               (Simdrone) sinteticos; con Fuentemic = ambos, sumados a mic_in.
-  mic_fuente   Switch CHOP: microfono (mic_in) o simulacion / ambos (mic_sim).
-  mic_flujo    Script CHOP: lee el bloque de mic_fuente, calcula el flujo con
-               numpy y llama al motor (sin Audio Spectrum CHOP, para poder
-               probarlo fuera de TouchDesigner). Saca los canales flujo y onset.
+  mic_flujo    Script CHOP: lee el bloque de mic_in (o, con Fuentemic = chop,
+               del CHOP de Chopmic), calcula el flujo con numpy y llama al
+               motor (sin Audio Spectrum CHOP, para poder probarlo fuera de
+               TouchDesigner). Saca los canales flujo y onset.
 
 PROBAR SIN MICROFONO
 --------------------
-  Fuentemic = simulacion (o ambos). Simonset: un clic, un onset, una celda
-  que baja. Simdrone: un drone sostenido que no da ninguno. Unos cuantos
-  Simonset seguidos: el ruido de sala abre un corte.
+  La sala virtual: exec(sala_virtual.py) pone Fuentemic = chop y Chopmic en
+  su microfono virtual (con Usarmic). En la pagina Sala de /project1/SALA,
+  Palmada: un clic, un onset, una celda que baja; Volumendrone: un drone que
+  no da ninguno; unas cuantas Palmada seguidas: el ruido de sala abre un
+  corte. Ruidopublico y Personas, el publico entero.
 
 COMO USARLO
 -----------
@@ -59,7 +66,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase21 v3  (pagina mas corta: tiempo muerto y ventana del ruido, fijos)'
+VERSION = 'fase21 v4  (sin la simulacion: Fuentemic microfono o chop; para probar, la sala virtual)'
 banner(VERSION)
 
 base = require_base(21)
@@ -71,19 +78,9 @@ m = motor.module
 # -----------------------------------------------------------------------------
 
 page = get_page(base, 'Fase21')
-ETIQUETAS_FUENTE = ['Microfono (mic_in)', 'Simulacion (mic_sim)', 'Los dos sumados', 'Otro CHOP (Chopmic)']
-add_par(base, page, 'menu', 'Fuentemic', 'De donde llega el sonido de la sala', 'ambos', menu=m.FUENTES_MIC,
-        menu_labels=ETIQUETAS_FUENTE)
-try:                                    # v2: el menu de un proyecto en la v1 gana chop
-    fp = base.par.Fuentemic
-    if list(fp.menuNames) != list(m.FUENTES_MIC):
-        actual = fp.eval()
-        fp.menuNames = list(m.FUENTES_MIC)
-        fp.menuLabels = ETIQUETAS_FUENTE
-        fp.val = actual
-        ok('Fuentemic: nueva opcion chop (el audio del CHOP de Chopmic)')
-except Exception:
-    pass
+# v4: microfono o chop (la simulacion y ambos los quita install_core, fase21_sin_simulacion)
+add_par(base, page, 'menu', 'Fuentemic', 'De donde llega el sonido de la sala', 'microfono',
+        menu=FUENTEMIC_NOMBRES, menu_labels=FUENTEMIC_ETIQUETAS)
 add_par(base, page, 'str', 'Chopmic', 'CHOP con el audio (Fuentemic = chop)', '')
 add_par(base, page, 'int', 'Canalmic', 'Canal del microfono (0: el primero)', 0, 0, 31, clamp=True)
 add_par(base, page, 'float', 'Umbralonset', 'Umbral de onset del microfono', 0.6, 0.0, 5.0, clamp=True)
@@ -91,15 +88,12 @@ add_par(base, page, 'float', 'Reduccionmic', 'Erosion de cada onset (escalones)'
 add_par(base, page, 'float', 'Umbralcorte', 'Ruido acumulado en 60 s que abre un corte', 20.0, 1.0, 500.0,
         clamp=True)
 add_par(base, page, 'int', 'Profundidadmic', 'Profundidad del corte por ruido', 3, 1, 12, clamp=True)
-add_par(base, page, 'pulse', 'Simonset', 'Probar: clic')
-add_par(base, page, 'float', 'Simruido', 'Probar: ruido de sala', 0.0, 0.0, 1.0, clamp=True)
-add_par(base, page, 'toggle', 'Simdrone', 'Probar: drone', False)
 try:
     base.par.Umbralcorte.label = 'Ruido acumulado en 60 s que abre un corte'
 except Exception:
     pass
-ok('pagina Fase21: Fuentemic (ambos), Chopmic, Canalmic 0, Umbralonset 0,6, Reduccionmic 1, '
-   'Umbralcorte 20 (en 60 s), Profundidadmic 3, Simonset, Simruido, Simdrone')
+ok('pagina Fase21: Fuentemic (microfono), Chopmic, Canalmic 0, Umbralonset 0,6, Reduccionmic 1, '
+   'Umbralcorte 20 (en 60 s), Profundidadmic 3')
 
 # -----------------------------------------------------------------------------
 # EL PAD 9 EN LAS TABLAS DE LA BATERIA
@@ -147,20 +141,9 @@ for nombre, valores, que in (('perfiles_erosion', PERFIL_PAD9, 'la reduccion la 
 # OPERADORES
 # -----------------------------------------------------------------------------
 
-MIC_SIM_CB = r'''# Script CHOP 'mic_sim' (fase 21): clic, ruido y drone sinteticos, sin azar.
-# El bloque lo genera el motor (mic_sim_cook).
-
-
-def onSetupParameters(scriptOp):
-    return
-
-
-def onCook(scriptOp):
-    op('motor').module.mic_sim_cook(scriptOp)
-'''
-
 MIC_FLUJO_CB = r'''# Script CHOP 'mic_flujo' (fase 21): el flujo espectral del bloque de
-# mic_fuente, el onset y la erosion los calcula el motor (mic_cook).
+# mic_in (o del CHOP de Chopmic), el onset y la erosion los calcula el motor
+# (mic_cook).
 
 
 def onSetupParameters(scriptOp):
@@ -173,43 +156,32 @@ def onCook(scriptOp):
 
 mic_in = get_or_make(base, 'audiodeviceinCHOP', 'mic_in', -880, 620)
 setp_any(mic_in, ['active'], True)
-cb = get_or_make(base, 'textDAT', 'mic_sim_callbacks', -880, 760)
-cb.text = MIC_SIM_CB
-mic_sim = get_or_make(base, 'scriptCHOP', 'mic_sim', -660, 760)
-setp_any(mic_sim, ['callbacks', 'callbackdat', 'dat'], 'mic_sim_callbacks')
-connect(mic_sim, mic_in, 0)
-fuente = get_or_make(base, 'switchCHOP', 'mic_fuente', -440, 620)
-connect(fuente, mic_in, 0)
-connect(fuente, mic_sim, 1)
-indice = setexpr(fuente, 'index', "0 if str(parent().par.Fuentemic) == 'microfono' else 1")
 cb = get_or_make(base, 'textDAT', 'mic_flujo_callbacks', -440, 760)
 cb.text = MIC_FLUJO_CB
 flujo = get_or_make(base, 'scriptCHOP', 'mic_flujo', -220, 620)
 setp_any(flujo, ['callbacks', 'callbackdat', 'dat'], 'mic_flujo_callbacks')
-connect(flujo, fuente, 0)
-ok('mic_in -> mic_sim -> mic_fuente -> mic_flujo: el motor lee cada bloque y busca onsets')
-if not indice:
-    info('mic_fuente: no pude enlazar su Index; pon 0 (microfono) o 1 (simulacion) a mano')
+connect(flujo, mic_in, 0)
+ok('mic_in -> mic_flujo (o el CHOP de Chopmic): el motor lee cada bloque y busca onsets')
 
 hay, texto = m.microfono_encontrado()
 if hay:
     ok('microfono: %s' % texto)
 else:
     info('microfono: no encuentro ninguno (%s). Elige el dispositivo en mic_in (Device), '
-         'o prueba con Fuentemic = simulacion' % texto)
+         'o prueba con la sala virtual (sala_virtual.py, Fuentemic = chop)' % texto)
 
 set_render(base)
 
 leeme(base, 21, """FASE 21 - EL MICROFONO DE LA SALA
   Un pad 9 de erosion que golpean los onsets del publico. mic_in (Audio
-  Device In; Device en el operador, Canalmic) o mic_sim (Simonset,
-  Simruido, Simdrone) por mic_fuente (Fuentemic) a mic_flujo: flujo
-  espectral en 16 bandas, onset con Umbralonset (y 0,12 s de tiempo muerto).
+  Device In; Device en el operador, Canalmic) o el CHOP de Chopmic
+  (Fuentemic = chop: la sala virtual) a mic_flujo: flujo espectral en
+  16 bandas, onset con Umbralonset (y 0,12 s de tiempo muerto).
   Cada onset baja Reduccionmic escalones en la celda del objetivo, enciende
   su luz (gris calido) y, desde la fase 14, cuenta como aranazo. La energia
   de los onsets de los ultimos 60 s, al pasar Umbralcorte, abre un corte de
   Profundidadmic conchas. La reduccion del pad 9 de perfiles_erosion la da
-  Reduccionmic.""")
+  Reduccionmic. Sin microfono: la sala virtual (Palmada, Volumendrone).""")
 
 print_report()
 
@@ -247,7 +219,7 @@ class TablaPrueba(object):
 def prueba(t):
     m = t.m
     guarda = {}
-    for nm in ('Fuentemic', 'Chopmic', 'Canalmic', 'Umbralonset', 'Reduccionmic', 'Umbralcorte', 'Profundidadmic', 'Simruido', 'Simdrone', 'Objetivo', 'Tema', 'Temaenciclo',
+    for nm in ('Fuentemic', 'Chopmic', 'Canalmic', 'Umbralonset', 'Reduccionmic', 'Umbralcorte', 'Profundidadmic', 'Objetivo', 'Tema', 'Temaenciclo',
                'Nota', 'Velprueba', 'Umbraldensidad', 'Golpesescalada', 'Ventanaescalada'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
@@ -262,6 +234,41 @@ def prueba(t):
             except Exception:
                 pass
         m.mic_reset()
+        for nm in ('mic_prueba', 'mic_prueba_callbacks'):
+            if base.op(nm) is not None:
+                base.op(nm).destroy()
+
+
+MIC_PRUEBA_CB = r'''# Script CHOP 'mic_prueba' (autoprueba de la fase 21; se borra al terminar):
+# un bloque de la senal sintetica por cocinado, con un clic si el motor lo pide.
+
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def onCook(scriptOp):
+    m = op('motor').module
+    n = 735
+    clic = m._MIC['clic'] > 0
+    if clic:
+        m._MIC['clic'] -= 1
+    x = m.mic_sim_bloque(n, m.MIC_RATE, m._MIC['muestra'], clic=clic)
+    m._MIC['muestra'] += n
+    scriptOp.isTimeSlice = False
+    scriptOp.clear()
+    scriptOp.rate = m.MIC_RATE
+    scriptOp.numSamples = n
+    scriptOp.appendChan('mic').vals = [float(v) for v in x]
+'''
+
+
+def crear_mic_prueba():
+    cb = get_or_make(base, 'textDAT', 'mic_prueba_callbacks', -880, 900)
+    cb.text = MIC_PRUEBA_CB
+    o = get_or_make(base, 'scriptCHOP', 'mic_prueba', -660, 900)
+    setp_any(o, ['callbacks', 'callbackdat', 'dat'], 'mic_prueba_callbacks')
+    return o
 
 
 def _prueba(t, m):
@@ -271,14 +278,12 @@ def _prueba(t, m):
     base.par.Temaenciclo = False
     base.par.Golpesescalada = 2
     base.par.Ventanaescalada = 8
-    base.par.Fuentemic = 'ambos'
+    base.par.Fuentemic = 'microfono'
     base.par.Canalmic = 0
     base.par.Umbralonset = 0.6
     base.par.Reduccionmic = 1.0
     base.par.Umbralcorte = 20.0
     base.par.Profundidadmic = 3
-    base.par.Simruido = 0.0
-    base.par.Simdrone = False
     R, n = 44100, 735
     reloj = [absTime.seconds + 100.0]
     muestra = [0]
@@ -425,30 +430,29 @@ def _prueba(t, m):
             len(c['perfiles']) == 9 and c['modos'][m.PAD_MIC] == 'erosion'
             and c['perfiles'][m.PAD_MIC][0] == 1.0 and len(c['colores_drum']) == 9)
 
-    # 7. la cadena de operadores: Simonset por mic_sim, mic_fuente y mic_flujo
+    # 7. la cadena de operadores con Fuentemic = chop: un CHOP de prueba (que la
+    # autoprueba crea y borra) con la senal sintetica, por mic_flujo
     W, c = nuevo()
-    base.par.Fuentemic = 'simulacion'
+    chop = crear_mic_prueba()
+    base.par.Fuentemic = 'chop'
+    base.par.Chopmic = chop.path
     for _ in range(5):
         m.mic_tick(W, m.cfg(), reloj[0])
-    m.on_pulse('Simonset')
+    m._MIC['clic'] += 1
     m.mic_tick(W, m.cfg(), reloj[0])
-    t.check('Simonset llega por mic_sim, mic_fuente y mic_flujo: un onset',
-            W['mic']['n'] == 1 and base.op('mic_flujo') is not None, 'onsets %d' % W['mic']['n'])
+    t.check('Fuentemic chop: un clic en el CHOP de Chopmic llega por mic_flujo: un onset',
+            W['mic']['n'] == 1 and base.op('mic_flujo') is not None and 'chop ' in m.legend(),
+            'onsets %d' % W['mic']['n'])
     log = base.op('midi_log')
     filas = [log[r, log.numCols - 1].val for r in range(log.numRows)] if log is not None else []
     t.check('midi_log: una fila MICRO por onset', any(f.startswith('MICRO onset flujo') for f in filas))
     t.check('leyenda MICRO', 'MICRO' in m.legend() and 'onsets 1' in m.legend())
-
-    # 8. Fuentemic = chop: el audio de otro CHOP (aqui, el mismo mic_sim)
-    W, c = nuevo()
-    base.par.Fuentemic = 'chop'
-    base.par.Chopmic = base.op('mic_sim').path
-    for _ in range(5):
-        m.mic_tick(W, m.cfg(), reloj[0])
-    m.on_pulse('Simonset')
-    m.mic_tick(W, m.cfg(), reloj[0])
-    t.check('Fuentemic chop: el detector lee el CHOP de Chopmic', W['mic']['n'] == 1
-            and 'chop ' in m.legend(), 'onsets %d' % W['mic']['n'])
+    # v4: sin la simulacion
+    t.check('sin simulacion: ni mic_sim ni mic_fuente; Simonset, Simruido y Simdrone fuera; '
+            'Fuentemic microfono o chop',
+            base.op('mic_sim') is None and base.op('mic_fuente') is None
+            and not any(has_par(base, nm) for nm in ('Simonset', 'Simruido', 'Simdrone'))
+            and list(base.par.Fuentemic.menuNames) == ['microfono', 'chop'])
     # v3: la pagina mas corta
     fuera = [nm for nm, _, _ in FASE21_FIJOS if has_par(base, nm)]
     t.check('pagina Fase21 sin Refractariomic ni Ventanaruido', not fuera,
@@ -459,7 +463,7 @@ def _prueba(t, m):
 
 
 run_test(base, prueba)
-print('  Ahora: Fuentemic = simulacion y Simonset para verlo sin microfono. Con el')
+print('  Ahora: sin microfono, la sala virtual (sala_virtual.py) y su Palmada. Con el')
 print('  microfono, elige su Device en mic_in y sube Umbralonset hasta que el drone')
 print('  de la sala no de ningun onset.')
 print('=' * 66)
