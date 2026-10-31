@@ -13,7 +13,7 @@ QUE HACE
                espectral es lo que sube la energia de cada banda (en dB)
                respecto a los bloques anteriores. Un sonido que empieza sube
                de golpe; un drone sostenido, no. Pasa Umbralonset (0,6),
-               Refractariomic s (0,12) despues del anterior y fuera de la
+               0,12 s despues del anterior y fuera de la
                ventana de un destello propio (la luz de sala de la fase 23):
                es un onset.
   PAD 9        un onset es un golpe de erosion del pad 9 (rol micro, gris
@@ -21,13 +21,17 @@ QUE HACE
                pads) baja Reduccionmic escalones enteros (1), enciende su luz
                y suma en ero_resto como un pad. Desde la fase 14 cuenta como
                aranazo: dos onsets en la misma zona escalan.
-  RUIDO        la energia de los onsets de los ultimos Ventanaruido s (60):
+  RUIDO        la energia de los onsets de los ultimos 60 s:
                al pasar Umbralcorte (20) abre un corte de Profundidadmic
                conchas (3, radio 1) en la celda del ultimo onset, y la cuenta
                vuelve a cero.
   LEYENDA      MICRO  ambos   flujo 0.12/0.60   onsets 12   ultimo flujo 0.71
                celda 40 hace 1.2 s   ruido 5.3/20 en 60 s
   midi_log     una fila por onset: MICRO onset flujo 0.71 celda 40
+  PAGINA (v3)  10 parametros en vez de 12: el tiempo muerto entre onsets
+               (0,12 s, antes Refractariomic) y la ventana del ruido (60 s,
+               antes Ventanaruido) quedan fijos. Relanzar cualquier fase los
+               quita de un proyecto anterior y avisa si los habias cambiado.
 
 OPERADORES (en /project1/FASE1)
 -------------------------------
@@ -55,7 +59,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase21 v2  (microfono: Fuentemic = chop, el audio de cualquier CHOP, como la sala virtual)'
+VERSION = 'fase21 v3  (pagina mas corta: tiempo muerto y ventana del ruido, fijos)'
 banner(VERSION)
 
 base = require_base(21)
@@ -83,16 +87,19 @@ except Exception:
 add_par(base, page, 'str', 'Chopmic', 'CHOP con el audio (Fuentemic = chop)', '')
 add_par(base, page, 'int', 'Canalmic', 'Canal del microfono (0: el primero)', 0, 0, 31, clamp=True)
 add_par(base, page, 'float', 'Umbralonset', 'Umbral de onset del microfono', 0.6, 0.0, 5.0, clamp=True)
-add_par(base, page, 'float', 'Refractariomic', 'Tiempo muerto entre onsets (s)', 0.12, 0.02, 1.0, clamp=True)
 add_par(base, page, 'float', 'Reduccionmic', 'Erosion de cada onset (escalones)', 1.0, 0.0, 15.0, clamp=True)
-add_par(base, page, 'float', 'Ventanaruido', 'Ventana del ruido de sala (s)', 60.0, 5.0, 600.0, clamp=True)
-add_par(base, page, 'float', 'Umbralcorte', 'Ruido acumulado que abre un corte', 20.0, 1.0, 500.0, clamp=True)
+add_par(base, page, 'float', 'Umbralcorte', 'Ruido acumulado en 60 s que abre un corte', 20.0, 1.0, 500.0,
+        clamp=True)
 add_par(base, page, 'int', 'Profundidadmic', 'Profundidad del corte por ruido', 3, 1, 12, clamp=True)
 add_par(base, page, 'pulse', 'Simonset', 'Probar: clic')
 add_par(base, page, 'float', 'Simruido', 'Probar: ruido de sala', 0.0, 0.0, 1.0, clamp=True)
 add_par(base, page, 'toggle', 'Simdrone', 'Probar: drone', False)
-ok('pagina Fase21: Fuentemic (ambos), Chopmic, Canalmic 0, Umbralonset 0,6, Refractariomic 0,12, Reduccionmic 1, '
-   'Ventanaruido 60, Umbralcorte 20, Profundidadmic 3, Simonset, Simruido, Simdrone')
+try:
+    base.par.Umbralcorte.label = 'Ruido acumulado en 60 s que abre un corte'
+except Exception:
+    pass
+ok('pagina Fase21: Fuentemic (ambos), Chopmic, Canalmic 0, Umbralonset 0,6, Reduccionmic 1, '
+   'Umbralcorte 20 (en 60 s), Profundidadmic 3, Simonset, Simruido, Simdrone')
 
 # -----------------------------------------------------------------------------
 # EL PAD 9 EN LAS TABLAS DE LA BATERIA
@@ -197,10 +204,10 @@ leeme(base, 21, """FASE 21 - EL MICROFONO DE LA SALA
   Un pad 9 de erosion que golpean los onsets del publico. mic_in (Audio
   Device In; Device en el operador, Canalmic) o mic_sim (Simonset,
   Simruido, Simdrone) por mic_fuente (Fuentemic) a mic_flujo: flujo
-  espectral en 16 bandas, onset con Umbralonset y Refractariomic.
+  espectral en 16 bandas, onset con Umbralonset (y 0,12 s de tiempo muerto).
   Cada onset baja Reduccionmic escalones en la celda del objetivo, enciende
   su luz (gris calido) y, desde la fase 14, cuenta como aranazo. La energia
-  de los onsets de Ventanaruido s, al pasar Umbralcorte, abre un corte de
+  de los onsets de los ultimos 60 s, al pasar Umbralcorte, abre un corte de
   Profundidadmic conchas. La reduccion del pad 9 de perfiles_erosion la da
   Reduccionmic.""")
 
@@ -240,8 +247,7 @@ class TablaPrueba(object):
 def prueba(t):
     m = t.m
     guarda = {}
-    for nm in ('Fuentemic', 'Chopmic', 'Canalmic', 'Umbralonset', 'Refractariomic', 'Reduccionmic', 'Ventanaruido',
-               'Umbralcorte', 'Profundidadmic', 'Simruido', 'Simdrone', 'Objetivo', 'Tema', 'Temaenciclo',
+    for nm in ('Fuentemic', 'Chopmic', 'Canalmic', 'Umbralonset', 'Reduccionmic', 'Umbralcorte', 'Profundidadmic', 'Simruido', 'Simdrone', 'Objetivo', 'Tema', 'Temaenciclo',
                'Nota', 'Velprueba', 'Umbraldensidad', 'Golpesescalada', 'Ventanaescalada'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
@@ -268,9 +274,7 @@ def _prueba(t, m):
     base.par.Fuentemic = 'ambos'
     base.par.Canalmic = 0
     base.par.Umbralonset = 0.6
-    base.par.Refractariomic = 0.12
     base.par.Reduccionmic = 1.0
-    base.par.Ventanaruido = 60.0
     base.par.Umbralcorte = 20.0
     base.par.Profundidadmic = 3
     base.par.Simruido = 0.0
@@ -312,7 +316,7 @@ def _prueba(t, m):
     bloques(W, c, 10)
     juntos, _ = bloques(W, c, 30, clics=(5, 9))         # 0,07 s: dentro de Refractariomic
     separados, _ = bloques(W, c, 60, clics=(5, 35))     # 0,5 s
-    t.check('dos clics dentro de Refractariomic dan un onset; separados, dos',
+    t.check('dos clics dentro de los 0,12 s de tiempo muerto dan un onset; separados, dos',
             len(juntos) == 1 and len(separados) == 2, '%d y %d' % (len(juntos), len(separados)))
 
     # 2. un onset es el pad 9: baja escalones enteros, enciende su luz y suma en ero_resto
@@ -359,7 +363,7 @@ def _prueba(t, m):
         evs += e
     ultimo = W['ev'].get('ruido') or {}
     energia = sum(e['flujo'] for e in evs)
-    t.check('clics hasta Umbralcorte en Ventanaruido: un corte de Profundidadmic (3) en la celda del '
+    t.check('clics hasta Umbralcorte en 60 s: un corte de Profundidadmic (3) en la celda del '
             'ultimo onset, y la cuenta a cero',
             W['ruido']['cortes'] == 1 and ultimo.get('prof') == 3 and ultimo.get('conchas', 0) > 0
             and ultimo.get('celda') == evs[-1]['celda'] and not W['ruido']['onsets']
@@ -378,7 +382,7 @@ def _prueba(t, m):
     base.par.Umbralcorte = 20.0
     W['ruido']['onsets'] = [[reloj[0] - 70.0, 30.0, 0]]
     m.ruido_tick(W, m.cfg(), reloj[0])
-    t.check('lo que sale de Ventanaruido no cuenta', not W['ruido']['onsets'] and not W['ruido']['cortes'])
+    t.check('lo que sale de los 60 s no cuenta', not W['ruido']['onsets'] and not W['ruido']['cortes'])
 
     # 4. el destello propio
     W, c = nuevo()
@@ -445,6 +449,13 @@ def _prueba(t, m):
     m.mic_tick(W, m.cfg(), reloj[0])
     t.check('Fuentemic chop: el detector lee el CHOP de Chopmic', W['mic']['n'] == 1
             and 'chop ' in m.legend(), 'onsets %d' % W['mic']['n'])
+    # v3: la pagina mas corta
+    fuera = [nm for nm, _, _ in FASE21_FIJOS if has_par(base, nm)]
+    t.check('pagina Fase21 sin Refractariomic ni Ventanaruido', not fuera,
+            'siguen: %s' % ', '.join(fuera) if fuera else '')
+    cf = m.cfg()
+    t.check('tiempo muerto 0,12 s y ventana del ruido 60 s',
+            cf['refractario_mic'] == 0.12 and cf['ventana_ruido'] == 60.0)
 
 
 run_test(base, prueba)

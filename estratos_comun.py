@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v44'
+VERSION_COMUN = 'comun v45'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1401,6 +1401,35 @@ def fase13_al_dia(base):
         ok('pagina Fase13: quitados %s' % ', '.join(quitados))
 
 
+# --- la pagina Fase21, mas corta (comun v45, motor v65) -----------------------
+# De 12 parametros a 10: el tiempo muerto entre onsets (0,12 s; antes
+# Refractariomic) y la ventana del ruido de sala (60 s; antes Ventanaruido)
+# quedan fijos. Cada cuanto abre un corte el ruido lo decide Umbralcorte.
+
+FASE21_FIJOS = (('Refractariomic', 0.12, 'tiempo muerto entre onsets, en s'),
+                ('Ventanaruido', 60.0, 'ventana del ruido de sala, en s'))
+
+
+def fase21_al_dia(base):
+    """Quita Refractariomic y Ventanaruido de un proyecto anterior a la
+    fase 21 v3; avisa si los habias cambiado."""
+    quitados = []
+    for nm, defecto, que in FASE21_FIJOS:
+        if not has_par(base, nm):
+            continue
+        try:
+            v = float(getattr(base.par, nm).eval())
+            if abs(v - defecto) > 1e-6:
+                info('%s era %s: ahora fijo en %s (%s)'
+                     % (nm, str(round(v, 3)).replace('.', ','), str(defecto).replace('.', ','), que))
+        except Exception:
+            pass
+        if remove_par(base, nm):
+            quitados.append(nm)
+    if quitados:
+        ok('pagina Fase21: quitados %s (valores fijos)' % ', '.join(quitados))
+
+
 def fase3_al_dia(base):
     """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
     Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
@@ -1552,6 +1581,7 @@ def install_core(base, carpeta, fase):
     fase8_al_dia(base)
     fase11_al_dia(base)
     fase13_al_dia(base)
+    fase21_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
