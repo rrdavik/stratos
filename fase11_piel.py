@@ -15,10 +15,10 @@ malla ortogonal.
                2     arbol joven (2 derivac.)    anadidos / plantas
                3     arbol adulto (completo)
                Umbralram   arboleda (3 a 7)      pasarelas / manzana
-               Umbralfusion bosque (timidez)     barrio / podio
+               fusion      bosque (timidez)      barrio / podio
                Umbralmonte monte boscoso         torre de antenas / rascacielos
-    (los umbrales son los de la fase 4: Umbralram, Umbralfusion, Umbralcorona;
-    el del monte, Umbralmonte)
+    (los umbrales son los de la fase 4: Umbralram y, a Pasoumbral, la fusion
+    y la corona; el del monte, Umbralmonte)
 
 BROTES, ARBOLES Y TERRAZAS (v8)
 -------------------------------

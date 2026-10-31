@@ -31,7 +31,10 @@
 #                 Slice de su entrada; motor v58: la pagina Fase3 con seis
 #                 parametros menos: Growstep sale de Semillafrac y Umbralram,
 #                 Gatemax 1 apaga el gate, Balanceo 0 apaga el balanceo y
-#                 Luzconchas es la intensidad de la luz de las conchas).
+#                 Luzconchas es la intensidad de la luz de las conchas; motor
+#                 v59: la pagina Fase4 con 4 parametros: los umbrales salen de
+#                 Umbralram y Pasoumbral, Satelite es tamano y altura del
+#                 satelite y la vecina la eligen siempre velocidad + ocupacion).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -44,7 +47,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v58'
+MOTOR_VERSION = 'motor v59'
 
 import math
 
@@ -639,6 +642,9 @@ def limit(cfg):
     return cfg['height_factor'] * cfg['shell_thick']
 
 
+PASO_UMBRAL_DEF = 2        # ocupaciones de un estado al siguiente (5, 7, 9, 11)
+
+
 def growstep_coherente(semilla, umbral_ram):
     """Crecimiento por trigger (x limite) con el que la formacion sube a
     escalones iguales de la semilla al limite: (1 - semilla) / (Umbralram - 1).
@@ -1069,9 +1075,9 @@ def clock_running(W, cfg, now, tempo, playing):
 
 def form_cap(cfg, sat):
     """Ocupacion a partir de la cual cuenta como la misma forma: la corona
-    (Umbralcorona). Una celda coronada sigue sumando ocupacion, y la cumbre
+    (Umbralram + 2 Pasoumbral). Una celda coronada sigue sumando ocupacion, y la cumbre
     sigue alargando la corona, pero el mundo ya se da por hecho. Un
-    satelite deja de cambiar antes, al llegar a Limsatelite."""
+    satelite deja de cambiar antes, al llegar a Satelite."""
     if sat:
         g = max(1e-6, cfg['grow_frac'])
         return max(1, 1 + int(math.ceil((cfg['sat_limit'] - cfg['seed_frac']) / g - 1e-9)))
@@ -7949,13 +7955,9 @@ def cfg():
         gate_max=_p('Gatemax', c['gate_max']),
         vel_umbral=_p('Umbralvel', c['vel_umbral']),
         th_branch=_p('Umbralram', c['th_branch']),
-        th_fusion=_p('Umbralfusion', c['th_fusion']),
-        th_crown=_p('Umbralcorona', c['th_crown']),
-        th_cumbre=_p('Umbralcumbre', c['th_cumbre']),
         cumbre_tramos=_p('Tramoscumbre', c['cumbre_tramos']),
-        sat_size=_p('Tamsatelite', c['sat_size']),
-        sat_limit=_p('Limsatelite', c['sat_limit']),
-        neigh_mode=_menu('Vecina', ['velocidad', 'velocidadocupacion'], 1),
+        sat_size=_p('Satelite', c['sat_size']),
+        sat_limit=_p('Satelite', c['sat_limit']),
         beats_per_bar=_p('Negrasporcompas', c['beats_per_bar']),
         umbral_madurez=_p('Umbralmadurez', c['umbral_madurez']),
         umbral_novedad=_p('Umbralnovedad', c['umbral_novedad']),
@@ -7991,6 +7993,10 @@ def cfg():
     # escalones iguales de la semilla al limite. Gatemax 1 apaga el gate.
     c['grow_frac'] = growstep_coherente(c['seed_frac'], c['th_branch'])
     c['gate_mode'] = int(c['gate_max'] > 1.0 + 1e-6)
+    # motor v59: fusion, corona y cumbre, a Pasoumbral ocupaciones una de otra
+    paso = max(1, int(_p('Pasoumbral', PASO_UMBRAL_DEF)))
+    c.update(th_fusion=c['th_branch'] + paso, th_crown=c['th_branch'] + 2 * paso,
+             th_cumbre=c['th_branch'] + 3 * paso)
     if c['nivel'] >= 7:
         pads = PAD_MIC + 1 if c['nivel'] >= 21 else 8        # fase 21: el pad 9 es el microfono
         c['perfiles'], c['tipos'], c['modos'], c['pulsos'], c['pump_rels'] = _perfiles(pads)
