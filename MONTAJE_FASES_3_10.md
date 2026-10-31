@@ -21,7 +21,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `estratos_motor.py` | La lógica entera del mundo. Lo cargan las fases; no se ejecuta solo. Desde la v27 lleva también la piel y el tejido de las fases 11 a 13 (ver `MONTAJE_FASES_11_18.md`); la v31 quita un bucle de cocinado de la cámara; la v33, el encuadre cercano (el planeta y `Holguraaltura`; solo cambia con una concha nueva); la v34 y la v35, las fases 14 y 15 (ver `MONTAJE_FASES_11_18.md`); la v36, un solo parámetro de encuadre (`Encuadre`); la v37, la compactación de las conchas (`Cortezamax`, ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`); la v38, la fase 16; la v39, la fase 17; la v40, la fase 18; la v41, la fase 19; la v42, el rango -10..10 V; la v43, el impulso del bombo y el tom (fase 7 v12); la v44, el pumping en seco (fase 7 v13); la v45, los pulsos de ocupación del impulso (fase 7 v14); la v46, la naturaleza legible y los ríos azules (fase 11 v5 y fase 13 v2; la paleta de conchas reserva de 120 a 275 grados); la v47 quita `Planofinal` (fase 10 v11); la v48, los árboles de pisos (fase 11 v6); la v49, sus ramas desde el tercio superior del tronco (fase 11 v7); la v50, ríos que se ven (fase 13 v3); la v51, ríos más vivos (fase 13 v4) | `motor v51` |
 | `estratos_comun.py` | Piezas compartidas por los scripts de fase; no se ejecuta solo; desde la v15 pone la cámara de globo en todas las fases; la v16 añade la luz de los secuenciadores en las conchas; de la v17 a la v19, las geometrías, el shader y el tejido de las fases 11 a 13; la v20 fija el color de las luces por su nombre real (`cr cg cb`); la v22 gira las marcas de la retícula desde el motor; la v23 pone `Encuadremargen` a 1,02 y la piel al día al relanzar; la v24 añade `Holguraaltura`; la v25 y la v26, las fases 14 y 15; la v27 sustituye `Encuadremargen` y `Holguraaltura` por `Encuadre`; la v28 devuelve a cero el giro y el pivote de la cámara al relanzar; la v29, la calibración de la vista (`Ciclomin` 16, `Compasesquietos` 3, `Grosormax` 1,5 si seguían por defecto, y `Cortezamax`); la v30, la fase 17 (ventanas por edificio, color de la luz desde el motor); la v31, la fase 18; la v32, la fase 19 (niebla y glitch en el shader); la v33, el terreno, los pisos, el borde tintado y el agua (fase 11 v5 y fase 13 v2); la v34, el diagnóstico de los ríos (fase 13 v3); la v35, el agua más viva (fase 13 v4) | `comun v35` |
 | `fase3_semilla.py` | Carga y frenada, semilla, crecimiento, material, balanceo del eje, polos y anillos, luz de celda, latido con el gate (v12: su autoprueba también vale relanzada en la fase 11; v13: la página Fase3 con 16 parámetros en vez de 22, ver «Página Fase3») | `fase3 v13` |
-| `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11) | `fase4 v7` |
+| `fase4_desborde.py` | Desbordamiento con carga, satélites, fusión, coronación, cumbre (v7: autoprueba válida en la fase 11; v8: la página Fase4 con 4 parámetros en vez de 8, ver «Página Fase4») | `fase4 v8` |
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2; v3: `Filtrar2` y `Nota2`; v4: los parámetros del SEQ2 pasan a la página Fase2 y desaparece la página Fase5 | `fase5 v4` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3) | `fase6 v5` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v14` |
@@ -186,13 +186,13 @@ Desde el límite (ocupación 5), cada trigger se desborda a una vecina. En el l�
 
 | Ocupación | Resultado | Notas acumuladas |
 |---|---|---|
-| 5–6 | Satélites en la vecindad (más pequeños: `Tamsatelite`) | 11 |
+| 5–6 | Satélites en la vecindad (más pequeños: `Satelite`) | 11 |
 | 7–8 | Fusión: un macizo bajo bajo el núcleo y sus satélites los une en una masa | 21 |
 | 9–10 | Coronación: aguja ámbar (geología) o antena con remate (arquitectura) | 31 |
 | 11+ | **Cumbre:** cada trigger alarga la corona un 25 % (y la ensancha un poco), hasta `Tramoscumbre` tramos (4: corona al doble, con 56 notas) | 41 |
 
 - **Desborde a una celda vacía:** nace un satélite de esa formación.
-- **Desborde a su propio satélite:** el satélite crece, hasta `Limsatelite`.
+- **Desborde a su propio satélite:** el satélite crece, hasta `Satelite` × el límite.
 - **Desborde a una formación ajena (presión):** le suma 1 a la carga, como si le llegara una nota: crece su trozo de escalón y, si completa la carga, sube su ocupación. No hay cascada: aunque esté en el límite, no desborda a su vez. Si es de la otra especie, la marca como híbrida.
 - **Un satélite que recibe una nota directa** se independiza.
 
@@ -200,12 +200,25 @@ Desde el límite (ocupación 5), cada trigger se desborda a una vecina. En el l�
 
 **Decisión: quién elige la vecina.** No el azar del software:
 
-- `Vecina = velocidad`: velocidad mod nº de vecinas;
-- `Vecina = velocidad + ocupación` (por defecto): la formación da la vuelta a su vecindad conforme insiste, aunque la velocidad sea fija.
+- velocidad + ocupación, mod nº de vecinas: la formación da la vuelta a su vecindad conforme insiste, aunque la velocidad sea fija.
+
+Hasta la fase 4 v7 había un menú `Vecina` con una segunda opción, solo la velocidad; con la velocidad fija del BeatStep desbordaba siempre hacia el mismo lado. Desde la v8 no hay menú.
 
 Si el knob RANDOMNESS del SEQ1 varía la velocidad, la decisión pasa a ser del aparato. **Por confirmar**: gira RANDOMNESS y mira la columna `vel` de `midi_log`.
 
-**Página Fase4:** `Umbralram` 5 · `Umbralfusion` 7 · `Umbralcorona` 9 · `Umbralcumbre` 11 · `Tramoscumbre` 4 · `Tamsatelite` 0,6 · `Limsatelite` 0,6 · `Vecina`
+**Página Fase4** (4 parámetros desde la v8): `Umbralram` 5 · `Pasoumbral` 2 · `Tramoscumbre` 4 · `Satelite` 0,6
+
+- `Umbralram`: la ocupación de la ramificación (el límite de altura). También decide el escalón de crecimiento de la fase 3.
+- `Pasoumbral`: ocupaciones de un estado al siguiente. Fusión en `Umbralram` + `Pasoumbral`, coronación + 2 × `Pasoumbral`, cumbre + 3 × `Pasoumbral` (5, 7, 9 y 11 por defecto).
+- `Satelite`: tamaño del satélite y su altura máxima, × la formación madre.
+
+**Quitados en la v8** (relanzar cualquier fase los quita de un proyecto anterior y dice en el informe qué ha hecho):
+
+| Antes | Ahora |
+|---|---|
+| `Umbralfusion`, `Umbralcorona`, `Umbralcumbre` | `Pasoumbral` = (`Umbralcumbre` − `Umbralram`) / 3, redondeado. Si no iban a paso fijo, el informe avisa con `..` de los umbrales que quedan |
+| `Tamsatelite`, `Limsatelite` | `Satelite`, su media (aviso si eran distintos) |
+| `Vecina` | Siempre velocidad + ocupación |
 
 **Leyenda:** `DESBORDE 57 -> 44 satelites 3 fusiones 1 coronas 0 cumbres 0`
 
@@ -279,13 +292,13 @@ Deja de escuchar, respecto a la v1: el intervalo entre notas como medida del pas
 **Las dos medidas.** En cada compás que avanza el reloj, el motor toma una foto de la forma de cada celda:
 
 ```
-forma(celda) = (especie, min(ocupación, Umbralcorona), híbrida, satélite, huella)
+forma(celda) = (especie, min(ocupación, corona), híbrida, satélite, huella)
 novedad = celdas cuya forma ha cambiado desde el compás anterior / celdas vivas (ahora o en el compás anterior)
 madurez = formaciones con ocupación >= Umbralram / formaciones (sin contar satélites)
 ```
 
-- **El recorte a `Umbralcorona` es obligatorio.** Una celda coronada sigue sumando ocupación con cada nota, y la cumbre sigue alargando la corona, pero su forma ya cuenta como hecha. Si se midiera el contador, la novedad no llegaría nunca a 0.
-- **Satélites:** se recortan antes, en la ocupación con la que llegan a `Limsatelite` (3 con los valores por defecto). Después siguen sumando ocupación con cada desborde, pero ya no cambian de forma.
+- **El recorte a la corona (`Umbralram` + 2 × `Pasoumbral`) es obligatorio.** Una celda coronada sigue sumando ocupación con cada nota, y la cumbre sigue alargando la corona, pero su forma ya cuenta como hecha. Si se midiera el contador, la novedad no llegaría nunca a 0.
+- **Satélites:** se recortan antes, en la ocupación con la que llegan a `Satelite` (3 con los valores por defecto). Después siguen sumando ocupación con cada desborde, pero ya no cambian de forma.
 - **La huella** solo cuenta desde el nivel 7.
 - **Un mundo vacío** tiene madurez 0, así que nunca se cierra por estancamiento.
 
@@ -469,7 +482,7 @@ En las tres primeras, la velocidad desplaza el golpe un semitono a un lado, al o
 
 **1 · Pulsos.** Un golpe de bombo suma **3 pulsos** a la celda; uno de tom, **2** (columna `pulsos` de `perfiles_erosion`). Cada pulso es un **trigger completo** (ocupación + 1), como si la celda ya hubiera pagado su coste en notas:
 
-- se aplican uno detrás de otro, con las reglas normales de la celda: crecimiento hasta el límite y, por encima, desborde a las vecinas (según `Vecina`), fusión, corona y cumbre cuando toque;
+- se aplican uno detrás de otro, con las reglas normales de la celda: crecimiento hasta el límite y, por encima, desborde a las vecinas (velocidad + ocupación), fusión, corona y cumbre cuando toque;
 - no se paga coste en notas (`Costemax` no interviene) y la velocidad del golpe no cambia el número de pulsos;
 - la estructura queda **al tamaño que le corresponde por esa ocupación**. Ejemplo: una celda con ocupación 2 recibe un bombo y queda en 5, con la altura y el estado de una celda de ocupación 5;
 - **celda vacía:** el primer pulso la siembra (ocupación 1, pulida o porosa según la velocidad del golpe y `Umbralvel`) y los demás suman: queda en ocupación = `pulsos`. La especie es la del secuenciador al que sigue el golpe (con `alterna`, el bombo y el tom siguen al SEQ1). Sobre una celda ocupada, los pulsos no cambian su especie ni la colonizan;
@@ -528,7 +541,7 @@ Si el golpe desborda, añade `desbordes N`. En el `midi_log`: `IMPULSO pad 1 +3 
 
 **Efectos colaterales a vigilar** (sin compensar todavía):
 
-- Sobre una celda en el límite, un bombo son **3 desbordes seguidos**: pueden nacer tres satélites de golpe. Con `Vecina` en `velocidadocupacion` se reparten; si salen apelotonados, se ajusta después.
+- Sobre una celda en el límite, un bombo son **3 desbordes seguidos**: pueden nacer tres satélites de golpe. Como la vecina la elige velocidad + ocupación, se reparten; si salen apelotonados, se ajusta después.
 - Más ocupación por golpe: las celdas maduran antes y heredan más, y los mundos se acortan. En la sesión de 20 minutos (`MONTAJE_FASES_11_18.md`, fase 18) pasan de 8 a 15 eras en la naturaleza y de 11 a 17 en la ciudad, todas por estancamiento (de 23 a 62 compases cada una), con los cuatro criterios de cierre cumplidos.
 
 **Autoprueba (v14),** las 12 del encargo:
@@ -793,7 +806,7 @@ CAMARA   globo   dist 32.6 -> 32.6   el planeta ocupa el 85% del alto (Encuadre 
 | El mundo nunca se entierra por estancamiento | La batería está destruyendo: cada golpe genera novedad (hasta la fase 7 v11, también el bombo) | Es lo esperado; quita la batería para que el mundo se asiente |
 | El bombo o el tom no erosionan ni cortan | Desde la fase 7 v12 son impulso: suman pulsos de ocupación (v14) y hinchan la celda un instante | Es lo esperado. Para que uno vuelva a erosionar, pon `erosion` en su `modo` de `perfiles_erosion` |
 | La celda golpeada no se hincha | `Pumpon` apagado, `Pumpamt` 0, 1 pulso en la tabla, o la estructura ya pasa de `Pumptope` × el límite | Revisa esos; la leyenda dice dónde cayó (`IMPULSO ... celda N`) |
-| Nacen varios satélites de golpe | Un bombo sobre una celda en el límite son 3 desbordes seguidos (fase 7 v14) | Es lo esperado. Con `Vecina` en `velocidadocupacion` se reparten; si salen apelotonados, baja los `pulsos` del pad |
+| Nacen varios satélites de golpe | Un bombo sobre una celda en el límite son 3 desbordes seguidos (fase 7 v14) | Es lo esperado. La vecina la elige velocidad + ocupación, así que se reparten; si salen apelotonados, baja los `pulsos` del pad |
 | El mundo no se entierra nunca (la leyenda dice `esperando territorio`) | La batería no deja que se llene el territorio: cada golpe lo vacía, y la edad máxima solo entierra un mundo con el territorio ocupado | Quita la batería (el mundo se asienta y se entierra por estancamiento) o baja `Umbralterritorio`. Mira la columna `territorio` de la tabla `ciclos` |
 | Los ciclos siempre acaban por edad máxima | Umbrales demasiado exigentes o un mundo que tarda en coronarse (carga) | Baja `Umbralmadurez`, sube `Umbralnovedad` o sube `Ciclomax`, y mira la tabla `ciclos` |
 | Ciclos demasiado cortos | El mundo madura rápido (pattern al 100 %, pocas notas), `Umbralnovedad` alto, `Herencia` baja (el mundo nuevo arranca casi vacío) o un `Semillafrac` alto (los escalones bajos cuestan pocas notas) | `ajuste_vista.py` (ver «Calibración de la vista» en `MONTAJE_FASES_11_18.md`), o sube `Ciclomin` o `Compasesquietos` |
@@ -825,14 +838,14 @@ Las que el plan dejaba abiertas, con el valor por defecto que se ha elegido. Tod
 |---|---|---|
 | 3 | ¿Incremento de altura por gate o fijo? | Por gate, con el fijo de respaldo (`Gatemax` 1) |
 | 4 | ¿6 vecinas? | Hexagonal desplazada entre anillos completos; solape de arcos en los incompletos |
-| 4 | ¿Quién elige la vecina? | Velocidad + ocupación (`Vecina`) |
+| 4 | ¿Quién elige la vecina? | Velocidad + ocupación (fija desde la fase 4 v8) |
 | 4 | ¿Desborde en los polos? | El polo desborda a cualquiera de las celdas de su anillo |
 | 5 | Canal del SEQ2 | 14 (`Canal2`), por confirmar |
 | 6 | ¿Qué es un ciclo de ecosistema? | Lo cierra el mundo: maduro y quieto (`Umbralmadurez`, `Umbralnovedad`, `Compasesquietos`) desde `Ciclomin`, o lleno pasado `Ciclomax` |
 | 6 | ¿Cuándo entierra la edad máxima? | Solo cuando el territorio (celdas tocadas por los secuenciadores en los últimos `Compasesterritorio` compases y sus vecinas) está ocupado (`Umbralterritorio` 0,8). Sin tope de seguridad; la novedad no cuenta |
 | 6 | ¿Cómo se cuenta el tiempo? | En compases del tempo del proyecto (`ritmo.tempo()`); ya no se deduce el paso de cada nota |
 | 6 | ¿Una vuelta por ciclo? | No: `Barsperturn` manual y `Girovivo` |
-| 6 | ¿Los satélites cuentan para la madurez? | No: madurez = formaciones propias en el límite. Su forma se recorta al llegar a `Limsatelite` |
+| 6 | ¿Los satélites cuentan para la madurez? | No: madurez = formaciones propias en el límite. Su forma se recorta al llegar a `Satelite` |
 | 7 | Canal y pads de la batería | Canal 16 (confirmado), pads desde 36 (`Notabase`), por confirmar |
 | 3–7 | ¿Balizas? | Sin balizas: secuenciadores y batería se ven igual, con la loseta del centro de la celda y la formación del color de quien acaba de tocarla; si coinciden, la luz más intensa |
 | 7 | ¿Qué deshace un golpe? | Notas de construcción, con la misma moneda que la fase 3; la mitad en cada anillo de vecinas |

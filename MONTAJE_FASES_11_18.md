@@ -63,13 +63,13 @@ Cada pieza que el motor ya colocaba como caja pasa a ser un modelo del tema acti
 | semilla (1) | matorral pionero del bioma | cono con ruido de crestas y columnas de basalto en las laderas bajas | caseta (2) | bloque de una planta (2) |
 | crecimiento (2 a `Umbralram` − 1) | árbol joven (2 derivaciones, con el matorral al pie) en la 2; adulto (derivación completa) desde la 3 | el cono sube | añadidos oblicuos apilados | apila plantas |
 | ramificación (`Umbralram`, 5+) | arboleda: 3 a 7 ejemplares desiguales con matorral entre ellos; los satélites, matorral o árbol joven | montañas satélite | pasarelas hacia las vecinas | anexos: manzana |
-| fusión (`Umbralfusion`, 7+) | bosque: ejemplares por disco de Poisson con timidez de copa, emergentes y orla | cordillera (cluster de 3+), sin columnas | barrio denso | podio que une la manzana |
+| fusión (`Umbralram` + `Pasoumbral`, 7+) | bosque: ejemplares por disco de Poisson con timidez de copa, emergentes y orla | cordillera (cluster de 3+), sin columnas | barrio denso | podio que une la manzana |
 | monte (`Umbralmonte`, 8+) | monte boscoso: sube el terreno y el bosque lo cubre | el terreno sube: cumbres nevadas | — | — |
-| coronación (`Umbralcorona`, 9+) | el mismo bosque sobre el monte | sigue el monte | torre de antenas | rascacielos con aguja |
+| coronación (`Umbralram` + 2 × `Pasoumbral`, 9+) | el mismo bosque sobre el monte | sigue el monte | torre de antenas | rascacielos con aguja |
 
 *Desde la fase 11 v5 la naturaleza tiene su escalera propia (ver* La naturaleza legible *más abajo), desde la v6 sus árboles eran de pisos y desde la v8 salen de la biblioteca de ejemplares (ver* Brotes, árboles y terrazas*). La tabla de la ciudad no cambia.*
 
-**Ojo con los números.** El plan habla de ocupación 1, 2–3, 4–5, 6–7 y 8+. Aquí los estados salen de los umbrales que ya tiene el motor (`Umbralram` 5, `Umbralfusion` 7, `Umbralcorona` 9), para que cambiar un umbral cambie también la piel. Con los valores por defecto cada estado empieza una ocupación más tarde que en el plan.
+**Ojo con los números.** El plan habla de ocupación 1, 2–3, 4–5, 6–7 y 8+. Aquí los estados salen de los umbrales que ya tiene el motor (`Umbralram` 5 y, a `Pasoumbral` 2, la fusión en 7 y la corona en 9), para que cambiar un umbral cambie también la piel. Con los valores por defecto cada estado empieza una ocupación más tarde que en el plan.
 
 **Híbridos.** La otra especie deja su rastro con su color. En la naturaleza, desde la v8, son mesetas construidas en el mapa de alturas: arrozal en terrazas (vegetación sobre relieve) y meseta-jardín (relieve sobre vegetación); hasta la v7 eran árboles que parten la roca y bosque sobre terrazas de basalto. En la ciudad: torre invadida por añadidos (informal sobre planificada) y barrio con plantas rectas impuestas (planificada sobre informal).
 
@@ -92,7 +92,7 @@ Cada pieza que el motor ya colocaba como caja pasa a ser un modelo del tema acti
 P(c) = ocupación(c) + Pesovecina × Σ ocupación de las vecinas de su especie
 ```
 
-- Dos vecinas de la misma especie se unen si las dos tienen `P ≥ Umbralvecindad` (union-find). Convive con la fusión por desborde de la fase 4: una formación en fusión (`Umbralfusion`) se une con sus satélites.
+- Dos vecinas de la misma especie se unen si las dos tienen `P ≥ Umbralvecindad` (union-find). Convive con la fusión por desborde de la fase 4: una formación en fusión (`Umbralram` + `Pasoumbral`) se une con sus satélites.
 - Cuenta como cluster un grupo de `Mincluster` celdas o más.
 - **La capital** es la celda más ocupada (sin contar satélites); en empate, la de índice menor.
 - **Con los valores por defecto**, `Sembrarzona` dos veces deja la celda y sus vecinas en ocupación 2: P = 2 + 0,5 × (2 + 2 + 2) = 5 ≥ 4 y se funden.
@@ -173,7 +173,7 @@ Comprueba: el catálogo completo en los dos temas (estados, puentes, protagonist
 | 1 | brote angular | brote: bola o cono pequeño |
 | 2 a `Umbralram` − 1 | tronco y copa | árbol de silueta clara: frondosa (bola) en el piso basal, conífera (cono) desde el montano; hasta `Maxcaosnat`, pimpollos alrededor |
 | `Umbralram` (5) | arboleda en las vecinas | arboleda: de 5 a 12 árboles agrupados |
-| `Umbralfusion` (7) | dosel multicelda | bosque: dosel continuo (ver *Dosel*) |
+| fusión (7) | dosel multicelda | bosque: dosel continuo (ver *Dosel*) |
 | `Umbralmonte` (8) y más | árbol madre que rompe el dosel | **monte boscoso**: la ocupación ya no añade piezas, sube el terreno de la celda y el bosque lo cubre como una manta |
 
 - Con los umbrales de siempre los estados empiezan una ocupación más tarde que en el encargo (ver *Ojo con los números*); el monte usa su propio umbral, `Umbralmonte` 8.
@@ -319,7 +319,7 @@ Cada modelo tiene su ángulo de rama, al que la semilla suma o resta hasta `Vara
 | 2 | árbol joven (2 derivaciones) con el matorral al pie a 0,6 |
 | 3 a `Umbralram` − 1 | árbol adulto (derivación completa) |
 | `Umbralram` (5) | arboleda: de 3 a 7 ejemplares desiguales (0,55–0,95) y matorral entre ellos |
-| `Umbralfusion` (7) y clusters de 4+ | bosque (ver abajo) |
+| fusión (7) y clusters de 4+ | bosque (ver abajo) |
 | `Umbralmonte` (8) | el monte sube bajo el bosque (sin cambios) |
 
 Cada gate que sube la ocupación añade una derivación; con `Avance = pasos`, la nueva aparece `Pasosetapa` pasos después. El vigor de la fase 12 ensancha tronco y copa (0,7–1,4). Hasta `Maxcaosnat` el caos elige variante, giro y escala; por encima, un hash de la celda. Cada ejemplar se inclina hasta `Inclinacion` (8°) hacia el lado con menos vecinas ocupadas.
@@ -1062,7 +1062,7 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | ¿Multicelda por puentes o autotiles? | Puentes: medio puente de cada celda hacia cada vecina del cluster |
 | ¿Qué cuenta como gate en el cluster? | Cualquier nota en una de sus celdas |
 | ¿La obra es de cada celda o del cluster? | Del cluster: una celda que se une entra en la etapa por la que va |
-| ¿Estados por los números del plan o por los umbrales? | Por los umbrales de la fase 4 (`Umbralram`, `Umbralfusion`, `Umbralcorona`) |
+| ¿Estados por los números del plan o por los umbrales? | Por los umbrales de la fase 4 (`Umbralram` y `Pasoumbral`) |
 | ¿LSystem SOP? | L-system en el motor, en Transform SOP con ángulos de 30°; basalto con Tube SOP, ciudad con Box SOP |
 | ¿Qué siembra el mapa logístico? | Velocidad fundadora y celda; la ocupación da el número de iteraciones |
 | ¿Duración de un paso? | 60 / (BPM × 4): `Pasospornegra` ya no existe (fase 6) |
@@ -1079,7 +1079,7 @@ La de la fase 8 (v10) comprueba que con `Cortezamax` 4 el radio nunca baja y sub
 | Cordillera como malla por cluster | Columnas por celda | Silueta continua legible |
 | Una sola esfera desplazada en el shader por un mapa de alturas (Script TOP) | Un Script SOP que rehace la malla en Python | Sin reconstruir geometría: solo una textura cuando cambia la ocupación |
 | El mapa se rehace con la ocupación, no con el stop-motion | Seguir la altura visible fotograma a fotograma | Rehacerlo 24 veces por segundo no cabe en el fotograma; la cumbre salta a su altura nueva |
-| Escalera por los umbrales (`Umbralram`, `Umbralfusion`) y `Umbralmonte` aparte | Los números del encargo (4–5, 6–7) | Como en el resto de la piel: cambiar un umbral cambia la piel |
+| Escalera por los umbrales (`Umbralram`, `Pasoumbral`) y `Umbralmonte` aparte | Los números del encargo (4–5, 6–7) | Como en el resto de la piel: cambiar un umbral cambia la piel |
 | Puntos de atracción por hash determinista | El mapa logístico | Sus ternas casi se repiten: la cúpula de una celda suelta quedaba vacía |
 | Banda verde reservada desde 120° | Desde 100° (todo el verde amarillento) | Con menos tono libre dos conchas seguidas dejarían de diferir 60° |
 

@@ -35,7 +35,20 @@ No el azar del software: un valor que viene del BeatStep.
 Con la velocidad fija del BeatStep, el primer modo desborda siempre hacia
 el mismo lado; el segundo da la vuelta a la formacion conforme insiste.
 Si el knob RANDOMNESS del SEQ1 varia la velocidad (miralo en midi_log),
-la eleccion queda en manos del aparato.
+la eleccion queda en manos del aparato. Desde la v8 es siempre la
+segunda (no hay parametro Vecina): con la velocidad fija del BeatStep la
+primera desbordaba siempre hacia el mismo lado.
+
+LA PAGINA FASE4 (v8): 4 parametros en vez de 8.
+  Umbralram     ramificacion desde (ocupacion 5)
+  Pasoumbral    ocupaciones de un estado al siguiente (2): fusion en
+                Umbralram + 2, coronacion + 4, cumbre + 6 (7, 9 y 11);
+                antes Umbralfusion, Umbralcorona y Umbralcumbre
+  Tramoscumbre  tramos de cumbre (4, un 25 % cada uno)
+  Satelite      tamano y altura maxima del satelite, x la formacion madre
+                (0,6); antes Tamsatelite y Limsatelite
+Relanzar cualquier fase pasa un proyecto anterior a estos cuatro: el paso
+sale de Umbralram a Umbralcumbre y Satelite es la media de los dos.
 
 COMO USARLO
 -----------
@@ -46,21 +59,15 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase4 v7  (desborde con carga, satelites, fusion, coronacion, cumbre)'
+VERSION = 'fase4 v8  (pagina mas corta: umbrales a paso fijo, un solo Satelite)'
 banner(VERSION)
 
 base = require_base(4)
 motor = install_core(base, CARPETA, 4)
 
 page = get_page(base, 'Fase4')
-add_par(base, page, 'int', 'Umbralram', 'Ramificacion desde (ocupacion)', 5, 2, 12, clamp=True)
-add_par(base, page, 'int', 'Umbralfusion', 'Fusion desde (ocupacion)', 7, 3, 16, clamp=True)
-add_par(base, page, 'int', 'Umbralcorona', 'Coronacion desde (ocupacion)', 9, 4, 24, clamp=True)
-add_par(base, page, 'int', 'Umbralcumbre', 'Cumbre desde (ocupacion)', 11, 5, 32, clamp=True)
-add_par(base, page, 'int', 'Tramoscumbre', 'Tramos de cumbre (25 % cada uno)', 4, 0, 12, clamp=True)
+add_fase4_pars(base, page)
 renew_default(base, 'Umbralram', 4, 5)
-renew_default(base, 'Umbralfusion', 6, 7)
-renew_default(base, 'Umbralcorona', 8, 9)
 # los de la fase 3, por si no se ha relanzado
 renew_default(base, 'Alturafactor', 3.0, 3.75)
 renew_default(base, 'Semillafrac', 0.25, 0.20)
@@ -69,13 +76,8 @@ if not has_par(base, 'Costemax'):
             5, 1, 12, clamp=True)
 if not has_par(base, 'Gatemax'):
     add_par(base, get_page(base, 'Fase3'), 'float', 'Gatemax', GATEMAX_LABEL, 1.25, 1.0, 2.0)
-add_par(base, page, 'float', 'Tamsatelite', 'Tamano de satelite', 0.6, 0.2, 1.0)
-add_par(base, page, 'float', 'Limsatelite', 'Altura max. de satelite (x limite)', 0.6, 0.2, 1.0)
-add_par(base, page, 'menu', 'Vecina', 'Quien elige la vecina', 'velocidadocupacion',
-        menu=['velocidad', 'velocidadocupacion'],
-        menu_labels=['Velocidad', 'Velocidad + ocupacion'])
-ok('pagina Fase4: Umbralram, Umbralfusion, Umbralcorona, Umbralcumbre, Tramoscumbre, Tamsatelite, '
-   'Limsatelite, Vecina')
+ok('pagina Fase4: Umbralram (5), Pasoumbral (2: fusion 7, corona 9, cumbre 11), Tramoscumbre, '
+   'Satelite')
 
 materiales_formas(base)
 make_constant(base, 'mat_corona', 780, 460, (1.0, 0.70, 0.30))
@@ -89,7 +91,8 @@ leeme(base, 4, """FASE 4 - EL LIMITE COMO MOTOR
     5-6 satelites, 7-8 fusion (macizo bajo), 9-10 coronacion (aguja ambar),
     11+ cumbre (la corona crece un 25 % por trigger, Tramoscumbre tramos).
   La presion sobre una formacion ajena le suma carga sin cascada.
-  Umbrales y tamanos en la pagina Fase4.""")
+  Pagina Fase4: Umbralram y Pasoumbral (los estados, a paso fijo),
+  Tramoscumbre y Satelite (tamano y altura del satelite).""")
 
 print_report()
 
@@ -152,6 +155,19 @@ def prueba(t):
             'celdas %d-%d, polo %d' % (min(vec), max(vec), len(m.NEIGH[m.POLE_S])))
     leg = m.legend()
     t.check('leyenda DESBORDE', 'DESBORDE' in leg)
+    # v8: la pagina mas corta
+    fuera = [nm for nm in ('Umbralfusion', 'Umbralcorona', 'Umbralcumbre', 'Tamsatelite',
+                           'Limsatelite', 'Vecina') if has_par(base, nm)]
+    t.check('pagina Fase4: solo Umbralram, Pasoumbral, Tramoscumbre y Satelite',
+            not fuera and all(has_par(base, nm) for nm in FASE4_PARS),
+            'siguen: %s' % ', '.join(fuera) if fuera else '')
+    paso = int(base.par.Pasoumbral)
+    t.check('fusion, corona y cumbre a Pasoumbral una de otra',
+            (c['th_fusion'], c['th_crown'], c['th_cumbre'])
+            == tuple(c['th_branch'] + k * paso for k in (1, 2, 3)),
+            '%d %d %d %d' % (c['th_branch'], c['th_fusion'], c['th_crown'], c['th_cumbre']))
+    t.check('Satelite: tamano y altura del satelite',
+            c['sat_size'] == c['sat_limit'] == float(base.par.Satelite))
 
 
 run_test(base, prueba)

@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v38'
+VERSION_COMUN = 'comun v39'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1125,6 +1125,78 @@ def _relabel(base, name, label):
         pass
 
 
+# --- la pagina Fase4, mas corta (comun v39, motor v59) ------------------------
+# De 8 parametros a 4: Umbralfusion, Umbralcorona y Umbralcumbre salen de
+# Umbralram y Pasoumbral (cada estado, Pasoumbral ocupaciones despues del
+# anterior: 5, 7, 9, 11); Tamsatelite y Limsatelite son un solo Satelite
+# (tamano y altura maxima, x la formacion madre); Vecina queda en
+# velocidad + ocupacion (con velocidad sola, el BeatStep a velocidad fija
+# desbordaba siempre hacia el mismo lado).
+
+PASO_UMBRAL_DEF = 2
+FASE4_PARS = ('Umbralram', 'Pasoumbral', 'Tramoscumbre', 'Satelite')
+
+
+def add_fase4_pars(base, page):
+    add_par(base, page, 'int', 'Umbralram', 'Ramificacion desde (ocupacion)', 5, 2, 12, clamp=True)
+    add_par(base, page, 'int', 'Pasoumbral',
+            'Ocupaciones entre ramificacion, fusion, corona y cumbre', PASO_UMBRAL_DEF, 1, 8,
+            clamp=True)
+    add_par(base, page, 'int', 'Tramoscumbre', 'Tramos de cumbre (25 % cada uno)', 4, 0, 12,
+            clamp=True)
+    add_par(base, page, 'float', 'Satelite', 'Satelite: tamano y altura max. (x la madre)',
+            0.6, 0.2, 1.0)
+
+
+def fase4_al_dia(base):
+    """Pasa un proyecto anterior a la fase 4 v8 a los 4 parametros nuevos,
+    conservando lo que hacian: Pasoumbral, el paso medio de Umbralram a
+    Umbralcumbre; Satelite, la media de Tamsatelite y Limsatelite."""
+    viejos = [nm for nm in ('Umbralfusion', 'Umbralcorona', 'Umbralcumbre', 'Tamsatelite',
+                            'Limsatelite', 'Vecina') if has_par(base, nm)]
+    if not viejos:
+        return False
+    def val(nm, d):
+        try:
+            return float(getattr(base.par, nm).eval()) if has_par(base, nm) else d
+        except Exception:
+            return d
+    ram = int(val('Umbralram', 5))
+    umbrales = [int(val(nm, 0)) for nm in ('Umbralfusion', 'Umbralcorona', 'Umbralcumbre')]
+    if has_par(base, 'Umbralcumbre'):
+        paso = max(1, min(8, int(round((umbrales[2] - ram) / 3.0))))
+    elif has_par(base, 'Umbralfusion'):
+        paso = max(1, min(8, umbrales[0] - ram))
+    else:
+        paso = PASO_UMBRAL_DEF
+    sat = [val(nm, None) for nm in ('Tamsatelite', 'Limsatelite')]
+    sat = [v for v in sat if v is not None]
+    sat_v = round(sum(sat) / len(sat), 3) if sat else 0.6
+    nuevos = not has_par(base, 'Pasoumbral')
+    add_fase4_pars(base, get_page(base, 'Fase4'))
+    if nuevos:
+        base.par.Pasoumbral = paso
+        base.par.Satelite = sat_v
+    antes = ', '.join('%s %s' % (nm, str(round(val(nm, 0), 2)).replace('.', ','))
+                      for nm in ('Umbralfusion', 'Umbralcorona', 'Umbralcumbre',
+                                 'Tamsatelite', 'Limsatelite') if has_par(base, nm))
+    for nm in viejos:
+        remove_par(base, nm)
+    ok('pagina Fase4: %s -> Pasoumbral %d (%s), Satelite %s; quitados %s'
+       % (antes or 'sin umbrales', int(base.par.Pasoumbral.eval()),
+          ', '.join(str(ram + k * int(base.par.Pasoumbral.eval())) for k in range(4)),
+          str(round(float(base.par.Satelite.eval()), 2)).replace('.', ','), ', '.join(viejos)))
+    distintos = [u - ram - (k + 1) * paso for k, u in enumerate(umbrales) if u]
+    if any(distintos):
+        info('los umbrales no iban a paso fijo (%d, %s): ahora %s'
+             % (ram, ', '.join(str(u) for u in umbrales if u),
+                ', '.join(str(ram + k * paso) for k in range(4))))
+    if len(set(sat)) > 1:
+        info('Tamsatelite y Limsatelite eran distintos (%s): Satelite es su media'
+             % ' y '.join(str(round(v, 2)).replace('.', ',') for v in sat))
+    return True
+
+
 def fase3_al_dia(base):
     """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
     Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
@@ -1270,6 +1342,7 @@ def install_core(base, carpeta, fase):
 
     add_grid_pars(base)
     fase3_al_dia(base)
+    fase4_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
