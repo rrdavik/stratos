@@ -40,7 +40,9 @@
 #                 memoria del territorio queda en 8 compases; motor v61: la
 #                 pagina Fase7 con 12 parametros: Luzdrum 0, Velref 0 y
 #                 Pumpamt 0 apagan la luz, la velocidad y el pumping, y
-#                 Multradio, Pumphold y Pumpvelmin quedan fijos).
+#                 Multradio, Pumphold y Pumpvelmin quedan fijos; motor v62: la
+#                 pagina Fase8 con 11: Paletaalterna y Contrasteocupada
+#                 fijos, y la luminosidad de la tapa sale de Paletaluz).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -53,7 +55,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v61'
+MOTOR_VERSION = 'motor v62'
 
 import math
 
@@ -1655,6 +1657,7 @@ AUREO = 0.6180339887
 # Contrasteocupada mas clara. Hasta la v52, fijas: 0,50 / 0,64 y +0,12
 # (Paletaluz 0,57, Paletaalterna 0,14, Contrasteocupada 0,12).
 L_VACIA = (0.50, 0.64)                                  # los valores antiguos (referencia)
+TAPA_LUZ_K = 0.8        # motor v62: luminosidad de la tapa = 0,8 x Paletaluz (antes Tapaluz, 0,28)
 L_OCUPADA = 0.12
 
 
@@ -7981,10 +7984,7 @@ def cfg():
         paleta_tono=_p('Paletatono', c['paleta_tono']) % 360.0,
         paleta_croma=max(0.0, min(0.15, _p('Paletacroma', c['paleta_croma']))),
         paleta_luz=max(0.05, min(0.95, _p('Paletaluz', c['paleta_luz']))),
-        paleta_alterna=max(0.0, min(0.4, _p('Paletaalterna', c['paleta_alterna']))),
-        contraste_ocupada=max(0.0, min(0.3, _p('Contrasteocupada', c['contraste_ocupada']))),
         tapa_neutra=max(0.0, min(1.0, _p('Tapaneutra', c['tapa_neutra']))),
-        tapa_luz=max(0.0, min(1.0, _p('Tapaluz', c['tapa_luz']))),
         max_shells=_p('Maxconchas', c['max_shells']),
         grosor_tiempo=int(_p('Grosortiempo', True)),
         grosor_max=_p('Grosormax', c['grosor_max']),
@@ -7997,6 +7997,8 @@ def cfg():
     # escalones iguales de la semilla al limite. Gatemax 1 apaga el gate.
     c['grow_frac'] = growstep_coherente(c['seed_frac'], c['th_branch'])
     c['gate_mode'] = int(c['gate_max'] > 1.0 + 1e-6)
+    # motor v62: el gris de la tapa sigue a la luminosidad de las conchas
+    c['tapa_luz'] = TAPA_LUZ_K * c['paleta_luz']
     # motor v59: fusion, corona y cumbre, a Pasoumbral ocupaciones una de otra
     paso = max(1, int(_p('Pasoumbral', PASO_UMBRAL_DEF)))
     c.update(th_fusion=c['th_branch'] + paso, th_crown=c['th_branch'] + 2 * paso,

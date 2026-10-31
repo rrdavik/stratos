@@ -25,7 +25,7 @@ Todos en la misma carpeta: `C:/Users/DareDave/Downloads/est`.
 | `fase5_especies.py` | SEQ2, arquitectura, híbridos, luz ámbar del SEQ2; v3: `Filtrar2` y `Nota2`; v4: los parámetros del SEQ2 pasan a la página Fase2 y desaparece la página Fase5 | `fase5 v4` |
 | `fase6_ciclo.py` | El ciclo lo cierra el mundo: madurez, novedad, territorio, tabla `ciclos`, giro vivo (v5: eras más largas, `Ciclomin` 16 y `Compasesquietos` 3; v6: la página Fase6 con 9 parámetros en vez de 12, ver «Página Fase6») | `fase6 v6` |
 | `fase7_erosion.py` | Canal 16; erosión en notas; perfiles del usuario; el golpe se ve como una nota (celda y formación); erosión con la velocidad; huellas, presupuesto (v10: autoprueba válida en la fase 11; v12: el bombo y el tom, impulso de creación; v13: pumping en seco, pico al instante; v14: pulsos de ocupación en lugar de capacidad, pumping solo visual con tope y luz con su curva) | `fase7 v16` |
-| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46); v12: conchas discretas (suelo oscuro, poco contraste ocupada/vacía, tapa neutra; `Paletaluz`, `Paletaalterna`, `Contrasteocupada`, `Tapaneutra`, `Tapaluz`, motor v53) | `fase8 v12` |
+| `fase8_conchas.py` | Conchas con el grosor de su ciclo, herencia, radio nominal; el mundo enterrado se deposita sobre la columna de cada celda (`Colmatacion`, zócalo); cámara de globo; luz de los secuenciadores en las conchas; un color por concha (`Paleta`); v9: desde la fase 15, las conchas con el shader de la piel; v10: la corteza se compacta (`Cortezamax`) y `Grosormax` 1,5; v11: solo la autoprueba (la paleta reserva también los verdes de los pisos y el azul de los ríos, motor v46); v12: conchas discretas (suelo oscuro, poco contraste ocupada/vacía, tapa neutra; `Paletaluz`, `Paletaalterna`, `Contrasteocupada`, `Tapaneutra`, `Tapaluz`, motor v53) | `fase8 v13` |
 | `fase9_arqueologia.py` | Cortes en la columna de cada celda, tope por mundo, el núcleo como fondo, estratigrafía, cicatriz cian que se funde con el color de su concha, destello (v8: del color de su pad de verdad, ver abajo; v9: la autoprueba mide sin compactar; v10: el bombo y el tom ya no cortan, su destello es suave y sigue el pumping; v11: la autoprueba, con el pumping en seco) | `fase9 v11` |
 | `fase10_direccion.py` | Paleta, luz cenital, cámara de globo (por defecto) o de superficie, modos (v7: la luz cenital fría y el relleno azulado, de verdad; v10: `Encuadre`, el alto del planeta en la pantalla; v11: sin `Planofinal`) | `fase10 v11` |
 
@@ -640,8 +640,8 @@ laguna(c)     = radio_nominal - suelo(c)          (siempre >= 0)
 n         = generación de la concha (0 = la primera)
 t         = frac(n × 0,6180339887)                    (ángulo áureo)
 tono      = Paletatono + t × 200°, saltando las bandas reservadas (245° hasta el motor v45)
-L_vacía   = Paletaluz − Paletaalterna/2 si n es par, Paletaluz + Paletaalterna/2 si es impar
-L_ocupada = L_vacía + Contrasteocupada
+L_vacía   = Paletaluz − 0,03 si n es par, Paletaluz + 0,03 si es impar
+L_ocupada = L_vacía + 0,04
 croma     = Paletacroma
 ```
 
@@ -650,18 +650,18 @@ croma     = Paletacroma
 | Parámetro | Defecto | Antes | Qué hace |
 |---|---|---|---|
 | `Paletaluz` | 0,35 | 0,57 | Luminosidad media de las conchas |
-| `Paletaalterna` | 0,06 | 0,14 | Diferencia de luminosidad entre conchas seguidas |
-| `Contrasteocupada` | 0,04 | 0,12 | Cuánto más clara es una loseta ocupada (0 = igual) |
+| alternancia | 0,06 | 0,14 | Diferencia de luminosidad entre conchas seguidas (hasta la v12, `Paletaalterna`; fija desde la v13) |
+| ocupada | 0,04 | 0,12 | Cuánto más clara es una loseta ocupada (hasta la v12, `Contrasteocupada`; fijo desde la v13) |
 | `Paletacroma` | 0,04 | 0,09 | Saturación |
 | `Tapaneutra` | 0,6 | (0) | Mezcla de la cara de arriba hacia un gris neutro (0 = como los flancos, 1 = gris) |
-| `Tapaluz` | 0,28 | — | Luminosidad de ese gris |
+| gris de la tapa | 0,28 | — | Luminosidad de ese gris: 0,8 × `Paletaluz` (hasta la v12, `Tapaluz`) |
 
-- **Contraste entre conchas seguidas:** al menos 60° de tono **y** `Paletaalterna` de luminosidad. Con los valores nuevos las bandas de un corte se distinguen sobre todo por el tono.
-- **Tapa neutra:** la loseta de arriba de cada columna lleva una **tapa**, una instancia fina (0,02 o un 25 % de la loseta) un poco más ancha que ella y que asoma un 0,4 % por arriba, del color de la concha mezclado `Tapaneutra` hacia el gris `Tapaluz`. Los flancos conservan el color de su concha: el color de cada estrato se ve donde la erosión lo deja a la vista, en las paredes de un corte. Cuesta **una instancia más por celda** (N, no el doble: con 24 conchas visibles, un 4 %). Solo las losetas de arriba enseñan su cara superior, así que no hace falta más. Con `Paleta` mineral no hay tapa.
+- **Contraste entre conchas seguidas:** al menos 60° de tono **y** 0,06 de luminosidad. Con los valores nuevos las bandas de un corte se distinguen sobre todo por el tono.
+- **Tapa neutra:** la loseta de arriba de cada columna lleva una **tapa**, una instancia fina (0,02 o un 25 % de la loseta) un poco más ancha que ella y que asoma un 0,4 % por arriba, del color de la concha mezclado `Tapaneutra` hacia el gris (0,8 × `Paletaluz`). Los flancos conservan el color de su concha: el color de cada estrato se ve donde la erosión lo deja a la vista, en las paredes de un corte. Cuesta **una instancia más por celda** (N, no el doble: con 24 conchas visibles, un 4 %). Solo las losetas de arriba enseñan su cara superior, así que no hace falta más. Con `Paleta` mineral no hay tapa.
 - **Mate:** la tapa lleva rugosidad 1 en el shader de la piel (fase 15) y `mat_estratos` pasa a especular 0: el suelo no hace brillos que compitan con `mat_pulido`. Los flancos de la fase 15 conservan su materia (el carbón brilla en los cortes).
 - **Secuenciador y cicatriz:** el tinte del secuenciador es una capa aditiva aparte y sigue cubriendo la tapa (se lee mejor sobre un suelo oscuro). La cicatriz manda: una loseta recién expuesta sale cian entera, tapa incluida.
-- **Jerarquía (informe):** la fase 8 comprueba que la tapa más clara posible, `(1 − Tapaneutra) × (Paletaluz + Paletaalterna/2 + Contrasteocupada) + Tapaneutra × Tapaluz`, queda al menos 0,15 por debajo de la luminosidad de las formaciones (media OKLab de las dos especies, `COL_GEO` y `COL_ARQ`: 0,58). Si no, avisa con `..`. Con los valores nuevos, 0,34; con los de antes, 0,76.
-- **Valores antiguos:** `Paletaluz` 0,57 · `Paletaalterna` 0,14 · `Contrasteocupada` 0,12 · `Paletacroma` 0,09 · `Tapaneutra` 0 reproducen la paleta de la v11 tal cual (la autoprueba lo comprueba).
+- **Jerarquía (informe):** la fase 8 comprueba que la tapa más clara posible, `(1 − Tapaneutra) × (Paletaluz + 0,07) + Tapaneutra × 0,8 × Paletaluz`, queda al menos 0,15 por debajo de la luminosidad de las formaciones (media OKLab de las dos especies, `COL_GEO` y `COL_ARQ`: 0,58). Si no, avisa con `..`. Con los valores nuevos, 0,34; con los de antes, 0,76.
+- **Valores antiguos:** `Paletaluz` 0,57 · alternancia 0,14 · ocupada 0,12 · `Paletacroma` 0,09 · `Tapaneutra` 0 reproducen la paleta de la v11 tal cual (la autoprueba lo comprueba en el motor). Desde la v13, desde el panel solo se llega a `Paletaluz` 0,57, `Paletacroma` 0,09 y `Tapaneutra` 0: la alternancia y el contraste de la ocupada quedan en los valores nuevos, más discretos.
 - **Proyecto en marcha:** al relanzar la fase 8, `Paletacroma` pasa de 0,09 a 0,04 solo si seguía en 0,09, y la tabla `escenas` de la fase 18 pasa de 0,09 / 0,06 a 0,04 / 0,03 si no se había tocado. Los mundos guardados se recolorean solos: el color se calcula, no se guarda.
 
 - **Bandas reservadas** (tono OKLCH): 165°–235°, el cian de la cicatriz, y 55°–100°, el ámbar del SEQ2. Desde el motor v46 (fase 11 v5 y fase 13 v2) también 120°–165°, los verdes de los pisos de la naturaleza, y 235°–275°, el azul de los ríos: una sola banda de 120° a 275°. La secuencia se reparte sobre los 200° que quedan, recorriendo el círculo y saltando las bandas; no se recorta al borde. Ninguna concha camufla un bosque ni un río. La banda verde empieza en 120° y no antes: con menos tono libre, dos conchas seguidas dejarían de diferir 60°.
@@ -713,7 +713,7 @@ Con `Paletatono` 20 y `Paletacroma` 0,09 (motor v46; hasta la v45 las conchas 2,
 
 **Cámara:** la de globo (la misma de la fase 10, sin modos): el planeta entero, centrado y tan cerca como permite el cuadro; retrocede a cada enterramiento. Desde comun v15 la pone `estratos_comun.py` en todas las fases que cargan el motor (de la 3 en adelante).
 
-**Página Fase8:** `Paleta` generaciones (*Paleta de las conchas*: generaciones o mineral) · `Paletatono` 20 (*Tono de la primera concha*, 0–360) · `Paletacroma` 0,04 (*Saturación de las conchas*, 0–0,15) · `Paletaluz` 0,35 (*Luminosidad media de las conchas*) · `Paletaalterna` 0,06 (*Diferencia de luminosidad entre conchas seguidas*) · `Contrasteocupada` 0,04 (*Loseta ocupada: cuánto más clara*) · `Tapaneutra` 0,6 (*Tapa de las losetas hacia el gris*) · `Tapaluz` 0,28 (*Luminosidad del gris de la tapa*) · `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 1,5 · `Cortezamax` 4 (*Corteza máxima: compacta las conchas viejas*, 0–12; 0 = el radio es el tiempo) · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
+**Página Fase8:** `Paleta` generaciones (*Paleta de las conchas*: generaciones o mineral) · `Paletatono` 20 (*Tono de la primera concha*, 0–360) · `Paletacroma` 0,04 (*Saturación de las conchas*, 0–0,15) · `Paletaluz` 0,35 (*Luminosidad de las conchas*; la tapa, 0,8 ×) · `Tapaneutra` 0,6 (*Tapa de las losetas hacia el gris*) · `Herencia` 0,25 · `Maxconchas` 24 (*Losetas visibles por columna*) · `Grosortiempo` (encendido) · `Grosormax` 1,5 · `Cortezamax` 4 (*Corteza máxima: compacta las conchas viejas*, 0–12; 0 = el radio es el tiempo) · `Colmatacion` 0 (*Relleno de las hondonadas al enterrar*, 0–1). 11 parámetros desde la v13: `Paletaalterna` y `Contrasteocupada` quedan fijos (0,06 y 0,04) y `Tapaluz` pasa a ser 0,8 × `Paletaluz`; relanzar cualquier fase los quita de un proyecto anterior y avisa con `..` si los habías cambiado. Para probar sin esperar a que el mundo se estanque: `Forzarciclo` (página Fase6).
 
 **Leyenda:**
 

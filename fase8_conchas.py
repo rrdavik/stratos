@@ -22,19 +22,23 @@ Al terminar cada ciclo de ecosistema (fase 6: lo cierra el mundo):
      azul de los rios: 120-275); claro y oscuro alternos; croma de
      mineral (Paletacroma).
      CONCHAS DISCRETAS (v12, motor v53): el suelo no compite con lo
-     construido. Luminosidad media Paletaluz (0,35), alternando
-     Paletaalterna (0,06) entre conchas seguidas; la ocupada, solo
-     Contrasteocupada (0,04) mas clara; Paletacroma 0,04. Dos conchas
-     seguidas difieren al menos 60 grados de tono y Paletaalterna de
-     luminosidad: en un corte, las bandas se leen por el tono.
+     construido. Luminosidad media Paletaluz (0,35), alternando 0,06
+     entre conchas seguidas; la ocupada, solo 0,04 mas clara; Paletacroma
+     0,04. Dos conchas seguidas difieren al menos 60 grados de tono y 0,06
+     de luminosidad: en un corte, las bandas se leen por el tono.
      TAPA NEUTRA: la cara de arriba de la loseta superior de cada columna
-     se mezcla Tapaneutra (0,6) hacia un gris de luminosidad Tapaluz
-     (0,28), mate; los flancos conservan el color de su concha, que se ve
+     se mezcla Tapaneutra (0,6) hacia un gris de luminosidad 0,8 x
+     Paletaluz (0,28), mate; los flancos conservan el color de su concha, que se ve
      en las paredes de los cortes. Una instancia fina por columna (N mas,
      no el doble). El tinte del secuenciador sigue encima; la cicatriz
      tine tambien la tapa. Valores de antes: Paletaluz 0,57,
      Paletaalterna 0,14, Contrasteocupada 0,12, Paletacroma 0,09,
      Tapaneutra 0.
+     PAGINA MAS CORTA (v13): 11 parametros en vez de 14. Paletaalterna
+     (0,06) y Contrasteocupada (0,04) quedan fijos, y el gris de la tapa
+     sale de Paletaluz (antes Tapaluz): Paletaluz aclara u oscurece todo
+     el suelo a la vez. Relanzar cualquier fase los quita de un proyecto
+     anterior y avisa si los habias cambiado.
      Calculado de la generacion: cambiar la paleta recolorea lo enterrado.
      Paleta = mineral vuelve a la anterior (ambar y grises).
   2. El planeta engorda el GROSOR de la concha. Con Grosortiempo es
@@ -93,7 +97,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v12  (conchas discretas: suelo oscuro, poco contraste y tapa neutra)'
+VERSION = 'fase8 v13  (pagina mas corta: la luminosidad del suelo, en un solo Paletaluz)'
 banner(VERSION)
 
 base = require_base(8)
@@ -111,14 +115,9 @@ add_par(base, page, 'menu', 'Paleta', 'Paleta de las conchas', 'generaciones',
         menu=['generaciones', 'mineral'], menu_labels=['Un color por concha', 'Mineral (anterior)'])
 add_par(base, page, 'float', 'Paletatono', 'Tono de la primera concha (grados)', 20.0, 0.0, 360.0)
 add_par(base, page, 'float', 'Paletacroma', 'Saturacion de las conchas', 0.04, 0.0, 0.15, clamp=True)
-add_par(base, page, 'float', 'Paletaluz', 'Luminosidad media de las conchas', 0.35, 0.05, 0.95, clamp=True)
-add_par(base, page, 'float', 'Paletaalterna', 'Diferencia de luminosidad entre conchas seguidas', 0.06, 0.0, 0.4,
-        clamp=True)
-add_par(base, page, 'float', 'Contrasteocupada', 'Loseta ocupada: cuanto mas clara (0: igual)', 0.04, 0.0, 0.3,
-        clamp=True)
+add_par(base, page, 'float', 'Paletaluz', PALETALUZ_LABEL, 0.35, 0.05, 0.95, clamp=True)
 add_par(base, page, 'float', 'Tapaneutra', 'Tapa de las losetas hacia el gris (0: como los flancos)', 0.6, 0.0, 1.0,
         clamp=True)
-add_par(base, page, 'float', 'Tapaluz', 'Luminosidad del gris de la tapa', 0.28, 0.0, 1.0, clamp=True)
 # v12: el defecto de Paletacroma baja de 0,09 a 0,04; un proyecto que seguia en 0,09 pasa al nuevo
 try:
     if abs(base.par.Paletacroma.eval() - 0.09) < 1e-9:
@@ -142,7 +141,7 @@ except Exception:
 ok('pagina Fase8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Grosormax (1,5), '
    'Cortezamax (4), '
    'Colmatacion (0), Paleta (generaciones), Paletatono (20), Paletacroma (0,04), Paletaluz (0,35), '
-   'Paletaalterna (0,06), Contrasteocupada (0,04), Tapaneutra (0,6), Tapaluz (0,28)')
+   'Tapaneutra (0,6)')
 
 make_phong(base, 'mat_estratos', 780, 620, spec=0.0, shin=1, diff=1.0)     # v12: mate
 ok('mat_estratos mate (sin especular): las losetas no compiten con los reflejos de mat_pulido')
@@ -153,7 +152,7 @@ try:
            % (l_tapa, l_form - l_tapa, l_form))
     else:
         info('jerarquia: la tapa mas clara (L %.2f) no queda 0,15 por debajo de las formaciones (L %.2f): '
-             'baja Paletaluz o Contrasteocupada, o sube Tapaneutra' % (l_tapa, l_form))
+             'baja Paletaluz o sube Tapaneutra' % (l_tapa, l_form))
 except Exception as e:
     info('jerarquia: no pude comprobarla (%s)' % e)
 make_instanced(base, 'estratos', 520, 620, 'mat_estratos')
@@ -172,9 +171,9 @@ else:
 leeme(base, 8, """FASE 8 - CONCHAS
   En cada fin de ciclo cada celda deposita una loseta sobre su columna,
   con el color de su generacion (Paleta: uno distinto por concha): las hondonadas se tapizan (Colmatacion
-  las rellena). Conchas discretas: Paletaluz (0,35), Paletaalterna (0,06),
-  Contrasteocupada (0,04), Paletacroma (0,04); la tapa de arriba, Tapaneutra
-  (0,6) hacia el gris Tapaluz (0,28); los flancos, con su color. Grosor: Shellthick x compases / Ciclomin (Grosortiempo),
+  las rellena). Conchas discretas: Paletaluz (0,35), Paletacroma (0,04);
+  la tapa de arriba, Tapaneutra (0,6) hacia un gris de 0,8 x Paletaluz;
+  los flancos, con su color. Grosor: Shellthick x compases / Ciclomin (Grosortiempo),
   entre 0,25x y Ciclomax/Ciclomin, como mucho Grosormax (1,5).
   Cortezamax (4): la concha nueva compacta las viejas; la corteza tiende
   a ese grosor y el planeta deja de engordar (0: sin compactar).
@@ -470,6 +469,14 @@ def prueba(t):
     t.check('i_estratos dibuja la concha (y sus tapas)', est.numSamples == quiere,
             '%d de %d' % (est.numSamples, quiere))
     t.check('leyenda CONCHAS', 'CONCHAS' in m.legend())
+    # v13: la pagina mas corta
+    fuera = [nm for nm in ('Paletaalterna', 'Contrasteocupada', 'Tapaluz') if has_par(base, nm)]
+    t.check('pagina Fase8 sin Paletaalterna, Contrasteocupada ni Tapaluz', not fuera,
+            'siguen: %s' % ', '.join(fuera) if fuera else '')
+    cf = m.cfg()
+    t.check('el gris de la tapa es 0,8 x Paletaluz (0,28 por defecto)',
+            abs(cf['tapa_luz'] - 0.8 * float(base.par.Paletaluz)) < 1e-9
+            and abs(0.8 * m.DEFAULT_CFG['paleta_luz'] - m.DEFAULT_CFG['tapa_luz']) < 1e-9)
 
 
 run_test(base, prueba)
