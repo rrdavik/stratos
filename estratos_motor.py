@@ -46,7 +46,9 @@
 #                 v63: la pagina Fase11 con 35: Rebote, Maxcaosnat, Varangulo,
 #                 Cuantizar30, Inclinacion, Densidadhoja y Muroterraza, fijos;
 #                 motor v64: la pagina Fase13 con 12: el ancho maximo de un
-#                 rio es 3,4 x Anchorio y Pendientemin queda en 0,01).
+#                 rio es 3,4 x Anchorio y Pendientemin queda en 0,01; motor
+#                 v65: la pagina Fase21 con 10: Refractariomic (0,12 s) y
+#                 Ventanaruido (60 s), fijos).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -59,7 +61,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v64'
+MOTOR_VERSION = 'motor v65'
 
 import math
 
@@ -7655,14 +7657,14 @@ def niebla(W, cfg, d, R):
 # banda respecto al maximo de los HIST_MIC bloques anteriores, en decenas de dB
 # por banda: un sonido que empieza (una palmada, una tos, unos pasos) sube de
 # golpe; un drone sostenido, no. Un onset es un flujo por encima de
-# Umbralonset, separado del anterior por Refractariomic s, y que no cae en la
+# Umbralonset, separado del anterior por 0,12 s (fijo desde el motor v65), y que no cae en la
 # ventana de un destello propio (W['sala']['destellos'], que llena la fase 23).
 #   onset           erosion() con el pad 9 en la celda del objetivo (Objetivo,
 #                   como los pads): baja Reduccionmic escalones enteros (D3),
 #                   enciende la luz de la celda con su color y, desde la fase
 #                   14, cuenta como aranazo: dos en la misma zona escalan (D9).
 #   ruido de sala   la energia (el flujo) de los onsets de los ultimos
-#                   Ventanaruido s; al pasar Umbralcorte abre un corte de
+#                   60 s (fijo desde el motor v65); al pasar Umbralcorte abre un corte de
 #                   Profundidadmic conchas y radio 1 en la celda del ultimo
 #                   onset, y la cuenta vuelve a cero.
 # Sin azar: la senal sintetica de prueba (clic, ruido y drone) sale de un hash
@@ -7713,7 +7715,7 @@ def flujo_espectral(prev, actual):
 
 
 def detectar_onset(W, cfg, flujo, now):
-    """El flujo es un onset: pasa Umbralonset, Refractariomic s despues del
+    """El flujo es un onset: pasa Umbralonset, 0,12 s despues del
     anterior y fuera de la ventana de un destello propio (este cuenta como
     descartado)."""
     mc = W['mic']
@@ -7745,7 +7747,7 @@ def erosion_mic(W, cfg, now, flujo=0.0):
 
 
 def ruido_tick(W, cfg, now):
-    """El ruido de sala: la energia de los onsets de los ultimos Ventanaruido s.
+    """El ruido de sala: la energia de los onsets de los ultimos 60 s.
     Al pasar Umbralcorte, un corte de Profundidadmic conchas y radio 1 en la
     celda del ultimo onset (corte_tematico desde la fase 16; cut antes) y la
     cuenta a cero. Devuelve el corte, o None."""
@@ -8122,9 +8124,7 @@ def cfg():
                  glitch=max(0.0, min(1.0, _p('Glitch', c['glitch']))))
     if c['nivel'] >= 21:
         c.update(umbral_onset=max(0.0, _p('Umbralonset', c['umbral_onset'])),
-                 refractario_mic=max(0.0, _p('Refractariomic', c['refractario_mic'])),
                  reduccion_mic=max(0.0, _p('Reduccionmic', c['reduccion_mic'])),
-                 ventana_ruido=max(0.0, _p('Ventanaruido', c['ventana_ruido'])),
                  umbral_corte=max(1e-6, _p('Umbralcorte', c['umbral_corte'])),
                  prof_mic=max(1, int(_p('Profundidadmic', c['prof_mic']))),
                  fuente_mic=_menu('Fuentemic', FUENTES_MIC, c['fuente_mic']),
