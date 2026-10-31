@@ -51,6 +51,22 @@ BROTES, ARBOLES Y TERRAZAS (v8)
   (Los arboles de pisos de la v6 y la v7 se sustituyen; sus parametros
   Pisoscopa, Anchocopa, Angulorama y Troncofrac se quitan.)
 
+PAGINA MAS CORTA (v9)
+---------------------
+  35 parametros en vez de 42. Siete ajustes finos de la geometria quedan
+  fijos en su valor por defecto:
+    Rebote 0,2        rebote del nacimiento
+    Maxcaosnat 5      ocupacion maxima con juego del caos (naturaleza)
+    Varangulo 12      variacion del angulo de rama (grados)
+    Cuantizar30 no    angulos de rama a 30 grados (era para comparar)
+    Inclinacion 8     inclinacion hacia la luz (grados)
+    Densidadhoja 6    hojas minimas por racimo
+    Muroterraza 0,25  parte del bancal que es muro
+  Se quedan los que cambian las escenas (fase 18), los de rendimiento
+  (Ligero, Refresconat, Impostores, Lodnat) y los que dan caracter al
+  bosque, los pisos y los hibridos. Relanzar cualquier fase los quita de
+  un proyecto anterior y avisa si los habias cambiado.
+
 NATURALEZA LEGIBLE (v5)
 -----------------------
   A distancia de globo la naturaleza se lee por masa, silueta y bandas de
@@ -58,7 +74,7 @@ NATURALEZA LEGIBLE (v5)
   ESCALERA     desde Umbralmonte la ocupacion ya no anade piezas: sube el
                terreno y el bosque lo cubre como una manta. Sin arbol madre.
                El juego del caos solo mueve y escala copas, y solo hasta
-               Maxcaosnat.
+               la ocupacion 5.
   RELIEVE      una sola malla ('terreno'): la esfera que el shader desplaza
                con el mapa de alturas del motor. Celda suelta: cono con ruido
                de crestas; cluster de 3+: cordillera con la cresta por su eje.
@@ -96,7 +112,7 @@ QUE ANADE
                mapa logistico (r = Caos) sembrado con la velocidad fundadora y
                la celda: la misma historia da el mismo compuesto.
   TRANSITOS    stop-motion. Nacimiento con rebote y destello (un paso como
-               mucho); crecimiento en un paso. Fusion y coronacion son
+               mucho; rebote 0,2); crecimiento en un paso. Fusion y coronacion son
                cadenas de etapas que avanzan una por gate en el cluster
                (Avance = gates) o cada Pasosetapa pasos (Avance = pasos).
                La erosion las recorre hacia atras; el fin de ciclo las cierra.
@@ -117,7 +133,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v8  (brotes, arboles y terrazas: biblioteca de ejemplares, biomas, arrozal y meseta-jardin)'
+VERSION = 'fase11 v9  (pagina mas corta: siete ajustes finos de la geometria, fijos)'
 banner(VERSION)
 
 base = require_base(11)
@@ -139,11 +155,9 @@ add_par(base, page, 'int', 'Maxpiezas', 'Piezas maximas por compuesto', 6, 1, 12
 add_par(base, page, 'menu', 'Avance', 'Las obras avanzan', 'gates', menu=m.AVANCES,
         menu_labels=['Una etapa por gate en el cluster', 'Una etapa cada Pasosetapa pasos'])
 add_par(base, page, 'int', 'Pasosetapa', 'Pasos por etapa (y al deshacerse)', 2, 1, 16, clamp=True)
-add_par(base, page, 'float', 'Rebote', 'Rebote del nacimiento', 0.2, 0.0, 0.6)
 add_par(base, page, 'pulse', 'Sembrarzona', 'Sembrar Nota y sus vecinas (SEQ1, prueba)')
 add_par(base, page, 'pulse', 'Sembrarzona2', 'Sembrar Nota2 y sus vecinas (SEQ2, prueba)')
 add_par(base, page, 'int', 'Umbralmonte', 'Ocupacion desde la que sube el terreno (monte)', 8, 1, 30, clamp=True)
-add_par(base, page, 'int', 'Maxcaosnat', 'Ocupacion maxima con juego del caos (naturaleza)', 5, 0, 16, clamp=True)
 add_par(base, page, 'float', 'Limitebosque', 'Limite del bosque (altura relativa)', 0.65, 0.4, 0.85)
 add_par(base, page, 'float', 'Limitenieve', 'Limite de la nieve (altura relativa)', 0.9, 0.5, 0.98)
 add_par(base, page, 'float', 'Alturamonte', 'Crecimiento maximo del suelo (x el limite)', 1.0, 0.0, 3.0)
@@ -156,10 +170,6 @@ add_par(base, page, 'float', 'Refresconat', 'La naturaleza se recalcula cada (s;
 add_par(base, page, 'toggle', 'Biomas', 'Biomas por latitud (frio, templado, calido)', True)
 add_par(base, page, 'int', 'Variantes', 'Variantes por modelo (biblioteca)', 2, 1, 8, clamp=True)
 renew_default(base, 'Variantes', 4, 2)          # v8 ligera: 2 variantes (menos geometrias)
-add_par(base, page, 'float', 'Varangulo', 'Variacion del angulo de rama (grados)', 12.0, 0.0, 45.0)
-add_par(base, page, 'toggle', 'Cuantizar30', 'Angulos de rama a 30 grados (comparar)', False)
-add_par(base, page, 'float', 'Inclinacion', 'Inclinacion hacia la luz (grados)', 8.0, 0.0, 30.0)
-add_par(base, page, 'int', 'Densidadhoja', 'Hojas minimas por racimo', 6, 1, 30, clamp=True)
 add_par(base, page, 'float', 'Traslucidez', 'Traslucidez del borde de la copa', 0.35, 0.0, 1.0)
 add_par(base, page, 'float', 'Timidez', 'Timidez de copa (hueco entre copas)', 0.12, 0.0, 1.0)
 add_par(base, page, 'float', 'Emergentes', 'Fraccion de emergentes del bosque', 0.1, 0.0, 1.0)
@@ -169,7 +179,6 @@ add_par(base, page, 'toggle', 'Impostores', 'De lejos, tarjetas de racimo', True
 add_par(base, page, 'float', 'Terrazaspornota', 'Bancales por nota del SEQ1 (arrozal)', 1.0, 0.0, 4.0)
 add_par(base, page, 'int', 'Maxterrazas', 'Bancales maximos', 8, 1, 16, clamp=True)
 add_par(base, page, 'float', 'Pasoterraza', 'Alto de un bancal (x el limite)', 0.12, 0.02, 0.5)
-add_par(base, page, 'float', 'Muroterraza', 'Parte del bancal que es muro', 0.25, 0.05, 0.9)
 add_par(base, page, 'toggle', 'Riego', 'Los bancales junto a un rio se inundan', True)
 add_par(base, page, 'rgb', 'Colorcultivo', 'Verde arroz de los bancales', (0.66, 0.80, 0.22))
 add_par(base, page, 'float', 'Alturameseta', 'Alto de un nivel de meseta (x el limite)', 0.15, 0.0, 1.0)
@@ -178,11 +187,11 @@ add_par(base, page, 'menu', 'Marco', 'Marco de los frutales', 'tresbolillo', men
         menu_labels=['Marco real', 'Tresbolillo'])
 add_par(base, page, 'toggle', 'Setos', 'Setos entre las parcelas de la meseta', True)
 ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
-   'Maxpiezas 6, Avance (gates), Pasosetapa 2, Rebote 0,2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
-   'Maxcaosnat 5, Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
-   'Ligero, Refresconat 0,25, Biomas, Variantes 2, Varangulo 12, Cuantizar30 no, Inclinacion 8, Densidadhoja 6, Traslucidez 0,35, '
+   'Maxpiezas 6, Avance (gates), Pasosetapa 2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
+   'Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
+   'Ligero, Refresconat 0,25, Biomas, Variantes 2, Traslucidez 0,35, '
    'Timidez 0,12, Emergentes 0,1, Orla, Mezcla 0,3, Impostores, Terrazaspornota 1, Maxterrazas 8, '
-   'Pasoterraza 0,12, Muroterraza 0,25, Riego, Colorcultivo, Alturameseta 0,15, Maxniveles 3, Marco '
+   'Pasoterraza 0,12, Riego, Colorcultivo, Alturameseta 0,15, Maxniveles 3, Marco '
    '(tresbolillo), Setos')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
@@ -241,7 +250,7 @@ leeme(base, 11, """FASE 11 - LA PIEL
   latitud (Biomas) y sucesion matorral -> arbol -> arboleda -> bosque ->
   monte; bosque con timidez de copa (Timidez, Emergentes, Orla, Mezcla); de
   lejos, tarjetas de racimo (Impostores). Hibridos: arrozal (Terrazaspornota,
-  Maxterrazas, Pasoterraza, Muroterraza, Riego, Colorcultivo) y
+  Maxterrazas, Pasoterraza, Riego, Colorcultivo) y
   meseta-jardin (Alturameseta, Maxniveles, Marco, Setos); textura
   'cultivos' para el shader. Ligero (por defecto): la naturaleza se
   recalcula cada Refresconat s (a saltos), 6 arboles por celda de bosque y
@@ -752,7 +761,7 @@ def _prueba_natural(t, m):
     fi = [q[4] for q in plantas(insti, i) if q[0] in m.ARBOLES][0]
     ang = math.degrees(math.acos(max(-1.0, min(1.0, m._dot(m._eje_y(fi[3], fi[4], fi[5]), m.normal_i(i))))))
     lejos = [q for q in plantas(insti) if q[3]]
-    t.check('el arbol se inclina hacia el lado sin vecinas (%.1f grados, <= Inclinacion %.0f); de lejos, '
+    t.check('el arbol se inclina hacia el lado sin vecinas (%.1f grados, <= %.0f); de lejos, '
             'tarjetas de racimo si Impostores (%d)' % (ang, c['inclinacion'], len(lejos)),
             0.5 < ang <= c['inclinacion'] + c.get('sway_max', 0.0) + 0.6
             and (bool(lejos) != bool(c.get('superficie') if c['ligero'] else m.lod_cerca(Wi, c, i))
@@ -813,6 +822,14 @@ def _prueba_natural(t, m):
     ley = m.legend()
     t.check('leyenda NATURALEZA (biomas F/T/C, ejemplares, hojas) y NATURA (montes, cordilleras)',
             'NATURALEZA' in ley and 'biomas F/T/C' in ley and 'hojas' in ley and 'NATURA ' in ley)
+    # v9: la pagina mas corta
+    fuera = [nm for nm, _, _ in FASE11_FIJOS if has_par(base, nm)]
+    t.check('pagina Fase11 sin Rebote, Maxcaosnat, Varangulo, Cuantizar30, Inclinacion, '
+            'Densidadhoja ni Muroterraza', not fuera, 'siguen: %s' % ', '.join(fuera) if fuera else '')
+    cf = m.cfg()
+    t.check('los siete fijos, en su valor por defecto',
+            all(cf[k] == m.DEFAULT_CFG[k] for k in ('rebote', 'max_caos_nat', 'var_angulo', 'cuantizar30',
+                                                     'inclinacion', 'densidad_hoja', 'muro_terraza')))
 
 
 run_test(base, prueba)
