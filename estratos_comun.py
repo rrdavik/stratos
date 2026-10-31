@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v42'
+VERSION_COMUN = 'comun v43'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -570,7 +570,7 @@ def onPulse(par):
 
 
 def onValueChange(par, prev):
-    if par.name in ('Modoactuacion', 'Escena', 'Variantes', 'Varangulo', 'Cuantizar30', 'Densidadhoja'):
+    if par.name in ('Modoactuacion', 'Escena', 'Variantes'):
         op('motor').module.on_value(par.name, par.eval())
     return
 '''
@@ -1328,6 +1328,41 @@ def fase8_al_dia(base):
         ok('pagina Fase8: quitados %s' % ', '.join(quitados))
 
 
+# --- la pagina Fase11, mas corta (comun v43, motor v63) -----------------------
+# De 42 parametros a 35: siete ajustes finos de la geometria quedan fijos en
+# su valor por defecto. Se quedan los de las escenas (fase 18), los de
+# rendimiento (Ligero, Refresconat, Impostores, Lodnat) y los que dan
+# caracter al bosque, los pisos y los hibridos.
+
+FASE11_FIJOS = (('Rebote', 0.2, 'rebote del nacimiento'),
+                ('Maxcaosnat', 5, 'ocupacion maxima con juego del caos en la naturaleza'),
+                ('Varangulo', 12.0, 'variacion del angulo de rama, en grados'),
+                ('Cuantizar30', 0, 'angulos de rama libres (el modo de comparar a 30 grados)'),
+                ('Inclinacion', 8.0, 'inclinacion de los arboles hacia la luz, en grados'),
+                ('Densidadhoja', 6, 'hojas minimas por racimo'),
+                ('Muroterraza', 0.25, 'parte del bancal que es muro'))
+
+
+def fase11_al_dia(base):
+    """Quita de un proyecto anterior a la fase 11 v9 los siete ajustes que
+    quedan fijos; avisa si los habias cambiado."""
+    quitados = []
+    for nm, defecto, que in FASE11_FIJOS:
+        if not has_par(base, nm):
+            continue
+        try:
+            v = float(getattr(base.par, nm).eval())
+            if abs(v - defecto) > 1e-6:
+                info('%s era %s: ahora fijo en %s (%s)'
+                     % (nm, str(round(v, 3)).replace('.', ','), str(defecto).replace('.', ','), que))
+        except Exception:
+            pass
+        if remove_par(base, nm):
+            quitados.append(nm)
+    if quitados:
+        ok('pagina Fase11: quitados %s (valores fijos)' % ', '.join(quitados))
+
+
 def fase3_al_dia(base):
     """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
     Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
@@ -1477,6 +1512,7 @@ def install_core(base, carpeta, fase):
     fase6_al_dia(base)
     fase7_al_dia(base)
     fase8_al_dia(base)
+    fase11_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
@@ -2403,7 +2439,7 @@ EJEMPLAR_CB = r'''# Script SOP de un ejemplar de la biblioteca (fase 11 v8): pid
 # y _lod, la version lejana con tarjetas de racimo) y la escribe una vez: ramas
 # (tubos de 4 o 5 lados) y hojas facetadas. Atributos: N y uv = (tipo,
 # profundidad en la copa, nivel de rama). Solo se recuece si cambia la
-# biblioteca (Varangulo, Cuantizar30, Densidadhoja).
+# biblioteca (Variantes).
 
 def onSetupParameters(scriptOp):
     return

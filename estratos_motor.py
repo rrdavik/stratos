@@ -42,7 +42,9 @@
 #                 Pumpamt 0 apagan la luz, la velocidad y el pumping, y
 #                 Multradio, Pumphold y Pumpvelmin quedan fijos; motor v62: la
 #                 pagina Fase8 con 11: Paletaalterna y Contrasteocupada
-#                 fijos, y la luminosidad de la tapa sale de Paletaluz).
+#                 fijos, y la luminosidad de la tapa sale de Paletaluz; motor
+#                 v63: la pagina Fase11 con 35: Rebote, Maxcaosnat, Varangulo,
+#                 Cuantizar30, Inclinacion, Densidadhoja y Muroterraza, fijos).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -55,7 +57,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v62'
+MOTOR_VERSION = 'motor v63'
 
 import math
 
@@ -8028,11 +8030,9 @@ def cfg():
                  max_piezas=max(1, int(_p('Maxpiezas', c['max_piezas']))),
                  avance=_menu('Avance', AVANCES, 0),
                  pasos_etapa=max(1, int(_p('Pasosetapa', c['pasos_etapa']))),
-                 rebote=max(0.0, _p('Rebote', c['rebote'])),
                  catalogo=_catalogo(),
                  # fase 11 v5: la naturaleza legible
                  umbral_monte=max(1, int(_p('Umbralmonte', c['umbral_monte']))),
-                 max_caos_nat=max(0, int(_p('Maxcaosnat', c['max_caos_nat']))),
                  limite_bosque=max(0.0, min(1.0, _p('Limitebosque', c['limite_bosque']))),
                  limite_nieve=max(0.0, min(1.0, _p('Limitenieve', c['limite_nieve']))),
                  altura_monte=max(0.0, _p('Alturamonte', c['altura_monte'])),
@@ -8044,10 +8044,6 @@ def cfg():
                  refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
                  biomas=int(bool(_p('Biomas', True))),
                  variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
-                 var_angulo=max(0.0, min(45.0, _p('Varangulo', c['var_angulo']))),
-                 cuantizar30=int(bool(_p('Cuantizar30', False))),
-                 inclinacion=max(0.0, min(30.0, _p('Inclinacion', c['inclinacion']))),
-                 densidad_hoja=max(1, min(30, int(_p('Densidadhoja', c['densidad_hoja'])))),
                  traslucidez=max(0.0, min(1.0, _p('Traslucidez', c['traslucidez']))),
                  timidez=max(0.0, min(1.0, _p('Timidez', c['timidez']))),
                  emergentes=max(0.0, min(1.0, _p('Emergentes', c['emergentes']))),
@@ -8057,7 +8053,6 @@ def cfg():
                  terrazas_por_nota=max(0.0, _p('Terrazaspornota', float(c['terrazas_por_nota']))),
                  max_terrazas=max(1, min(16, int(_p('Maxterrazas', c['max_terrazas'])))),
                  paso_terraza=max(0.02, min(0.5, _p('Pasoterraza', c['paso_terraza']))),
-                 muro_terraza=max(0.05, min(0.9, _p('Muroterraza', c['muro_terraza']))),
                  riego=int(bool(_p('Riego', True))),
                  color_cultivo=(max(0.0, _p('Colorcultivor', c['color_cultivo'][0])),
                                 max(0.0, _p('Colorcultivog', c['color_cultivo'][1])),
@@ -8873,7 +8868,7 @@ def on_value(name, val):
             parent().par.Showgrid = not bool(val)
         except Exception:
             pass
-    elif name in ('Variantes', 'Varangulo', 'Cuantizar30', 'Densidadhoja'):    # fase 11 v8
+    elif name in ('Variantes', 'Varangulo', 'Cuantizar30', 'Densidadhoja'):    # fase 11 v8 (v9: solo Variantes)
         c = cfg()
         biblioteca(c)                   # se precalcula de nuevo
         if VARIANTES_TD and int(c['variantes']) > VARIANTES_TD:
