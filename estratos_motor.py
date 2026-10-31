@@ -34,7 +34,10 @@
 #                 Luzconchas es la intensidad de la luz de las conchas; motor
 #                 v59: la pagina Fase4 con 4 parametros: los umbrales salen de
 #                 Umbralram y Pasoumbral, Satelite es tamano y altura del
-#                 satelite y la vecina la eligen siempre velocidad + ocupacion).
+#                 satelite y la vecina la eligen siempre velocidad + ocupacion;
+#                 motor v60: la pagina Fase6 con 9 parametros: el compas sale
+#                 de la linea de tiempo, Giromin 1 apaga el giro vivo y la
+#                 memoria del territorio queda en 8 compases).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -47,7 +50,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v59'
+MOTOR_VERSION = 'motor v60'
 
 import math
 
@@ -7958,16 +7961,15 @@ def cfg():
         cumbre_tramos=_p('Tramoscumbre', c['cumbre_tramos']),
         sat_size=_p('Satelite', c['sat_size']),
         sat_limit=_p('Satelite', c['sat_limit']),
-        beats_per_bar=_p('Negrasporcompas', c['beats_per_bar']),
+        beats_per_bar=_compas(c['beats_per_bar']),
         umbral_madurez=_p('Umbralmadurez', c['umbral_madurez']),
         umbral_novedad=_p('Umbralnovedad', c['umbral_novedad']),
         compases_quietos=_p('Compasesquietos', c['compases_quietos']),
         umbral_territorio=_p('Umbralterritorio', c['umbral_territorio']),
-        compases_territorio=_p('Compasesterritorio', c['compases_territorio']),
         ciclo_min=_p('Ciclomin', c['ciclo_min']),
         ciclo_max=_p('Ciclomax', c['ciclo_max']),
         cambio_entierra=int(_p('Cambioentierra', False)),
-        giro_vivo=int(_p('Girovivo', True)),
+        giro_vivo=int(_p('Giromin', c['giro_min']) < 1.0),    # v60: Giromin 1 = sin giro vivo
         giro_min=_p('Giromin', c['giro_min']),
         dens_umbral=_p('Umbraldensidad', c['dens_umbral']),
         rad_mult=_p('Multradio', c['rad_mult']),
@@ -8191,6 +8193,15 @@ def tempo():
         return 120.0
 
 
+def _compas(defecto=4):
+    """Negras por compas: las de la linea de tiempo del proyecto (Signature),
+    las mismas con las que gira el planeta (motor v60; antes Negrasporcompas)."""
+    try:
+        return max(1, int(_ritmo().beats_per_bar()))
+    except Exception:
+        return defecto
+
+
 def playing():
     try:
         return _ritmo().playing()
@@ -8215,7 +8226,7 @@ def floor_radius(i, frame=None):
 
 
 def giro_factor(frame=None):
-    """Multiplica el giro del planeta (lo lee 'ritmo'). 1 sin Girovivo."""
+    """Multiplica el giro del planeta (lo lee 'ritmo'). 1 con Giromin 1."""
     try:
         return float(world().get('giro_factor', 1.0))
     except Exception:
