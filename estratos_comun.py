@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v41'
+VERSION_COMUN = 'comun v42'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1297,6 +1297,37 @@ def fase7_al_dia(base):
         ok('pagina Fase7: quitados %s' % ', '.join(quitados))
 
 
+# --- la pagina Fase8, mas corta (comun v42, motor v62) ------------------------
+# De 14 parametros a 11: Paletaalterna (0,06) y Contrasteocupada (0,04)
+# quedan fijos, y el gris de la tapa es 0,8 x Paletaluz (antes Tapaluz,
+# 0,28 = 0,8 x 0,35): Paletaluz aclara u oscurece todo el suelo a la vez.
+
+FASE8_FIJOS = (('Paletaalterna', 0.06, 'diferencia de luminosidad entre conchas seguidas'),
+               ('Contrasteocupada', 0.04, 'cuanto mas clara la loseta ocupada'),
+               ('Tapaluz', 0.28, 'gris de la tapa: ahora 0,8 x Paletaluz'))
+PALETALUZ_LABEL = 'Luminosidad de las conchas (la tapa, 0,8 x)'
+
+
+def fase8_al_dia(base):
+    """Quita Paletaalterna, Contrasteocupada y Tapaluz de un proyecto
+    anterior a la fase 8 v13; avisa si los habias cambiado."""
+    quitados = []
+    for nm, defecto, que in FASE8_FIJOS:
+        if not has_par(base, nm):
+            continue
+        try:
+            v = float(getattr(base.par, nm).eval())
+            if abs(v - defecto) > 1e-6:
+                info('%s era %s: ahora fijo (%s)' % (nm, str(round(v, 3)).replace('.', ','), que))
+        except Exception:
+            pass
+        if remove_par(base, nm):
+            quitados.append(nm)
+    _relabel(base, 'Paletaluz', PALETALUZ_LABEL)
+    if quitados:
+        ok('pagina Fase8: quitados %s' % ', '.join(quitados))
+
+
 def fase3_al_dia(base):
     """Quita Growstep y Gatemode de un proyecto anterior a la fase 3 v13. Si
     Gatemode estaba apagado, Gatemax pasa a 1 (el gate no cuenta)."""
@@ -1445,6 +1476,7 @@ def install_core(base, carpeta, fase):
     fase4_al_dia(base)
     fase6_al_dia(base)
     fase7_al_dia(base)
+    fase8_al_dia(base)
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
