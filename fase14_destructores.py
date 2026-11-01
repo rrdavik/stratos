@@ -50,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase14 v3  (destructores: aranazos tematicos, escalada, incendio y derrumbes; autoprueba con el pad 9)'
+VERSION = 'fase14 v4  (industria: derrumbe de galeria y grisu, chimenea y apagon en cadena, fuga e incendio)'
 banner(VERSION)
 
 base = require_base(14)
@@ -70,7 +70,10 @@ add_par(base, page, 'int', 'Pasosfuego', 'Pasos que arde (o se derrumba) cada ce
 add_par(base, page, 'int', 'Maxfuego', 'Celdas que arden (o se derrumban) a la vez', 6, 1, 40, clamp=True)
 add_par(base, page, 'int', 'Pasospolvo', 'Pasos en que se disipa el polvo', 8, 1, 64, clamp=True)
 add_par(base, page, 'pulse', 'Escalar', 'Escalada de prueba: Golpesescalada aranazos con Padprueba')
-ok('pagina Fase14: Ventanaescalada 8, Golpesescalada 2, Pasosfuego 6, Maxfuego 6, Pasospolvo 8, Escalar')
+add_par(base, page, 'toggle', 'Apagon', 'Industria: la escalada de la energia es un apagon en cadena', True)
+add_par(base, page, 'toggle', 'Grisu', 'Industria: la escalada de la mina es una explosion de grisu', True)
+ok('pagina Fase14: Ventanaescalada 8, Golpesescalada 2, Pasosfuego 6, Maxfuego 6, Pasospolvo 8, Escalar; '
+   'v4: Apagon, Grisu')
 
 # -----------------------------------------------------------------------------
 # CATALOGO Y MODELOS: las huellas (claro de ceniza, pedregal, escombros; el
@@ -94,7 +97,11 @@ leeme(base, 14, """FASE 14 - DESTRUCTORES I: ARANAZOS Y ESCALADA
   incendio por el dosel, derrumbe, derrumbe en cadena o implosion. Pasosfuego,
   Maxfuego; mapa logistico; no sale del cluster. Huellas: ceniza, pedregal,
   escombros, solar vallado. Una obra a medias golpeada se derriba.
-  Prueba: bosque denso, Padprueba 5 y Escalar.""")
+  Prueba: bosque denso, Padprueba 5 y Escalar.
+  v4, industria: mina (derrumbe de galeria; grisu por los pozos del
+  cluster; crater), energia (cae una chimenea con polvo; apagon en cadena;
+  ruina de naves) y refineria (fuga con llamarada; incendio por las
+  tuberias; hollin). Apagon y Grisu los apagan.""")
 
 print_report()
 
@@ -107,7 +114,7 @@ def prueba(t):
     m = t.m
     guarda = {}
     for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Padprueba', 'Maxfuego', 'Umbraldensidad',
-               'Golpesescalada', 'Ventanaescalada', 'Pasosfuego', 'Pasospolvo', 'Avance'):
+               'Golpesescalada', 'Ventanaescalada', 'Pasosfuego', 'Pasospolvo', 'Avance', 'Apagon', 'Grisu'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -327,6 +334,48 @@ def _prueba(t, m):
     ley2 = m.legend()
     t.check('leyenda: el accidente en EROSION y la catastrofe en ESCALADA',
             ' rayo celda' in ley1 and 'golpes 1/' in ley1 and 'ESCALADA INCENDIO' in ley2)
+    # 11. v4, la industria: un golpe, la escalada y la huella de cada especie
+    acc = []
+    for s, centro, esp in ((m.GEO, 0, 'mina'), (m.ARQ, 0, 'energia'), (m.GEO, 60, 'refineria')):
+        m.reset_world()
+        W, c = zona('industria', s, 64, centro=centro)
+        objetivo = m.pick_target(W, c, pad, 100)
+        v, e0 = m.victima(W, c, objetivo)
+        polvo0 = len(W['polvo'])
+        ev = m.erosion(W, c, pad, 100, now)
+        a = ev.get('accidente') or {}
+        bien = a.get('tipo') == m.ACCIDENTE[esp] and a.get('celda') == v and not ev.get('escalada')
+        if esp == 'energia':                         # la chimenea cae de una pieza, con polvo
+            bien = bien and len(W['polvo']) > polvo0
+        acc.append('%s %s' % (esp, 'bien' if bien else 'MAL (%s)' % a.get('tipo')))
+    t.check('industria, un golpe: derrumbe de galeria, cae una chimenea (con polvo), fuga con llamarada',
+            all(x.endswith('bien') for x in acc), '; '.join(acc))
+    otras = []
+    for s, centro, esp in ((m.GEO, 0, 'mina'), (m.ARQ, 0, 'energia'), (m.GEO, 60, 'refineria')):
+        m.reset_world()
+        W, c = zona('industria', s, 64, veces=4, centro=centro)
+        m.erosion(W, c, pad, 100, now)
+        ev = m.erosion(W, c, pad, 100, now)
+        pasos(W, c, 60)
+        ruinas = [i for i in range(m.N) if W['ruina'][i] == 1 + m.RUINA_ESP.index(esp)]
+        inst = m.build_instances(W, c, now)
+        mo = m.modelos_de(c, 'industria', esp, 'huella')[0]
+        bien = ev.get('escalada') == m.CATASTROFE[esp] and ruinas and bool(inst.get(m.geometria_de(mo, False, False)))
+        otras.append('%s: %s, %d huellas %s' % (esp, ev.get('escalada'), len(ruinas), '' if bien else 'MAL'))
+    t.check('industria, la escalada: grisu (crater), apagon en cadena (ruina) e incendio de refineria (hollin)',
+            not any(x.endswith('MAL') for x in otras), '; '.join(otras))
+    base.par.Grisu = False
+    base.par.Apagon = False
+    sin = []
+    for s in (m.GEO, m.ARQ):
+        m.reset_world()
+        W, c = zona('industria', s, 64, veces=4)
+        m.erosion(W, c, pad, 100, now)
+        ev = m.erosion(W, c, pad, 100, now)
+        sin.append(ev.get('escalada'))
+    base.par.Grisu = True
+    base.par.Apagon = True
+    t.check('Grisu y Apagon apagados: la mina y la energia no escalan (%s)' % sin, sin == [None, None])
 
 
 run_test(base, prueba)

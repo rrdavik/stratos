@@ -50,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase17 v2  (autoprueba: las ventanas de los edificios de la biblioteca de la ciudad, fase 11 v10)'
+VERSION = 'fase17 v3  (industria: trenes y balancines al tempo, STOP es huelga, el frente es un cambio de turno)'
 banner(VERSION)
 
 base = require_base(17)
@@ -67,7 +67,8 @@ add_par(base, page, 'int', 'Trafico', 'Puntos de trafico por tramo de carretera'
 add_par(base, page, 'int', 'Pasosfrente', 'Pasos que tarda el frente de polo a polo', 16, 1, 128, clamp=True)
 add_par(base, page, 'str', 'Masterbeat', 'CHOP de master_beat (vacio: el pulso lo cuenta el motor)', '')
 add_par(base, page, 'pulse', 'Frenteprueba', 'Cambio de pattern de prueba: lanza el frente')
-ok('pagina Fase17: Swaymax 6, Trafico 2, Pasosfrente 16, Masterbeat, Frenteprueba')
+add_par(base, page, 'toggle', 'Turno', 'Industria: el frente es un cambio de turno (ola de focos de sodio)', True)
+ok('pagina Fase17: Swaymax 6, Trafico 2, Pasosfrente 16, Masterbeat, Frenteprueba; v3: Turno')
 
 # la luz cenital, tenida por la estacion; las ventanas de la ciudad, encendidas
 if tiempo_al_dia(base):
@@ -78,6 +79,10 @@ piel_al_dia(base, m)
 set_render(base)
 
 leeme(base, 17, """FASE 17 - TIEMPO
+  v3, industria: los balancines bombean, las poleas giran y los trenes
+  circulan al tempo; el humo sale a bocanadas y la red late. STOP es una
+  huelga (todo quieto, el humo tambien). El frente de pattern es un cambio
+  de turno: los focos de sodio se encienden o se apagan en ola (Turno).
   Pulso: beats con el tempo, a 0 con el START (o Masterbeat). Naturaleza:
   el dosel se balancea (Swaymax) y las esporas derivan. Ciudad: trafico por
   las carreteras (Trafico por tramo, un tramo cada dos beats) y ventanas que
@@ -104,6 +109,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
             try:
@@ -300,6 +306,63 @@ def _prueba(t, m):
         and all(m.ventanas_celda(W, c, x, bq) in encendida for x in norte)
     t.check('ciudad: ola de ventanas que se %s al paso del frente' % ('encienden' if nv else 'apagan'),
             sur and norte and ola and nv == 0)
+
+
+def _prueba_industria(t, m):
+    """v3: la industria en el tiempo."""
+    tema0 = str(base.par.Tema.eval())
+    try:
+        _prueba_industria_(t, m)
+    finally:
+        base.par.Tema = tema0
+        base.par.Turno = True
+
+
+def _prueba_industria_(t, m):
+    base.par.Tema = 'industria'
+    c = m.cfg()
+    i = m.note_cell(64)
+    anillo = m.RINGS[m.RING_OF[i]]
+    q = anillo.index(i)
+    W = m.world()
+    m.reset_world()
+    W = m.world()
+    celdas = [(i, m.ARQ, 8)] + [(anillo[(q + k) % len(anillo)], m.GEO, 3) for k in (2, 3)]
+    for x, own, occ in celdas:
+        W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, 100
+        W['h'][x] = W['vh'][x] = m.height_for(c, occ)
+        W['t_nac'][x] = -50.0
+    m.cerrar_obras(W, c)
+    trenes = lambda ins: [tuple(round(v, 4) for v in f[:3]) for f in ins.get('particulas', [])
+                          if tuple(f[9:12]) == (0.18, 0.18, 0.2)]
+    humo = lambda ins: [tuple(round(v, 4) for v in f[:3]) for f in ins.get('particulas', [])
+                        if tuple(round(v, 3) for v in f[9:12]) in [tuple(round(v, 3) for v in col)
+                                                                   for col in m.COL_HUMO.values()]]
+    W['pulso']['beat'] = 1.0
+    a = m.build_instances(W, c, absTime.seconds + 10.0)
+    b = m.build_instances(W, c, absTime.seconds + 12.0)      # STOP: el pulso no avanza (huelga)
+    W['pulso']['beat'] = 2.5
+    d = m.build_instances(W, c, absTime.seconds + 12.0)
+    t.check('industria: %d trenes (locomotoras) y el humo se mueven con el pulso; con el pulso quieto (STOP, '
+            'huelga) todo se queda quieto' % len(trenes(a)),
+            trenes(a) and humo(a) and trenes(a) == trenes(b) and humo(a) == humo(b)
+            and trenes(a) != trenes(d) and humo(a) != humo(d))
+    # el cambio de turno: con el frente a medio pasar, los focos cambian en ola (o no, sin Turno)
+    W['estacion'] = dict(tinte=[1.0, 1.0, 1.0], ventanas=1)
+    m.on_pulse('Frenteprueba')
+    W, c = m.world(), m.cfg()
+    W['pulso']['beat'] = W['frente']['beat0'] + 2.0
+    m.frente_tick(W, c)
+    bq = m.beat_stop(W, c)
+    qf = m.progreso_frente(W, c)
+    sur = [x for x in range(m.N) if m.latitud(x) < m.lat_frente(qf) - 1.0]
+    nv = W['frente']['a']['ventanas']
+    con = set(m.ventanas_celda(W, c, x, bq) in ((1, 4) if nv else (0, 3)) for x in sur)
+    base.par.Turno = False
+    c2 = m.cfg()
+    sin = set(m.ventanas_celda(W, c2, x, bq) in (1, 4) for x in sur)
+    t.check('cambio de turno: el frente enciende o apaga los focos de sodio a su paso; sin Turno, no',
+            con == {True} and sin == {True})
 
 
 run_test(base, prueba)

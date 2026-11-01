@@ -55,7 +55,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase19 v2  (senales del modular: viento, respiracion, esporas, smog, niebla y glitch; rango -10..10 V)'
+VERSION = 'fase19 v3  (industria: el ruido lleva el humo, la saturacion la incandescencia, el LFO el vapor)'
 banner(VERSION)
 
 base = require_base(19)
@@ -109,6 +109,9 @@ piel_al_dia(base, m)                    # el shader con la niebla y el glitch
 set_render(base)
 
 leeme(base, 19, """FASE 19 - SENALES DEL MODULAR
+  v3, industria: el ruido lleva el humo y el smog, la saturacion la
+  incandescencia de coladas y antorchas, y el LFO la respiracion del vapor
+  de las torres de refrigeracion.
   Valores de control (no analisis del audio), de Fuentemodular: osc
   (UDP Puertoosc, /estratos/lfo ruido espacio saturacion), chop
   (Chopmodular), manual o prueba. Rangomodular, Suavizado.
@@ -135,6 +138,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
             try:
@@ -261,6 +265,43 @@ def _prueba(t, m):
             and abs(md['lfo'] - 0.5) < 0.02 and md['saturacion'] < 0.02,
             'lfo %.2f' % md['lfo'])
     t.check('leyenda MODULAR', 'MODULAR' in m.legend() and 'osc :' in m.legend())
+
+
+def _prueba_industria(t, m):
+    """v3: las senales del modular en la industria."""
+    tema0 = str(base.par.Tema.eval())
+    try:
+        base.par.Tema = 'industria'
+        c = m.cfg()
+        i = m.note_cell(64)
+        vec = list(m.NEIGH[i])
+        m.reset_world()
+        W = m.world()
+        for x, own, occ in ((i, m.ARQ, 8), (vec[0], m.GEO, 8), (vec[2], m.ARQ, 4)):
+            W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, 100
+            W['h'][x] = W['vh'][x] = m.height_for(c, occ)
+            W['t_nac'][x] = -50.0
+        m.cerrar_obras(W, c)
+        blanco = tuple(round(v, 3) for v in m.COL_HUMO['blanco'])
+        llama = tuple(round(v, 3) for v in m.COL_LLAMA)
+
+        def medir(ruido, sat, lfo):
+            W['modular'].update(ruido=ruido, saturacion=sat, lfo=lfo, activo=True)
+            ins = m.build_instances(W, c, absTime.seconds + 10.0)
+            ps = ins.get('particulas', [])
+            humo = [f for f in ps if tuple(round(v, 3) for v in f[9:12]) in
+                    [tuple(round(v, 3) for v in col) for col in m.COL_HUMO.values()]]
+            ll = [f[7] for f in ps if tuple(round(v, 3) for v in f[9:12]) == llama]
+            vapor = [f[6] for f in ps if tuple(round(v, 3) for v in f[9:12]) == blanco]
+            return len(humo), max(ll or [0.0]), max(vapor or [0.0])
+        h0, l0, v0 = medir(0.0, 0.0, 0.0)
+        h1, l1, v1 = medir(1.0, 1.0, 1.0)
+        t.check('industria: el ruido sube el humo (%d -> %d), la saturacion aviva la antorcha (%.3f -> %.3f) y el '
+                'LFO hincha el vapor de las torres (%.3f -> %.3f)' % (h0, h1, l0, l1, v0, v1),
+                h1 > h0 and l1 > l0 and v1 > v0)
+    finally:
+        base.par.Tema = tema0
+        m.world()['modular'].update(ruido=0.0, saturacion=0.0, lfo=0.5, activo=False)
 
 
 run_test(base, prueba)

@@ -21,6 +21,36 @@ malla ortogonal.
     (los umbrales son los de la fase 4: Umbralram y, a Pasoumbral, la fusion
     y la corona; el del monte, Umbralmonte)
 
+TEMA INDUSTRIA (v11)
+--------------------
+  Un tercer Tema. La mina (SEQ1) cava, en racimo oblicuo; la energia (SEQ2)
+  transforma, en malla ortogonal. Mismo motor que la ciudad (biblioteca por
+  gramatica, obra, mutantes), con piezas de ingenieria: cilindros, celosias,
+  hiperboloides y troncos de cono, cada una con su rasgo de lectura.
+    mina      brote (bocamina, balancin, cantera), mina con maquinaria
+              (castillete, balancines, trituradora), complejo minero
+              (lavadero), fundicion (altos hornos con colada), refineria
+              (columnas y antorcha)
+    energia   aserradero (cobertizo, secadero), serreria (portico), fabrica
+              (naves de sierra y chimenea), central termica (la primera torre)
+              y central electrica (2-4 torres con penacho, de ella nace la red)
+  RECURSO   con Recursos, la mina lee la concha de abajo (registro de la fase
+            15): carbon (naturaleza), chatarra (ciudad), escoria (industria) o
+            mineral (primera era); terriles y vagonetas de su color.
+  EPOCA     por las eras enterradas (vapor 0-2, acero 3-5, quimica 6+) o fija
+            (Epoca), en directo: cada planta conserva la suya.
+  MUTANTES  CORTA (mina sobre energia: Bancospornota, Maxbancos; se come las
+            naves, luego las calderas; queda la chimenea; agua acida y
+            rotopala desde 4 bancos; no corta conchas) e INTEGRADA (energia
+            sobre mina: Maxbastidor niveles que los castilletes atraviesan).
+  CLUSTER   cuenca minera (terriles fundidos y cable aereo); torres que se
+            alinean: compartida (2-3), fila (4-6), anillo (7+).
+  OBRA      terminada = humea: encofrado deslizante en chimeneas y torres,
+            columna tumbada que iza la grua, poleas al final.
+  HUMO      particulas del motor (negro, gris o vapor blanco; Emisiones,
+            Maxhumo); la nota tine la bocanada de su chimenea. Partes moviles
+            (balancin, poleas, rotopala) al tempo.
+
 CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
 --------------------------------------------------------------------
   Lo mismo que la v8 hizo con la naturaleza. Ninguna etapa es una caja
@@ -175,7 +205,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v10  (ciudad legible: edificios por etapa, lenguajes, obra y construcciones mutantes)'
+VERSION = 'fase11 v11  (tema industria: mina y energia, recurso de la concha, epoca, corta e integrada)'
 banner(VERSION)
 
 base = require_base(11)
@@ -188,7 +218,9 @@ m = motor.module
 
 page = get_page(base, 'Fase11')
 add_par(base, page, 'menu', 'Tema', 'Tema', 'naturaleza', menu=m.TEMAS,
-        menu_labels=['Naturaleza', 'Ciudad'])
+        menu_labels=['Naturaleza', 'Ciudad', 'Industria'])
+if menu_al_dia(base, 'Tema', m.TEMAS, ['Naturaleza', 'Ciudad', 'Industria']):
+    info('v11: Tema gana la industria (naturaleza / ciudad / industria)')
 add_par(base, page, 'float', 'Pesovecina', 'Peso de las vecinas en la presion', 0.5, 0.0, 2.0)
 add_par(base, page, 'float', 'Umbralvecindad', 'Presion para fundirse (cluster)', 4.0, 1.0, 20.0)
 add_par(base, page, 'int', 'Mincluster', 'Celdas minimas de un cluster', 2, 2, 20, clamp=True)
@@ -256,6 +288,17 @@ add_par(base, page, 'int', 'Maxgruas', 'Gruas a la vez', 6, 0, 32, clamp=True)
 add_par(base, page, 'toggle', 'Tinteventanas', 'Una nota enciende las ventanas con el color de su SEQ', True)
 add_par(base, page, 'float', 'Pasostinte', 'Pasos que tarda en apagarse ese color', 4.0, 0.25, 32.0)
 add_par(base, page, 'float', 'Lodciudad', 'Remates pequenos desde (px por celda)', 60.0, 0.0, 400.0)
+# v11: la industria
+add_par(base, page, 'toggle', 'Recursos', 'La mina saca lo que guarda la concha de abajo', True)
+add_par(base, page, 'menu', 'Epoca', 'Epoca de la industria', 'eras', menu=m.EPOCA_MODOS,
+        menu_labels=['Por las eras enterradas', 'Vapor', 'Acero', 'Quimica'])
+add_par(base, page, 'int', 'Variantesind', 'Variantes por diseno (industria)', 3, 1, 6, clamp=True)
+add_par(base, page, 'float', 'Bancospornota', 'Bancos de la corta por nota del SEQ1', 1.0, 0.0, 4.0)
+add_par(base, page, 'int', 'Maxbancos', 'Bancos maximos de la corta', 6, 1, 12, clamp=True)
+add_par(base, page, 'int', 'Maxbastidor', 'Niveles maximos del bastidor (planta integrada)', 3, 1, 6, clamp=True)
+add_par(base, page, 'float', 'Emisiones', 'Humo y vapor de la industria', 0.5, 0.0, 2.0)
+add_par(base, page, 'int', 'Maxhumo', 'Particulas de humo maximas', 6000, 0, 20000, clamp=True)
+add_par(base, page, 'float', 'Lodind', 'Remates pequenos de la industria desde (px por celda)', 60.0, 0.0, 400.0)
 ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
    'Maxpiezas 6, Avance (gates), Pasosetapa 2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
    'Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
@@ -265,7 +308,9 @@ ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Minclust
    '(tresbolillo), Setos; v10: Lenguaje (latitud), Variantesciudad 3, Fijartipo (auto), Oblicuidad 6, '
    'Alturaplanta 0,08, Anchovano 0,05, Retranqueo 0,15, Torsionmax 90, Parasitospornota 4, Maxparasitos 24, '
    'Modulomarco 0,25, Maxmarco 3, Capsulas 0,4, Mutacion 0,5, Mutacionfuente (manual), Obra, '
-   'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60')
+   'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60; v11: Tema + industria, '
+   'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
+   'Maxhumo 6000, Lodind 60')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -335,7 +380,11 @@ leeme(base, 11, """FASE 11 - LA PIEL
   Desfasefachada, Gruas, Maxgruas), construcciones mutantes (colonia:
   Parasitospornota, Maxparasitos; marco: Modulomarco, Maxmarco, Capsulas;
   Mutacion, Mutacionfuente), torres que se buscan en los clusters, el tinte
-  del secuenciador en las ventanas (Tinteventanas, Pasostinte) y Lodciudad.""")
+  del secuenciador en las ventanas (Tinteventanas, Pasostinte) y Lodciudad.
+  v11, tema industria: mina (SEQ1) y energia (SEQ2), del aserradero y la
+  bocamina a la refineria y la central; recurso de la concha de abajo
+  (Recursos), Epoca, corta que devora (Bancospornota, Maxbancos) y planta
+  integrada (Maxbastidor), humo (Emisiones, Maxhumo), Variantesind, Lodind.""")
 
 print_report()
 
@@ -421,7 +470,7 @@ def _prueba(t, m):
                 geos[mo].add(g)
             puentes = sum(len(inst.get(g, [])) for g in geos[pm])
             prot = m.modelos_de(c, tema, esp, 'protagonista')[m.clase_cluster(n_cl)]
-            if tema == 'ciudad':            # v10: la pieza del cluster (pasarela, bucle o losa)
+            if tema in ('ciudad', 'industria'):     # v10-v11: la pieza del cluster (losa, torres...)
                 n_prot = sum((W.get('piel') or {}).get('ciudad', {}).get('protagonistas', {}).values())
             else:
                 n_prot = sum(len(inst.get(g, [])) for g in geos.get(prot, ()))
@@ -451,9 +500,9 @@ def _prueba(t, m):
                 en_obra = len(m.obras_ciudad(W, c))
                 t.check('%s, %s: Sembrarzona x2 -> cluster de %d celdas, %d edificios (%d en obra), %d puentes%s'
                         % (tema, esp, n_cl, edis, en_obra, puentes,
-                           ' y la pieza del cluster' if esp == 'planificada' else ''),
+                           ' y la pieza del cluster' if esp in ('planificada', 'energia') else ''),
                         n_cl == 1 + len(m.NEIGH[i]) and puentes == enlaces > 0 and edis + en_obra >= n_cl
-                        and n_prot == (1 if esp == 'planificada' else 0) and not otro,
+                        and n_prot == (1 if esp in ('planificada', 'energia') else 0) and not otro,
                         'cluster %d, puentes %d de %d, pieza %d, del otro tema %d'
                         % (n_cl, puentes, enlaces, n_prot, len(otro)))
         if tema == 'naturaleza':
@@ -604,6 +653,7 @@ def _prueba(t, m):
             not m._CACHE['inst']['formas_pulidas'])
     _prueba_natural(t, m)
     _prueba_ciudad(t, m)
+    _prueba_industria(t, m)
 
 
 def _prueba_natural(t, m):
@@ -1265,7 +1315,7 @@ def _prueba_ciudad_(t, m):
             'en Pasostinte pasos (%.2f)' % (t1, t2), 2.0 < t1 < 3.0 and t2 == 0.0)
     # 13. la paleta: la misma en el motor y en el shader; sin el azul de los rios ni el cian
     import re
-    txt = PIEL_PIXEL[PIEL_PIXEL.index('const vec3 PALETA[24]'):]
+    txt = PIEL_PIXEL[PIEL_PIXEL.index('const vec3 PALETA['):]
     txt = txt[:txt.index(');')]
     nums = [float(x) for x in re.findall(r'[0-9]+\.[0-9]+', txt)]
     mot = [v for lg in m.PALETA_CIUDAD for col in lg for v in col]
@@ -1335,6 +1385,285 @@ def _prueba_ciudad_(t, m):
     t.check('rendimiento: %d celdas a ocupacion maxima, ciudad %.1f ms por fotograma, naturaleza %.1f ms'
             % (m.N, 1000 * tiempos['ciudad'], 1000 * tiempos['naturaleza']),
             tiempos['ciudad'] <= 1.1 * tiempos['naturaleza'] + 0.002)
+
+
+def _prueba_industria(t, m):
+    """Las pruebas del tema industria (v11)."""
+    guarda = {}
+    for nm in ('Tema', 'Epoca', 'Recursos', 'Mutacion', 'Fijartipo', 'Avance', 'Emisiones'):
+        try:
+            guarda[nm] = getattr(base.par, nm).eval()
+        except Exception:
+            pass
+    try:
+        _prueba_industria_(t, m)
+    finally:
+        for nm, v in guarda.items():
+            try:
+                getattr(base.par, nm).val = v
+            except Exception:
+                pass
+
+
+def _prueba_industria_(t, m):
+    import time
+    base.par.Tema = 'industria'
+    base.par.Epoca = 'eras'
+    base.par.Recursos = True
+    base.par.Fijartipo = 'auto'
+    base.par.Mutacion = 0.5
+    nota = int(base.par.Nota)
+    i = m.note_cell(nota)
+    c = m.cfg()
+    c12 = dict(c, nivel=max(12, c['nivel']), respaldo=0)
+    ahora = absTime.seconds + 10.0
+    unico = [500.0]
+
+    def t_unico():
+        unico[0] += 1.0
+        return unico[0]
+
+    def mundo(celdas, own, occ, vel=100, cerrar=True, cc=None):
+        W = m.new_world()
+        for x in celdas:
+            W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, vel
+            W['h'][x] = W['vh'][x] = m.height_for(m.cfg(), occ)
+            W['t_nac'][x] = -50.0
+        if cerrar:
+            m.cerrar_obras(W, cc or m.cfg())
+        return W
+
+    def edis(inst, celda=None, pref='mod_edi_'):
+        out = []
+        for g, fs in inst.items():
+            if g.startswith(pref):
+                for f in fs:
+                    if celda is None or max(range(m.N), key=lambda x: sum(f[q] * m.NORMALS[x][q]
+                                                                          for q in range(3))) == celda:
+                        out.append((g, f))
+        return out
+
+    def filas(inst, g):
+        return inst.get(m.geometria_de(g), [])
+
+    def humo(inst, cols=None, celda=None):
+        cols = cols or list(m.COL_HUMO.values())
+        return [f for f in inst.get('particulas', []) if tuple(round(v, 3) for v in f[9:12])
+                in [tuple(round(v, 3) for v in col) for col in cols]
+                and (celda is None or max(range(m.N), key=lambda x: sum(f[q] * m.NORMALS[x][q]
+                                                                        for q in range(3))) == celda)]
+
+    # 0. la biblioteca: ninguna pieza desnuda (celosia, bandas, colada, penacho, llama o remate)
+    desnudas = []
+    for d in m.DISENOS_IND:
+        ex = m.edificio(c, d, 0)
+        rasgo = any(v['fach'] in (m.F_CELOSIA, m.F_BANDAS, m.F_INCANDESCENTE, m.F_RETICULA, m.F_SIERRA)
+                    for v in ex['vols']) or ex['fuentes'] or ex['rem']
+        if not rasgo:
+            desnudas.append(d)
+    t.check('biblioteca de la industria: %d disenos x %d variantes; ninguna pieza desnuda'
+            % (len(m.DISENOS_IND), m.variantes_ind(c)), not desnudas and len(m.DISENOS_IND) >= 18,
+            'desnudas: %s' % desnudas)
+    # 1. escalera de la mina: 1 a 9
+    serie = []
+    for o in range(1, 10):
+        W = mundo([i], m.GEO, o)
+        inf = m.info_ciudad(W, c, i)
+        inst = m.build_instances(W, c, ahora)
+        serie.append((o, inf['tipo'], inf['diseno'], len(edis(inst, i))))
+    esperado = ['brote', 'mina', 'mina', 'complejo', 'complejo', 'fundicion', 'fundicion', 'refineria',
+                'refineria']
+    t.check('escalera de la mina 1 -> 9: %s' % ' / '.join('%d %s' % (o, d) for o, _, d, _ in serie),
+            [x[1] for x in serie] == esperado and all(x[3] >= 1 for x in serie), 'tipos %s' % [x[1] for x in serie])
+    # 2. escalera de la energia, con la obra: chimenea deslizante, torre por anillos y primer humo
+    serie = [(o, m.info_ciudad(mundo([i], m.ARQ, o), c, i)['tipo']) for o in range(1, 10)]
+    esperado = ['aserradero', 'serreria', 'serreria', 'fabrica', 'fabrica', 'termica', 'termica', 'central',
+                'central']
+    cg = dict(c12, avance=0)
+    Wo = m.new_world()
+    k = 0
+    while Wo['occ'][i] < 8 and k < 400:
+        m.note_on(Wo, cg, m.ARQ, nota, 100, 100.0 + 0.01 * k, 120.0)
+        k += 1
+    for x in range(m.N):                    # sin los satelites del desborde (humean por su cuenta)
+        if x != i:
+            Wo['occ'][x] = Wo['own'][x] = Wo['sp'][x] = 0
+            Wo['h'][x] = Wo['vh'][x] = 0.0
+    pasos_ = m.pasos_obra('energia', 'central')
+    vistas, encofrado, humo_obra, humo_fin = [], 0, 0, 0
+    for q in range(len(pasos_) + 1):
+        Wo['vh'] = list(Wo['h'])
+        tq = 120.0 + q
+        inst = m.build_instances(Wo, cg, tq + 5.0)
+        vistas.append(m.obras_ciudad(Wo, cg).get(i, 'terminada'))
+        if filas(inst, 'ciu_encofrado'):
+            encofrado += 1
+        if vistas[-1] != 'terminada':
+            humo_obra += len(humo(inst, celda=i))
+        else:
+            humo_fin = len(humo(inst, celda=i))
+        m.note_on(Wo, cg, m.ARQ, nota, 100, tq, 120.0)
+    t.check('escalera de la energia 1 -> 9: %s; la obra: %s (encofrado %d, humo en obra %d, al terminar %d)'
+            % (' / '.join('%d %s' % s_ for s_ in serie), ' -> '.join(vistas), encofrado, humo_obra, humo_fin),
+            [x[1] for x in serie] == esperado and vistas[:len(pasos_)] == pasos_ and vistas[-1] == 'terminada'
+            and encofrado >= 1 and humo_obra == 0 and humo_fin > 0)
+    # 3. recurso: la concha de abajo (naturaleza: carbon; ciudad: chatarra)
+    res3 = []
+    base.par.Fijartipo = '1'                # el castillete, con su terril
+    for tema, rec in (('naturaleza', 'carbon'), ('ciudad', 'chatarra'), (None, 'mineral')):
+        W = mundo([i], m.GEO, 3)
+        if tema:
+            W['shells'] = [dict(tema=tema, esp=[0] * m.N)]
+            W['cols'][i] = [[0, 0.5]]
+        inst = m.build_instances(W, m.cfg(), ahora, tiles=False)
+        terril = [f for f in filas(inst, 'ciu_terril')]
+        res3.append((m.recurso_celda(W, c, i), terril and tuple(terril[0][9:12]) == m.COL_RECURSO[rec]))
+    base.par.Fijartipo = 'auto'
+    t.check('recurso: sobre naturaleza carbon, sobre ciudad chatarra, sin concha mineral (%s); terriles de su color'
+            % ', '.join(r for r, _ in res3), [r for r, _ in res3] == ['carbon', 'chatarra', 'mineral']
+            and all(ok_ for _, ok_ in res3))
+    # 4. epoca: por las eras (vapor, acero, quimica) y fija en directo
+    eps = []
+    for gen in (0, 3, 6):
+        W = mundo([i], m.ARQ, 4, cerrar=False)
+        W['gen'] = gen
+        m.cerrar_obras(W, c)
+        eps.append(m.info_ciudad(W, c, i)['epoca'])
+    t.check('epoca por las eras enterradas: 0 -> vapor, 3 -> acero, 6 -> quimica (%s)' % eps, eps == [0, 1, 2])
+    # 5. corta que devora: fabrica y 1, 3 y 5 notas del SEQ1
+    res5 = []
+    for notas in (1, 3, 5):
+        W = mundo([i], m.ARQ, 4)
+        W['t_nac'][i] = t_unico()
+        cols0 = [list(map(list, x)) for x in W['cols']]
+        for _ in range(notas):
+            m.note_on(W, c, m.GEO, nota, 100, 2.0, 120.0)
+        W['occ'][i] = 4
+        m.cerrar_obras(W, c)
+        W['vh'] = list(W['h'])
+        inst = m.build_instances(W, c, ahora)
+        planta = [g for g, _ in edis(inst, i) if g.startswith('mod_edi_papelera')]
+        res5.append((W['par_vis'][i], len(filas(inst, 'ciu_anillo')), bool(planta),
+                     len([g for g, _ in edis(inst, i) if 'calderas' in g]),
+                     len([g for g, _ in edis(inst, i) if 'chimenea' in g]), len(filas(inst, 'ciu_agua')),
+                     [list(map(list, x)) for x in W['cols']] == cols0))
+    t.check('corta sobre una fabrica: 1, 3 y 5 notas del SEQ1 -> %s bancos; se come las naves, luego las calderas; '
+            'queda la chimenea de testigo; agua acida desde 4; ninguna concha cortada'
+            % '/'.join(str(x[0]) for x in res5),
+            [x[0] for x in res5] == [1, 3, 5] and [x[1] for x in res5] == [1, 3, 5] and not any(x[2] for x in res5)
+            and res5[0][3] == 1 and res5[2][3] == 0 and all(x[4] == 1 for x in res5) and res5[2][5] == 1
+            and res5[0][5] == 0 and all(x[6] for x in res5), str(res5))
+    # 6. planta integrada: complejo minero y 1 y 3 notas del SEQ2
+    res6 = []
+    for notas in (1, 3):
+        W = mundo([i], m.GEO, 4)
+        W['t_nac'][i] = t_unico()
+        for _ in range(notas):
+            m.note_on(W, c, m.ARQ, nota, 100, 2.0, 120.0)
+        W['occ'][i] = 4
+        m.cerrar_obras(W, c)
+        W['vh'] = list(W['h'])
+        inst = m.build_instances(W, c, ahora)
+        inf = m.info_ciudad(W, c, i)
+        cast = max(v['y1'] for v in inf['ex']['vols'] if v['rol'] == 'castillete')
+        res6.append(((W['marco_vis'][i] + 1) // 2, len(filas(inst, 'ciu_bastidor')), cast > 0.5 + 1e-6,
+                     len([g for g, _ in edis(inst, i) if 'chimenea' in g])))
+    t.check('planta integrada sobre un complejo minero: 1 y 3 notas del SEQ2 -> bastidor de %d y %d niveles; los '
+            'castilletes lo atraviesan; la chimenea corona desde el segundo nivel' % (res6[0][0], res6[1][0]),
+            res6[0][0] == 1 and res6[1][0] == 3 and res6[1][1] == 3 * res6[0][1] > 0 and all(x[2] for x in res6)
+            and res6[0][3] == 0 and res6[1][3] == 1, str(res6))
+    # 7. torres que se alinean: clusters de energia de 2, 5 y 8 celdas
+    def cluster_de(n_celdas):
+        celdas = [i]
+        frente = list(m.NEIGH[i])
+        while len(celdas) < n_celdas and frente:
+            x = frente.pop(0)
+            if x not in celdas and not m.is_pole(x):
+                celdas.append(x)
+                frente += [y for y in m.NEIGH[x] if y not in celdas]
+        W = mundo(celdas, m.ARQ, 7)
+        cl = m.clusters(W, c)
+        tf, _ = m.objetivos(W, c, cl)
+        for x in celdas:
+            W['et_f'][x] = W['ant_et_f'][x] = tf[x]
+            W['mut'][x] = 0.5
+        m.build_instances(W, c, ahora)
+        return list(W['piel'].get('ciudad', {}).get('protagonistas', {}))
+    p2, p5, p8 = cluster_de(2), cluster_de(5), cluster_de(8)
+    t.check('torres que se alinean: clusters de 2, 5 y 8 celdas -> %s, %s y %s' % (p2, p5, p8),
+            p2 == ['torre compartida'] and p5 == ['fila de torres'] and p8 == ['anillo de torres'])
+    # 8. tinte: una nota sobre una planta suelta una bocanada del color de su secuenciador
+    W = mundo([i], m.ARQ, 6)
+    W['t_gate'][i], W['lat_s'][i] = ahora, 2
+    W['paso'] = 0.125
+    inst = m.build_instances(W, c, ahora)
+    sq = m.seq_color(c, 2)
+    tenidas = [f for f in inst.get('particulas', []) if abs(f[9] - m.COL_HUMO['negro'][0]) > 0.05
+               and abs(f[9] - m.COL_HUMO['gris'][0]) > 0.05 and abs(f[9] - m.COL_HUMO['blanco'][0]) > 0.02
+               and f[9] > f[11]]
+    t.check('tinte: una nota del SEQ2 sobre una central termica suelta una bocanada de su color (%d particulas)'
+            % len(tenidas), tenidas and sq[0] > sq[2])
+    # 9. partes moviles al tempo: el balancin cabecea
+    W = mundo([i], m.GEO, 2)
+    base.par.Fijartipo = '2'
+    cm = m.cfg()
+    W['pulso']['beat'] = 0.0
+    r1 = [tuple(f[3:6]) for f in filas(m.build_instances(W, cm, 100.0), 'ciu_balancin')]
+    W['pulso']['beat'] = 0.25               # desde la fase 17, el pulso (master_beat)
+    r2 = [tuple(f[3:6]) for f in filas(m.build_instances(W, cm, 100.31), 'ciu_balancin')]
+    base.par.Fijartipo = 'auto'
+    t.check('partes moviles: los balancines cabecean al tempo (%d)' % len(r1), r1 and r1 != r2)
+    # 10. lectura a distancia: la industria frente a la ciudad, a 20 px
+    ind_ = m.silueta_edificio(c, 'central', 0, 20, 30)
+    peor = max(m.iou(ind_, m.silueta_edificio(c, d, 0, 20, 30)) for d in ('prisma', 'deco', 'podio', 'tubos'))
+    blanca = m.PALETA_CIUDAD[m.PALETA_IND + 1][3]
+    brillo = any(v['fach'] == m.F_INCANDESCENTE for v in m.edificio(c, 'altohorno', 0)['vols'])
+    t.check('a 20 px la central se distingue de la ciudad (el mas parecido, %.2f): torres blancas (%.2f), humo y '
+            'brillo naranja de la colada' % (peor, min(blanca)), peor < 0.75 and min(blanca) > 0.7 and brillo
+            and m.edificio(c, 'central', 0)['fuentes'])
+    # 10b. el violeta de la red, reservado: fuera de la paleta de conchas (y de la industria)
+    tonos = [m.palette_hue(n, c['paleta_tono'], m.bandas_de(c)) for n in range(200)]
+    t.check('el violeta de la red queda fuera de la paleta de conchas (%d generaciones) y de la industria'
+            % len(tonos), not any(m.BANDA_RED[0] <= h < m.BANDA_RED[1] for h in tonos)
+            and all(col[2] <= max(col[0], col[1]) + 0.02 for fila in m.PALETA_CIUDAD[m.PALETA_IND:] for col in fila))
+    # 11. leyenda INDUSTRIA
+    m.reset_world()
+    Wl = m.world()
+    for x, v, o in ((i, m.GEO, 4), (m.NEIGH[i][0], m.ARQ, 8), (m.NEIGH[i][1], m.ARQ, 4)):
+        Wl['occ'][x], Wl['own'][x], Wl['sp'][x], Wl['vel'][x] = o, v, v, 100
+        Wl['h'][x] = Wl['vh'][x] = m.height_for(m.cfg(), o)
+        Wl['t_nac'][x] = -50.0
+    Wl['sp'][m.NEIGH[i][1]] = m.HIB
+    Wl['par_vis'][m.NEIGH[i][1]] = 4
+    m.cerrar_obras(Wl, m.cfg())
+    Wl['par_vis'][m.NEIGH[i][1]] = 4
+    m.build_instances(Wl, m.cfg(), absTime.seconds + 10.0)
+    ley = m.legend()
+    t.check('leyenda INDUSTRIA (epoca, recursos, plantas, humo) y CORTA',
+            'INDUSTRIA  época vapor   recursos' in ley and 'humo' in ley and 'CORTA    celda' in ley,
+            ' '.join(l.strip() for l in ley.split('\n') if 'INDUSTRIA' in l or 'CORTA' in l))
+    # 12. rendimiento: las 85 celdas al maximo con el humo en Maxhumo, frente a la ciudad
+    tiempos = {}
+    for tema in ('ciudad', 'industria'):
+        base.par.Tema = tema
+        cc = m.cfg()
+        W = mundo(range(m.N), m.GEO, 14, cerrar=False)
+        for x in range(0, m.N, 3):
+            W['own'][x] = W['sp'][x] = m.ARQ
+        m.cerrar_obras(W, cc)
+        m.build_instances(W, cc, absTime.seconds + 10.0)
+        ts = []
+        for _ in range(9):
+            t0 = time.time()
+            m.build_instances(W, cc, absTime.seconds + 10.0)
+            ts.append(time.time() - t0)
+        tiempos[tema] = min(ts)
+        if tema == 'industria':
+            nh = W['piel'].get('ciudad', {}).get('humo', 0)
+    base.par.Tema = 'industria'
+    t.check('rendimiento: %d celdas al maximo, industria %.1f ms (humo %d de %d), ciudad %.1f ms'
+            % (m.N, 1000 * tiempos['industria'], nh, int(c['max_humo']), 1000 * tiempos['ciudad']),
+            tiempos['industria'] <= 1.1 * tiempos['ciudad'] + 0.002 and nh <= int(c['max_humo']))
 
 run_test(base, prueba)
 print('  Ahora: Sembrarzona dos veces (pagina Fase11) y mira el cluster, sus')
