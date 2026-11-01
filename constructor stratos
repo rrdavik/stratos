@@ -26,3 +26,8 @@ exec(open('C:/Users/DareDave/Downloads/est/fase19_modular.py').read())
 
 # ajuste de la vista (opcional): pone los valores calibrados aunque los hayas tocado a mano
 exec(open('C:/Users/DareDave/Downloads/est/ajuste_vista.py').read())
+
+
+# TODO DE UNA VEZ: recarga todas las fases en orden (3 a 21, las que haya) y para en la primera que falle.
+# Sustituye a lanzar las de arriba a mano; no hace falta lanzar las dos cosas.
+exec(open('C:/Users/DareDave/Downloads/est/recargar_todo.py').read())
