@@ -239,6 +239,41 @@ def escena_ciudad(m):
     return c, W, t, anillo[2], otro[3]
 
 
+def escena_industria(m):
+    """Fase 11 v11: la industria. La escalera de la mina (1, 2, 4, 6, 8) y la de
+    la energia (1, 2, 4, 6, 8), una corta y una planta integrada; las vias y la red."""
+    c = dict(m.DEFAULT_CFG)
+    c.update(nivel=17, tema=2, avance=0)
+    W = m.new_world()
+    W['estacion'] = dict(tinte=[1.0, 1.0, 1.0], ventanas=1)
+    anillo, otro = m.RINGS[3], m.RINGS[4]
+
+    def poner(x, own, occ, vel=100):
+        W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, vel
+        W['h'][x] = W['vh'][x] = m.height_for(c, occ)
+        W['t_nac'][x] = -50.0
+    for k, o in enumerate((1, 2, 4, 6, 8)):
+        poner(anillo[k], m.GEO, o, 90 + 7 * k)
+        poner(otro[k], m.ARQ, o, 60 + 11 * k)
+    m.cerrar_obras(W, c)
+    co = otro[7]
+    poner(co, m.ARQ, 4)
+    W['t_nac'][co] = 9.0
+    for _ in range(5):
+        m.note_on(W, c, m.GEO, m.cell_note(co), 100, 1.0, 120.0)
+    W['occ'][co] = 4
+    it = anillo[7]
+    poner(it, m.GEO, 4)
+    W['t_nac'][it] = 10.0
+    for _ in range(3):
+        m.note_on(W, c, m.ARQ, m.cell_note(it), 100, 1.0, 120.0)
+    W['occ'][it] = 4
+    m.cerrar_obras(W, c)
+    W['paso'] = 0.125
+    W['pulso']['beat'] = 3.3
+    return c, W, 2.0, anillo[2], otro[3]
+
+
 def esfera(filas=256, cols=512):
     """La malla del terreno: esfera unidad (posicion y normal)."""
     v = []
@@ -407,6 +442,19 @@ def main():
         print('       ciudad legible: %d edificios de %d tipos, lenguajes F/T/C %s, colonias %s, marcos %s'
               % (pz.get('edificios', 0), pz.get('tipos', 0), pz.get('lenguajes'), pz.get('colonias'),
                  pz.get('marcos')))
+    if hasattr(m, 'DISENOS_IND'):               # fase 11 v11: la industria, cerca y lejos
+        c, W, now, a, b = escena_industria(m)
+        m.build_instances(W, c, now)
+        mid = m._norm(m._add(m.normal_i(a), m.normal_i(b)))
+        R = m.top_radius(W, c)
+        for dist in (R * 1.75, R * 4.6):
+            cam = m._add(m._mul(mid, dist), m._mul(m.tangents(mid)[1], dist * 0.18))
+            img, inst = dibujar(ctx, prog, m, c, W, now, cam, m._mul(mid, R * 0.85))
+            imgs.append(img)
+        pz = W['piel'].get('ciudad', {})
+        print('       industria: %d plantas de %d tipos, epocas %s, cortas %s, integradas %s, humo %d'
+              % (pz.get('edificios', 0), pz.get('tipos', 0), pz.get('epocas'), pz.get('cortas'),
+                 pz.get('integradas'), pz.get('humo', 0)))
     filas_img = [fila(imgs[0], imgs[1]), fila(imgs[2], imgs[3])]
     for k in range(4, len(imgs) - 1, 2):
         filas_img.append(fila(imgs[k], imgs[k + 1]))

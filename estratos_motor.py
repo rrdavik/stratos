@@ -55,7 +55,11 @@
 #                 gramatica (un tipo por etapa, con variantes; la fachada en
 #                 el shader), lenguajes por latitud, la obra entre etapas,
 #                 colonia y marco como construcciones mutantes y torres que
-#                 se buscan en los clusters).
+#                 se buscan en los clusters; motor v68, fase 11 v11: el tema
+#                 industria, con mina y energia, recurso de la concha de abajo,
+#                 epoca por las eras, corta y planta integrada, vias y red
+#                 electrica (fase 13), grisu y apagon (14), y su sitio en las
+#                 fases 15 a 19).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -68,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v67'
+MOTOR_VERSION = 'motor v68'
 
 import math
 
@@ -8795,9 +8799,6 @@ def build_industria_tejido(W, cfg, now, out):
     paso = W.get('paso') or 0.125
     spb = max(1, int(cfg.get('steps_per_beat', 4)))
     tau = beat_stop(W, cfg) if cfg['nivel'] >= 17 else now / max(1e-6, paso * spb)
-
-    fc = t.get('fc') or {}
-    red = t.get('red') or {}
     clave = (_clave_tej_ind(W, cfg, t), doce)
     fijo = _TEJ_IND.get('fijo')
     if fijo is None or fijo[0] != clave:       # viaductos, torres y los extremos de los pulsos: se guardan
