@@ -164,7 +164,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v16  (pagina mas corta: cada intensidad a 0 apaga lo suyo)'
+VERSION = 'fase7 v17  (autoprueba: el giro y el balanceo se leen de frame_u, comun v49)'
 banner(VERSION)
 
 base = require_base(7)
@@ -730,8 +730,8 @@ def prueba(t):
                 for col in cd['colores_drum'] for ref in (cian, ambar, blanco)))
     geo = base.op('luz_celda')
     t.check('luz_celda gira y se balancea con el planeta',
-            geo is not None and 'rotation(' in (geo.par.ry.expr or '')
-            and 'wobble(' in (geo.par.rx.expr or ''))
+            geo is not None and any(x in (geo.par.ry.expr or '') for x in ('rotation(', "frame_u')['ry']"))
+            and any(x in (geo.par.rx.expr or '') for x in ('wobble(', "frame_u')['rx']")))
     t.check('leyenda EROSION (pad 4)', 'EROSION' in m.legend() and 'IMPULSO' not in m.legend())
     prueba_impulso(t, m, cd)
 

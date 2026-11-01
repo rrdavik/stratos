@@ -88,7 +88,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v13  (pagina mas corta: carga y frenada, luz de celda, material, balanceo, polos)'
+VERSION = 'fase3 v14  (autoprueba: el giro y el balanceo se leen de frame_u, comun v49)'
 banner(VERSION)
 
 base = require_base(3)
@@ -209,7 +209,7 @@ def prueba(t):
     leg = m.legend()
     t.check('leyenda MUNDO', 'MUNDO' in leg and ('ocupadas %d/%d' % (m.occupied(W), m.N)) in leg)
     sin_bal = [n for n in ('nucleo', 'reticula', 'luz_celda', 'formas_pulidas', 'formas_porosas')
-               if 'wobble(' not in (base.op(n).par.rx.expr or '')]
+               if not any(x in (base.op(n).par.rx.expr or '') for x in ('wobble(', "frame_u')['rx']"))]
     t.check('balanceo del eje en el planeta', not sin_bal,
             'sin balanceo: %s' % ', '.join(sin_bal) if sin_bal else '')
     # luz de celda: la nota del SEQ1 enciende el centro de su celda

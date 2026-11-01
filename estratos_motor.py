@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v68'
+MOTOR_VERSION = 'motor v69'
 
 import math
 
@@ -11129,6 +11129,13 @@ def frame_tick():
         if o is not None:
             o.cook(force=True)
     terreno_al_dia_td(W, c)
+    render_tema_al_dia(c)               # motor v69: el render, solo con el tema actual
+    fu = parent().op('frame_u')         # motor v69: giro y uniformes, una vez por fotograma
+    if fu is not None:
+        try:
+            fu.cook(force=True)
+        except Exception:
+            pass
     W['dirty'] = False
 
 
@@ -11642,6 +11649,88 @@ def guardar_escena(nombre=None):
 
 
 # --- balanceo del eje (rotacion extra, desde la fase 3) ----------------------
+
+def canales_frame(spec, frame=None):
+    """Motor v69 (comun v49): los canales del Script CHOP 'frame_u', una vez por
+    fotograma: el giro del planeta (ry), el balanceo del eje (rx) y los uniformes de
+    la piel que pide spec [(canal, tipo, nombre, k)]: piel (uniformes_piel), luz
+    (color x dimmer de una luz), mod (las senales del modular) y ventanas."""
+    out = []
+    try:
+        out.append(('ry', float(_ritmo().rotation(frame))))
+    except Exception:
+        out.append(('ry', 0.0))
+    try:
+        out.append(('rx', float(wobble(frame))))
+    except Exception:
+        out.append(('rx', 0.0))
+    for canal, tipo, nombre, k in spec or ():
+        try:
+            if tipo == 'piel':
+                v = piel_uniforme(nombre, k, frame)
+            elif tipo == 'luz':
+                v = luz_color(nombre, k, frame)
+            elif tipo == 'mod':
+                v = modular_uniforme(nombre, k, frame)
+            elif tipo == 'ventanas':
+                v = ventanas_luz(frame)
+            else:
+                v = 0.0
+        except Exception:
+            v = 0.0
+        out.append((canal, float(v)))
+    return out
+
+
+def temas_de_modelo(mo):
+    """Motor v69: los temas en los que se ve la geometria de un modelo. Las de los
+    cortes (fos_, arq_, las galerias de la industria) se ven en todos: ensenan las
+    eras de cualquier tema."""
+    if es_ejemplar(mo) or mo.startswith(('veg_', 'rel_')):
+        return ('naturaleza',)
+    if es_edificio(mo):
+        return ('industria',) if parte_edificio(mo)[0] in INDUSTRIALES else ('ciudad',)
+    if mo in ('ind_crater', 'ind_ruina', 'ind_hollin'):
+        return ('industria',)
+    if mo == 'inf_escombros':
+        return ('ciudad',)
+    if mo.startswith('ciu_'):
+        return ('ciudad', 'industria')
+    return tuple(TEMAS)
+
+
+def geometrias_activas(cfg):
+    """Las geometrias de los modelos que pueden tener instancias con el tema actual."""
+    tema = tema_de(cfg)
+    return [g for g, mo, _ in geometrias_piel(cfg) if tema in temas_de_modelo(mo)]
+
+
+def render_tema_al_dia(c):
+    """Motor v69: el Render TOP solo dibuja las geometrias del tema actual (con las
+    ~300 de los tres temas, TouchDesigner cocinaba y dibujaba las vacias en cada
+    fotograma). Se rehace al cambiar de tema o si una fase rehizo la lista."""
+    if c['nivel'] < 11:
+        return False
+    try:
+        r = parent().op('render')
+        actual = str(r.par.geometry.eval())
+    except Exception:
+        return False
+    clave = (tema_de(c), c['nivel'] < 12, variantes(c), variantes_ciudad(c), variantes_ind(c))
+    if _CACHE.get('render_tema') == clave and _CACHE.get('render_str') == actual:
+        return False
+    nombres = actual.split()
+    resto = [n for n in nombres if not n.startswith('mod_')]
+    activos = sorted(set(geometrias_activas(c)))
+    k = resto.index('coronas') if 'coronas' in resto else len(resto)
+    nuevo = ' '.join(resto[:k] + activos + resto[k:])
+    try:
+        r.par.geometry = nuevo
+    except Exception:
+        return False
+    _CACHE['render_tema'], _CACHE['render_str'] = clave, nuevo
+    return True
+
 
 def wobble(frame=None):
     try:
