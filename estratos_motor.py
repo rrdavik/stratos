@@ -193,6 +193,7 @@ def pads_corte(cfg):
     impulso no corta, tenga la profundidad que tenga."""
     return [k for k, p in enumerate(cfg['perfiles']) if p[2] > 0 and not es_impulso(cfg, k)]
 
+COL_RED_DEF = (0.62, 0.30, 0.95)           # el violeta electrico de la red de la industria (reservado)
 DEFAULT_CFG = dict(
     nivel=3,
     core_radius=6.0,
@@ -245,6 +246,11 @@ DEFAULT_CFG = dict(
     retranqueo=0.15, torsion_max=90.0, parasitos_por_nota=4, max_parasitos=24, modulo_marco=0.25,
     max_marco=3, capsulas=0.4, mutacion=0.5, mutacion_fuente=0, obra=1, desfase_fachada=2, gruas=1,
     max_gruas=6, tinte_ventanas=1, pasos_tinte=4, lod_ciudad=60.0,
+    # fase 11 v11 (motor v68): la industria (13 v7: vias y red; 14 v4: apagon y grisu; 17 v3: turno)
+    recursos=1, epoca=0, variantes_ind=3, bancos_por_nota=1.0, max_bancos=6, max_bastidor=3,
+    emisiones=0.5, max_humo=6000, lod_ind=60.0,
+    vias=1, red=1, min_red=2, ancho_via=0.14, pulso_red=1, color_red=COL_RED_DEF,
+    apagon=1, grisu=1, turno=1,
     # fase 12: moduladores
     material_modo=1, rug_min=0.05, rug_max=0.85, vigor_max=1.5, plantas_ligado=2,
     gate_prueba=0.5, respaldo=0,
@@ -2864,6 +2870,73 @@ def _modelos():
     M['ciu_pilar'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
     M['ciu_nucleo'] = [_losa(-0.5, 0.5, 0.0, 0.9, -0.5, 0.5), _losa(-0.56, 0.56, 0.86, 1.0, -0.56, 0.56)]
     M['ciu_tierra'] = [_cono(0.0, 0.0, 0.0, 1.0, 1.0)]
+    # ------------------------- la industria (fase 11 v11, motor v68): remates y obra
+    M['ciu_terril'] = [_cono(0.0, 0.0, 0.0, 1.0, 1.0), _cono(0.22, 0.0, 0.1, 0.6, 0.7)]
+    M['ciu_vagoneta'] = [_losa(-0.5, 0.5, 0.3, 1.0, -0.4, 0.4), _hexa(-0.3, 0.15, 0.0, 0.3, 0.3, 90.0, 0.0, 0.0),
+                         _hexa(0.3, 0.15, 0.0, 0.3, 0.3, 90.0, 0.0, 0.0)]
+    M['ciu_railes'] = [_losa(-0.5, 0.5, 0.0, 0.4, -0.5, 0.5), _losa(-0.35, -0.25, 0.4, 1.0, -0.5, 0.5),
+                       _losa(0.25, 0.35, 0.4, 1.0, -0.5, 0.5)]
+    # la polea (gira) y el balancin (cabecea): partes moviles, el motor les da la fase
+    M['ciu_polea'] = [_losa(-0.08, 0.08, 0.0, 1.0, -0.06, 0.06), _losa(-0.08, 0.08, 0.44, 0.56, -0.5, 0.5),
+                      _caja(0.0, 0.5, 0.0, 0.16, 0.1, 0.96, 45.0, 0.0, 0.0),
+                      _caja(0.0, 0.5, 0.0, 0.16, 0.1, 0.96, -45.0, 0.0, 0.0)]
+    M['ciu_balancin'] = [_losa(-0.5, 0.35, 0.4, 0.6, -0.12, 0.12), _losa(0.3, 0.5, 0.0, 1.0, -0.14, 0.14),
+                         _losa(-0.5, -0.36, 0.0, 0.4, -0.1, 0.1)]
+    M['ciu_tuberia'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
+    M['ciu_cinta'] = [_losa(-0.5, 0.5, 0.6, 1.0, -0.5, 0.5), _losa(-0.1, 0.1, 0.0, 0.6, -0.1, 0.1)]
+    M['ciu_troncos'] = [_hexa(x, 0.2 + 0.35 * f, z, 0.32, 1.0, 90.0, 0.0, 0.0)
+                        for f, (x, z) in enumerate(((-0.33, 0.0), (0.0, 0.0), (0.33, 0.0), (-0.16, 0.0), (0.16, 0.0)))]
+    M['ciu_troncos'] = _a_alto_uno(M['ciu_troncos'])
+    M['ciu_tablones'] = [_losa(-0.5, 0.5, y, y + 0.18, z - 0.08, z + 0.08) for y in (0.0, 0.4, 0.8)
+                         for z in (-0.3, 0.0, 0.3)]
+    M['ciu_portico'] = [_losa(-0.5, -0.42, 0.0, 1.0, -0.5, 0.5), _losa(0.42, 0.5, 0.0, 1.0, -0.5, 0.5),
+                        _losa(-0.5, 0.5, 0.88, 1.0, -0.12, 0.12)]
+    M['ciu_ciclon'] = [_cono(0.0, 0.0, 0.0, 1.0, 1.0, 180.0, 0.0, 0.0)]
+    M['ciu_ciclon'] = _a_alto_uno(M['ciu_ciclon'])
+    M['ciu_subestacion'] = ([_losa(x - 0.04, x + 0.04, 0.0, 1.0, z - 0.04, z + 0.04) for x in (-0.4, 0.0, 0.4)
+                             for z in (-0.4, 0.4)] + [_losa(-0.5, 0.5, 0.9, 1.0, z - 0.03, z + 0.03) for z in (-0.4, 0.4)]
+                            + [_losa(-0.2, 0.2, 0.0, 0.4, -0.2, 0.2)])
+    M['ciu_rotopala'] = [_hexa(-0.3, 0.6, 0.0, 0.8, 0.12, 90.0, 0.0, 0.0), _losa(-0.3, 0.5, 0.45, 0.55, -0.06, 0.06),
+                         _losa(0.2, 0.5, 0.0, 0.3, -0.3, 0.3)]
+    # la corta: un anillo de banco (octogono hueco) y el agua acida del fondo
+    M['ciu_anillo'] = [_caja(0.43 * math.cos(math.radians(45 * k)), 0.5, 0.43 * math.sin(math.radians(45 * k)),
+                             0.16, 1.0, 0.42, 0.0, -45.0 * k, 0.0) for k in range(8)]
+    M['ciu_agua'] = [_hexa(0.0, 0.5, 0.0, 1.0, 1.0)]
+    # la planta integrada: un modulo de bastidor con tuberias de colores
+    M['ciu_bastidor'] = ([_losa(x - 0.03, x + 0.03, 0.0, 1.0, z - 0.03, z + 0.03) for x in (-0.47, 0.47)
+                          for z in (-0.47, 0.47)]
+                         + [_losa(-0.5, 0.5, 0.92, 1.0, -0.5, 0.5)]
+                         + [_losa(-0.5, 0.5, 0.55, 0.65, z - 0.05, z + 0.05) for z in (-0.2, 0.15)])
+    # obra: el encofrado (deslizante o trepante) y la columna tumbada que iza la grua
+    M['ciu_encofrado'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, -0.4), _losa(-0.5, 0.5, 0.0, 1.0, 0.4, 0.5),
+                          _losa(-0.5, -0.4, 0.0, 1.0, -0.4, 0.4), _losa(0.4, 0.5, 0.0, 1.0, -0.4, 0.4)]
+    M['ciu_columna'] = [_hexa(0.0, 0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 90.0)]
+    M['ciu_columna'] = _a_alto_uno(M['ciu_columna'])
+    # el tejido de la industria (fase 13): torre de alta tension, poste y viaducto de celosia
+    M['ciu_torre'] = [_caja(-0.25, 0.5, 0.0, 0.06, 1.0, 0.06, 0.0, 0.0, -12.0),
+                      _caja(0.25, 0.5, 0.0, 0.06, 1.0, 0.06, 0.0, 0.0, 12.0),
+                      _losa(-0.5, 0.5, 0.78, 0.82, -0.03, 0.03), _losa(-0.35, 0.35, 0.92, 0.95, -0.03, 0.03)]
+    M['ciu_poste'] = [_losa(-0.08, 0.08, 0.0, 1.0, -0.08, 0.08), _losa(-0.5, 0.5, 0.86, 0.92, -0.05, 0.05)]
+    M['ciu_viaducto'] = ([_losa(-0.5, 0.5, 0.86, 1.0, -0.5, 0.5)] + [_losa(-0.42, -0.34, 0.0, 0.86, z - 0.04, z + 0.04)
+                                                                    for z in (-0.4, 0.0, 0.4)]
+                         + [_losa(0.34, 0.42, 0.0, 0.86, z - 0.04, z + 0.04) for z in (-0.4, 0.0, 0.4)])
+    # huellas de la industria (fase 14): crater de hundimiento, ruina de nave y hollin
+    M['ind_crater'] = [_caja(0.43 * math.cos(math.radians(60 * k)), 0.3, 0.43 * math.sin(math.radians(60 * k)),
+                             0.2, 0.6, 0.5, 0.0, -60.0 * k, 20.0) for k in range(6)] + [_hexa(0.0, 0.05, 0.0, 0.6, 0.1)]
+    M['ind_ruina'] = ([_losa(x - 0.03, x + 0.03, 0.0, 1.0, z - 0.03, z + 0.03) for x in (-0.4, 0.0, 0.4)
+                       for z in (-0.3, 0.3)] + [_losa(-0.45, 0.45, 0.0, 0.35, -0.36, -0.3),
+                                                _caja(0.1, 0.8, 0.0, 0.6, 0.04, 0.05, 0.0, 0.0, 18.0)])
+    M['ind_hollin'] = [_hexa(0.0, 0.03, 0.0, 1.0, 0.06), _hexa(0.15, 0.3, -0.1, 0.12, 0.6),
+                       _caja(-0.2, 0.15, 0.2, 0.5, 0.06, 0.06, 0.0, 30.0, 0.0)]
+    # lo que ensenan los cortes de la industria (fase 16): galeria entibada, vagoneta fosil y pozo
+    M['ind_galeria'] = [_losa(-0.5, 0.5, 0.0, 0.1, -0.5, 0.5), _losa(-0.5, -0.38, 0.1, 0.8, -0.5, 0.5),
+                        _losa(0.38, 0.5, 0.1, 0.8, -0.5, 0.5), _losa(-0.5, 0.5, 0.8, 0.92, -0.5, 0.5),
+                        _losa(-0.3, -0.26, 0.1, 0.8, -0.5, 0.5), _losa(0.26, 0.3, 0.1, 0.8, -0.5, 0.5)]
+    M['ind_vagoneta'] = [_caja(0.0, 0.4, 0.0, 0.8, 0.4, 0.5, 0.0, 0.0, 14.0), _hexa(-0.25, 0.1, 0.0, 0.2, 0.2, 90.0),
+                         _hexa(0.25, 0.1, 0.0, 0.2, 0.2, 90.0)]
+    M['ind_pozo'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, -0.38), _losa(-0.5, 0.5, 0.0, 1.0, 0.38, 0.5),
+                     _losa(-0.5, -0.38, 0.0, 1.0, -0.38, 0.38), _losa(0.38, 0.5, 0.0, 1.0, -0.38, 0.38),
+                     _losa(-0.05, 0.05, 0.0, 1.0, -0.05, 0.05)]
     # ------------------------------------------------------------ obras de la ciudad
     M['ciu_valla'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, -0.47), _losa(-0.5, 0.5, 0.0, 1.0, 0.47, 0.5),
                       _losa(-0.5, -0.47, 0.0, 1.0, -0.47, 0.47), _losa(0.47, 0.5, 0.0, 1.0, -0.47, 0.47)]
@@ -3586,16 +3659,32 @@ DISENOS_TIPO = dict(caseta=['chabola', 'contenedor', 'cubo'], casa=['laje'], tre
                     pabellon=['sierra', 'pilotis'], bloque=['lamina', 'punto', 'hache'],
                     manzana=['cerda', 'peine'], podio=['podio'],
                     rascacielos=['deco', 'tubos', 'torsion', 'prisma'])
+# fase 11 v11 (motor v68): la industria. La mina (SEQ1) cava, en racimo oblicuo; la
+# energia (SEQ2) transforma, en malla ortogonal
+TIPOS.update(mina=['brote', 'mina', 'complejo', 'fundicion', 'refineria'],
+             energia=['aserradero', 'serreria', 'fabrica', 'termica', 'central'])
+DISENOS_TIPO.update(brote=['bocamina', 'balancin', 'cantera'], mina=['castillete', 'balancines', 'trituradora'],
+                    complejo=['lavadero'], fundicion=['altohorno'], refineria=['refineria'],
+                    aserradero=['aserradero', 'secadero'], serreria=['serreria'], fabrica=['papelera'],
+                    termica=['termica'], central=['central'])
+PIEZAS_IND = ['torreref', 'chimenea', 'calderas']    # torres del cluster, testigo y calderas de la corta
 TIPO_DE_DISENO = dict((d, t) for t, ds in DISENOS_TIPO.items() for d in ds)
-PASOS_OBRA = ['solar', 'excavacion', 'nucleo', 'esqueleto', 'fachada', 'coronacion', 'bloque']
+PASOS_OBRA = ['solar', 'excavacion', 'nucleo', 'esqueleto', 'fachada', 'coronacion', 'bloque', 'estructura',
+              'montaje', 'puesta']
 PIEZAS_EDI = ['cuarto', 'capsula', 'zocalo']     # parasitos, capsulas y el zocalo de los puentes
 DISENOS = [d for t in TIPOS['informal'] + TIPOS['planificada'] for d in DISENOS_TIPO[t]] + PIEZAS_EDI
+DISENOS_IND = [d for t in TIPOS['mina'] + TIPOS['energia'] for d in DISENOS_TIPO[t]] + PIEZAS_IND
+DISENOS = DISENOS + DISENOS_IND
+INDUSTRIALES = set(DISENOS_IND)
 INFORMALES = set(d for t in TIPOS['informal'] for d in DISENOS_TIPO[t]) | {'cuarto'}
 RASCACIELOS = DISENOS_TIPO['rascacielos']
 # formas del catalogo que no son ejemplares: los hibridos y las piezas del cluster
-CIUDAD_FORMAS = ['colonia', 'marco', 'pasarela', 'bucle', 'losa', 'pasarelas', 'corredores', 'kowloon']
-FACHADAS = ['ciega', 'reticula', 'irregular', 'corona', 'zocalo', 'capsula', 'loggia', 'sierra']
+CIUDAD_FORMAS = ['colonia', 'marco', 'pasarela', 'bucle', 'losa', 'pasarelas', 'corredores', 'kowloon',
+                 'corta', 'integrada', 'cuenca', 'torre compartida', 'fila de torres', 'anillo de torres']
+FACHADAS = ['ciega', 'reticula', 'irregular', 'corona', 'zocalo', 'capsula', 'loggia', 'sierra',
+            'incandescente', 'bandas', 'celosia']
 F_CIEGA, F_RETICULA, F_IRREGULAR, F_CORONA, F_ZOCALO, F_CAPSULA, F_LOGGIA, F_SIERRA = range(8)
+F_INCANDESCENTE, F_BANDAS, F_CELOSIA = 8, 9, 10     # industria: colada, chimenea con bandas, celosia
 # materias (slots): 0-3 las plantas informales (cada una de un color), 4 cubierta o
 # estructura informal, 5 cuerpo planificado, 6 piedra o zocalo, 7 estructura
 SLOT_TECHO, SLOT_CUERPO, SLOT_PIEDRA, SLOT_ESTRUCTURA = 4, 5, 6, 7
@@ -3611,7 +3700,19 @@ PALETA_CIUDAD = (
     # calido: cal y celosia
     ((0.92, 0.90, 0.85), (0.71, 0.53, 0.38), (0.90, 0.76, 0.40), (0.90, 0.68, 0.62),
      (0.64, 0.52, 0.42), (0.90, 0.89, 0.86), (0.81, 0.74, 0.62), (0.55, 0.42, 0.30)),
+    # industria (fase 11 v11), por epoca. Materias: ladrillo u obra, estructura, oxido,
+    # hormigon de torre, cubierta, cuerpo de nave, bandas de chimenea, tuberias.
+    # vapor: ladrillo rojo, hierro remachado y madera
+    ((0.55, 0.24, 0.17), (0.16, 0.15, 0.14), (0.50, 0.28, 0.16), (0.70, 0.68, 0.64),
+     (0.20, 0.18, 0.17), (0.58, 0.27, 0.19), (0.62, 0.22, 0.16), (0.42, 0.30, 0.20)),
+    # acero: hormigon y acero pintado
+    ((0.60, 0.59, 0.56), (0.42, 0.44, 0.40), (0.52, 0.30, 0.18), (0.78, 0.77, 0.74),
+     (0.28, 0.28, 0.29), (0.55, 0.56, 0.54), (0.78, 0.24, 0.20), (0.85, 0.70, 0.20)),
+    # quimica: acero blanco, aluminio y tuberias de colores
+    ((0.88, 0.88, 0.86), (0.78, 0.79, 0.80), (0.55, 0.33, 0.20), (0.90, 0.90, 0.88),
+     (0.60, 0.61, 0.62), (0.92, 0.92, 0.90), (0.85, 0.26, 0.20), (0.90, 0.50, 0.15)),
 )
+PALETA_IND = 3               # las filas de la industria empiezan aqui (3 + epoca)
 COL_BLOQUE = (0.56, 0.56, 0.54)          # bloque gris sin revocar
 COL_REMATE = dict(deposito=(0.10, 0.10, 0.11), antena=(0.36, 0.36, 0.38), maquinaria=(0.46, 0.46, 0.47),
                   varillas=(0.42, 0.24, 0.16), escalera=(0.50, 0.48, 0.45), cable=(0.06, 0.06, 0.06),
@@ -3620,19 +3721,29 @@ COL_REMATE = dict(deposito=(0.10, 0.10, 0.11), antena=(0.36, 0.36, 0.38), maquin
                   sierra=(0.48, 0.48, 0.50), aguja=(0.78, 0.74, 0.64), pasarela=(0.40, 0.38, 0.36),
                   corredor=(0.52, 0.42, 0.32), losa=(0.72, 0.72, 0.70), bucle=(0.20, 0.21, 0.22),
                   marco=(0.62, 0.62, 0.64), pilar=(0.58, 0.58, 0.60), nucleo=(0.60, 0.59, 0.56),
-                  tierra=(0.42, 0.33, 0.24), balcon=(0.70, 0.66, 0.56), pretil=(0.85, 0.83, 0.78))
+                  tierra=(0.42, 0.33, 0.24), balcon=(0.70, 0.66, 0.56), pretil=(0.85, 0.83, 0.78),
+                  # industria (fase 11 v11)
+                  terril=(0.10, 0.10, 0.10), vagoneta=(0.12, 0.11, 0.10), railes=(0.30, 0.28, 0.26),
+                  polea=(0.20, 0.19, 0.18), balancin=(0.90, 0.72, 0.16), tuberia=(0.80, 0.55, 0.15),
+                  cinta=(0.30, 0.30, 0.30), troncos=(0.48, 0.32, 0.18), tablones=(0.70, 0.55, 0.36),
+                  portico=(0.92, 0.75, 0.15), ciclon=(0.70, 0.70, 0.68), subestacion=(0.55, 0.55, 0.56),
+                  rotopala=(0.85, 0.66, 0.18), unagua=(0.4, 0.4, 0.4), dosaguas=(0.4, 0.4, 0.4))
 COL_BALIZA = (1.0, 0.18, 0.08)           # la baliza de la grua (particula)
 REMATES_LOD = ('varillas', 'escalera', 'cable', 'toldo', 'bidon', 'chimenea', 'pretil', 'balcon')
 H_TOPE = 2.1                 # ningun edificio pasa de 2,1 x el limite (la camara lo encuadra)
 HUECO_FACHADA = 0.95
+FUENTES = ('humo', 'penacho', 'llama', 'baliza')     # industria: de donde sale el humo (particulas)
+MOVILES = ('polea', 'balancin', 'rotopala')          # industria: las partes que se mueven al tempo
 
 
 def _v(x, z, w, d, y0, y1, fach=F_RETICULA, slot=SLOT_CUERPO, hueco=0.5, giro=0.0, forma='rect',
-       hm=1.0, vm=1.0, pila=-1):
-    """Un volumen de la gramatica: planta (rect u oct) de w x d centrada en x z,
-    de y0 a y1 en plantas, girada 'giro' grados; datos de fachada."""
+       hm=1.0, vm=1.0, pila=-1, top=1.0, rol=''):
+    """Un volumen de la gramatica: planta (rect, oct o cil: un cilindro de 12
+    lados) de w x d centrada en x z, de y0 a y1 en plantas, girada 'giro'
+    grados; 'top' estrecha la tapa (troncos de cono, hiperboloides, taludes);
+    datos de fachada; 'rol' (industria: nave, calderas, chimenea...)."""
     return dict(x=x, z=z, w=w, d=d, y0=y0, y1=y1, fach=fach, slot=slot, hueco=hueco, giro=giro,
-                forma=forma, hm=hm, vm=vm, pila=pila)
+                forma=forma, hm=hm, vm=vm, pila=pila, top=top, rol=rol)
 
 
 def _rem(tipo, x, y, z, s=0.08, alto=1.0, giro=0.0, vol=-1, largo=None):
@@ -3954,12 +4065,231 @@ def _gen_prisma(G):
     G.add(_v(0.0, 0.0, s * 0.94, s * 0.28, 19.0, 22.0, fach=F_CORONA, slot=SLOT_CUERPO, hueco=0.8))
 
 
+# --- la industria (fase 11 v11, motor v68): las piezas de ingenieria --------------
+# Aqui si valen las primitivas (cilindros, celosias, hiperboloides, troncos de
+# cono), pero ninguna va desnuda: cada pieza lleva su rasgo de lectura (anillos,
+# celosia, penacho, llama). Materias de la industria: 0 ladrillo u obra, 1
+# estructura metalica, 2 oxido, 3 hormigon de torre, 4 cubierta, 5 cuerpo de nave,
+# 6 bandas de chimenea, 7 tuberias de color (la paleta, por epoca). Fuentes: 'humo'
+# (chimenea), 'penacho' (torre de refrigeracion) y 'llama' (antorcha).
+
+def _cil(G, x, z, r, y0, y1, slot=1, fach=F_CIEGA, top=1.0, rol='', hueco=0.5):
+    return G.add(_v(x, z, 2 * r, 2 * r, y0, y1, fach=fach, slot=slot, forma='cil', top=top, rol=rol,
+                    hueco=hueco))
+
+
+def _chimenea(G, x, z, r, alto, slot=6, rol='chimenea', balizas=False):
+    """Chimenea con bandas (y balizas): un tronco de cono; la fuente de humo arriba."""
+    k = _cil(G, x, z, r, 0.0, alto, slot=slot, fach=F_BANDAS, top=0.7, rol=rol)
+    G.rem.append(_rem('humo', x, alto, z, s=r * 1.4, alto=0.0, vol=k))
+    if balizas:
+        G.rem.append(_rem('baliza', x, alto * 0.98, z, s=r, alto=0.0, vol=k))
+    return k
+
+
+def _torre_ref(G, x, z, r, alto, rol='torre'):
+    """Torre de refrigeracion: un hiperboloide de seis rodajas (la cintura a los
+    dos tercios) con el penacho arriba."""
+    perfil = [1.0, 0.86, 0.76, 0.70, 0.69, 0.72, 0.78]
+    k = 0
+    for q in range(6):
+        k = _cil(G, x, z, r * perfil[q], alto * q / 6.0, alto * (q + 1) / 6.0, slot=3,
+                 top=perfil[q + 1] / perfil[q], rol=rol)
+    G.rem.append(_rem('penacho', x, alto, z, s=r * 1.5, alto=0.0, vol=k))
+    return k
+
+
+def _castillete(G, x, z, alto, giro=0.0, rol='castillete'):
+    """El castillete: torre de celosia inclinada con dos poleas (la A con ruedas)."""
+    k = G.add(_v(x, z, 0.12, 0.12, 0.0, alto, fach=F_CELOSIA, slot=1, top=0.55, giro=giro, rol=rol))
+    G.add(_v(x + 0.09, z, 0.03, 0.10, 0.0, alto * 0.8, fach=F_CELOSIA, slot=1, giro=giro - 25.0, rol=rol))
+    for dz in (-0.03, 0.03):
+        G.rem.append(_rem('polea', x, alto, z + dz, s=0.07, alto=0.8, giro=giro, vol=k))
+    return k
+
+
+def _gen_bocamina(G):
+    k = G.add(_v(0.0, -0.08, 0.6, 0.42, 0.0, 1.6, fach=F_CIEGA, slot=4, top=0.55, rol='talud'))
+    G.add(_v(0.0, 0.16, 0.12, 0.08, 0.0, 0.6, fach=F_CIEGA, slot=1, rol='galeria'))
+    G.rem += [_rem('vagoneta', 0.08, 0.0, 0.3, s=0.07, alto=0.45, vol=k),
+              _rem('railes', 0.0, 0.0, 0.32, s=0.06, alto=0.05, largo=0.36, vol=k),
+              _rem('terril', -0.3, 0.0, 0.3, s=0.2, alto=1.0, vol=k)]
+
+
+def _gen_balancin(G):
+    for q, (x, z) in enumerate(((0.0, 0.0), (0.24, 0.2))[:1 + G.var % 2]):
+        G.add(_v(x, z, 0.22, 0.08, 0.0, 0.3, fach=F_CIEGA, slot=1, rol='base'))
+        k = G.add(_v(x, z, 0.04, 0.06, 0.3, 1.5, fach=F_CELOSIA, slot=7, top=0.6, rol='poste'))
+        G.rem.append(_rem('balancin', x, 1.5, z, s=0.26, alto=0.5, vol=k))
+    kt = _cil(G, -0.26, -0.18, 0.08, 0.0, 0.9, slot=2, rol='tanque')
+    G.rem.append(_rem('terril', 0.28, 0.0, -0.26, s=0.14, alto=0.6, vol=kt))
+
+
+def _gen_cantera(G):
+    for q in range(3):
+        G.add(_v(0.0, 0.0, 0.62 - 0.14 * q, 0.5 - 0.12 * q, 0.5 * q, 0.5 * q + 0.5, fach=F_CIEGA, slot=2,
+                 top=0.9, rol='banco'))
+    G.rem += [_rem('mastil', 0.2, 1.5, 0.1, s=0.06, alto=1.6, vol=2),
+              _rem('terril', -0.32, 0.0, 0.3, s=0.18, alto=0.8, vol=0)]
+
+
+def _gen_castillete(G):
+    _castillete(G, -0.12, 0.0, 6.0, giro=round(G.u(-G.obl, G.obl), 1))
+    G.add(_v(0.14, 0.0, 0.26, 0.22, 0.0, 2.2, fach=F_RETICULA, slot=0, hueco=0.35, rol='maquinas'))
+    G.rem += [_rem('terril', 0.22, 0.0, 0.3, s=0.26, alto=2.2, vol=0),
+              _rem('vagoneta', -0.1, 0.0, 0.24, s=0.06, alto=0.4, vol=0)]
+
+
+def _gen_balancines(G):
+    for q in range(3):
+        x, z = -0.3 + 0.3 * q, -0.2 + 0.18 * (q % 2)
+        G.add(_v(x, z, 0.2, 0.07, 0.0, 0.3, fach=F_CIEGA, slot=1, rol='base'))
+        k = G.add(_v(x, z, 0.04, 0.05, 0.3, 1.5, fach=F_CELOSIA, slot=7, top=0.6, rol='poste'))
+        G.rem.append(_rem('balancin', x, 1.5, z, s=0.24, alto=0.5, vol=k))
+    for x in (-0.15, 0.15):
+        _cil(G, x, 0.26, 0.09, 0.0, 1.2, slot=2, rol='tanque')
+
+
+def _gen_trituradora(G):
+    for q in range(2):
+        G.add(_v(-0.2, -0.15, 0.4 - 0.12 * q, 0.34 - 0.1 * q, 0.5 * q, 0.5 * q + 0.5, fach=F_CIEGA, slot=2,
+                 top=0.9, rol='banco'))
+    k = G.add(_v(0.2, 0.15, 0.22, 0.2, 0.0, 2.0, fach=F_RETICULA, slot=5, hueco=0.3, rol='trituradora'))
+    G.rem += [_rem('cinta', 0.0, 1.2, 0.0, s=0.04, alto=0.15, giro=40.0, vol=k, largo=0.5),
+              _rem('terril', 0.3, 0.0, -0.28, s=0.18, alto=1.2, vol=k)]
+
+
+def _gen_lavadero(G):
+    """Complejo minero: lavadero en alto con tolvas, dos castilletes, cintas, terriles y cable."""
+    k = G.add(_v(0.0, 0.0, 0.3, 0.22, 2.0, 4.0, fach=F_RETICULA, slot=5, hueco=0.35, rol='lavadero'))
+    for x in (-0.11, 0.11):
+        G.add(_v(x, 0.0, 0.04, 0.18, 0.0, 2.0, fach=F_CELOSIA, slot=1, rol='lavadero'))
+    _castillete(G, -0.3, -0.24, 7.0, giro=round(G.u(-G.obl, G.obl), 1))
+    _castillete(G, 0.28, -0.26, 6.0, giro=round(G.u(-G.obl, G.obl), 1))
+    G.add(_v(-0.2, 0.26, 0.2, 0.16, 0.0, 1.6, fach=F_RETICULA, slot=0, hueco=0.35, rol='maquinas'))
+    G.rem += [_rem('cinta', -0.15, 2.6, -0.12, s=0.04, alto=0.15, giro=-50.0, vol=k, largo=0.36),
+              _rem('cinta', 0.15, 2.6, -0.12, s=0.04, alto=0.15, giro=50.0, vol=k, largo=0.36),
+              _rem('terril', 0.32, 0.0, 0.3, s=0.28, alto=2.6, vol=k),
+              _rem('terril', -0.36, 0.0, 0.08, s=0.22, alto=2.0, vol=k),
+              _rem('cable', 0.0, 4.6, 0.3, s=0.02, alto=0.05, giro=90.0, vol=k, largo=0.9)]
+
+
+def _gen_altohorno(G):
+    """Fundicion: altos hornos (troncos de cono de oxido) con la colada
+    incandescente al pie, estufas de aire caliente y tuberias de gas."""
+    for x in ((0.0,) if G.var % 3 == 1 else (-0.14, 0.18)):
+        _cil(G, x, -0.05, 0.035, 0.0, 0.5, slot=0, fach=F_INCANDESCENTE, rol='colada')
+        _cil(G, x, -0.05, 0.1, 0.5, 3.5, slot=2, top=0.62, rol='horno')
+        _cil(G, x, -0.05, 0.06, 3.5, 5.0, slot=1, top=0.8, rol='horno')
+    for q in range(3):
+        _cil(G, -0.28 + 0.14 * q, 0.26, 0.055, 0.0, 4.2, slot=1, rol='estufa')
+    G.rem += [_rem('tuberia', 0.0, 4.2, 0.12, s=0.03, alto=0.1, giro=30.0, vol=0, largo=0.4),
+              _rem('tuberia', 0.1, 3.2, 0.2, s=0.03, alto=0.1, giro=-35.0, vol=0, largo=0.3),
+              _rem('humo', 0.18, 5.0, -0.05, s=0.12, alto=0.0, vol=0)]
+
+
+def _gen_refineria(G):
+    """Refineria: haz de columnas de destilacion, bastidores de tuberias, tanques
+    de techo flotante y la antorcha con su llama."""
+    altos = [11.0, 9.0, 13.0, 8.0, 10.0]
+    for q, a in enumerate(altos[:3 + G.var % 3]):
+        _cil(G, -0.22 + 0.09 * q, -0.12 + 0.05 * (q % 2), 0.035, 0.0, a, slot=3, rol='columna')
+    G.add(_v(0.0, 0.08, 0.5, 0.08, 0.0, 2.2, fach=F_CELOSIA, slot=7, rol='bastidor'))
+    for x, z in ((0.24, 0.26), (-0.08, 0.3), (0.3, -0.12)):
+        _cil(G, x, z, 0.1, 0.0, 0.9, slot=3, rol='tanque')
+    k = _cil(G, 0.36, 0.36, 0.015, 0.0, 14.0, slot=1, rol='antorcha')
+    G.rem.append(_rem('llama', 0.36, 14.0, 0.36, s=0.06, alto=0.0, vol=k))
+
+
+def _gen_aserradero(G):
+    for x in (-0.2, 0.2):
+        for z in (-0.14, 0.14):
+            G.add(_v(x, z, 0.03, 0.03, 0.0, 1.2, fach=F_CIEGA, slot=7, rol='cobertizo'))
+    k = G.add(_v(0.0, 0.0, 0.08, 0.06, 0.0, 0.5, fach=F_CIEGA, slot=1, rol='sierra'))
+    G.rem += [_rem('dosaguas', 0.0, 1.2, 0.0, s=0.48, alto=0.6, vol=k, largo=0.36),
+              _rem('troncos', -0.1, 0.0, 0.3, s=0.3, alto=0.5, vol=k),
+              _rem('tablones', 0.28, 0.0, -0.3, s=0.2, alto=0.3, vol=k)]
+
+
+def _gen_secadero(G):
+    for q in range(4):
+        G.add(_v(-0.3 + 0.2 * q, 0.0, 0.16, 0.3, 0.0, 1.0, fach=F_CIEGA, slot=0, rol='horno'))
+    _chimenea(G, 0.36, 0.24, 0.035, 2.6, slot=0)
+    G.rem.append(_rem('troncos', 0.0, 0.0, 0.32, s=0.4, alto=0.5, vol=0))
+
+
+def _gen_serreria(G):
+    G.add(_v(0.0, -0.14, 0.5, 0.26, 0.0, 1.8, fach=F_SIERRA, slot=5, hueco=0.6, rol='nave'))
+    k = _cil(G, 0.32, 0.22, 0.08, 0.0, 2.4, slot=3, rol='silo')
+    G.rem += [_rem('portico', 0.0, 0.0, 0.26, s=0.5, alto=2.2, vol=k, largo=0.3),
+              _rem('troncos', -0.1, 0.0, 0.26, s=0.36, alto=0.5, vol=k),
+              _rem('ciclon', 0.32, 2.4, 0.22, s=0.12, alto=0.8, vol=k),
+              _rem('cinta', 0.16, 1.2, 0.06, s=0.03, alto=0.1, giro=-40.0, vol=k, largo=0.3)]
+
+
+def _gen_papelera(G):
+    """Fabrica: naves en peine con dientes de sierra, chimenea de ladrillo y depositos."""
+    for q in range(3):
+        k = G.add(_v(-0.1, -0.3 + 0.2 * q, 0.56, 0.17, 0.0, 1.8, fach=F_SIERRA, slot=5, hueco=0.6, rol='nave'))
+        G.rem.append(_rem('sierra', -0.1, 1.8, -0.3 + 0.2 * q, s=0.56, alto=0.5, vol=k, largo=0.17))
+    _chimenea(G, 0.32, 0.3, 0.04, 6.0, slot=0)
+    for z in (-0.2, 0.05):
+        _cil(G, 0.32, z, 0.07, 0.0, 1.4, slot=3, rol='deposito')
+
+
+def _calderas(G, x, z, w, d, alto):
+    return G.add(_v(x, z, w, d, 0.0, alto, fach=F_RETICULA, slot=5, hueco=0.4, rol='calderas'))
+
+
+def _gen_termica(G):
+    _calderas(G, -0.16, -0.08, 0.3, 0.26, 4.0)
+    G.add(_v(-0.16, 0.18, 0.4, 0.16, 0.0, 2.0, fach=F_SIERRA, slot=5, hueco=0.6, rol='nave'))
+    _chimenea(G, 0.06, -0.3, 0.045, 12.0)
+    _torre_ref(G, 0.27, 0.18, 0.15, 5.0)
+    G.rem += [_rem('terril', -0.34, 0.0, -0.32, s=0.2, alto=1.0, vol=0),
+              _rem('cinta', -0.25, 1.4, -0.22, s=0.03, alto=0.1, giro=45.0, vol=0, largo=0.25)]
+
+
+def _gen_central(G):
+    """Central electrica: 2-4 torres de refrigeracion con penacho, chimenea muy alta
+    con balizas, sala de turbinas y subestacion. De aqui nace la red."""
+    n = 2 + G.var % 3
+    sitios = [(0.22, 0.22), (-0.22, 0.24), (0.24, -0.2), (-0.02, 0.34)][:n]
+    for x, z in sitios:
+        _torre_ref(G, x, z, 0.13, 6.0)
+    _calderas(G, -0.22, -0.16, 0.26, 0.22, 4.0)
+    G.add(_v(-0.02, -0.3, 0.3, 0.12, 0.0, 2.4, fach=F_RETICULA, slot=5, hueco=0.5, rol='turbinas'))
+    _chimenea(G, -0.36, 0.0, 0.035, 18.0, balizas=True)
+    G.rem.append(_rem('subestacion', 0.3, 0.0, -0.36, s=0.18, alto=1.0, vol=0))
+
+
+def _gen_torreref(G):
+    _torre_ref(G, 0.0, 0.0, 0.45, 6.0)
+
+
+def _gen_chimenea(G):
+    _chimenea(G, 0.0, 0.0, 0.12, 12.0)
+
+
+def _gen_calderas(G):
+    _calderas(G, 0.0, 0.0, 0.8, 0.7, 4.0)
+
+
+_GEN_IND = dict(bocamina=_gen_bocamina, balancin=_gen_balancin, cantera=_gen_cantera,
+                castillete=_gen_castillete, balancines=_gen_balancines, trituradora=_gen_trituradora,
+                lavadero=_gen_lavadero, altohorno=_gen_altohorno, refineria=_gen_refineria,
+                aserradero=_gen_aserradero, secadero=_gen_secadero, serreria=_gen_serreria,
+                papelera=_gen_papelera, termica=_gen_termica, central=_gen_central,
+                torreref=_gen_torreref, chimenea=_gen_chimenea, calderas=_gen_calderas)
+
+
 _GEN_EDI = dict(chabola=_gen_chabola, contenedor=_gen_contenedor, cubo=_gen_cubo, laje=_gen_laje,
                 voladizo=_gen_voladizo, racimo=_gen_racimo, kowloon=_gen_kowloon, dentada=_gen_dentada,
                 cuarto=_gen_cuarto, capsula=_gen_capsula, zocalo=_gen_zocalo, sierra=_gen_sierra,
                 pilotis=_gen_pilotis, lamina=_gen_lamina, punto=_gen_punto, hache=_gen_hache,
                 cerda=_gen_cerda, peine=_gen_peine, podio=_gen_podio, deco=_gen_deco, tubos=_gen_tubos,
                 torsion=_gen_torsion, prisma=_gen_prisma)
+_GEN_EDI.update(_GEN_IND)
 _EDIFICIOS = {}
 
 
@@ -3996,7 +4326,8 @@ def edificio(cfg, diseno, var):
     xs = [abs(v['x']) + 0.5 * max(v['w'], v['d']) * (1.42 if v['giro'] else 1.0) for v in G.vols]
     e = _EDIFICIOS[k] = dict(diseno=diseno, var=int(var), vols=vols, rem=rem, alto=alto,
                              modo='corte' if diseno == 'dentada' else 'escala',
-                             informal=diseno in INFORMALES, radio=min(0.5, max(xs)),
+                             informal=diseno in INFORMALES, industrial=diseno in INDUSTRIALES,
+                             fuentes=[r for r in rem if r['tipo'] in FUENTES], radio=min(0.5, max(xs)),
                              pilas=sorted(set(v['pila'] for v in G.vols)))
     return e
 
@@ -4016,13 +4347,32 @@ def variantes_ciudad(cfg):
 
 
 VARIANTES_CIU_TD = None
+VARIANTES_IND_TD = None
+
+
+def variantes_ind(cfg):
+    """Variantes por diseno de la industria: Variantesind, sin pasar de las que tienen geometria."""
+    global VARIANTES_IND_TD
+    v = max(1, int(cfg.get('variantes_ind', 3)))
+    if VARIANTES_IND_TD is None:
+        try:
+            VARIANTES_IND_TD = int(me.fetch('variantes_ind_td', 0))
+        except Exception:
+            VARIANTES_IND_TD = 0
+    if VARIANTES_IND_TD:
+        v = min(v, VARIANTES_IND_TD)
+    return v
+
+
+def variantes_de(cfg, diseno):
+    return variantes_ind(cfg) if diseno in INDUSTRIALES else variantes_ciudad(cfg)
 
 
 def biblioteca_ciudad(cfg):
-    """Precalcula la biblioteca de la ciudad. Devuelve el numero de ejemplares."""
+    """Precalcula la biblioteca de la ciudad y la industria. Devuelve el numero de ejemplares."""
     n = 0
     for d in DISENOS:
-        for v in range(variantes_ciudad(cfg)):
+        for v in range(variantes_de(cfg, d)):
             edificio(cfg, d, v)
             n += 1
     return n
@@ -4034,7 +4384,7 @@ def nombre_edificio(diseno, var):
 
 def edificios_de(cfg):
     """Los nombres de los ejemplares de la ciudad que necesita TD."""
-    return [nombre_edificio(d, v) for d in DISENOS for v in range(variantes_ciudad(cfg))]
+    return [nombre_edificio(d, v) for d in DISENOS for v in range(variantes_de(cfg, d))]
 
 
 def es_edificio(nombre):
@@ -4053,7 +4403,10 @@ def _planta_vol(v):
     """Los vertices (x, z) de la planta de un volumen, en orden (antihorario
     visto desde arriba), girados y en su sitio."""
     w, d = v['w'] / 2.0, v['d'] / 2.0
-    if v['forma'] == 'oct':
+    if v['forma'] in ('cil', 'cil6'):
+        n = 12 if v['forma'] == 'cil' else 6
+        pts = [(w * math.cos(2 * math.pi * k / n), d * math.sin(2 * math.pi * k / n)) for k in range(n)]
+    elif v['forma'] == 'oct':
         c = 0.29 * min(w, d) * 2.0
         pts = [(-w + c, -d), (w - c, -d), (w, -d + c), (w, d - c), (w - c, d), (-w + c, d), (-w, d - c),
                (-w, -d + c)]
@@ -4084,13 +4437,17 @@ def malla_edificio(nombre, cfg=None):
         pl = _planta_vol(vol)
         y0, y1 = vol['y0'], vol['y1']
         m = len(pl)
+        tp = float(vol.get('top', 1.0))     # la tapa, estrechada hacia su centro
+        pt = [(vol['x'] + (x - vol['x']) * tp, vol['z'] + (z - vol['z']) * tp) for x, z in pl]
         for k in range(m):                  # las caras de los lados
             a, b = pl[k], pl[(k + 1) % m]
+            at, bt = pt[k], pt[(k + 1) % m]
             nx, nz = b[1] - a[1], -(b[0] - a[0])
             ln = math.sqrt(nx * nx + nz * nz) or 1.0
-            nrm = (nx / ln, 0.0, nz / ln)
+            sube = ((a[0] + b[0] - at[0] - bt[0]) * nx + (a[1] + b[1] - at[1] - bt[1]) * nz) / (2.0 * ln)
+            nrm = _norm((nx / ln, sube / max(1e-6, y1 - y0) if tp != 1.0 else 0.0, nz / ln))
             k0 = len(P)
-            for x, y, z in ((a[0], y0, a[1]), (b[0], y0, b[1]), (b[0], y1, b[1]), (a[0], y1, a[1])):
+            for x, y, z in ((a[0], y0, a[1]), (b[0], y0, b[1]), (bt[0], y1, bt[1]), (at[0], y1, at[1])):
                 P.append((x, y, z))
                 Nn.append(nrm)
                 U.append(uv)
@@ -4099,7 +4456,7 @@ def malla_edificio(nombre, cfg=None):
             if ny < 0 and y0 < 1e-6:
                 continue
             k0 = len(P)
-            for x, z in pl:
+            for x, z in (pt if ny > 0 else pl):
                 P.append((x, y, z))
                 Nn.append((0.0, ny, 0.0))
                 U.append(uv)
@@ -4145,11 +4502,12 @@ def silueta_edificio(cfg, diseno, var=0, px=20, ref=None, lado=False):
 # operacion) sale del mapa logistico sembrado con la velocidad fundadora y
 # la celda; la ocupacion dice cuantas piezas lleva el compuesto.
 
-TEMAS = ['naturaleza', 'ciudad']
+TEMAS = ['naturaleza', 'ciudad', 'industria']      # fase 11 v11: la industria
 AVANCES = ['gates', 'pasos']
 ESTADOS = ['semilla', 'crecimiento', 'ramificacion', 'fusion', 'coronacion']
 ESPECIES = {('naturaleza', GEO): 'vegetacion', ('naturaleza', ARQ): 'relieve',
-            ('ciudad', GEO): 'informal', ('ciudad', ARQ): 'planificada'}
+            ('ciudad', GEO): 'informal', ('ciudad', ARQ): 'planificada',
+            ('industria', GEO): 'mina', ('industria', ARQ): 'energia'}
 CATALOGO_COLS = ['tema', 'especie', 'estado', 'variante', 'modelo']
 
 
@@ -4192,25 +4550,46 @@ def _catalogo_defecto():
     add('ciudad', 'informal', 'hibrido', ['marco'])           # la planificada sobrevuela la informal
     add('ciudad', 'planificada', 'hibrido', ['colonia'])      # la informal coloniza la planificada
     add('ciudad', 'planificada', 'remate', ['ciu_aguja'])
+    # fase 11 v11: la industria, como la ciudad: un tipo por etapa, con sus disenos
+    for esp in ('mina', 'energia'):
+        tipos = TIPOS[esp]
+        for k, tipo in enumerate(tipos):
+            add('industria', esp, 'etapa%d' % (k + 1), DISENOS_TIPO[tipo])
+        for estado, k in zip(ESTADOS, (0, 1, 2, 3, 4)):
+            add('industria', esp, estado, DISENOS_TIPO[tipos[k]])
+    add('industria', 'mina', 'puente', ['ciu_terril'])        # la cuenca: terriles fundidos y cable aereo
+    add('industria', 'energia', 'puente', ['ciu_tuberia'])    # tuberias y cintas entre las plantas
+    add('industria', 'mina', 'protagonista', ['cuenca', 'cuenca', 'cuenca'])
+    add('industria', 'energia', 'protagonista', ['torre compartida', 'fila de torres', 'anillo de torres'])
+    add('industria', 'mina', 'hibrido', ['integrada'])        # la energia se monta encima de la mina
+    add('industria', 'energia', 'hibrido', ['corta'])         # la mina se come la planta
     for tema, esp, mo in (('naturaleza', 'vegetacion', 'veg_claro'), ('naturaleza', 'relieve', 'rel_pedregal'),
                           ('ciudad', 'informal', 'inf_escombros'), ('ciudad', 'planificada', 'ciu_valla')):
         add(tema, esp, 'huella', [mo])     # fase 14: lo que deja una catastrofe
     for obra in ('valla', 'foso', 'andamio', 'grua'):
         add('ciudad', 'obra', obra, ['ciu_' + obra])
+        add('industria', 'obra', obra, ['ciu_' + obra])
+    for esp, mo in (('mina', 'ind_crater'), ('energia', 'ind_ruina'), ('refineria', 'ind_hollin')):
+        add('industria', esp, 'huella', [mo])        # fase 14: lo que deja una catastrofe industrial
     # fase 16: lo que ensenan los cortes, en la pared (expuesto) y en el fondo
     for tema, esp, pared, fondo in (('naturaleza', 'vegetacion', ['fos_tronco', 'fos_tronco2'], ['fos_tronco']),
                                     ('naturaleza', 'relieve', ['fos_basalto'], ['fos_basalto']),
                                     ('ciudad', 'informal', ['arq_cimientos'], ['arq_cimientos']),
                                     ('ciudad', 'planificada', ['arq_sotano'], ['arq_cimientos']),
-                                    ('ciudad', 'calle', ['arq_calle'], ['arq_calle'])):
+                                    ('ciudad', 'calle', ['arq_calle'], ['arq_calle']),
+                                    ('industria', 'mina', ['ind_galeria', 'ind_vagoneta'], ['ind_pozo']),
+                                    ('industria', 'energia', ['arq_sotano'], ['arq_cimientos'])):
         add(tema, esp, 'expuesto', pared)
         add(tema, esp, 'fondo', fondo)
     add('ciudad', 'galeria', 'union', ['arq_galeria'])
+    add('industria', 'galeria', 'union', ['ind_galeria'])
     cadenas = {('naturaleza', 'vegetacion'): (['inclinar', 'puentes', 'hundir', 'esporas'], ['emerger']),
                ('naturaleza', 'relieve'): (['soldadura', 'relleno'], ['soldadura', 'relleno']),
                ('ciudad', 'informal'): (['soldadura', 'relleno'], ['soldadura', 'relleno']),
                ('ciudad', 'planificada'): (['solar', 'excavacion', 'obreros', 'andamio'],
-                                           ['grua', 'fachada', 'aguja'])}
+                                           ['grua', 'fachada', 'aguja']),
+               ('industria', 'mina'): (['soldadura', 'relleno'], ['soldadura', 'relleno']),
+               ('industria', 'energia'): (['solar', 'excavacion', 'obreros', 'andamio'], ['grua', 'fachada'])}
     for (tema, esp), (cf, cc) in sorted(cadenas.items()):
         add(tema, esp, 'cadena fusion', cf)
         add(tema, esp, 'cadena corona', cc)
@@ -4721,7 +5100,8 @@ def geometrias_piel(cfg=None):
     porosa (mat_poroso); desde la fase 12, una por modelo con el material de
     su familia."""
     cfg = cfg or DEFAULT_CFG
-    clave = (cfg['nivel'] < 12, variantes(cfg), VARIANTES_TD, variantes_ciudad(cfg), VARIANTES_CIU_TD)
+    clave = (cfg['nivel'] < 12, variantes(cfg), VARIANTES_TD, variantes_ciudad(cfg), VARIANTES_CIU_TD,
+             variantes_ind(cfg), VARIANTES_IND_TD)
     v = _GEOS_CACHE.get(clave)
     if v is not None:
         return v
@@ -5053,9 +5433,49 @@ def build_piel(W, cfg, now, out):
 
 # --- la ciudad: lenguaje, tipo y obra de cada celda ---------------------------------
 
-def lenguaje_celda(cfg, i):
+# --- la industria: epoca y recurso (fase 11 v11) --------------------------------------
+EPOCAS = ['vapor', 'acero', 'quimica']
+EPOCA_MODOS = ['eras', 'vapor', 'acero', 'quimica']
+RECURSOS = ['carbon', 'chatarra', 'escoria', 'mineral']
+RECURSO_DE_TEMA = dict(naturaleza='carbon', ciudad='chatarra', industria='escoria')
+COL_RECURSO = dict(carbon=(0.07, 0.07, 0.07), chatarra=(0.46, 0.40, 0.34), escoria=(0.24, 0.21, 0.23),
+                   mineral=(0.62, 0.36, 0.20))
+COL_HUMO = dict(negro=(0.10, 0.10, 0.10), gris=(0.42, 0.42, 0.43), blanco=(0.92, 0.92, 0.92))
+COL_LLAMA = (1.0, 0.55, 0.12)            # antorcha y colada: incandescentes
+COL_RED = COL_RED_DEF                    # el violeta electrico de la red (reservado)
+
+
+def epoca_actual(cfg, W=None):
+    """0 vapor, 1 acero, 2 quimica: por las eras enterradas (0-2, 3-5, 6+) o fija (Epoca)."""
+    modo = int(cfg.get('epoca', 0))
+    if modo in (1, 2, 3):
+        return modo - 1
+    eras = int(W.get('gen', 0)) if W is not None else 0
+    return 0 if eras <= 2 else (1 if eras <= 5 else 2)
+
+
+def recurso_celda(W, cfg, i):
+    """Lo que saca la mina de la celda i: con Recursos, lo que guarda la concha de
+    abajo (el registro de la fase 15: naturaleza carbon, ciudad chatarra,
+    industria escoria; ninguna, mineral); sin Recursos, la semilla."""
+    if not cfg.get('recursos', 1):
+        x = logistica(semilla_caos(W['vel'][i], i + 71), 3.91, 1)[0]
+        return RECURSOS[min(3, int(x * 4))]
+    col = W['cols'][i] if i < len(W.get('cols', [])) else []
+    for s_, _ in reversed(col or []):
+        if 0 <= s_ < len(W['shells']):
+            t = W['shells'][s_].get('tema')
+            if t in RECURSO_DE_TEMA:
+                return RECURSO_DE_TEMA[t]
+            break
+    return 'mineral'
+
+
+def lenguaje_celda(cfg, i, W=None):
     """0 frio, 1 templado, 2 calido: por la latitud (los extremos del registro,
     frio; el centro, calido), fijo o mezcla (el mapa logistico por celda)."""
+    if tema_de(cfg) == 'industria':     # fase 11 v11: en la industria, la epoca
+        return epoca_actual(cfg, W)
     modo = int(cfg.get('lenguaje', 0))
     if modo in (1, 2, 3):
         return modo - 1
@@ -5096,26 +5516,45 @@ def occ_inicio(cfg, esp, e):
 
 
 def pasos_obra(esp, tipo):
-    """Los pasos de la obra hacia ese tipo (terminada = len)."""
+    """Los pasos de la obra hacia ese tipo (terminada = len). En la industria,
+    terminada = humea: la puesta en marcha es el ultimo paso."""
     if esp == 'informal':
         return ['bloque']
+    if esp in ('mina', 'energia'):
+        if tipo in ('brote', 'aserradero'):
+            return ['montaje']
+        return (['solar', 'montaje', 'puesta'] if esp == 'mina'
+                else ['solar', 'excavacion', 'estructura', 'montaje', 'puesta'])
     if tipo == 'pabellon':
         return ['solar', 'esqueleto', 'fachada']
     return ['solar', 'excavacion', 'nucleo', 'esqueleto', 'fachada'] + (['coronacion'] if tipo == 'rascacielos'
                                                                        else [])
 
 
+CONSTRUIDOS = ('ciudad', 'industria')        # los temas que salen de la biblioteca de edificios
+ESP_COD = dict(informal=1, planificada=2, mina=3, energia=4)
+COD_ESP = dict((v, k) for k, v in ESP_COD.items())
+
+
 def _codigo_edi(cfg, W, i):
-    esp = especie_de('ciudad', W['own'][i])
+    esp = especie_de(tema_de(cfg), W['own'][i])
     e = etapa_ciudad(cfg, esp, W['occ'][i])
     if W['par'][i] >= 0:
         e = min(e, 2)                   # los satelites, pequenos
-    return (1 if esp == 'informal' else 2) * 10 + e
+    return ESP_COD.get(esp, 2) * 10 + e
 
 
 def _de_codigo(c):
-    esp = 'informal' if c // 10 == 1 else 'planificada'
+    esp = COD_ESP.get(c // 10, 'planificada')
     return esp, c % 10, TIPOS[esp][c % 10 - 1]
+
+
+def _paso_reinicio(pasos):
+    """El paso al que vuelve una obra a medias que cambia de etapa."""
+    for p in ('esqueleto', 'estructura'):
+        if p in pasos:
+            return pasos.index(p)
+    return 0
 
 
 def ciudad_sync(W, cfg, i, now):
@@ -5142,19 +5581,19 @@ def ciudad_sync(W, cfg, i, now):
             hecho = old >= 0 and W['obra'][i] >= len(pasos_obra(*_de_codigo(old)[::2]))
             if sin_obra:
                 W['obra'][i] = len(pasos)
-            elif esp == 'planificada' and old >= 0 and not hecho:
-                W['obra'][i] = min(W['obra'][i], pasos.index('esqueleto'))
+            elif esp != 'informal' and old >= 0 and not hecho:
+                W['obra'][i] = min(W['obra'][i], _paso_reinicio(pasos))
             else:
                 W['obra'][i] = 0
             W['ant_obra'][i] = -1
             W['t_obra'][i] = now
-            W['leng'][i] = lenguaje_celda(cfg, i)
+            W['leng'][i] = lenguaje_celda(cfg, i, W)
             W['mut'][i] = mutacion_actual(W, cfg)
             return True
         # baja o cambia de especie: lo de abajo queda hecho; se cae lo de arriba
         W['obra'][i] = len(pasos)
         if old // 10 != code // 10 or W['leng'][i] < 0:
-            W['leng'][i] = lenguaje_celda(cfg, i)
+            W['leng'][i] = lenguaje_celda(cfg, i, W)
         _polvo(W, now, i, 'polvo', 6)
         return False
     if o != W['edi_occ'][i]:            # la misma etapa, otra ocupacion
@@ -5164,7 +5603,7 @@ def ciudad_sync(W, cfg, i, now):
             if esp == 'informal':       # una planta nueva: bloque gris con varillas
                 W['obra'][i], W['ant_obra'][i], W['t_obra'][i] = 0, -1, now
                 return True
-            if W['obra'][i] >= len(pasos):     # mas plantas del mismo modulo: esqueleto y fachada
+            if W['obra'][i] >= len(pasos) and esp == 'planificada':     # mas plantas del mismo modulo
                 W['plantas_ant'][i] = plantas_de(cfg, W, i, o - 1)
                 W['obra'][i] = pasos.index('esqueleto')
                 W['ant_obra'][i], W['t_obra'][i] = -1, now
@@ -5183,7 +5622,7 @@ def _paso_obra(W, i, k, now):
 def ciudad_gate(W, cfg, i, now):
     """Una nota en la celda i (desde gate_piel): la mutacion de lo que se
     construya a partir de ahora y, con Avance = gates, un paso de su obra."""
-    if tema_de(cfg) != 'ciudad' or cfg['nivel'] < 11 or not 0 <= i < N:
+    if tema_de(cfg) not in CONSTRUIDOS or cfg['nivel'] < 11 or not 0 <= i < N:
         return
     W['mut'][i] = mutacion_actual(W, cfg)
     empieza = ciudad_sync(W, cfg, i, now)
@@ -5201,6 +5640,10 @@ def colonos_logicos(W, cfg, i):
     if W['sp'][i] != HIB or W['occ'][i] <= 0:
         return 0, 0
     n = notas_colonas(W, i)
+    if tema_de(cfg) == 'industria':     # fase 11 v11: bancos de la corta; niveles del bastidor
+        if W['own'][i] == ARQ:
+            return min(int(cfg['max_bancos']), int(round(cfg['bancos_por_nota'] * n))), 0
+        return 0, 2 * min(int(cfg['max_bastidor']), n)
     if W['own'][i] == ARQ:
         return min(int(cfg['max_parasitos']), int(round(cfg['parasitos_por_nota'] * n))), 0
     return 0, 2 * min(int(cfg['max_marco']), n)
@@ -5210,7 +5653,7 @@ def ciudad_tick(W, cfg, now, paso, playing=True):
     """Las obras que van solas (Avance = pasos), el derribo hacia atras y los
     mutantes visibles, que persiguen a la logica uno por paso (los parasitos de
     abajo arriba al irse; del marco, primero las capsulas)."""
-    if tema_de(cfg) != 'ciudad' or cfg['nivel'] < 11:
+    if tema_de(cfg) not in CONSTRUIDOS or cfg['nivel'] < 11:
         return
     espera = max(1, int(cfg['pasos_etapa'])) * paso
     pasos_av = int(cfg.get('avance', 0)) == 1
@@ -5240,7 +5683,7 @@ def ciudad_tick(W, cfg, now, paso, playing=True):
 
 def cerrar_obras_ciudad(W, cfg):
     """Fin de ciclo: los edificios, terminados; los mutantes, al dia."""
-    if tema_de(cfg) != 'ciudad':
+    if tema_de(cfg) not in CONSTRUIDOS:
         return
     for i in range(N):
         if W['occ'][i] <= 0:
@@ -5256,7 +5699,7 @@ def cerrar_obras_ciudad(W, cfg):
 def obras_ciudad(W, cfg):
     """Celdas con un edificio a medias: {celda: paso}."""
     out = {}
-    if cfg['nivel'] < 11 or tema_de(cfg) != 'ciudad':
+    if cfg['nivel'] < 11 or tema_de(cfg) not in CONSTRUIDOS:
         return out
     for i in range(N):
         if W['occ'][i] > 0 and W['edi'][i] >= 0:
@@ -5273,7 +5716,7 @@ def diseno_celda(W, cfg, i, esp=None, e=None):
     historia, el mismo edificio); Fijartipo lo fuerza para probar."""
     if esp is None:
         esp, e, _ = _de_codigo(_codigo_edi(cfg, W, i))
-    lista = [d for d in modelos_de(cfg, 'ciudad', esp, 'etapa%d' % e) if d in _GEN_EDI] or \
+    lista = [d for d in modelos_de(cfg, tema_de(cfg), esp, 'etapa%d' % e) if d in _GEN_EDI] or \
         DISENOS_TIPO[TIPOS[esp][e - 1]]
     xs = logistica(semilla_caos(W['vel'][i], i + 131 * e), cfg['caos'], 3)
     f = int(cfg.get('fijar_tipo', 0))
@@ -5281,7 +5724,8 @@ def diseno_celda(W, cfg, i, esp=None, e=None):
     mut = W['mut'][i] if W['mut'][i] >= 0 else mutacion_actual(W, cfg)
     if d == 'torsion' and mut < 0.25:   # sin mutacion, torres rectas
         d = 'prisma'
-    return d, min(variantes_ciudad(cfg) - 1, int(xs[1] * variantes_ciudad(cfg))), int(xs[2] * 4)
+    nv = variantes_de(cfg, d)
+    return d, min(nv - 1, int(xs[1] * nv)), int(xs[2] * 4)
 
 
 def plantas_de(cfg, W, i, occ=None):
@@ -5289,7 +5733,7 @@ def plantas_de(cfg, W, i, occ=None):
     las que anade cada ocupacion de la etapa (el mismo modulo); en la torre
     autoconstruida, los cuartos que se ven."""
     occ = W['occ'][i] if occ is None else occ
-    esp = especie_de('ciudad', W['own'][i])
+    esp = especie_de(tema_de(cfg), W['own'][i])
     e = etapa_ciudad(cfg, esp, occ)
     if W['par'][i] >= 0:
         e = min(e, 2)
@@ -5300,6 +5744,9 @@ def plantas_de(cfg, W, i, occ=None):
         return float(min(ex['alto'], 7 + 2 * k))
     if esp == 'informal':
         return ex['alto']
+    if esp in ('mina', 'energia'):      # la industria: el gate (vigor, fase 12) alarga chimeneas
+        vig = W['vig'][i] if cfg['nivel'] >= 12 else 1.0
+        return ex['alto'] * (1.0 + 0.12 * k) * (0.85 + 0.15 * vig)
     paso = dict(pabellon=0.0, bloque=3.0, manzana=1.0, podio=3.0, rascacielos=4.0)[TIPOS[esp][e - 1]]
     return ex['alto'] + paso * k
 
@@ -5315,7 +5762,8 @@ def lod_ciudad(W, cfg, i):
         return True
     R = top_radius(W, cfg) + RETICULA_SOBRE_DEF
     px = ENCUADRE_DEF * 720.0 / (2.0 * R)
-    return min(SIZE_EW[i], SIZE_NS[i]) * base_radius(W, cfg, i) * px >= cfg.get('lod_ciudad', 60.0)
+    lod = cfg.get('lod_ind', 60.0) if tema_de(cfg) == 'industria' else cfg.get('lod_ciudad', 60.0)
+    return min(SIZE_EW[i], SIZE_NS[i]) * base_radius(W, cfg, i) * px >= lod
 
 
 def nivel_ventanas(alfa):
@@ -5415,10 +5863,11 @@ def pilares_marco(ex, m):
 
 _INFO_CIU = {}
 _CFG_CIU = ('th_branch', 'th_fusion', 'th_crown', 'caos', 'fijar_tipo', 'variantes_ciudad', 'alto_planta',
-            'oblicuidad', 'retranqueo', 'torsion_max', 'lenguaje', 'height_factor', 'shell_thick')
+            'oblicuidad', 'retranqueo', 'torsion_max', 'lenguaje', 'height_factor', 'shell_thick', 'tema',
+            'epoca', 'nivel')
 
 
-def info_ciudad(W, cfg, i, cl=None):
+def info_ciudad(W, cfg, i, cl=None, clave_cfg=None):
     """Lo que hace falta para dibujar el edificio de la celda i: especie, etapa,
     tipo, diseno, variante, giro, ejemplar, plantas, alto de la malla (H, en el
     mundo), parte visible (vis, 0-1: la torre autoconstruida por corte),
@@ -5429,7 +5878,8 @@ def info_ciudad(W, cfg, i, cl=None):
         capital = int(k_ >= 0 and cl['capital'][k_] == i and clase_cluster(len(cl['celdas'][k_])) == 2)
     mut = W['mut'][i] if W['mut'][i] >= 0 else mutacion_actual(W, cfg)
     clave = (i, W['occ'][i], W['own'][i], W['par'][i] >= 0, W['vel'][i], W['leng'][i], mut >= 0.25, capital,
-             tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi'])
+             round(W['vig'][i], 2),
+             clave_cfg or (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi']))
     v = _INFO_CIU.get(clave)
     if v is None:
         if len(_INFO_CIU) > 4000:
@@ -5442,7 +5892,7 @@ def info_ciudad(W, cfg, i, cl=None):
 
 def _info_ciudad(W, cfg, i, cl=None):
     own = W['own'][i]
-    esp = especie_de('ciudad', own)
+    esp = especie_de(tema_de(cfg), own)
     o = W['occ'][i]
     e = etapa_ciudad(cfg, esp, o)
     if W['par'][i] >= 0:
@@ -5463,11 +5913,13 @@ def _info_ciudad(W, cfg, i, cl=None):
     else:
         H = min(tope, pl * hp)
         vis = 1.0
-    giro = float((90 if esp == 'planificada' else 30) * g4)
-    leng = W['leng'][i] if W['leng'][i] >= 0 else lenguaje_celda(cfg, i)
+    giro = float((90 if own == ARQ else 30) * g4)
+    leng = W['leng'][i] if W['leng'][i] >= 0 else lenguaje_celda(cfg, i, W)
     mut = W['mut'][i] if W['mut'][i] >= 0 else mutacion_actual(W, cfg)
+    ind = esp in ('mina', 'energia')
     return dict(esp=esp, etapa=e, tipo=tipo, diseno=d, var=v, giro=giro, ex=ex, plantas=pl, H=H, vis=vis,
-                leng=int(leng), mut=mut, hp=hp)
+                leng=int(leng) + (PALETA_IND if ind else 0), epoca=int(leng) if ind else -1, mut=mut, hp=hp,
+                industria=ind)
 
 
 def _fila_edi(ctx, p, marco, dims, albedo, rug, luces, leng, tinte=0.0, vis=1.0, fin=1.0, modo=0,
@@ -5533,7 +5985,7 @@ def piel_ciudad(W, cfg, ctx, i, rug, kb, fl, arde, out, now, paso):
     ej = _marco(i, inf['giro'], incl, rumbo)
     # la obra
     pasos = pasos_obra(esp, inf['tipo'])
-    codigo = (1 if esp == 'informal' else 2) * 10 + inf['etapa']
+    codigo = ESP_COD.get(esp, 2) * 10 + inf['etapa']
     # sin obra en curso para este tipo (un mundo hecho a mano, o el motor recien
     # cargado, antes del primer tick), terminado
     s = W['obra'][i] if cfg.get('obra', 1) and W['edi'][i] == codigo else len(pasos)
@@ -5545,6 +5997,13 @@ def piel_ciudad(W, cfg, ctx, i, rug, kb, fl, arde, out, now, paso):
     fin0 = min(1.0, W['plantas_ant'][i] / pl) if W['plantas_ant'][i] > 0 else 0.0
     if paso_ in ('solar', 'excavacion', 'nucleo'):
         ver = False
+    elif paso_ == 'estructura':              # industria: sube anillo a anillo (encofrado deslizante)
+        vis, fin, modo = 0.15 + 0.85 * q, 0.0, 1
+    elif paso_ == 'montaje':                 # industria: la estructura se cierra (el castillete, tramo a tramo)
+        if esp == 'mina':
+            vis, fin, modo = 0.3 + 0.7 * q, 0.3 + 0.7 * q, 0
+        else:
+            fin, modo = q, 1
     elif paso_ == 'esqueleto':
         vis, fin, modo = fin0 + (1.0 - fin0) * max(0.15, q), fin0, 1
     elif paso_ == 'fachada':
@@ -5557,6 +6016,8 @@ def piel_ciudad(W, cfg, ctx, i, rug, kb, fl, arde, out, now, paso):
         res['obra'][paso_] = res['obra'].get(paso_, 0) + 1
     # luces: las de la estacion (fase 17), apagadas en obra; el tinte de la nota
     luces = ctx['luces'](i) if hecho or esp == 'informal' else 0
+    if i in ctx['apagadas']:                 # industria (fase 13): sin corriente, las naves a oscuras
+        luces = 0
     tinte = 0.0
     if cfg.get('tinte_ventanas', 1) and W['lat_s'][i] in (1, 2):
         It = 1.0 - (now - W['t_gate'][i]) / max(1e-6, cfg.get('pasos_tinte', 4) * paso)
@@ -5572,27 +6033,40 @@ def piel_ciudad(W, cfg, ctx, i, rug, kb, fl, arde, out, now, paso):
         sombra, luces = max(sombra, 0.8 * arde[i]), 0
     nombre = nombre_edificio(ex['diseno'], ex['var'])
     alb = PALETA_CIUDAD[leng][ex['vols'][-1]['slot'] if ex['informal'] else SLOT_CUERPO]
-    if ver:
+    ind = inf['industria']
+    corta = ind and hib and W['own'][i] == ARQ and W['par_vis'][i] > 0     # la corta se come la planta
+    if ver and not corta:
         out.setdefault(geometria_de(nombre), []).append(
             _fila_edi(ctx, p0, ej, (sx, H, sz), alb, rug, luces, leng, tinte, vis, fin, modo, sombra))
         piezas += 1
         res['edificios'] += 1
         res['tipos'].add(nombre)
-        res['lenguajes'][leng] += 1
+        if ind:
+            res['epocas'][inf['epoca']] += 1
+        else:
+            res['lenguajes'][leng] += 1
     # los remates
-    if ver:
+    if ver and not corta:
         piezas += _remates(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, vis, hecho, paso_, q, lejos, out)
+    if ind and ver and not corta:            # terminada = humea (y la nota suelta su bocanada)
+        piezas += _humo(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, hecho, now, paso, out)
     # la obra: valla, tierra, foso, nucleo, grua o andamio, obreros
-    if paso_ and esp == 'planificada':
+    if paso_ and ind:
+        piezas += _obra_industria(W, cfg, ctx, i, inf, ej, p0, n, cw, cl_, sx, sz, H, paso_, q, vis, now, paso, out)
+    elif paso_ and esp == 'planificada':
         piezas += _obra_planificada(W, cfg, ctx, i, inf, ej, p0, n, cw, cl_, sx, sz, H, paso_, q, s, now, paso,
                                     out)
     elif paso_ == 'bloque' and not lejos:
         _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, H, semilla_caos(i, 13), 3, COL_OBRERO,
                     now, paso, 'obreros', 0.6)
     # los mutantes
-    if hib and W['own'][i] == ARQ and ver:
+    if ind and hib and W['own'][i] == ARQ:
+        piezas += _corta(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, luces, now, paso, out)
+    elif ind and hib and W['own'][i] == GEO:
+        piezas += _integrada(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, now, paso, out)
+    elif hib and W['own'][i] == ARQ and ver:
         piezas += _colonia(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, now, paso, out)
-    if hib and W['own'][i] == GEO:
+    elif hib and W['own'][i] == GEO:
         piezas += _marco_ciudad(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, now, paso, out)
     # las piezas del cluster (en la capital) y los puentes
     if piezas_cl and capital:
@@ -5620,13 +6094,23 @@ def _remates(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, vis, hecho, paso_, q, lejos
                                                   inf['esp'])
     k = 0
     tope = ctx['tope']
+    rec = ctx['recurso'](i) if inf['industria'] else None
     for mo, x, y, z, s_, alto, largo, giro, col in lista:
         if y * H + alto * hp > tope:            # nada pasa de la altura maxima
             alto = max(0.0, (tope - y * H) / hp)
         p = _en_edi(p0, ej, x * sx, y * H, z * sz)
         dims = (s_ * sx, alto * hp, largo * sz)
-        out.setdefault(geometria_de(mo), []).append(_fila_ciu(ctx, p, _marco(i, round(inf['giro'] + giro)),
-                                                              dims, col))
+        g = round(inf['giro'] + giro)
+        if mo in ('ciu_polea', 'ciu_balancin', 'ciu_rotopala'):     # al tempo (master_beat, fase 17)
+            fase = ctx['bq']
+            ang = (round(fase * 4.0) * 22.5) % 360.0 if mo != 'ciu_balancin' else \
+                round(18.0 * math.sin(2.0 * math.pi * fase) / 3.0) * 3.0
+            mk = _marco(i, g, abs(ang), g if ang >= 0 else g + 180)
+        else:
+            mk = _marco(i, g)
+        if rec is not None and mo in ('ciu_terril', 'ciu_vagoneta'):     # el recurso de la concha de abajo
+            col = COL_RECURSO[rec]
+        out.setdefault(geometria_de(mo), []).append(_fila_ciu(ctx, p, mk, dims, col))
         k += 1
     return k
 
@@ -5648,6 +6132,8 @@ def _lista_remates(ex, leng, lejos, hecho, puede_crecer, vis, paso_, tramo, esp)
                 continue
             if tipo in ('deposito', 'antena', 'mastil') and not hecho and esp == 'informal':
                 continue                        # aparecen al revocar
+            if tipo == 'polea' and not hecho:
+                continue                        # industria: las poleas, al final del montaje
             if tipo == 'varillas' and not puede_crecer:
                 continue
             if tipo == 'aguja' and paso_ == 'coronacion':
@@ -5839,13 +6325,18 @@ def piezas_de_cluster(W, cfg, ctx, tf):
     out = {}
     for k_, cs in cl['celdas'].items():
         cap = cl['capital'][k_]
-        if not cs or cap not in ctx['info'] or especie_de('ciudad', W['own'][cap]) != 'planificada':
+        esp = ctx['info'][cap]['esp'] if cap in ctx['info'] else ''
+        if not cs or esp not in ('planificada', 'energia'):
             continue
-        cf, _ = cadenas_de(cfg, 'ciudad', 'planificada')
+        cf, _ = cadenas_de(cfg, tema_de(cfg), esp)
         if W['et_f'][cap] < tf[cap] or not cf:
             continue
         mut = ctx['info'][cap]['mut']
         clase = clase_cluster(len(cs)) if mut > 0.05 else 0
+        if esp == 'energia':            # fase 11 v11: torres que se alinean
+            out[k_] = dict(clase=clase, nombre=['torre compartida', 'fila de torres', 'anillo de torres'][clase],
+                           par=(), q=1.0, celdas=list(cs), industria=True)
+            continue
         par = None
         if clase == 1:
             vec = [j for j in cl['mascara'][cap] if j in ctx['info']] or \
@@ -5860,6 +6351,8 @@ def piezas_de_cluster(W, cfg, ctx, tf):
 
 
 def _piezas_cluster(W, cfg, ctx, i, pc, out):
+    if pc.get('industria'):
+        return _torres_cluster(W, cfg, ctx, i, pc, out)
     info, bases, cl = ctx['info'], ctx['bases'], ctx['cl']
     lim = limit(cfg)
     n = normal_i(i)
@@ -5920,14 +6413,31 @@ def _puentes_ciudad(W, cfg, ctx, i, inf, p0, n, cw, cl_, now, paso, out):
     if kp <= 0:
         return 0
     info, bases = ctx['info'], ctx['bases']
-    pm = (modelos_de(cfg, 'ciudad', inf['esp'], 'puente') or ['ciu_pasarela'])[0]
+    pm = (modelos_de(cfg, tema_de(cfg), inf['esp'], 'puente') or ['ciu_pasarela'])[0]
     k = 0
     for q, j in enumerate(ctx['cl']['mascara'][i]):
         Hj = info[j]['H'] if j in info else inf['H']
         pj = bases[j]
         largo = 0.5 * math.sqrt((p0[0] - pj[0]) ** 2 + (p0[1] - pj[1]) ** 2 + (p0[2] - pj[2]) ** 2) + 0.06
         ej = _marco_puente(i, j)
-        if inf['esp'] == 'planificada':     # el zocalo comercial (z de 0 a 1)
+        if inf['esp'] == 'mina':            # la cuenca: los terriles se funden en una sierra negra
+            centro = _add(p0, ej[2], 0.5 * largo)
+            out.setdefault(geometria_de(pm if pm in MODELOS else 'ciu_terril'), []).append(
+                _fila_ciu(ctx, centro, ej, (0.2 * min(cw, cl_), 0.09 * limit(cfg) * max(0.35, kp), largo),
+                          COL_RECURSO[ctx['recurso'](i)]))
+            if kp >= 1 and i < j and inf['etapa'] in (2, 3) and j in info and info[j]['etapa'] in (2, 3):
+                # y un cable aereo de baldes une los castilletes (uno por par; los hay en la mina y el complejo)
+                y = 0.8 * min(inf['H'], Hj)
+                out.setdefault(geometria_de('ciu_cable'), []).append(
+                    _fila_ciu(ctx, _add(_add(p0, n, y), ej[2], largo), ej, (0.01 * cw, 0.01 * cw, 2.0 * largo),
+                              COL_REMATE['cable']))
+        elif inf['esp'] == 'energia':       # tuberias entre las plantas
+            y = 0.25 * min(inf['H'], Hj)
+            out.setdefault(geometria_de(pm if pm in MODELOS else 'ciu_tuberia'), []).append(
+                _fila_ciu(ctx, _add(_add(p0, n, y), ej[2], 0.5 * largo), ej,
+                          (0.04 * min(cw, cl_) * (0.35 if kp < 1 else 1.0), 0.04 * min(cw, cl_), largo),
+                          PALETA_CIUDAD[inf['leng']][7]))
+        elif inf['esp'] == 'planificada':     # el zocalo comercial (z de 0 a 1)
             alto = max(0.01, 2.0 * inf['hp'] * kp * (1.0 + 0.04 * (q % 3)))
             mo = pm if es_edificio(pm) else nombre_edificio('zocalo', 0)
             out.setdefault(geometria_de(mo), []).append(
@@ -5945,6 +6455,294 @@ def _puentes_ciudad(W, cfg, ctx, i, inf, p0, n, cw, cl_, now, paso, out):
     return k
 
 
+
+# --- dibujar la industria (fase 11 v11) ------------------------------------------------
+
+COL_AGUA_ACIDA = (0.55, 0.20, 0.12)      # el fondo inundado de la corta: rojizo, nunca azul
+COL_BANCO = ((0.50, 0.30, 0.18), (0.42, 0.25, 0.16), (0.58, 0.36, 0.22))
+COL_TESTIGO = (0.58, 0.27, 0.19)
+
+
+def color_humo(ctx, inf, i, tipo):
+    """Humo negro (carbon y vapor), gris (acero) o vapor blanco (torres y quimica)."""
+    if tipo == 'penacho':
+        return COL_HUMO['blanco']
+    if ctx['carbon'](i) or inf['epoca'] == 0:
+        return COL_HUMO['negro']
+    return COL_HUMO['gris'] if inf['epoca'] == 1 else COL_HUMO['blanco']
+
+
+def _humo(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, hecho, now, paso, out):
+    """El humo, el vapor y la llama de la planta terminada (particulas del motor):
+    bocanadas al pulso, cantidad por la ocupacion y Emisiones (y el ruido del
+    modular), sin pasar de Maxhumo. Una nota tine la bocanada de su chimenea
+    del color de su secuenciador; con STOP (huelga) el humo se queda quieto."""
+    if not hecho:
+        return 0
+    parts = out.setdefault('particulas', [])
+    tope = int(cfg.get('max_humo', 6000))
+    # a saltos de stop-motion (FOTOS_PASO por paso): las mismas filas se guardan y se
+    # copian mientras el humo no cambia de foto
+    kq = max(1, int(cfg.get('steps_per_beat', 4))) * FOTOS_PASO
+    tau_q = math.floor(ctx['bq'] * kq) / kq
+    tin_q = 0
+    if W['lat_s'][i] in (1, 2):
+        It = 1.0 - (now - W['t_gate'][i]) / max(1e-6, cfg.get('pasos_tinte', 4) * paso)
+        if 0.0 < It <= 1.0:
+            tin_q = W['lat_s'][i] * 100 + int(It * 20)
+    clave = (i, tau_q, round(H, 4), round(sx, 4), round(sz, 4), id(inf['ex']), inf['epoca'], inf['etapa'],
+             tin_q, round(ctx['ruido'], 2), round(ctx['lfo'], 2), round(ctx['saturacion'], 2), ctx['carbon'](i),
+             cfg.get('emisiones'), p0)
+    filas = _HUMO.get(clave)
+    if filas is None:
+        if len(_HUMO) > 3000:
+            _HUMO.clear()
+        filas = _HUMO[clave] = []
+        ctx_q = dict(ctx, bq=tau_q, humo=[0])
+        _humo_filas(W, cfg, ctx_q, i, inf, ej, p0, sx, sz, H, now, paso, filas, 10 ** 6)
+    libres = max(0, tope - ctx['humo'][0])
+    usar = filas if len(filas) <= libres else filas[:libres]
+    parts.extend(usar)
+    ctx['humo'][0] += len(usar)
+    return len(usar)
+
+
+_HUMO = {}
+
+
+def _humo_filas(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, now, paso, parts, tope):
+    k = 0
+    n = normal_i(i)
+    e_, t_ = tangents(n)
+    rx, ry = orient(n)                          # una vez por celda: todas las particulas miran igual
+    tau = ctx['bq']                             # en beats: STOP lo congela
+    cant = cfg.get('emisiones', 0.5) * (1.0 + ctx['ruido'])
+    tin = None
+    if W['lat_s'][i] in (1, 2):
+        It = 1.0 - (now - W['t_gate'][i]) / max(1e-6, cfg.get('pasos_tinte', 4) * paso)
+        if 0.0 < It <= 1.0:
+            tin = (seq_color(cfg, W['lat_s'][i]), It)
+    for r in inf['ex']['fuentes']:
+        p = _en_edi(p0, ej, r['x'] * sx, r['y'] * H, r['z'] * sz)
+        m_ = min(sx, sz)
+        if r['tipo'] == 'baliza':               # balizas de las chimeneas altas: parpadean
+            if int(tau * 2.0) % 2 == 0:
+                parts.append(_row(p, n, 0.02 * m_, 0.02 * m_, 0.02 * m_, COL_BALIZA))
+                k += 1
+            continue
+        if r['tipo'] == 'llama':                # la antorcha: incandescente, crece con la saturacion
+            g = 0.05 * m_ * (1.0 + 0.6 * ctx['saturacion'])
+            parts.append(_row(p, n, g, 2.2 * g * (0.8 + 0.4 * abs(math.sin(7.0 * tau))), g, COL_LLAMA))
+            k += 1
+            continue
+        col = color_humo(ctx, inf, i, r['tipo'])
+        q_n = max(1, min(6, int(round(cant * (1 + inf['etapa']) * 0.8))))     # pocas bocanadas, grandes
+        if r['tipo'] == 'penacho':              # el vapor de las torres respira con el LFO
+            q_n = max(3, q_n)
+        q_n = min(q_n, tope - ctx['humo'][0])
+        if q_n <= 0:
+            return k
+        respira = 1.0 + (0.5 * ctx['lfo'] if r['tipo'] == 'penacho' else 0.0)
+        ct = _mix(col, tin[0], 0.85 * tin[1]) if tin is not None else col
+        for q in range(q_n):
+            f = (tau / 2.0 + q / float(q_n)) % 1.0
+            s0 = r['s'] * m_ * (0.9 + 2.0 * f) * respira
+            h = H * (0.05 + 0.5 * f)
+            a_, b_ = 0.12 * f * m_, 0.05 * f * m_
+            c = ct if f < 0.5 else col          # la bocanada de la nota, del color de su SEQ
+            parts.append([p[0] + n[0] * h + e_[0] * a_ + t_[0] * b_, p[1] + n[1] * h + e_[1] * a_ + t_[1] * b_,
+                          p[2] + n[2] * h + e_[2] * a_ + t_[2] * b_, rx, ry, 0.0, s0, s0, s0, c[0], c[1], c[2]])
+        ctx['humo'][0] += q_n
+        k += q_n
+    return k
+
+
+def _obra_industria(W, cfg, ctx, i, inf, ej, p0, n, cw, cl_, sx, sz, H, paso_, q, vis, now, paso, out):
+    """La obra de la industria: valla, foso, el encofrado que sube con la chimenea
+    o la torre, la columna tumbada que iza la grua y la grua."""
+    lim = limit(cfg)
+    ex = inf['ex']
+    r = ex['radio']
+    k = 0
+    if paso_ in ('solar', 'excavacion', 'estructura'):
+        out.setdefault(geometria_de('ciu_valla'), []).append(
+            _fila_ciu(ctx, p0, _marco(i), (2.1 * r * cw, 0.05 * lim, 2.1 * r * cl_), COL_OBRA['valla']))
+        k += 1
+    if paso_ == 'solar' and inf['tipo'] == 'refineria':     # la columna llega tumbada
+        out.setdefault(geometria_de('ciu_columna'), []).append(
+            _fila_ciu(ctx, _en_edi(p0, ej, 0.0, 0.0, 0.2 * cl_), _marco(i, round(inf['giro'])),
+                      (0.6 * H, 0.06 * cw, 0.06 * cw), PALETA_CIUDAD[inf['leng']][3]))
+        k += 1
+    if paso_ == 'excavacion':
+        out.setdefault(geometria_de('ciu_foso'), []).append(
+            _fila_ciu(ctx, _add(p0, n, 0.004), _marco(i), (1.8 * r * cw, 0.02 * lim, 1.8 * r * cl_),
+                      COL_OBRA['foso']))
+        k += 1
+        _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, H, semilla_caos(i, 7), 6, COL_POLVO, now,
+                    paso, 'polvo')
+    if paso_ == 'estructura':                   # el encofrado deslizante o trepante, arriba
+        altos = [v for v in ex['vols'] if v['rol'] in ('chimenea', 'torre')]
+        if altos:
+            v = max(altos, key=lambda x: x['y1'])
+            y = min(vis, v['y1']) * H
+            tp = 1.0 - (1.0 - v.get('top', 1.0)) * min(1.0, max(0.0, (min(vis, v['y1']) - v['y0']) /
+                                                                 max(1e-6, v['y1'] - v['y0'])))
+            out.setdefault(geometria_de('ciu_encofrado'), []).append(
+                _fila_ciu(ctx, _en_edi(p0, ej, v['x'] * sx, y, v['z'] * sz), ej,
+                          (v['w'] * sx * tp * 1.25, 0.04 * lim, v['d'] * sz * tp * 1.25), COL_OBRA['grua']))
+            k += 1
+    if paso_ in ('solar', 'estructura') or (paso_ == 'montaje' and inf['esp'] == 'energia'):
+        alto = H * (vis if paso_ == 'estructura' else 1.0) if paso_ != 'solar' else 0.6 * H
+        if cfg.get('gruas', 1) and inf['etapa'] >= 2:
+            ctx['gruas'].append((W['t_obra'][i], i, ej, p0, n, cw, cl_, r, alto))
+    return k
+
+
+def _corta(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, luces, now, paso, out):
+    """CORTA QUE DEVORA: la mina se come la planta. Un banco por nota del SEQ1
+    (Bancospornota, hasta Maxbancos), dentro de su anillo de escombreras: los
+    bancos suben hacia la cresta y el fondo queda a ras de suelo (no corta
+    conchas: eso solo lo hace la caja). Primero se van las naves, luego la sala
+    de calderas; queda la chimenea, sola, de testigo. Desde 4 bancos el fondo se
+    inunda de agua acida rojiza y una rotopala trabaja el banco mas alto."""
+    b = W['par_vis'][i]
+    if b <= 0:
+        return 0
+    lim = limit(cfg)
+    mx = max(1, int(cfg['max_bancos']))
+    R0 = 0.47
+    dr = R0 / (mx + 2.0)
+    hc = 0.12 * lim * (1.0 + 0.12 * b)
+    k = 0
+    for q in range(b):                          # de la cresta (fuera, alto) hacia el fondo
+        r_ = R0 - q * dr
+        h = hc * (b - q) / float(b)
+        out.setdefault(geometria_de('ciu_anillo'), []).append(
+            _fila_ciu(ctx, p0, _marco(i, 22.5 * (q % 2)), (2 * r_ * cw, h, 2 * r_ * cl_), COL_BANCO[q % 3]))
+        k += 1
+    rf = R0 - b * dr                            # el fondo, a ras de suelo
+    v = inf['var'] % max(1, variantes_ind(cfg))
+    leng = inf['leng']
+    if b <= 2:                                  # quedan la sala de calderas y la chimenea
+        lado = min(0.9, 1.6 * rf)
+        out.setdefault(geometria_de(nombre_edificio('calderas', v)), []).append(
+            _fila_edi(ctx, _en_edi(p0, ej, -0.25 * rf * cw, 0.0, 0.0), ej, (lado * cw * 0.6, 4.0 * inf['hp'],
+                                                                           lado * cl_ * 0.6),
+                      PALETA_CIUDAD[leng][5], rug, luces, leng))
+        k += 1
+    out.setdefault(geometria_de(nombre_edificio('chimenea', v)), []).append(
+        _fila_edi(ctx, _en_edi(p0, ej, 0.2 * rf * cw, 0.0, 0.0), ej, (0.25 * cw, 0.85 * H, 0.25 * cl_),
+                  COL_TESTIGO, rug, 0, leng))
+    k += 1
+    if b >= 4:                                  # agua acida (Rio Tinto) y la rotopala en el banco alto
+        out.setdefault(geometria_de('ciu_agua'), []).append(
+            _fila_ciu(ctx, _add(p0, normal_i(i), 0.003), _marco(i), (2 * rf * cw * 1.05, 0.01 * lim, 2 * rf * cl_ * 1.05),
+                      COL_AGUA_ACIDA))
+        g = round(inf['giro'])
+        fase = ctx['bq']
+        out.setdefault(geometria_de('ciu_rotopala'), []).append(
+            _fila_ciu(ctx, _en_edi(p0, ej, (R0 - 0.5 * dr) * cw, hc, 0.0),
+                      _marco(i, g, (round(fase * 4.0) * 22.5) % 360.0, g),
+                      (0.14 * cw, 0.12 * lim, 0.07 * cl_), (0.85, 0.66, 0.18)))
+        k += 2
+    ctx['res']['cortas'][i] = (b, mx, b >= 3)
+    return k
+
+
+def _integrada(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, now, paso, out):
+    """PLANTA INTEGRADA: la energia se monta encima de la mina (Zollverein). Un
+    nivel de bastidor de tuberias y unidades de proceso por nota del SEQ2 (hasta
+    Maxbastidor), que los castilletes atraviesan; las tuberias bajan a los pozos
+    y desde el segundo nivel una chimenea corona el conjunto."""
+    u = W['marco_vis'][i]
+    if u <= 0:
+        return 0
+    niveles = (u + 1) // 2
+    ex = inf['ex']
+    m = max(0.1, min(0.5, float(cfg.get('modulo_marco', 0.25))))
+    libres, g, paso_m = pilares_marco(ex, m)
+    mh = paso_m * min(cw, cl_) * 0.5
+    hb = 0.5 * H                                # a media altura: los castilletes lo atraviesan
+    k = 0
+    xs = logistica(semilla_caos(W['vel'][i], i + 888), 3.91, len(libres) + 4)
+    for q, (x, z) in enumerate(libres):
+        if xs[q] < 0.35 or (abs(x) > 0.49 and abs(z) > 0.49):
+            out.setdefault(geometria_de('ciu_pilar'), []).append(
+                _fila_ciu(ctx, _en_edi(p0, ej, x * cw, 0.0, z * cl_), ej, (0.025 * cw, hb + niveles * mh, 0.025 * cl_),
+                          PALETA_CIUDAD[inf['leng']][1]))
+            k += 1
+    tub = PALETA_CIUDAD[inf['leng']][7]
+    for lv in range(niveles):
+        y = hb + lv * mh
+        for a in range(g):
+            for b_ in range(g):
+                x, z = -0.5 + (a + 0.5) * paso_m, -0.5 + (b_ + 0.5) * paso_m
+                out.setdefault(geometria_de('ciu_bastidor'), []).append(
+                    _fila_ciu(ctx, _en_edi(p0, ej, x * cw, y, z * cl_), _marco(i, round(inf['giro']) // 90 * 90),
+                              (paso_m * cw, mh, paso_m * cl_), tub if (a + b_ + lv) % 2 else PALETA_CIUDAD[inf['leng']][1]))
+                k += 1
+    for x, z in ((-0.25, -0.25), (0.25, 0.25)):     # las tuberias bajan a los pozos
+        out.setdefault(geometria_de('ciu_tuberia'), []).append(
+            _fila_ciu(ctx, _en_edi(p0, ej, x * cw, 0.0, z * cl_), ej, (0.03 * cw, hb, 0.03 * cl_), tub))
+        k += 1
+    if niveles >= 2:                            # la chimenea corona el conjunto
+        v = inf['var'] % max(1, variantes_ind(cfg))
+        out.setdefault(geometria_de(nombre_edificio('chimenea', v)), []).append(
+            _fila_edi(ctx, _en_edi(p0, ej, 0.0, hb + niveles * mh, 0.0), ej, (0.2 * cw, 0.5 * H, 0.2 * cl_),
+                      PALETA_CIUDAD[inf['leng']][6], rug, 0, inf['leng']))
+        k += 1
+    kc = ctx['cl']['de'][i]
+    r = ctx['res']['integradas'].setdefault(kc if kc >= 0 else 'c%d' % i, [0, int(cfg['max_bastidor'])])
+    r[0] = max(r[0], niveles)
+    return k
+
+
+def _torres_cluster(W, cfg, ctx, i, pc, out):
+    """Energia: torres que se alinean. 2-3 celdas, una torre de refrigeracion
+    compartida; 4-6, una fila; 7 o mas, un anillo alrededor de la chimenea mas alta."""
+    info, bases, cl = ctx['info'], ctx['bases'], ctx['cl']
+    n = normal_i(i)
+    cw, cl_ = _cell_sizes(_len(bases[i]), i)
+    hp = info[i]['hp']
+    Ht = min(H_TOPE * limit(cfg), 6.5 * hp)
+    sitios = []
+    if pc['clase'] == 0:
+        vec = [j for j in cl['mascara'][i] if j in info]
+        if vec:
+            j = vec[0]
+            sitios.append(_mul(_norm(_add(bases[i], bases[j])), 0.5 * (_len(bases[i]) + _len(bases[j]))))
+    elif pc['clase'] == 1:
+        lejos_ = max(pc['celdas'], key=lambda c: (_len(_add(bases[c], bases[i], -1.0)), -c))
+        for t in (0.3, 0.55, 0.8):
+            pm = _add(_mul(bases[i], 1.0 - t), bases[lejos_], t)
+            sitios.append(_mul(_norm(pm), _len(bases[i])))
+    else:
+        e_, t_ = tangents(n)
+        for q in range(6):
+            a = 2.0 * math.pi * q / 6.0
+            pm = _add(_add(bases[i], e_, 0.8 * cw * math.cos(a)), t_, 0.8 * cl_ * math.sin(a))
+            sitios.append(_mul(_norm(pm), _len(bases[i])))
+    k = 0
+    v = info[i]['var'] % max(1, variantes_ind(cfg))
+    for p in sitios:
+        nn = _norm(p)
+        ejt = _ejes(nn)
+        mk = ejt + (_euler_xyz(*ejt),)
+        out.setdefault(geometria_de(nombre_edificio('torreref', v)), []).append(
+            _fila_edi(ctx, p, mk, (0.42 * cw, Ht, 0.42 * cl_), PALETA_CIUDAD[info[i]['leng']][3], 0.6,
+                      ctx['luces'](i), info[i]['leng']))
+        k += 1
+        if ctx['humo'][0] < int(cfg.get('max_humo', 6000)):     # su penacho
+            for q in range(3):
+                f = (ctx['bq'] / 2.0 + q / 3.0) % 1.0
+                s0 = 0.18 * cw * (0.6 + 1.4 * f) * (1.0 + 0.5 * ctx['lfo'])
+                out.setdefault('particulas', []).append(_row(_add(p, nn, Ht * (1.0 + 0.5 * f)), nn, s0, s0, s0,
+                                                             COL_HUMO['blanco']))
+                ctx['humo'][0] += 1
+    ctx['res']['protagonistas'][pc['nombre']] = ctx['res']['protagonistas'].get(pc['nombre'], 0) + 1
+    return k
+
+
 def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
     """La ciudad entera (fase 11 v10): una pasada para saber el edificio de cada
     celda (el cluster mira a sus vecinas) y otra para dibujarlo. Devuelve
@@ -5954,19 +6752,27 @@ def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
     bq = beat_stop(W, cfg) if tiempo else 0.0
     respaldo = doce and cfg.get('respaldo', 0)
     info = {}
+    ck = (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi'])
     for i in range(N):
         if W['occ'][i] > 0 and W['own'][i] and W['vh'][i] > 0.005:
-            info[i] = info_ciudad(W, cfg, i, cl)
+            info[i] = info_ciudad(W, cfg, i, cl, ck)
     cerca = {}
+    if cfg.get('superficie'):
+        px_lod = None
+    else:
+        px_lod = ENCUADRE_DEF * 720.0 / (2.0 * (top_radius(W, cfg) + RETICULA_SOBRE_DEF))
+    lod_px = cfg.get('lod_ind', 60.0) if tema_de(cfg) == 'industria' else cfg.get('lod_ciudad', 60.0)
 
     def es_cerca(i):
         v = cerca.get(i)
         if v is None:
-            v = cerca[i] = lod_ciudad(W, cfg, i)
+            v = cerca[i] = px_lod is None or \
+                min(SIZE_EW[i], SIZE_NS[i]) * _len(bases[i]) * px_lod >= lod_px
         return v
     res = dict(lenguajes=[0, 0, 0], edificios=0, tipos=set(), obra={}, gruas=0, colonias={}, marcos={},
                protagonistas={}, mutacion=mutacion_actual(W, cfg),
-               fuente=MUTACION_FUENTES[int(cfg.get('mutacion_fuente', 0)) % 2])
+               fuente=MUTACION_FUENTES[int(cfg.get('mutacion_fuente', 0)) % 2],
+               epocas=[0, 0, 0], cortas={}, integradas={}, tema=tema_de(cfg))
     luz = {}
 
     def luces(i):                       # las ventanas de la celda (fase 17), una vez por fotograma
@@ -5976,8 +6782,29 @@ def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
         return v
     ctx = dict(cl=cl, bases=bases, info=info, doce=doce, respaldo=respaldo, res=res, gruas=[], cerca=es_cerca,
                tope=0.96 * altura_max(cfg), lejos=lambda i: not es_cerca(i), luces=luces)
+    # fase 11 v11: la industria. El pulso (master_beat desde la fase 17; si no, el reloj),
+    # el recurso de cada mina, el carbon que llega a cada planta, la red y el modular
+    if tiempo:
+        ctx['bq'] = bq
+    else:
+        ctx['bq'] = now / max(1e-6, paso * max(1, int(cfg.get('steps_per_beat', 4))))
+    recursos = {}
+
+    def recurso(i):
+        v = recursos.get(i)
+        if v is None:
+            v = recursos[i] = recurso_celda(W, cfg, i)
+        return v
+    ind = tema_de(cfg) == 'industria'
+    red = (W.get('ind_red') or {}) if ind and cfg['nivel'] >= 13 else {}
+    ctx.update(recurso=recurso, apagadas=set(red.get('apagadas', ())) if cfg.get('red', 1) else set(),
+               carbon=lambda i: recurso(i) == 'carbon' or (red.get('carbon') and i in red['carbon']),
+               humo=[0], ruido=float(W['modular'].get('ruido', 0.0)) if cfg['nivel'] >= 19 else 0.0,
+               lfo=float(W['modular'].get('lfo', 0.5)) if cfg['nivel'] >= 19 else 0.5,
+               saturacion=float(W['modular'].get('saturacion', 0.0)) if cfg['nivel'] >= 19 else 0.0)
     ctx['cluster'] = piezas_de_cluster(W, cfg, ctx, tf)
-    ctx['cadenas'] = dict((e, cadenas_de(cfg, 'ciudad', e)[0]) for e in ('informal', 'planificada'))
+    ctx['cadenas'] = dict((e, cadenas_de(cfg, tema_de(cfg), e)[0])
+                          for e in ('informal', 'planificada', 'mina', 'energia'))
     piezas = 0
     for i in sorted(info):
         bomba.cerrar()
@@ -5990,6 +6817,14 @@ def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
     bomba.cerrar()
     piezas += emitir_gruas(W, cfg, ctx, out, now, paso)
     res['tipos'] = len(res['tipos'])
+    if ind:                             # la leyenda INDUSTRIA
+        res['humo'] = ctx['humo'][0]
+        res['recursos'] = dict((r, 0) for r in RECURSOS)
+        for i in info:
+            if info[i]['esp'] == 'mina':
+                res['recursos'][recurso(i)] += 1
+        res['plantas'] = sum(1 for i in info if info[i]['esp'] == 'energia')
+        res['epoca'] = EPOCAS[epoca_actual(cfg, W)]
     return piezas, res
 
 # -----------------------------------------------------------------------------
@@ -7773,17 +8608,33 @@ def build_tejido(W, cfg):
 # aranazo se derriba: su cadena se recorre hacia atras hasta que una nota del
 # cluster la retome. El fin de ciclo lo apaga todo de golpe.
 
-RUINA_ESP = ['vegetacion', 'relieve', 'informal', 'planificada']
+RUINA_ESP = ['vegetacion', 'relieve', 'informal', 'planificada', 'mina', 'energia', 'refineria']
+# fase 11 v11: la industria. La refineria (la mina en su ultima etapa) tiene su propia catastrofe
 ACCIDENTE = dict(vegetacion='rayo', relieve='desprendimiento', informal='se desploma un anadido',
-                 planificada='caen las plantas altas')
+                 planificada='caen las plantas altas', mina='derrumbe de galeria', energia='cae una chimenea',
+                 refineria='fuga con llamarada')
 CATASTROFE = dict(vegetacion='incendio', relieve='derrumbe', informal='derrumbe en cadena',
-                  planificada='implosion')
-RUINA_ALTO = dict(vegetacion=0.30, relieve=0.22, informal=0.26, planificada=0.12)    # x limite
+                  planificada='implosion', mina='explosion de grisu', energia='apagon en cadena',
+                  refineria='incendio')
+RUINA_ALTO = dict(vegetacion=0.30, relieve=0.22, informal=0.26, planificada=0.12, mina=0.12, energia=0.3,
+                  refineria=0.08)    # x limite
+TEMA_DE_ESP = dict(vegetacion='naturaleza', relieve='naturaleza', informal='ciudad', planificada='ciudad',
+                   mina='industria', energia='industria', refineria='industria')
 COL_CENIZA = (0.44, 0.43, 0.41)           # copos de ceniza
 COL_CARBON = (0.10, 0.09, 0.08)           # lo que arde se carboniza
 COL_BRASA = (1.00, 0.46, 0.10)
 COL_RUINA = dict(vegetacion=(0.25, 0.23, 0.21), relieve=(0.38, 0.37, 0.40), informal=(0.46, 0.44, 0.41),
-                 planificada=COL_OBRA['valla'])
+                 planificada=COL_OBRA['valla'], mina=(0.18, 0.16, 0.15), energia=(0.48, 0.30, 0.20),
+                 refineria=(0.06, 0.06, 0.06))
+
+
+def especie_destructor(W, cfg, i):
+    """La especie para los destructores: la de la celda, salvo la refineria (la
+    mina en su ultima etapa), que arde por sus tuberias."""
+    esp = especie_de(tema_de(cfg), W['own'][i])
+    if esp == 'mina' and etapa_ciudad(cfg, esp, W['occ'][i]) >= 5:
+        return 'refineria'
+    return esp
 SALTO = 0.5                 # el fuego salta a una vecina si el mapa logistico pasa de aqui
 POLVO_MAX = 48              # nubes de particulas a la vez
 
@@ -7876,7 +8727,7 @@ def foco_catastrofe(W, cfg, i):
     k = cl['de'][i]
     zona = sorted(cl['celdas'][k]) if k >= 0 else [i]
     enlaces = dict((c, [j for j in cl['mascara'][c] if W['own'][j] == W['own'][i]]) for c in zona)
-    return dict(celda=i, own=W['own'][i], especie=especie_de(tema_de(cfg), W['own'][i]),
+    return dict(celda=i, own=W['own'][i], especie=especie_destructor(W, cfg, i),
                 zona=zona, enlaces=enlaces)
 
 
@@ -7910,7 +8761,7 @@ def destructor(W, cfg, pad, vel, now, ev, antes):
         ev['escalada'] = cat['tipo'] if cat else None
     elif antes['victima'] is not None and W['own'][antes['victima'][0]]:
         v, e0 = antes['victima']
-        esp = especie_de(tema_de(cfg), W['own'][v])
+        esp = especie_destructor(W, cfg, v)
         if W['occ'][v] > 0 and estado_idx(cfg, W['occ'][v]) >= e0:
             ev['quitado'] += bajar_estado(W, cfg, v, e0)
         acc = dict(tipo=ACCIDENTE[esp], especie=esp, celda=v, t=now)
@@ -7942,6 +8793,10 @@ def iniciar_catastrofe(W, cfg, foco, vel, now):
     pie o no queda sitio (Maxfuego)."""
     vivas = [c for c in foco['zona'] if W['occ'][c] > 0 and W['own'][c] == foco['own']]
     if not vivas:
+        return None
+    tipo = CATASTROFE.get(foco['especie'])          # fase 11 v11: Grisu y Apagon (pagina Fase14)
+    if (tipo == 'explosion de grisu' and not cfg.get('grisu', 1)) or \
+            (tipo == 'apagon en cadena' and not cfg.get('apagon', 1)):
         return None
     i = foco['celda'] if foco['celda'] in vivas else min(vivas, key=lambda c: (-W['h'][c], c))
     for c in W['cats']:
@@ -8090,7 +8945,7 @@ def build_destructores(W, cfg, now, out):
         if not r or W['occ'][i] > 0:
             continue
         esp = RUINA_ESP[r - 1]
-        if (esp in ('vegetacion', 'relieve')) != (tema == 'naturaleza'):
+        if TEMA_DE_ESP.get(esp) != tema:
             continue                        # los modelos del otro tema no se dibujan
         mo = (modelos_de(cfg, tema, esp, 'huella') or [None])[0]
         if mo is None:
@@ -8150,9 +9005,11 @@ BASALTO = (0.19, 0.20, 0.23)
 HORMIGON = (0.56, 0.55, 0.52)
 CALLE = (0.11, 0.11, 0.12)
 # especie: (materia, rugosidad, cuanto pesa sobre el color de la generacion)
+ESCORIA = (0.22, 0.20, 0.21)             # fase 11 v11: la veta de escoria y chatarra de la industria
 MATERIA = dict(vegetacion=(CARBON, 0.06, 0.85), relieve=(BASALTO, 0.5, 0.6),
-               informal=(HORMIGON, 0.85, 0.6), planificada=(HORMIGON, 0.85, 0.6))
-MATERIA_TEMA = dict(naturaleza='carbon y basalto', ciudad='hormigon')
+               informal=(HORMIGON, 0.85, 0.6), planificada=(HORMIGON, 0.85, 0.6),
+               mina=(ESCORIA, 0.35, 0.75), energia=(ESCORIA, 0.6, 0.6), refineria=(ESCORIA, 0.3, 0.8))
+MATERIA_TEMA = dict(naturaleza='carbon y basalto', ciudad='hormigon', industria='escoria y chatarra')
 RUG_LOSETA, RUG_ZOCALO = 0.7, 0.9
 
 
@@ -8168,11 +9025,12 @@ def registro_concha(W, cfg):
             esp[i] = 1 + RUINA_ESP.index(especie_de(tema, W['own'][i]))
             est[i] = estado_idx(cfg, W['occ'][i])
             clu[i] = cl['de'][i]
-            if tema == 'ciudad' and cfg['nivel'] >= 11:     # fase 11 v10: la tipologia de cada celda
+            if tema in CONSTRUIDOS and cfg['nivel'] >= 11:     # fase 11 v10: la tipologia de cada celda
                 tipo[i] = diseno_celda(W, cfg, i)[0]
     t = tejido(W, cfg) if cfg['nivel'] >= 13 else {}
     vias = sorted([min(a, b), max(a, b)] for a, b in t.get('vias', []))
     return dict(tema=tema, esp=esp, estado=est, cluster=clu, tipo=tipo, vias=vias,
+                epoca=epoca_actual(cfg, W) if tema == 'industria' else None,
                 calles=sorted(set(x for v in vias for x in v)), rios=[list(r) for r in t.get('rios', [])])
 
 
@@ -8188,7 +9046,7 @@ def herencia_tematica(W, cfg, now, reg):
             if W['occ'][i] > 0:
                 W['rebrote'][i] = 1
                 W['t_rebrote'][i] = now
-    if nuevo == 'ciudad' and reg['tema'] == 'ciudad':
+    if nuevo in CONSTRUIDOS and reg['tema'] == nuevo:      # carreteras o vias (fase 11 v11)
         W['trazas'] = [list(v) for v in reg['vias']]
 
 
@@ -8229,7 +9087,9 @@ def tile_material(cfg, sh, s, c):
         col = _mix(col, mat, k)
     elif tema == 'ciudad':                  # el suelo de la ciudad tambien es hormigon
         col, rug = _mix(col, HORMIGON, 0.3), MATERIA['informal'][1]
-    if tema == 'ciudad' and c in sh.get('calles', ()):
+    elif tema == 'industria':               # y el de la industria, escoria
+        col, rug = _mix(col, ESCORIA, 0.3), MATERIA['energia'][1]
+    if tema in CONSTRUIDOS and c in sh.get('calles', ()):
         col, rug = _mix(col, CALLE, 0.7), 0.7
     return col, rug
 
@@ -8259,12 +9119,14 @@ def tile_material(cfg, sh, s, c):
 COL_EXPUESTO = dict(vegetacion=(0.62, 0.55, 0.44),      # fosil: piedra clara sobre el carbon
                     relieve=(0.27, 0.28, 0.32),          # columnas de basalto
                     informal=(0.60, 0.58, 0.54), planificada=(0.52, 0.52, 0.50),
-                    calle=(0.24, 0.24, 0.25))
-RUG_EXPUESTO = dict(vegetacion=0.35, relieve=0.4, informal=0.85, planificada=0.8, calle=0.7)
+                    calle=(0.24, 0.24, 0.25), mina=(0.40, 0.30, 0.20), energia=(0.50, 0.46, 0.42),
+                    refineria=(0.30, 0.28, 0.27))
+RUG_EXPUESTO = dict(vegetacion=0.35, relieve=0.4, informal=0.85, planificada=0.8, calle=0.7, mina=0.8,
+                    energia=0.8, refineria=0.6)
 COL_GALERIA, RUG_GALERIA = (0.58, 0.57, 0.53), 0.8
 NOMBRE_ERA = dict(vegetacion='carbon', relieve='basalto', informal='ruinas', planificada='ruinas',
-                  calle='calles')
-PRIORIDAD_ERA = ['vegetacion', 'planificada', 'informal', 'relieve', 'calle']
+                  calle='calles', mina='galerias', energia='escoria', refineria='escoria')
+PRIORIDAD_ERA = ['vegetacion', 'planificada', 'informal', 'relieve', 'mina', 'refineria', 'energia', 'calle']
 UNION_NOMBRE = dict(canon='canon', galeria='galeria de metro')
 
 
@@ -8276,7 +9138,7 @@ def contenido(sh, c):
     e = sh['esp'][c]
     if e:
         return RUINA_ESP[e - 1]
-    if sh['tema'] == 'ciudad' and c in sh.get('calles', ()):
+    if sh['tema'] in ('ciudad', 'industria') and c in sh.get('calles', ()):
         return 'calle'
     return None
 
@@ -8403,7 +9265,7 @@ def abrir_union(W, cfg, a, b, depth, now):
     """Une los cortes de a y b por el camino mas corto: canon en naturaleza
     (el camino se corta con la profundidad del menor), galeria de metro en la
     ciudad (una zanja de una loseta con su boveda)."""
-    galeria = tema_de(cfg) == 'ciudad'
+    galeria = tema_de(cfg) in CONSTRUIDOS
     camino = camino_corto(a, b)
     prof = 1 if galeria else max(1, int(depth))
     for c in camino[1:-1]:
@@ -8485,7 +9347,9 @@ def build_arqueologia(W, cfg, now, out):
         for s, x, j, a, b, q in piezas:
             sh = W['shells'][s]
             tema = sh['tema']
-            col = COL_EXPUESTO[q]
+            col = COL_EXPUESTO.get(q, COL_EXPUESTO['planificada'])
+            if tema == 'industria' and sh.get('epoca') is not None:    # la epoca de esa concha
+                col = _mix(col, PALETA_CIUDAD[PALETA_IND + int(sh['epoca'])][0], 0.45)
             t0 = W['scars'].get(s * 1000 + x)
             if t0 is not None:                  # la cicatriz manda
                 col = _mix(COL_SCAR, col, max(0.0, min(1.0, (now - t0) / st)))
@@ -8500,7 +9364,7 @@ def build_arqueologia(W, cfg, now, out):
                 h = 0.5 * min(th, 0.8)
                 giro = 30.0 * int(v * 6)
                 emit(mo, _mul(n, b - 0.5 * h), _marco(c, giro), (0.55 * cw, h, 0.55 * cl_), col,
-                     RUG_EXPUESTO[q])
+                     RUG_EXPUESTO.get(q, 0.8))
             else:                               # en la pared, asomando al corte
                 mo, v = _variante(modelos_de(cfg, tema, q, 'expuesto'), s, x, j)
                 mo = cimiento_de(sh, x, q) or mo
@@ -8513,7 +9377,7 @@ def build_arqueologia(W, cfg, now, out):
                 prof = min(0.3, 0.25 * ancho)
                 y0 = a + 0.1 * th
                 p = _add(_add(_mul(marco[1], y0), off, r_mid), marco[2], 0.1 * prof)
-                emit(mo, p, marco, (0.7 * ancho, 0.8 * th, prof), col, RUG_EXPUESTO[q])
+                emit(mo, p, marco, (0.7 * ancho, 0.8 * th, prof), col, RUG_EXPUESTO.get(q, 0.8))
             n_piezas += 1
     galerias = 0
     for u in W['uniones']:
@@ -8819,7 +9683,7 @@ def build_tiempo(W, cfg, now, out):
             k_esp = 3 + int(round(9.0 * W['modular']['ruido'])) if cfg['nivel'] >= 19 else 3
             _particulas(parts, n, _mul(n, base), cw, cl_, W['vh'][i], semilla_caos(i, 31), k_esp,
                         COL_ESPORA, now_p, 0.125, 'esporas')
-    if tema == 'ciudad' and cfg['nivel'] >= 19:     # fase 19: el ruido del modular es smog
+    if tema in CONSTRUIDOS and cfg['nivel'] >= 19:     # fase 19: el ruido del modular es smog (y humo)
         k_smog = int(round(5.0 * W['modular']['ruido'] * cfg['smog']))
         if k_smog > 0:
             now_p = bq * max(1, int(cfg['steps_per_beat'])) * 0.125
@@ -8895,7 +9759,7 @@ def escena_defecto(nombre):
 
 def obras_a_medias(W, cfg, cl=None):
     """Celdas de la ciudad con una obra a medias (fusion o coronacion sin acabar)."""
-    if cfg['nivel'] < 11 or tema_de(cfg) != 'ciudad':
+    if cfg['nivel'] < 11 or tema_de(cfg) not in CONSTRUIDOS:
         return []
     tf, tc = objetivos(W, cfg, cl)
     obras = obras_ciudad(W, cfg)        # fase 11 v10: y los edificios en obra (planificada)
@@ -9555,7 +10419,17 @@ def cfg():
                  max_gruas=max(0, min(32, int(_p('Maxgruas', c['max_gruas'])))),
                  tinte_ventanas=int(bool(_p('Tinteventanas', True))),
                  pasos_tinte=max(0.25, _p('Pasostinte', float(c['pasos_tinte']))),
-                 lod_ciudad=max(0.0, _p('Lodciudad', c['lod_ciudad'])))
+                 lod_ciudad=max(0.0, _p('Lodciudad', c['lod_ciudad'])),
+                 # fase 11 v11: la industria
+                 recursos=int(bool(_p('Recursos', True))),
+                 epoca=_menu('Epoca', EPOCA_MODOS, 0),
+                 variantes_ind=max(1, min(6, int(_p('Variantesind', c['variantes_ind'])))),
+                 bancos_por_nota=max(0.0, _p('Bancospornota', float(c['bancos_por_nota']))),
+                 max_bancos=max(1, min(12, int(_p('Maxbancos', c['max_bancos'])))),
+                 max_bastidor=max(1, min(6, int(_p('Maxbastidor', c['max_bastidor'])))),
+                 emisiones=max(0.0, min(2.0, _p('Emisiones', c['emisiones']))),
+                 max_humo=max(0, int(_p('Maxhumo', c['max_humo']))),
+                 lod_ind=max(0.0, _p('Lodind', c['lod_ind'])))
     if c['nivel'] >= 12:
         c.update(material_modo=_menu('Materialmodo', MATERIALES, 1),
                  rug_min=max(0.0, min(1.0, _p('Rugmin', c['rug_min']))),
@@ -9575,6 +10449,13 @@ def cfg():
                  ancho_rio=max(0.005, _p('Anchorio', c['ancho_rio'])),
                  emisivo_rio=max(0.0, _p('Emisivorio', c['emisivo_rio'])),
                  lagos=int(_p('Lagos', True)),
+                 # fase 13 v7: el tejido de la industria (vias y red)
+                 vias=int(_p('Vias', True)), red=int(_p('Red', True)),
+                 min_red=max(1, int(_p('Minred', c['min_red']))),
+                 ancho_via=max(0.01, _p('Anchovia', c['ancho_via'])),
+                 pulso_red=int(_p('Pulsored', True)),
+                 color_red=(max(0.0, _p('Colorredr', COL_RED_DEF[0])), max(0.0, _p('Colorredg', COL_RED_DEF[1])),
+                            max(0.0, _p('Colorredb', COL_RED_DEF[2]))),
                  # fase 13 v3: rios que se ven desde el globo
                  ancho_min_px=max(0.0, _p('Anchominpx', c['ancho_min_px'])),
                  encuadre=max(0.3, min(1.0, _p('Encuadre', c['encuadre']))))
@@ -9583,7 +10464,8 @@ def cfg():
                  golpes_escalada=max(1, int(_p('Golpesescalada', c['golpes_escalada']))),
                  pasos_fuego=max(1, int(_p('Pasosfuego', c['pasos_fuego']))),
                  max_fuego=max(1, int(_p('Maxfuego', c['max_fuego']))),
-                 pasos_polvo=max(1, int(_p('Pasospolvo', c['pasos_polvo']))))
+                 pasos_polvo=max(1, int(_p('Pasospolvo', c['pasos_polvo']))),
+                 apagon=int(_p('Apagon', True)), grisu=int(_p('Grisu', True)))     # fase 14 v4
     if c['nivel'] >= 15:
         c.update(peso_traza=max(0.0, min(1.0, _p('Pesotraza', c['peso_traza']))),
                  rebrote=int(_p('Rebrote', True)), tema_en_ciclo=int(_p('Temaenciclo', True)))
@@ -9599,6 +10481,7 @@ def cfg():
         c.update(sway_max=max(0.0, _p('Swaymax', c['sway_max'])),
                  trafico=max(0, int(_p('Trafico', c['trafico']))),
                  pasos_frente=max(1, int(_p('Pasosfrente', c['pasos_frente']))),
+                 turno=int(_p('Turno', True)),          # fase 17 v3: el frente es un cambio de turno
                  master_beat=_master_beat())
     if c['nivel'] >= 19:
         c.update(fuente_modular=_menu('Fuentemodular', FUENTES_MODULAR, c['fuente_modular']),
@@ -9989,7 +10872,7 @@ def uniformes_piel(W, c, now):
     # (en el mundo) y los colores de los secuenciadores (el tinte de las ventanas)
     lim_ = limit(c)
     u['uCiudad'] = (c.get('alto_planta', 0.08) * lim_, c.get('ancho_vano', 0.05) * lim_,
-                    1.0 if c['nivel'] >= 11 and tema_de(c) == 'ciudad' else 0.0, 0.0)
+                    1.0 if c['nivel'] >= 11 and tema_de(c) in CONSTRUIDOS else 0.0, 0.0)
     u['uSeq1'] = tuple(seq_color(c, 1)) + (0.0,)
     u['uSeq2'] = tuple(seq_color(c, 2)) + (0.0,)
     focos = focos_tinte(W, c, now) if nat else []
@@ -10343,7 +11226,7 @@ def on_value(name, val):
                     s.cook(force=True)
                 except Exception:
                     pass
-    elif name in ('Variantesciudad', 'Oblicuidad', 'Retranqueo', 'Torsionmax'):    # fase 11 v10
+    elif name in ('Variantesciudad', 'Oblicuidad', 'Retranqueo', 'Torsionmax', 'Variantesind'):   # fase 11 v10-v11
         c = cfg()
         biblioteca_ciudad(c)
         if VARIANTES_CIU_TD and int(c['variantes_ciudad']) > VARIANTES_CIU_TD:
@@ -10815,8 +11698,35 @@ def _num_es(x, d=2):
     return ('%%.%df' % d % x).replace('.', ',')
 
 
+def _miles_es(n):
+    return ('%.1fk' % (n / 1000.0)).replace('.', ',') if n >= 1000 else str(int(n))
+
+
+def _legend_industria(W, c, r):
+    """Las lineas INDUSTRIA, CORTA e INTEGRADA de la leyenda (fase 11 v11)."""
+    rec = r.get('recursos', {})
+    partes = ' · '.join('%s %d' % (k.replace('carbon', 'carbón'), rec[k]) for k in RECURSOS if rec.get(k))
+    out = ['  INDUSTRIA  época %s   recursos %s   plantas %d   humo %s/%s'
+           % (r.get('epoca', 'vapor').replace('quimica', 'química'), partes or '-', r.get('plantas', 0),
+              _miles_es(r.get('humo', 0)), _miles_es(int(c.get('max_humo', 6000))))]
+    for i_, (b, mx, testigo) in sorted(r.get('cortas', {}).items())[:2]:
+        out.append('  CORTA    celda %d   bancos %d/%d   testigo %s' % (i_, b, mx, 'sí' if testigo else 'no'))
+    for k_, (nv, mx) in sorted(r.get('integradas', {}).items(), key=lambda kv: str(kv[0]))[:2]:
+        out.append('  INTEGRADA  %s   niveles %d/%d'
+                   % ('cluster %s' % k_ if not str(k_).startswith('c') else 'celda %s' % str(k_)[1:], nv, mx))
+    return out
+
+
 def _legend_ciudad(W, c, r):
-    """Las lineas CIUDAD, OBRA, COLONIA y MARCO de la leyenda (fase 11 v10)."""
+    """Las lineas CIUDAD, OBRA, COLONIA y MARCO de la leyenda (fase 11 v10); en la
+    industria, INDUSTRIA, OBRA, CORTA e INTEGRADA (fase 11 v11)."""
+    if r.get('tema') == 'industria':
+        out = _legend_industria(W, c, r)
+        ob = r.get('obra', {})
+        if ob or r.get('gruas'):
+            partes = ' · '.join('%s %d' % (k, ob[k]) for k in PASOS_OBRA if ob.get(k))
+            out.insert(1, '  OBRA     %d (%s)   gruas %d' % (sum(ob.values()), partes or '-', r.get('gruas', 0)))
+        return out
     lg = r.get('lenguajes', [0, 0, 0])
     out = ['  CIUDAD   lenguajes F/T/C %d/%d/%d   edificios %d   tipos %d   MUTACION %s (%s)'
            % (lg[0], lg[1], lg[2], r.get('edificios', 0), r.get('tipos', 0), _num_es(r.get('mutacion', 0.0)),
@@ -11177,7 +12087,7 @@ def ventanas_luz_de(W, c):
     respiran con el LFO del modular (Respiracion)."""
     if c['nivel'] < 17:
         return 0.0
-    if c['nivel'] >= 19 and tema_de(c) == 'ciudad' and W['modular'].get('activo'):
+    if c['nivel'] >= 19 and tema_de(c) in CONSTRUIDOS and W['modular'].get('activo'):
         return 1.0 - c['respiracion'] * (1.0 - W['modular']['lfo'])
     return 1.0
 

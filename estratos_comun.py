@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v47'
+VERSION_COMUN = 'comun v48'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -410,6 +410,25 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
     return True
 
 
+def menu_al_dia(base, name, menu, labels=None):
+    """comun v48: un menu que ya existia toma las opciones nuevas (Tema + industria,
+    Escena + industria) sin perder lo elegido."""
+    if not has_par(base, name):
+        return False
+    try:
+        p = getattr(base.par, name)
+        if list(p.menuNames) != list(menu):
+            val = str(p.eval())
+            p.menuNames = list(menu)
+            p.menuLabels = list(labels or menu)
+            if val in menu:
+                p.val = val
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def renew_default(base, name, old, new):
     """Cambia el valor por defecto de un parametro que ya existia. Solo
     toca el valor si seguia en el defecto viejo: lo ajustado a mano se
@@ -571,7 +590,7 @@ def onPulse(par):
 
 def onValueChange(par, prev):
     if par.name in ('Modoactuacion', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
-                    'Torsionmax'):
+                    'Torsionmax', 'Variantesind'):
         op('motor').module.on_value(par.name, par.eval())
     return
 '''
@@ -862,18 +881,25 @@ vec3 foco(vec4 t, vec4 c, vec3 d)
 
 // fase 11 v10: la paleta de la ciudad (PALETA_CIUDAD del motor): lenguaje x materia.
 // 0-3 las plantas informales, 4 cubierta, 5 cuerpo planificado, 6 piedra o zocalo,
-// 7 estructura. Sin el azul de los rios ni el cian de las cicatrices.
-const vec3 PALETA[24] = vec3[24](
+// 7 estructura. Sin el azul de los rios ni el cian de las cicatrices. Fase 11 v11: las
+// filas 3-5 son la industria por epoca (vapor, acero, quimica), sin el violeta de la red.
+const vec3 PALETA[48] = vec3[48](
     vec3(0.62, 0.63, 0.62), vec3(0.52, 0.32, 0.22), vec3(0.72, 0.58, 0.36), vec3(0.62, 0.24, 0.19),
     vec3(0.30, 0.30, 0.31), vec3(0.66, 0.64, 0.60), vec3(0.46, 0.45, 0.43), vec3(0.34, 0.34, 0.35),
     vec3(0.62, 0.32, 0.22), vec3(0.55, 0.55, 0.53), vec3(0.80, 0.56, 0.52), vec3(0.56, 0.60, 0.38),
     vec3(0.36, 0.29, 0.25), vec3(0.17, 0.18, 0.18), vec3(0.60, 0.31, 0.22), vec3(0.40, 0.40, 0.41),
     vec3(0.92, 0.90, 0.85), vec3(0.71, 0.53, 0.38), vec3(0.90, 0.76, 0.40), vec3(0.90, 0.68, 0.62),
-    vec3(0.64, 0.52, 0.42), vec3(0.90, 0.89, 0.86), vec3(0.81, 0.74, 0.62), vec3(0.55, 0.42, 0.30));
+    vec3(0.64, 0.52, 0.42), vec3(0.90, 0.89, 0.86), vec3(0.81, 0.74, 0.62), vec3(0.55, 0.42, 0.30),
+    vec3(0.55, 0.24, 0.17), vec3(0.16, 0.15, 0.14), vec3(0.50, 0.28, 0.16), vec3(0.70, 0.68, 0.64),
+    vec3(0.20, 0.18, 0.17), vec3(0.58, 0.27, 0.19), vec3(0.62, 0.22, 0.16), vec3(0.42, 0.30, 0.20),
+    vec3(0.60, 0.59, 0.56), vec3(0.42, 0.44, 0.40), vec3(0.52, 0.30, 0.18), vec3(0.78, 0.77, 0.74),
+    vec3(0.28, 0.28, 0.29), vec3(0.55, 0.56, 0.54), vec3(0.78, 0.24, 0.20), vec3(0.85, 0.70, 0.20),
+    vec3(0.88, 0.88, 0.86), vec3(0.78, 0.79, 0.80), vec3(0.55, 0.33, 0.20), vec3(0.90, 0.90, 0.88),
+    vec3(0.60, 0.61, 0.62), vec3(0.92, 0.92, 0.90), vec3(0.85, 0.26, 0.20), vec3(0.90, 0.50, 0.15));
 
 vec3 paleta(int leng, int slot)
 {
-    return PALETA[clamp(leng, 0, 2) * 8 + clamp(slot, 0, 7)];
+    return PALETA[clamp(leng, 0, 5) * 8 + clamp(slot, 0, 7)];
 }
 
 void main()
@@ -1013,7 +1039,8 @@ void main()
         nivelv = floor(a * 0.5 + 0.0001);
         rug = clamp(a - 2.0 * nivelv, 0.02, 1.0);
         luces = min(1.0, nivelv * 0.25);
-        int leng = int(clamp(lg, 0.0, 2.0));
+        int leng = int(clamp(lg, 0.0, 5.0));
+        bool industria = leng >= 3;     // fase 11 v11: la industria (3 + epoca)
         // r: el tinte de la nota (secuenciador + intensidad); g: lo visible (x 1000) y lo
         // terminado (fraccion); b: el modo de obra (1 esqueleto, 2 bloque gris) + sombra
         float sq = floor(iVert.color.r + 0.0001);
@@ -1050,7 +1077,11 @@ void main()
         vec2 cel = vec2(floor(fx), floor(fy));
         float h1 = hash13(vec3(cel, sem + float(iVert.inst) * 0.113));
         float h2 = hash13(vec3(cel.yx + 7.1, sem + 1.7));
-        if (enObra && modo > 0.5 && modo < 1.5) {
+        if (fach > 7.5 && fach < 8.5) {
+            // industria: la colada incandescente (la saturacion del modular la aviva)
+            emis += vec3(1.0, 0.45, 0.08) * (0.9 + 0.8 * uGlitch.x) * (0.75 + 0.25 * ruido(bp * 40.0));
+            base *= 0.3;
+        } else if (enObra && modo > 0.5 && modo < 1.5) {
             // esqueleto: forjados y pilares sin fachada; el resto, hueco
             float forjado = step(0.84, g.y);
             float pilar = step(fract(fx * 0.5), 0.1);
@@ -1070,12 +1101,23 @@ void main()
             }
         } else if (cubierta) {
             base *= 0.72;               // la cubierta (la losa de la azotea)
+        } else if (fach > 8.5 && fach < 9.5) {
+            // industria: chimenea con bandas (rojo y blanco, o anillos de ladrillo)
+            float banda = step(0.5, fract(bp.y / max(1e-4, 2.5 * uCiudad.x)));
+            base = mix(base, leng == 3 ? base * 0.75 : vec3(0.92, 0.91, 0.89), banda * step(0.6, yrel));
+        } else if (fach > 9.5) {
+            // industria: celosia (castilletes, bastidores): rombos huecos entre perfiles
+            vec2 cg = vec2(fract((u + bp.y) / max(1e-4, 0.6 * vano)), fract((u - bp.y) / max(1e-4, 0.6 * vano)));
+            float perfil = 1.0 - step(0.16, min(min(cg.x, 1.0 - cg.x), min(cg.y, 1.0 - cg.y)));
+            if (perfil < 0.5)
+                discard;
         } else if (fach > 0.5) {
             // la fachada: bandas de forjado (cuentan las plantas) y huecos
             float banda = step(0.88, g.y);
             float ven = 0.0;
             float lit = 0.0;
-            vec3 luzCol = vec3(1.0, 0.88, 0.70);    // planificada: blanco calido en reticula
+            vec3 luzCol = industria ? vec3(1.0, 0.55, 0.15)     // industria: vapor de sodio naranja
+                                    : vec3(1.0, 0.88, 0.70);    // planificada: blanco calido en reticula
             bool zocalo = (fach > 3.5 && fach < 4.5) || (hm < 0.0 && bp.y < 1.6 * uCiudad.x);
             vec2 lc = vec2(dot(iVert.oPos.xz, tg), iVert.oPos.y);
             if (fach > 1.5 && fach < 2.5) {
@@ -2828,6 +2870,7 @@ def construir_modelos(base, m, solo_nuevos=False):
     # comun v47 (fase 11 v10): la biblioteca de la ciudad, un Script SOP por ejemplar
     # (el mismo callback: el motor reconoce edi_<diseno>_<v>)
     m.VARIANTES_CIU_TD = 0
+    m.VARIANTES_IND_TD = 0                  # comun v48: la industria, con sus variantes
     m.biblioteca_ciudad(c)
     edis = m.edificios_de(c)
     fila1 = fila0 + len(nombres) // 12 + 2
@@ -2837,8 +2880,10 @@ def construir_modelos(base, m, solo_nuevos=False):
         construir_ejemplar(modelos, nm, (k % 12) * 220, -(fila1 + k // 12) * 160)
         hechos += 1
     m.VARIANTES_CIU_TD = m.variantes_ciudad(c)
+    m.VARIANTES_IND_TD = m.variantes_ind(c)
     try:
         base.op('motor').store('variantes_ciu_td', m.VARIANTES_CIU_TD)
+        base.op('motor').store('variantes_ind_td', m.VARIANTES_IND_TD)
     except Exception:
         pass
     return modelos, hechos, piezas, ajustadas
