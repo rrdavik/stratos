@@ -2324,6 +2324,7 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False)
     if lvl >= 13:                   # fase 13: carreteras (tejido) y rios (fase 13 v2, su geometria)
         out['tejido'], W['tejido'] = build_tejido(W, cfg)
         out['rios'], W['rios_res'] = build_rios(W, cfg)
+        build_industria_tejido(W, cfg, now, out)        # fase 13 v7: viaductos, torres, pulsos y trenes
     if lvl >= 14:                   # fase 14: huellas y particulas de los destructores
         build_destructores(W, cfg, now, out)
     if lvl >= 16:                   # fase 16: lo que ensenan los cortes
@@ -6796,9 +6797,11 @@ def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
             v = recursos[i] = recurso_celda(W, cfg, i)
         return v
     ind = tema_de(cfg) == 'industria'
-    red = (W.get('ind_red') or {}) if ind and cfg['nivel'] >= 13 else {}
-    ctx.update(recurso=recurso, apagadas=set(red.get('apagadas', ())) if cfg.get('red', 1) else set(),
-               carbon=lambda i: recurso(i) == 'carbon' or (red.get('carbon') and i in red['carbon']),
+    tj = tejido(W, cfg) if ind and cfg['nivel'] >= 13 else {}
+    red = tj.get('red') or {}
+    carbon_pl = set(p for p, rs in (tj.get('fc') or {}).get('fuente', {}).items() if 'carbon' in rs)
+    ctx.update(recurso=recurso, apagadas=set(red.get('apagadas', ())),
+               carbon=lambda i: recurso(i) == 'carbon' if info.get(i, {}).get('esp') == 'mina' else i in carbon_pl,
                humo=[0], ruido=float(W['modular'].get('ruido', 0.0)) if cfg['nivel'] >= 19 else 0.0,
                lfo=float(W['modular'].get('lfo', 0.5)) if cfg['nivel'] >= 19 else 0.5,
                saturacion=float(W['modular'].get('saturacion', 0.0)) if cfg['nivel'] >= 19 else 0.0)
@@ -8518,7 +8521,8 @@ def tejido(W, cfg):
     ocupacion). dict(rios, abajo, caudal, arbol, vias)."""
     tema = tema_de(cfg)
     sello = (id(W), _TERRENO.get('sello'), tuple(W['occ']), tema, cfg['rios'], cfg['carreteras'],
-             cfg['max_rio'], cfg['min_via'], len(W.get('trazas') or []))
+             cfg['max_rio'], cfg['min_via'], len(W.get('trazas') or []), cfg.get('vias'), cfg.get('red'),
+             cfg.get('min_red'), tuple(W['own']))
     if _TEJIDO.get('sello') == sello:       # ya visto en este fotograma
         return _TEJIDO['t']
     trazas = frozenset((min(a, b), max(a, b)) for a, b in W.get('trazas') or []) \
@@ -8528,7 +8532,8 @@ def tejido(W, cfg):
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), tema, cfg['rios'], cfg['carreteras'],
              cfg['min_via'], cfg['max_rio'], cfg['umbral_vecindad'], cfg['peso_vecina'],
              cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'], trazas,
-             cfg.get('peso_traza', 0.0), alturas, cfg.get('pendiente_min', 0.05))
+             cfg.get('peso_traza', 0.0), alturas, cfg.get('pendiente_min', 0.05), cfg.get('vias'), cfg.get('red'),
+             cfg.get('min_red'), cfg.get('recursos'), tuple(len(x) for x in W.get('cols', [])))
     if _TEJIDO.get('clave') == clave:
         _TEJIDO['sello'] = sello
         return _TEJIDO['t']
@@ -8539,21 +8544,26 @@ def tejido(W, cfg):
         t['caudal'] = _caudal(t['rios'], t['abajo'])
     if tema == 'ciudad' and cfg['carreteras']:
         t['arbol'], t['vias'] = carreteras(W, cfg, cl, trazas)
+    if tema == 'industria':             # fase 13 v7: las vias (como rios) y la red (al reves)
+        t['fc'] = ferrocarril(W, cfg, trazas)
+        t['vias'] = list(t['fc']['vias'])
+        t['red'] = red_electrica(W, cfg)
     _TEJIDO['clave'], _TEJIDO['t'] = clave, t
     _TEJIDO['version'] = _TEJIDO.get('version', 0) + 1
     _TEJIDO['sello'] = sello
     return t
 
 
-def _tramo_suelo(W, cfg, a, b, ancho, col, rug, out):
+def _tramo_suelo(W, cfg, a, b, ancho, col, rug, out, desplaza=0.0, medio=False):
     """Dos medios tramos de la celda a a la b, a ras del suelo, siguiendo la
-    curva: centro de a -> punto medio -> centro de b."""
+    curva: centro de a -> punto medio -> centro de b. 'desplaza' lo aparta de lado
+    (los railes de la industria); 'medio', solo el primer medio tramo."""
     na, nb = normal_i(a), normal_i(b)
     ra = base_radius(W, cfg, a) + TEJIDO_LIFT
     rb = base_radius(W, cfg, b) + TEJIDO_LIFT
     pa, pb = _mul(na, ra), _mul(nb, rb)
     pm = _mul(_norm(_add(na, nb)), 0.5 * (ra + rb))
-    for p, q in ((pa, pm), (pm, pb)):
+    for p, q in (((pa, pm),) if medio else ((pa, pm), (pm, pb))):
         Y = _norm(_add(p, q))           # el centro, sobre la superficie (no en la cuerda)
         c = _mul(Y, 0.5 * (math.sqrt(_dot(p, p)) + math.sqrt(_dot(q, q))))
         d = (q[0] - p[0], q[1] - p[1], q[2] - p[2])
@@ -8563,6 +8573,8 @@ def _tramo_suelo(W, cfg, a, b, ancho, col, rug, out):
             continue
         Z = _mul(d, 1.0 / L)
         X = _cross(Y, Z)
+        if desplaza:
+            c = _add(c, X, desplaza)
         rx, ry, rz = _euler_xyz(X, Y, Z)
         out.append([c[0], c[1], c[2], rx, ry, rz, ancho, TEJIDO_ALTO, L + 0.5 * ancho,
                     col[0], col[1], col[2], rug])
@@ -8571,7 +8583,9 @@ def _tramo_suelo(W, cfg, a, b, ancho, col, rug, out):
 def build_tejido(W, cfg):
     """(filas de la geometria 'tejido', resumen para la leyenda)."""
     t = tejido(W, cfg)
-    W['tejido_vias'] = t['vias']
+    W['tejido_vias'] = t['vias'] if tema_de(cfg) == 'ciudad' else []
+    if tema_de(cfg) == 'industria':     # fase 13 v7: vias y red
+        return build_tejido_industria(W, cfg, t)
     filas = []
     w = cfg['grosor_via']
     for a, b in t['vias']:                  # los rios van en su geometria ('rios', build_rios)
@@ -8580,6 +8594,294 @@ def build_tejido(W, cfg):
         for f in filas:
             f[12] = 1.0
     return filas, dict(rios=len(t['rios']), tramos_rio=len(t['caudal']), tramos_via=len(t['vias']))
+
+
+
+# --- el tejido de la industria (fase 13 v7, motor v68): vias y red ------------------
+# FERROCARRIL, como los rios: nace en cada mina con ocupacion Minvia o mas y baja
+# por el camino mas corto (Dijkstra; los tramos de la industria enterrada pesan
+# menos, Pesotraza) hasta la planta de energia mas cercana. Las lineas confluyen:
+# la carga de un tramo son las lineas que pasan (via unica, doble desde 2) y a la
+# llegada se abre una playa de vias. Un desnivel se salva con un viaducto.
+# RED ELECTRICA, como un rio al reves: nace en cada central (energia desde la
+# fusion - 1) y se ramifica por las formaciones de la industria hasta todas las de
+# ocupacion Minred o mas: un arbol con raiz en las centrales (BFS de varias
+# fuentes por las celdas ocupadas). La carga de un tramo, las formaciones que
+# alimenta aguas abajo: alta tension, media o postes. Lo que no alcanza ninguna
+# central se apaga (sin pulsos, naves a oscuras). Los pulsos violeta salen de la
+# central hacia fuera, al tempo.
+COL_BALASTO, COL_RAIL = (0.16, 0.14, 0.13), (0.70, 0.68, 0.64)
+COL_CABLE = (0.10, 0.10, 0.11)
+
+
+def ferrocarril(W, cfg, trazas):
+    """dict(vias=[(a, b)], carga={(a, b): lineas}, playas=[planta], lineas=[[celdas]],
+    fuente={planta: set(recursos)})."""
+    import heapq
+    out = dict(vias=[], carga={}, playas=[], lineas=[], fuente={})
+    if not cfg.get('vias', 1):
+        return out
+    minas = [i for i in range(N) if W['occ'][i] >= max(1, int(cfg['min_via'])) and W['own'][i] == GEO]
+    plantas = [i for i in range(N) if W['occ'][i] > 0 and W['own'][i] == ARQ]
+    if not minas or not plantas:
+        return out
+    peso = max(0.0, float(cfg.get('peso_traza', 0.5)))
+    dist = dict((p, 0.0) for p in plantas)
+    hacia = dict((p, None) for p in plantas)
+    cola = [(0.0, p) for p in plantas]
+    heapq.heapify(cola)
+    while cola:
+        d, c = heapq.heappop(cola)
+        if d > dist.get(c, 1e9) + 1e-12:
+            continue
+        for j in sorted(NEIGH[c]):
+            w = 1.0 - (0.5 * min(1.0, peso) if (min(c, j), max(c, j)) in trazas else 0.0)
+            nd = d + w
+            if nd < dist.get(j, 1e9) - 1e-12:
+                dist[j], hacia[j] = nd, c
+                heapq.heappush(cola, (nd, j))
+    for mi in sorted(minas):
+        if mi in plantas or mi not in hacia:
+            continue
+        linea = [mi]
+        while hacia[linea[-1]] is not None and len(linea) < N:
+            linea.append(hacia[linea[-1]])
+        out['lineas'].append(linea)
+        destino = linea[-1]
+        out['fuente'].setdefault(destino, set()).add(recurso_celda(W, cfg, mi))
+        if destino not in out['playas']:
+            out['playas'].append(destino)
+        for a, b in zip(linea, linea[1:]):
+            k = (min(a, b), max(a, b))
+            out['carga'][k] = out['carga'].get(k, 0) + 1
+    out['vias'] = sorted(out['carga'])
+    return out
+
+
+def red_electrica(W, cfg):
+    """dict(tramos=[(padre, hijo)], carga={hijo: formaciones aguas abajo},
+    hondo={celda: tramos desde la central}, centrales=[...], apagadas=[...])."""
+    out = dict(tramos=[], carga={}, hondo={}, centrales=[], apagadas=[])
+    if not cfg.get('red', 1):
+        return out
+    umbral = int(cfg['th_fusion']) - 1
+    nodos = set(i for i in range(N) if W['occ'][i] > 0 and W['own'][i])
+    centrales = sorted(i for i in nodos if W['own'][i] == ARQ and W['occ'][i] >= umbral)
+    consumo = set(i for i in nodos if W['occ'][i] >= max(1, int(cfg['min_red'])))
+    out['centrales'] = centrales
+    padre = dict((c, None) for c in centrales)
+    hondo = dict((c, 0) for c in centrales)
+    frente = list(centrales)
+    while frente:
+        sig = []
+        for c in frente:
+            for j in sorted(NEIGH[c]):
+                if j in nodos and j not in padre:
+                    padre[j], hondo[j] = c, hondo[c] + 1
+                    sig.append(j)
+        frente = sig
+    carga = dict((c, 1 if c in consumo else 0) for c in padre)
+    for c in sorted(padre, key=lambda x: -hondo[x]):
+        if padre[c] is not None:
+            carga[padre[c]] += carga[c]
+    # solo las ramas que llevan a algun consumidor
+    out['tramos'] = sorted((padre[c], c) for c in padre if padre[c] is not None and carga[c] > 0)
+    out['carga'], out['hondo'] = carga, hondo
+    out['apagadas'] = sorted(c for c in consumo if c not in padre)
+    return out
+
+
+def nivel_red(carga):
+    """0 postes, 1 media tension, 2 alta tension (cerca de la central)."""
+    return 2 if carga >= 5 else (1 if carga >= 2 else 0)
+
+
+def _cable(W, cfg, a, b, h, ancho, col, out):
+    """Un tramo de cable entre las torres de a y b, a altura h."""
+    pa = _mul(normal_i(a), base_radius(W, cfg, a) + h)
+    pb = _mul(normal_i(b), base_radius(W, cfg, b) + h)
+    c = _mul(_add(pa, pb), 0.5)
+    d = _add(pb, pa, -1.0)
+    L = _len(d)
+    if L < 1e-6:
+        return
+    Y = _norm(c)
+    Z = _norm(_add(d, Y, -_dot(d, Y)))
+    X = _cross(Y, Z)
+    rx, ry, rz = _euler_xyz(X, Y, Z)
+    out.append([c[0], c[1], c[2], rx, ry, rz, ancho, ancho, L, col[0], col[1], col[2], 0.6])
+
+
+_TEJ_IND = {}
+
+
+def _clave_tej_ind(W, cfg, t):
+    """Lo que cambia las filas fijas del tejido de la industria: la topologia (la
+    version del tejido), el suelo de sus celdas y los anchos (una vez por fotograma)."""
+    sello = (id(W), _TERRENO.get('sello'), _TEJIDO.get('version'))
+    v = _TEJ_IND.get('clave')
+    if v is not None and v[0] == sello:
+        return v[1]
+    nodos = set(x for e in (t.get('fc') or {}).get('vias', []) for x in e) | \
+        set(x for e in (t.get('red') or {}).get('tramos', []) for x in e)
+    clave = (_TEJIDO.get('version'), tuple(round(base_radius(W, cfg, x), 4) for x in sorted(nodos)),
+             cfg.get('ancho_via'), cfg.get('respaldo', 0), limit(cfg), GRID['lo'], GRID['hi'],
+             cfg.get('recursos'))
+    _TEJ_IND['clave'] = (sello, clave)
+    return clave
+
+
+def build_tejido_industria(W, cfg, t):
+    """Filas del 'tejido' de la industria: balasto y railes (doble via, playas) y
+    los cables de la red. Se guardan mientras no cambie la topologia ni el suelo.
+    Devuelve (filas, resumen)."""
+    clave = _clave_tej_ind(W, cfg, t)
+    v = _TEJ_IND.get('filas')
+    if v is not None and v[0] == clave:         # las mismas filas: el Script CHOP no se recuece
+        return list(v[1]), dict(v[2])
+    filas, res = _build_tejido_industria(W, cfg, t)
+    _TEJ_IND['filas'] = (clave, filas, dict(res))
+    return list(filas), res
+
+
+def _build_tejido_industria(W, cfg, t):
+    filas = []
+    w = cfg.get('ancho_via', 0.14)
+    lim = limit(cfg)
+    fc = t.get('fc') or {}
+    for a, b in fc.get('vias', []):
+        doble = fc['carga'].get((a, b), 1) >= 2
+        wb = w * (1.7 if doble else 1.0)
+        _tramo_suelo(W, cfg, a, b, wb, COL_BALASTO, 0.9, filas)
+        for off in ((-0.32, -0.12, 0.12, 0.32) if doble else (-0.12, 0.12)):
+            _tramo_suelo(W, cfg, a, b, 0.07 * wb, COL_RAIL, 0.2, filas, desplaza=off * wb)
+    for p in fc.get('playas', []):                  # la playa de vias: el haz se abre a la llegada
+        for j in sorted(NEIGH[p])[:1]:
+            for off in (-0.5, -0.25, 0.0, 0.25, 0.5):
+                _tramo_suelo(W, cfg, p, j, 0.12 * w, COL_RAIL, 0.2, filas, desplaza=off * w * 2.4, medio=True)
+    red = t.get('red') or {}
+    for a, b in red.get('tramos', []):
+        nv = nivel_red(red['carga'].get(b, 1))
+        h = (0.10, 0.20, 0.34)[nv] * lim
+        _cable(W, cfg, a, b, h, (0.008, 0.014, 0.022)[nv] * (1.0 + 0.1 * red['carga'].get(b, 1) ** 0.5),
+               COL_CABLE, filas)
+    if cfg.get('respaldo', 0):
+        for f in filas:
+            f[12] = 1.0
+    res = dict(rios=0, tramos_rio=0, tramos_via=len(fc.get('vias', [])), lineas=len(fc.get('lineas', [])),
+               playas=len(fc.get('playas', [])), centrales=len(red.get('centrales', [])),
+               tramos_red=len(red.get('tramos', [])), apagadas=len(red.get('apagadas', [])))
+    return filas, res
+
+
+def build_industria_tejido(W, cfg, now, out):
+    """Lo que el tejido de la industria pone en las geometrias de los modelos y las
+    particulas: viaductos, torres y postes, los pulsos violeta de la red y (desde
+    la fase 17) los trenes, cargados con el recurso de su mina hacia la planta y
+    vacios de vuelta, al tempo."""
+    if tema_de(cfg) != 'industria':
+        return
+    t = tejido(W, cfg)
+    lim = limit(cfg)
+    doce = cfg['nivel'] >= 12
+    paso = W.get('paso') or 0.125
+    spb = max(1, int(cfg.get('steps_per_beat', 4)))
+    tau = beat_stop(W, cfg) if cfg['nivel'] >= 17 else now / max(1e-6, paso * spb)
+
+    fc = t.get('fc') or {}
+    red = t.get('red') or {}
+    clave = (_clave_tej_ind(W, cfg, t), doce)
+    fijo = _TEJ_IND.get('fijo')
+    if fijo is None or fijo[0] != clave:       # viaductos, torres y los extremos de los pulsos: se guardan
+        fijo = _TEJ_IND['fijo'] = (clave, _tejido_ind_fijo(W, cfg, t, doce))
+    for g, filas_ in fijo[1]['filas'].items():
+        out.setdefault(g, []).extend(filas_)
+    parts = out.setdefault('particulas', [])
+    if cfg.get('pulso_red', 1) and cfg['nivel'] >= 13:     # los pulsos: de la central hacia fuera
+        col = cfg.get('color_red') or COL_RED_DEF
+        s_ = 0.03 * lim
+        for h, pa, d, rx, ry in fijo[1]['pulsos']:
+            f = (tau * 0.5 - 0.25 * h) % 1.0
+            parts.append([pa[0] + d[0] * f, pa[1] + d[1] * f, pa[2] + d[2] * f, rx, ry, 0.0, s_, s_, s_,
+                          col[0], col[1], col[2]])
+    if cfg['nivel'] >= 17:                          # fase 17: los trenes
+        trenes(fijo[1], tau, lim, parts)
+
+
+def _tejido_ind_fijo(W, cfg, t, doce):
+    """Lo fijo del tejido de la industria para las geometrias de los modelos."""
+    lim = limit(cfg)
+    salida = {}
+
+    def fila(mo, p, ej, dims, col):
+        f = _fila_m(p, ej, dims[0], dims[1], dims[2], col)
+        if doce:
+            f.append(1.0)
+        salida.setdefault(geometria_de(mo), []).append(f)
+    fc = t.get('fc') or {}
+    for a, b in fc.get('vias', []):                 # viaductos donde la via salva un desnivel
+        ra, rb = base_radius(W, cfg, a), base_radius(W, cfg, b)
+        if abs(ra - rb) > 0.04 * lim:
+            ej = _marco_puente(a, b) if ra > rb else _marco_puente(b, a)
+            hi = max(ra, rb)
+            pm = _mul(_norm(_add(normal_i(a), normal_i(b))), min(ra, rb))
+            L = _len(_add(_mul(normal_i(a), ra), _mul(normal_i(b), rb), -1.0))
+            fila('ciu_viaducto', _add(pm, _norm(pm), 0.0), ej, (cfg.get('ancho_via', 0.14) * 1.4, hi - min(ra, rb)
+                                                                + 0.01, 0.5 * L), COL_REMATE['subestacion'])
+    red = t.get('red') or {}
+    puestos = set()
+    for a, b in red.get('tramos', []):              # torres y postes en cada nudo
+        for c, nv in ((a, nivel_red(red['carga'].get(b, 1))), (b, nivel_red(red['carga'].get(b, 1)))):
+            if (c, nv) in puestos:
+                continue
+            puestos.add((c, nv))
+            n = normal_i(c)
+            cw, cl_ = _cell_sizes(base_radius(W, cfg, c), c)
+            p = _add(_add(_mul(n, base_radius(W, cfg, c)), tangents(n)[0], 0.4 * cw), tangents(n)[1], 0.4 * cl_)
+            alto = (0.10, 0.20, 0.34)[nv] * lim
+            fila('ciu_torre' if nv else 'ciu_poste', p, _marco(c), (alto * (0.5 if nv else 0.25), alto, 0.05 * cw),
+                 (0.55, 0.55, 0.56))
+    pulsos = []
+    for a, b in red.get('tramos', []):
+        nv = nivel_red(red['carga'].get(b, 1))
+        alto = (0.10, 0.20, 0.34)[nv] * lim
+        pa = _mul(normal_i(a), base_radius(W, cfg, a) + alto)
+        pb = _mul(normal_i(b), base_radius(W, cfg, b) + alto)
+        rx, ry = orient(_norm(_add(pa, pb)))
+        pulsos.append((red['hondo'].get(a, 0), pa, _add(pb, pa, -1.0), rx, ry))
+    lineas = []
+    for linea in fc.get('lineas', []):
+        if len(linea) < 2:
+            continue
+        tramos = []
+        for a, b in zip(linea, linea[1:]):
+            pa = _mul(normal_i(a), base_radius(W, cfg, a) + 0.02 * lim)
+            pb = _mul(normal_i(b), base_radius(W, cfg, b) + 0.02 * lim)
+            d = _add(pb, pa, -1.0)
+            rx, ry = orient(_norm(_add(pa, pb)))
+            tramos.append((pa, d, _norm(d), rx, ry))
+        lineas.append((tramos, COL_RECURSO[recurso_celda(W, cfg, linea[0])]))
+    return dict(filas=salida, pulsos=pulsos, lineas=lineas)
+
+
+def trenes(fijo, tau, lim, parts):
+    """Fase 17: un convoy por linea, cargado con el recurso de su mina hacia la
+    planta y vacio de vuelta, al tempo (STOP, huelga: se para)."""
+    s_, a_ = 0.035 * lim, 0.03 * lim
+    for k, (tramos, rec) in enumerate(fijo['lineas']):
+        n_ = len(tramos)
+        u = (tau / (2.0 * (n_ + 1)) + 0.37 * k) % 2.0     # ida (cargado) y vuelta (vacio)
+        ida = u < 1.0
+        pos = (u if ida else 2.0 - u) * n_
+        q = min(n_ - 1, int(pos))
+        fr = pos - q
+        pa, d, du, rx, ry = tramos[q]
+        sg = -0.05 * lim if ida else 0.05 * lim
+        for v in range(4):                          # locomotora y tres vagones
+            col = (0.18, 0.18, 0.2) if v == 0 else (rec if ida else (0.45, 0.42, 0.40))
+            o = sg * v
+            parts.append([pa[0] + d[0] * fr + du[0] * o, pa[1] + d[1] * fr + du[1] * o,
+                          pa[2] + d[2] * fr + du[2] * o, rx, ry, 0.0, s_, a_, s_, col[0], col[1], col[2]])
 
 
 # -----------------------------------------------------------------------------
@@ -8635,6 +8937,8 @@ def especie_destructor(W, cfg, i):
     if esp == 'mina' and etapa_ciudad(cfg, esp, W['occ'][i]) >= 5:
         return 'refineria'
     return esp
+
+
 SALTO = 0.5                 # el fuego salta a una vecina si el mapa logistico pasa de aqui
 POLVO_MAX = 48              # nubes de particulas a la vez
 
@@ -11917,9 +12221,15 @@ def _legend():
             lines.append('  MOD      -   %s' % modo)
     if lvl >= 13:
         tj = W.get('tejido') or {}
-        lines.append('  TEJIDO   rios %d (%d tramos, %d lagos)   carreteras %d tramos'
-                     % (tj.get('rios', 0), tj.get('tramos_rio', 0), (W.get('rios_res') or {}).get('lagos', 0),
-                        tj.get('tramos_via', 0)))
+        if tema_de(c) == 'industria':           # fase 13 v7: vias y red
+            lines.append('  TEJIDO   vías %d (%d tramos, %d playa%s)   red %d centrales %d tramos   apagadas %d'
+                         % (tj.get('lineas', 0), tj.get('tramos_via', 0), tj.get('playas', 0),
+                            '' if tj.get('playas', 0) == 1 else 's', tj.get('centrales', 0), tj.get('tramos_red', 0),
+                            tj.get('apagadas', 0)))
+        else:
+            lines.append('  TEJIDO   rios %d (%d tramos, %d lagos)   carreteras %d tramos'
+                         % (tj.get('rios', 0), tj.get('tramos_rio', 0), (W.get('rios_res') or {}).get('lagos', 0),
+                            tj.get('tramos_via', 0)))
         if tema_de(c) == 'naturaleza':          # fase 13 v3: el diagnostico de los rios
             rr = W.get('rios_res') or {}
             lines.append('  RIOS     tramos %d   fuentes %d   lagos %d   caudal max %d   ancho %.1f px'

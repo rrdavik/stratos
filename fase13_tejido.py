@@ -32,6 +32,17 @@ QUE HACE
                arbol de expansion minima (Kruskal) entre las capitales de
                cluster y las formaciones sueltas con ocupacion de Minvia o
                mas; cada arista va por el camino mas corto de la reticula.
+  VIAS Y RED (industria, v7)
+               el ferrocarril nace en cada mina con ocupacion Minvia o mas y
+               baja hasta la planta de energia mas cercana; confluye como los
+               rios: via unica, doble desde dos lineas, y una playa de vias a
+               la llegada; un viaducto donde salva un desnivel. Balasto oscuro
+               y railes claros (Anchovia). La red electrica nace en cada
+               central (energia desde la fusion - 1) y se ramifica por las
+               formaciones hasta las de ocupacion Minred o mas: alta tension,
+               media y postes segun lo que alimenta aguas abajo. Pulsos violeta
+               de la central hacia fuera (Pulsored, Colorred, reservado); lo
+               que no alcanza ninguna central se apaga (Red).
   Las carreteras van de centro a centro de celda, a ras del suelo: pasan
   por debajo de las formaciones que cruzan (geometria 'tejido', el shader
   de la piel: el asfalto es mate). Se recalculan solo cuando cambia la
@@ -76,7 +87,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v6  (pagina mas corta: el ancho maximo del rio sale de Anchorio)'
+VERSION = 'fase13 v7  (industria: el ferrocarril como los rios y la red electrica como un rio al reves)'
 banner(VERSION)
 
 base = require_base(13)
@@ -111,9 +122,16 @@ renew_default(base, 'Emisivorio', 0.25, 0.6)
 renew_default(base, 'Anchominpx', 2.0, 4.0)
 for k, ch in enumerate('rgb'):
     renew_default(base, 'Colorrio' + ch, m.COL_RIO_V50[k], m.COL_RIO[k])
+# v7: el tejido de la industria
+add_par(base, page, 'toggle', 'Vias', 'Ferrocarril (industria)', True)
+add_par(base, page, 'toggle', 'Red', 'Red electrica (industria)', True)
+add_par(base, page, 'int', 'Minred', 'Ocupacion minima de una formacion con corriente', 2, 1, 16, clamp=True)
+add_par(base, page, 'float', 'Anchovia', 'Ancho del ferrocarril', 0.14, 0.02, 1.0)
+add_par(base, page, 'toggle', 'Pulsored', 'Pulsos por la red, al tempo', True)
+add_par(base, page, 'rgb', 'Colorred', 'Color de la red (violeta reservado)', m.COL_RED_DEF)
 ok('pagina Fase13: Rios, Carreteras, Minvia 2, Grosorvia 0,18 (carreteras), Maxrio 12; v2: Colorrio '
    '(v4: OKLCH 0,65 0,18 250), Anchorio 0,10 (el maximo, 3,4 x), Emisivorio 0,6, Lagos; v3: Anchominpx 4, '
-   'Pruebario')
+   'Pruebario; v7: Vias, Red, Minred 2, Anchovia 0,14, Pulsored, Colorred')
 
 # -----------------------------------------------------------------------------
 # GEOMETRIA: el tejido, cajas a ras del suelo con el shader de la piel
@@ -132,6 +150,10 @@ setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else '
 set_render(base)
 
 leeme(base, 13, """FASE 13 - TEJIDO CONECTIVO
+  Industria (v7): el ferrocarril baja de las minas a la planta mas cercana
+  y confluye (doble via, playa); la red nace en las centrales y se ramifica
+  (alta, media, postes; pulsos violeta; apagon). Vias, Red, Minred,
+  Anchovia, Pulsored, Colorred.
   Naturaleza (v2): los rios nacen en las cumbres y bajan por el suelo real
   (suelo + relieve) a la vecina mas baja, hasta un llano, otro rio o Maxrio;
   en una hondonada, lago (Lagos). Cintas azules (geometria rios,
@@ -372,6 +394,7 @@ def _prueba(t, m):
     t.check('i_rios recibe las cintas (con el canal a)', chop.numSamples >= 1 and chop['a'] is not None)
     t.check('leyenda TEJIDO', 'TEJIDO' in m.legend() and 'rios' in m.legend() and 'lagos' in m.legend())
     _prueba_v3(t, m)
+    _prueba_industria(t, m)
 
 
 def _prueba_v3(t, m):
@@ -455,6 +478,68 @@ def _prueba_v3(t, m):
     cf = m.cfg()
     t.check('el rio mas caudaloso, 3,4 x Anchorio; el relieve minimo de una fuente, 0,01',
             abs(cf['ancho_max_rio'] - 3.4 * float(base.par.Anchorio)) < 1e-9 and cf['pendiente_min'] == 0.01)
+
+def _prueba_industria(t, m):
+    """v7: el tejido de la industria. Pruebas 7 (trenes) y 8 (red) del encargo."""
+    tema0 = str(base.par.Tema.eval())
+    try:
+        _prueba_industria_(t, m)
+    finally:
+        base.par.Tema = tema0
+
+
+def _prueba_industria_(t, m):
+    base.par.Tema = 'industria'
+    c = m.cfg()
+
+    def mundo(celdas):
+        W = m.new_world()
+        for x, own, occ in celdas:
+            W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, 100
+            W['h'][x] = W['vh'][x] = m.height_for(c, occ)
+            W['t_nac'][x] = -50.0
+        m.cerrar_obras(W, c)
+        return W
+    # 7. tres minas y una planta: tres vias que confluyen, se ensanchan y acaban en una playa
+    i = m.note_cell(64)
+    anillo = m.RINGS[m.RING_OF[i]]
+    q = anillo.index(i)
+    minas = [anillo[(q + 3) % len(anillo)], anillo[(q - 3) % len(anillo)]]
+    otro = m.RINGS[m.RING_OF[i] + 2] if m.RING_OF[i] + 2 < len(m.RINGS) else m.RINGS[m.RING_OF[i] - 2]
+    minas.append(min(otro, key=lambda x: -sum(m.NORMALS[x][k] * m.NORMALS[i][k] for k in range(3))))
+    W = mundo([(i, m.ARQ, 6)] + [(x, m.GEO, 4) for x in minas])
+    tj = m.tejido(W, c)
+    fc = tj['fc']
+    doble = [e for e, n in fc['carga'].items() if n >= 2]
+    inst = m.build_instances(W, c, absTime.seconds + 10.0)
+    t.check('trenes: tres minas y una planta -> %d lineas que confluyen (%d tramos de doble via) y acaban en '
+            '%d playa' % (len(fc['lineas']), len(doble), len(fc['playas'])),
+            len(fc['lineas']) == 3 and all(l[-1] == i for l in fc['lineas']) and fc['playas'] == [i]
+            and len(inst.get('tejido', [])) > 3 * len(fc['vias']), 'carga %s' % fc['carga'])
+    # 8. una central y seis formaciones: el arbol desde la central, pulsos violeta, apagon
+    vec = list(m.NEIGH[i])
+    zona_ = [(i, m.ARQ, 8)] + [(x, m.GEO if k % 2 else m.ARQ, 3) for k, x in enumerate(vec[:6])]
+    W = mundo(zona_)
+    red = m.tejido(W, c)['red']
+    inst = m.build_instances(W, c, absTime.seconds + 10.0)
+    col = tuple(round(v, 3) for v in c['color_red'])
+    pulsos = [f for f in inst.get('particulas', []) if tuple(round(v, 3) for v in f[9:12]) == col]
+    W2 = mundo([(x, own, occ) for x, own, occ in zona_ if x != i])
+    red2 = m.tejido(W2, c)['red']
+    t.check('red: una central y seis formaciones -> arbol de %d tramos desde la central, %d pulsos violeta; sin '
+            'la central, %d apagadas' % (len(red['tramos']), len(pulsos), len(red2['apagadas'])),
+            red['centrales'] == [i] and len(red['tramos']) >= 6 and not red['apagadas'] and len(pulsos) == len(red['tramos'])
+            and len(red2['apagadas']) == 6 and not red2['tramos'])
+    m.build_instances(W, c, absTime.seconds + 10.0)
+    W_ = m.world()
+    for k in W:
+        W_[k] = W[k]
+    m.build_instances(W_, c, absTime.seconds + 10.0)
+    ley = m.legend()
+    t.check('leyenda TEJIDO de la industria (vias, playas, red, centrales, apagadas)',
+            'TEJIDO   vías' in ley and 'centrales' in ley and 'apagadas' in ley,
+            ' '.join(l.strip() for l in ley.split('\n') if 'TEJIDO' in l))
+
 
 run_test(base, prueba)
 print('  Ahora: con Tema ciudad, Sembrarzona en dos notas lejanas: la carretera')
