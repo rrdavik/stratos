@@ -160,11 +160,23 @@ def prueba(t):
     for k in range(3):
         t.midi(0x9C, 0x40, 0x64)
         hs.append(W['h'][i])
-    t.check('4 notas -> crecimiento (ocupacion 3)', W['occ'][i] == 3 and hs[-1] > hs[0],
+    # lo esperado sale del coste del proyecto (Costemax): la nota 1 siembra y
+    # cada nota despues suma 1 a la carga, que dispara el trigger al llegar a cost(ocupacion)
+    occ_e, carga_e, ks = 1, 0, []
+    for k in range(3):
+        ks.append(m.cost(c, occ_e))
+        carga_e += 1
+        if carga_e >= m.cost(c, occ_e):
+            occ_e, carga_e = occ_e + 1, 0
+    t.check('4 notas -> crecimiento (ocupacion %d)' % occ_e,
+            W['occ'][i] == occ_e and hs[-1] > hs[0],
             'ocupacion %d, altura %.2f' % (W['occ'][i], W['h'][i]))
-    t.check('frenada: la nota 3 sube menos que la 2', hs[2] - hs[1] < hs[1] - hs[0] - 1e-6,
-            '%.3f < %.3f' % (hs[2] - hs[1], hs[1] - hs[0]))
-    t.check('carga: la nota 3 no dispara trigger', m.cost(c, 2) == 2)
+    dif = [hs[k + 1] - hs[k] for k in range(3)]
+    t.check('frenada: cada nota sube Growstep / coste (menos cuanto mas cuesta el trigger)',
+            all(abs(dif[k] * ks[k] - c['grow_frac'] * lim) < 1e-6 for k in range(3)),
+            ' , '.join('%.3f (coste %d)' % (dif[k], ks[k]) for k in range(3)))
+    t.check('carga: las notas sin trigger se acumulan (carga %d)' % carga_e,
+            W['carga'][i] == carga_e, '%d' % W['carga'][i])
     W2 = m.new_world()
     for k in range(3):
         m.note_on(W2, c, m.GEO, 64, 100, float(k))
@@ -174,15 +186,21 @@ def prueba(t):
             W2['h'][i] <= m.height_for(c, W2['occ'][i] + 1) + 1e-9
             and W2['h'][i] - h3 <= (c['gate_max'] - 1.0) * c['grow_frac'] * lim / 2 + 1e-9,
             '%.3f -> %.3f' % (h3, W2['h'][i]))
-    for k in range(6):
+    # cuantas notas hacen falta sale de la configuracion del proyecto (Costemax,
+    # umbrales...): con los valores de fabrica son 10 hasta la madurez y 11 hasta el limite
+    n = 4
+    while W['occ'][i] < c['th_branch'] - 1 and n < 200:
         t.midi(0x9C, 0x40, 0x64)
-    t.check('10 notas -> madurez, aun bajo el limite',
+        n += 1
+    t.check('%d notas -> madurez, aun bajo el limite' % n,
             W['occ'][i] == c['th_branch'] - 1 and W['h'][i] < lim,
             'ocupacion %d, altura %.2f de %.2f' % (W['occ'][i], W['h'][i], lim))
-    t.midi(0x9C, 0x40, 0x64)
+    while W['occ'][i] < c['th_branch'] and n < 200:
+        t.midi(0x9C, 0x40, 0x64)
+        n += 1
     o11 = W['occ'][i]
     desborda = c['nivel'] >= 4            # relanzada sobre un proyecto ya avanzado
-    t.check('11 notas -> limite de altura' + ('' if desborda else ', sin desbordar'),
+    t.check('%d notas -> limite de altura' % n + ('' if desborda else ', sin desbordar'),
             abs(W['h'][i] - lim) < 1e-6 and o11 == c['th_branch']
             and (desborda or m.occupied(W) == 1),
             'altura %.2f de %.2f, celdas %d' % (W['h'][i], lim, m.occupied(W)))
