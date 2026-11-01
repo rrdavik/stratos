@@ -1696,7 +1696,7 @@ def _prueba_rendimiento_td(t, m):
             c = m.cfg()
             m._CACHE.pop('render_tema', None)
             m.render_tema_al_dia(c)
-            geos = [g for g in str(base.op('render').par.geometry.eval()).split() if g.startswith('mod_')]
+            geos = [g for g in str(base.op('render').par.geometry.val).split() if g.startswith('mod_')]
             mods = dict((g, mo) for g, mo, _ in m.geometrias_piel(c))
             ajenas = [g for g in geos if m.tema_de(c) not in m.temas_de_modelo(mods.get(g, ''))]
             res.append((tema, len(geos), len(mods), ajenas))

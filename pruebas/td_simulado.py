@@ -35,7 +35,7 @@ CARPETA_TD = 'C:/Users/DareDave/Downloads/est'
 ROT_ORDERS = ['xyz', 'xzy', 'yxz', 'yzx', 'zxy', 'zyx']
 # Parametros que apuntan a un operador: en TouchDesigner, eval() devuelve el
 # operador (que se escribe como su ruta completa), no el texto.
-OP_PARS = ('material', 'instanceop', 'lookat')
+OP_PARS = ('material', 'instanceop', 'lookat', 'geometry')
 XFORM_ORDERS = ['srt', 'str', 'rst', 'rts', 'tsr', 'trs']
 
 _XFORM = ['tx', 'ty', 'tz', 'rx', 'ry', 'rz', 'sx', 'sy', 'sz', 'px', 'py', 'pz', 'scale',

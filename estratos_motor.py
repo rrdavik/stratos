@@ -11713,7 +11713,7 @@ def render_tema_al_dia(c):
         return False
     try:
         r = parent().op('render')
-        actual = str(r.par.geometry.eval())
+        actual = str(r.par.geometry.val)
     except Exception:
         return False
     clave = (tema_de(c), c['nivel'] < 12, variantes(c), variantes_ciudad(c), variantes_ind(c))
