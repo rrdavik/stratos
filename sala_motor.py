@@ -32,9 +32,17 @@
 #   CAMARA      la vista libre (orbita alrededor de la sala) y la cenital,
 #               desde la camara de la tabla, con su imagen de profundidad para
 #               la fase 22.
+#   v2, ESTAR EN LA SALA
+#               Vista = visitante (por defecto): los ojos de un visitante, a
+#               1,65 m, que pasea despacio entre el publico mirando la esfera;
+#               entrada: de pie junto a la puerta; orbita (la libre de la v1)
+#               y cenital. Los haces de los focos y del estrobo se ven en la
+#               bruma (Bruma), la esfera ilumina la sala con el color medio de
+#               lo que muestra, el publico tiene cabeza y sombra, y un plano
+#               cenital y un rotulo completan el monitor (monitor_sala).
 # =============================================================================
 
-SALA_VERSION = 'sala v1'
+SALA_VERSION = 'sala v2'
 
 import math
 
@@ -54,6 +62,13 @@ BOCA = 1.5                  # m: de donde salen la voz y las palmas
 CICLO_PRUEBA = 60.0         # s: deposito, tension y erosion dominante, un tercio cada uno
 DESTELLO = 0.03             # s que dura un destello del estrobo
 MAX_HZ = 3.0                # tope duro de destellos por segundo (WCAG 2.3.1)
+OJOS = 1.65                 # m: la altura de la camara del visitante
+VEL_VISITANTE = 0.45        # m/s: el visitante pasea mas despacio que el publico
+PARADA_VISITANTE = 9.0      # s que se para en cada punto
+PUNTOS_VISITANTE = 6        # puntos de su paseo (vuelve a empezar)
+HAZ_MAX = 8.0               # m: largo maximo de un haz de luz
+HAZ_K = 0.10                # brillo de un haz con Bruma 1 y el foco a tope
+COL_ESFERA_DEF = (0.35, 0.55, 0.75)     # la luz de la esfera si no se puede medir su imagen
 
 AMBAR = (1.00, 0.55, 0.15)
 BLANCO_FRIO = (0.80, 0.90, 1.00)
@@ -422,9 +437,10 @@ def bloque_audio(cfg, equipos, ta, n, rate, evs, mic=None):
 # Lo de aqui abajo usa parent(), op() y absTime: solo funciona dentro de
 # TouchDesigner (o del simulado de pruebas/).
 
-_SALA = dict(t0=None, frame=None, equipos=None, audio=None, t_audio=None, forzar=False, manuales=[])
+_SALA = dict(t0=None, frame=None, equipos=None, audio=None, t_audio=None, forzar=False, manuales=[],
+             col_esfera=None, col_frame=None)
 MODOS_LUZ = ['apagado', 'prueba']
-VISTAS = ['libre', 'cenital']
+VISTAS = ['visitante', 'entrada', 'orbita', 'cenital']      # v2; hasta la v1, libre (= orbita) y cenital
 
 
 def _p(name, default):
@@ -462,7 +478,8 @@ def cfg():
                 ruido_publico=max(0.0, _p('Ruidopublico', 0.05)), reaccion=max(0.0, _p('Reaccion', 3.0)),
                 volumen_drone=max(0.0, _p('Volumendrone', 0.5)),
                 modo_luz=_menu('Modoluz', MODOS_LUZ, 1), hz_prueba=_p('Hzprueba', 2.5),
-                luz_casa=max(0.0, _p('Luzcasa', 0.25)), vista=_menu('Vista', VISTAS, 0))
+                luz_casa=max(0.0, _p('Luzcasa', 0.06)), vista=_menu('Vista', VISTAS, 0),
+                bruma=max(0.0, min(1.0, _p('Bruma', 0.5))))
 
 
 def ahora():
@@ -522,11 +539,110 @@ def valor(nombre, que, frame=None):
         return 0.0
 
 
-def vista(que, frame=None):
-    """La camara libre: orbita alrededor del centro de la sala."""
+def paseo_visitante(cfg, t, evitar=()):
+    """(x, z) del visitante en t: pasea a VEL_VISITANTE entre PUNTOS_VISITANTE
+    puntos de la sala (lejos de la esfera y del estrobo), se para
+    PARADA_VISITANTE s en cada uno y vuelve a empezar. Sin azar ni estado."""
+    pts = [(0.0, 0.5 * cfg['fondo'] - 0.8)]
+    pts += [_punto(cfg, 777, 0, k, evitar) for k in range(PUNTOS_VISITANTE)]
+    tramos = []
+    for k, p in enumerate(pts):
+        q = pts[(k + 1) % len(pts)]
+        tramos.append((p, p, PARADA_VISITANTE))
+        tramos.append((p, q, math.hypot(q[0] - p[0], q[1] - p[1]) / VEL_VISITANTE))
+    T = sum(d for _, _, d in tramos)
+    u = t % T if T > 0 else 0.0
+    for p, q, d in tramos:
+        if u <= d or d <= 0:
+            f = 0.0 if d <= 0 else u / d
+            f = f * f * (3.0 - 2.0 * f)             # arranca y se para sin tirones
+            return (p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f)
+        u -= d
+    return pts[0]
+
+
+def ojos(c=None, frame=None):
+    """(posicion, a donde mira) de la camara principal segun Vista."""
+    c = c or cfg()
+    eq = equipos()
+    esf = next((e for e in eq if e['tipo'] == 'esfera'), None)
+    mira = esf['pos'] if esf is not None else (0.0, 1.3, -0.5 * c['fondo'])
+    modo = VISTAS[c['vista'] % len(VISTAS)]
+    if modo == 'visitante':
+        x, z = paseo_visitante(c, ahora(), evitar_de(eq))
+        return (x, OJOS, z), mira
+    if modo == 'entrada':
+        return (0.0, OJOS, 0.5 * c['fondo'] - 0.5), mira
+    if modo == 'cenital':
+        cam = next((e for e in eq if e['tipo'] == 'camara'), None)
+        p = cam['pos'] if cam is not None else (0.0, 3.5, 0.0)
+        return p, (p[0], 0.0, p[2] - 0.3)
     a = math.radians(_p('Orbita', 30.0))
     R = _p('Distancia', 11.0)
-    return dict(tx=R * math.sin(a), ty=_p('Alturavista', 5.0), tz=R * math.cos(a)).get(que, 0.0)
+    return (R * math.sin(a), _p('Alturavista', 5.0), R * math.cos(a)), (0.0, 1.0, 0.0)
+
+
+def vista(que, frame=None):
+    """La camara principal (Vista): tx ty tz de su posicion, mx my mz de a
+    donde mira (el Null 'mirada'), y fov."""
+    try:
+        c = cfg()
+        p, m = ojos(c)
+        if que == 'fov':
+            return 75.0 if VISTAS[c['vista'] % len(VISTAS)] == 'cenital' else 62.0
+        if que in ('mx', 'my', 'mz'):
+            return m[('mx', 'my', 'mz').index(que)]
+        return p[('tx', 'ty', 'tz').index(que)]
+    except Exception:
+        return 0.0
+
+
+def plano(que, frame=None):
+    """La camara del plano (ortografica, desde arriba): ty y el ancho."""
+    c = cfg()
+    if que == 'ancho':
+        return 1.08 * max(c['ancho'], c['fondo'] * 4.0 / 3.0)
+    return c['alto'] + 2.0
+
+
+def haz(e):
+    """(largo, diametro) del haz de un foco o del estrobo: hasta el suelo,
+    como mucho HAZ_MAX."""
+    L = _largo(e['eje'])
+    dy = e['eje'][1] / L if L > 1e-9 else -1.0
+    largo = HAZ_MAX if dy > -0.05 else min(HAZ_MAX, e['y'] / -dy)
+    return largo, 2.0 * largo * math.tan(math.radians(min(170.0, e['tam']) / 2.0))
+
+
+def color_esfera(frame=None):
+    """(r, g, b) medio de la imagen de la esfera (el TOP 'esfera_media', la
+    imagen de FASE1 reducida), una vez por fotograma; si no se puede medir,
+    COL_ESFERA_DEF."""
+    if _SALA['col_esfera'] is not None and _SALA['col_frame'] == absTime.frame:
+        return _SALA['col_esfera']
+    col = COL_ESFERA_DEF
+    try:
+        a = parent().op('esfera_media').numpyArray()
+        if a is not None and a.size:
+            m = a.reshape(-1, a.shape[-1]).mean(axis=0)
+            col = tuple(max(0.0, min(1.0, float(v))) for v in m[:3])
+    except Exception:
+        pass
+    _SALA['col_esfera'], _SALA['col_frame'] = col, absTime.frame
+    return col
+
+
+def luz_esfera(que, frame=None):
+    """La luz de la esfera (Light COMP luz_esfera): tx ty tz y r g b d."""
+    try:
+        e = equipo('esfera')
+        if que in ('tx', 'ty', 'tz'):
+            return e['pos'][('tx', 'ty', 'tz').index(que)] if e is not None else 0.0
+        if que == 'd':
+            return 0.9 if cfg()['activa'] else 0.0
+        return color_esfera()[('r', 'g', 'b').index(que)]
+    except Exception:
+        return 0.0
 
 
 def _filas_sala(c):
@@ -562,16 +678,50 @@ def _filas_equipos(c, eq, t):
     return out
 
 
+CABEZA = 0.23               # m: diametro de la cabeza (v2)
+
+
 def _filas_personas(c, eq, t):
+    """El cuerpo de cada persona: una caja hasta los hombros, de ropa oscura
+    (en una sala a oscuras el publico se lee a contraluz)."""
     out = []
     for i, x, z, h, _ in personas(c, t, evitar_de(eq)):
-        col = (0.35 + 0.4 * h01(i, 11), 0.35 + 0.4 * h01(i, 12), 0.35 + 0.4 * h01(i, 13))
-        out.append([x, 0.0, z, 0, 0, 0, 0.42, h, 0.28] + list(col))
+        col = (0.10 + 0.22 * h01(i, 11), 0.10 + 0.22 * h01(i, 12), 0.10 + 0.22 * h01(i, 13))
+        out.append([x, 0.0, z, 0, 0, 0, 0.42, h - CABEZA - 0.04, 0.26] + list(col))
+    return out
+
+
+def _filas_cabezas(c, eq, t):
+    out = []
+    for i, x, z, h, _ in personas(c, t, evitar_de(eq)):
+        piel = 0.30 + 0.35 * h01(i, 14)
+        out.append([x, h - 0.5 * CABEZA, z, 0, 0, 0, CABEZA, 1.08 * CABEZA, CABEZA,
+                    piel, 0.78 * piel, 0.62 * piel])
+    return out
+
+
+def _filas_haces(c, eq, t):
+    """Un cono por foco y por estrobo, del color de su luz, en la bruma: la
+    punta en el aparato, la base en el suelo. Sin luz (o sin Bruma), nada."""
+    out = []
+    if not c['activa'] or c['bruma'] <= 0:
+        return out
+    for e in eq:
+        if e['tipo'] not in ('foco', 'estrobo'):
+            continue
+        r, g, b, d = luz_de(c, e, t)
+        k = HAZ_K * c['bruma'] * d
+        if k <= 1e-4:
+            continue
+        largo, diam = haz(e)
+        rx, ry = giro_hacia(e['eje'])
+        out.append([e['x'], e['y'], e['z'], rx, ry, 0, diam, diam, largo, r * k, g * k, b * k])
     return out
 
 
 def filas(nombre):
-    """Las instancias de los Script CHOP i_sala, i_equipos e i_personas."""
+    """Las instancias de los Script CHOP i_sala, i_equipos, i_personas y
+    (v2) i_cabezas e i_haces."""
     c = cfg()
     eq = equipos()
     t = ahora()
@@ -581,6 +731,10 @@ def filas(nombre):
         return _filas_equipos(c, eq, t)
     if nombre == 'i_personas':
         return _filas_personas(c, eq, t) if c['activa'] else []
+    if nombre == 'i_cabezas':
+        return _filas_cabezas(c, eq, t) if c['activa'] else []
+    if nombre == 'i_haces':
+        return _filas_haces(c, eq, t)
     return []
 
 
@@ -588,7 +742,7 @@ def frame_tick():
     """Cada fotograma (latido_sala): las personas y los aparatos se redibujan."""
     if not _p('Activa', True):
         return
-    for nm in ('i_personas', 'i_equipos'):
+    for nm in ('i_personas', 'i_cabezas', 'i_equipos', 'i_haces'):
         o = parent().op(nm)
         if o is not None:
             o.cook(force=True)
@@ -674,6 +828,33 @@ def on_pulse(nombre):
     elif nombre == 'Reiniciarsala':
         reiniciar()
         print('SALA  abierta de nuevo: las personas vuelven a entrar')
+
+
+def texto_monitor(frame=None):
+    """El rotulo del monitor (v2): la sala, la luz y lo que oye FASE1."""
+    lineas = [legend()]
+    try:
+        c = cfg()
+        modo = VISTAS[c['vista'] % len(VISTAS)]
+        t = ahora()
+        if c['modo_luz'] == 1:
+            est, u = estado_prueba(t)
+            luz = 'LUZ  %s (%d%%)   %s' % (est, int(u * 100), {
+                'deposito': 'ambar tenue que respira', 'tension': 'sube y vira a blanco frio',
+                'erosion': 'estrobo blanco %.1f Hz' % hz_estrobo(c)}[est])
+        else:
+            luz = 'LUZ  apagada (Modoluz)'
+        lineas.append('%s   bruma %d%%   vista %s' % (luz, int(c['bruma'] * 100), modo))
+    except Exception:
+        pass
+    try:
+        m = op('/project1/FASE1').op('motor').module
+        mc = m.world().get('mic') or {}
+        if 'n' in mc:
+            lineas.append('MICRO  onsets %d   flujo %.2f' % (mc['n'], mc.get('flujo', 0.0)))
+    except Exception:
+        pass
+    return '\n'.join(lineas)
 
 
 def legend(frame=None):

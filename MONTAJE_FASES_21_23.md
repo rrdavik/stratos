@@ -18,7 +18,7 @@ La sala entra en la pieza: desde la fase 21 el micrófono escucha al público, y
 | `estratos_motor.py` | La v55 añade el micrófono: flujo espectral, onsets, el pad 9 de erosión (baja escalones enteros), el corte por ruido de sala y la línea `MICRO`; la v56, `Fuentemic` = chop (el audio de cualquier CHOP, como la sala virtual); la v57 saca `mic_sim` y `mic_flujo` del modo Time Slice de su entrada (en TouchDesigner avisaban «Editing numSamples is not supported in Time Slice mode»); la v58, la página Fase3 con seis parámetros menos (fase 3 v13, ver «Página Fase3» en `MONTAJE_FASES_3_10.md`); la v59, la página Fase4 con 4 parámetros (fase 4 v8, ver «Página Fase4»); la v60, la página Fase6 con 9 (fase 6 v6: el compás de la línea de tiempo, ver «Página Fase6»); la v61, la página Fase7 con 12 (fase 7 v16: cada intensidad a 0 apaga lo suyo); la v62, la página Fase8 con 11 (fase 8 v13: la luminosidad del suelo en un solo `Paletaluz`); la v63, la página Fase11 con 35 (fase 11 v9: siete ajustes finos de la geometría, fijos); la v64, la página Fase13 con 12 (fase 13 v6: el ancho máximo del río sale de `Anchorio`); la v65, la página Fase21 con 10 (fase 21 v3: tiempo muerto y ventana del ruido, fijos); la v66, sin la simulación de la fase 21 (`Fuentemic` micrófono o chop) | `motor v66` |
 | `estratos_comun.py` | La v37: `require_base(21)` acepta un proyecto en la fase 19 o en la 20 (los POPs, sin fusionar: D1) y el informe dice cuál encontró; la v38 quita de la página Fase3 `Growstep`, `Gatemode`, `Rotextra` y los tres ajustes de la luz de las conchas, conservando lo que hacían; la v39 deja la página Fase4 en `Umbralram`, `Pasoumbral`, `Tramoscumbre` y `Satelite`; la v40 quita de la Fase6 `Negrasporcompas`, `Girovivo` y `Compasesterritorio`; la v41, de la Fase7 `Balizasdrum`, `Erosionvel`, `Pumpon`, `Multradio`, `Pumphold` y `Pumpvelmin`; la v42, de la Fase8 `Paletaalterna`, `Contrasteocupada` y `Tapaluz`; la v43, de la Fase11 `Rebote`, `Maxcaosnat`, `Varangulo`, `Cuantizar30`, `Inclinacion`, `Densidadhoja` y `Muroterraza`; la v44, de la Fase13 `Anchomaxrio` y `Pendientemin`; la v45, de la Fase21 `Refractariomic` y `Ventanaruido`; la v46, la simulación de la fase 21 (`mic_sim`, `mic_fuente`, `Simonset`, `Simruido`, `Simdrone`) | `comun v46` |
 | `fase21_microfono.py` | El micrófono: página Fase21, `mic_in` y `mic_flujo`, la fila del pad 9 en `perfiles_erosion` y `colores_drum` (v2: `Fuentemic` = chop y `Chopmic`; v3: la página Fase21 con 10 parámetros en vez de 12; v4: sin la simulación (`mic_sim`, `mic_fuente`, `Simonset`, `Simruido`, `Simdrone`), 7 parámetros) | `fase21 v4` |
-| `sala_virtual.py` y `sala_motor.py` | No son una fase: la maqueta de la instalación en `/project1/SALA` (ver *Sala virtual*) | `sala_virtual v1`, `sala v1` |
+| `sala_virtual.py` y `sala_motor.py` | No son una fase: la maqueta de la instalación en `/project1/SALA` (ver *Sala virtual*; v2: estar en la sala, un solo monitor) | `sala_virtual v2`, `sala v2` |
 | `fase7_erosion.py` | v15: relanzada sobre la fase 21, conserva la fila del micrófono (pad 9) de `perfiles_erosion`; v16: la página Fase7 con 12 parámetros en vez de 18 (ver «Página Fase7» en `MONTAJE_FASES_3_10.md`) | `fase7 v16` |
 | `fase14_destructores.py` | v3: solo la autoprueba (cuenta también el pad 9 al repartir los pads en arañazos, cortes e impulsos) | `fase14 v3` |
 | `claude/PLAN_V5.md` | El plan v5, renumerado a las fases 24–31, encima de la 23 | — |
@@ -162,8 +162,8 @@ Habla con Estratos **por los mismos sitios que el hardware real**, así que la p
 |---|---|---|
 | Micrófono | `audio_mic`: pasos, palmadas y toses de cada persona, el drone de los cuatro altavoces y el sub y el clic del estrobo, cada uno por 1/d y con su retardo (d / 343 m/s) | `Fuentemic` = chop, `Chopmic` = `/project1/SALA/audio_mic` (lo pone el script con `Usarmic`) |
 | Cámara cenital | `vista_cenital` a 3,5 m (75° de campo, como la Femto Bolt en NFOV), `render_cenital` (320 × 288) y `profundidad` | La fase 22, cuando exista |
-| Focos y estrobo | Una Light COMP por fila de la tabla (`luz_<nombre>`); con `Modoluz` = prueba recorren en un minuto depósito, tensión y erosión dominante | La fase 23 (DMX), cuando exista |
-| Esfera de LEDs | Una esfera de 1 m con la imagen de `FASE1/render` | — |
+| Focos y estrobo | Una Light COMP por fila de la tabla (`luz_<nombre>`), con sombra; con `Modoluz` = prueba recorren en un minuto depósito, tensión y erosión dominante; con `Bruma`, su haz se ve en el aire | La fase 23 (DMX), cuando exista |
+| Esfera de LEDs | Una esfera de 1 m con la imagen de `FASE1/render`, que además ilumina la sala (`luz_esfera`, con el color medio de esa imagen) | — |
 
 ### La sala
 
@@ -189,11 +189,37 @@ La especificación no fija cuántos focos hay («los focos no están decididos»
 
 ### Parámetros (página Sala de `/project1/SALA`)
 
-`Activa` · `Ancho` 8 · `Fondo` 6 · `Alto` 4 · `Zonaancho` 5,4 · `Zonafondo` 4,5 · `Recolocar` · `Personas` 6 · `Llegada` 8 s · `Ruidopublico` 0,05 · `Reaccion` 3 · `Volumendrone` 0,5 · `Palmada` · `Reiniciarsala` · `Usarmic` · `Modoluz` (apagada / prueba) · `Hzprueba` 2,5 (tope 3) · `Luzcasa` 0,25 · `Vista` (libre / cenital) · `Orbita` 30° · `Distancia` 11 m · `Alturavista` 5 m
+`Activa` · `Ancho` 8 · `Fondo` 6 · `Alto` 4 · `Zonaancho` 5,4 · `Zonafondo` 4,5 · `Recolocar` · `Personas` 6 · `Llegada` 8 s · `Ruidopublico` 0,05 · `Reaccion` 3 · `Volumendrone` 0,5 · `Palmada` · `Reiniciarsala` · `Usarmic` · `Modoluz` (apagada / prueba) · `Hzprueba` 2,5 (tope 3) · `Luzcasa` 0,06 (hasta la v1, 0,25) · `Bruma` 0,5 (v2) · `Vista` (visitante / entrada / órbita / cenital; v2) · `Orbita` 30° · `Distancia` 11 m · `Alturavista` 5 m (las tres, solo con `Vista` = órbita)
 
-### Cómo mirarla
+### Cómo mirarla (v2: un solo monitor)
 
-Abre `render_sala`: la sala desde una cámara que orbita (`Orbita`, `Distancia`, `Alturavista`) o, con `Vista` = cenital, lo que ve la cámara del techo. `Palmada` da una palmada junto a la persona más cerca del micro, y la línea `MICRO` de FASE1 cuenta el onset.
+Abre **`salida_sala`** (o el Null `monitor_sala`): una sola imagen de 1280 × 720 con todo. No hace falta abrir ningún otro render.
+
+```
+┌───────────────────────────────────────────────────────────┐
+│ SALA 8x6 m   personas 5/6   luz tension ...  ┌──────────┐ │
+│ LUZ tension (40%)  sube y vira a blanco frio │ la esfera│ │
+│ MICRO onsets 12   flujo 0.31                 └──────────┘ │
+│                                                           │
+│          la sala desde la Vista (en grande)               │
+│                                              ┌──────────┐ │
+│                                              │  plano   │ │
+│                                              └──────────┘ │
+└───────────────────────────────────────────────────────────┘
+```
+
+- **En grande, la sala desde `Vista`:**
+  - *visitante* (por defecto): los ojos de un visitante, a 1,65 m, que pasea despacio entre el público (6 puntos de la sala, se para 9 s en cada uno) mirando la esfera. Es la vista para sentir la sala.
+  - *entrada*: de pie junto a la puerta, mirando la esfera.
+  - *órbita*: desde fuera, como la vista libre de la v1 (`Orbita`, `Distancia`, `Alturavista`).
+  - *cenital*: lo que ve la cámara del techo.
+- **Arriba a la derecha**, lo que muestra la esfera (la imagen de FASE1).
+- **Abajo a la derecha**, el plano de la sala desde arriba (cámara ortográfica, con su propia luz para que se lea): dónde está el público y qué focos están encendidos.
+- **Arriba a la izquierda**, el rótulo: la sala y el público, el estado de la luz (depósito, tensión o erosión, y cuánto le queda) con la bruma y la vista, y los onsets que cuenta FASE1.
+
+**La luz, como en la sala.** La sala está a oscuras (`Luzcasa` 0,06). Los focos y el estrobo dan sombra al público. Con `Bruma` (0,5) cada haz se ve en el aire: un cono del color de su luz que va del aparato al suelo y se apaga con él (0 = aire limpio). La esfera es una luz más: ilumina lo que tiene cerca (hasta unos 6 m) con el color medio de lo que muestra. El suelo brilla un poco, así que refleja la esfera y los focos. El público tiene cabeza y ropa oscura: a contraluz se lee como personas.
+
+`render_cenital` (320 × 288) y `profundidad` siguen ahí, porque son la entrada de la cámara para la fase 22, pero no hace falta mirarlos. `Palmada` da una palmada junto a la persona más cerca del micro, y el rótulo cuenta el onset.
 
 ### Autoprueba
 
@@ -202,6 +228,7 @@ Abre `render_sala`: la sala desde una cámara que orbita (`Orbita`, `Distancia`,
 - el drone de los altavoces y el sub no da onsets en 5 s; una palmada junto al micro da un onset y más flujo que una al otro lado de la sala; el sonido llega con su retardo;
 - la luz de prueba: el estrobo solo en blanco y como mucho 3 destellos en cualquier ventana de 1 s; depósito en ámbar tenue y tensión hacia blanco frío;
 - `render_cenital` y `profundidad`; la esfera con la imagen de FASE1;
+- (v2) el monitor (`salida_sala` ← `monitor_sala`, con el plano, la esfera y el rótulo); el visitante pasea dentro de la sala, lejos de la esfera y del estrobo, sin correr, con los ojos a 1,65 m mirando la esfera; la órbita, como la vista libre de antes; una cabeza por persona; un haz por aparato encendido, del color de su luz y hasta el suelo, y ninguno sin bruma o con la luz apagada; `luz_esfera` en su sitio y con un color válido; el rótulo con la sala, la luz y la vista;
 - `Palmada`: FASE1 la oye por `audio_mic` y cuenta un onset.
 
 ### Lo que la maqueta no es
@@ -209,4 +236,5 @@ Abre `render_sala`: la sala desde una cámara que orbita (`Orbita`, `Distancia`,
 - **La esfera real pide un mapa equirectangular 2:1** por HDMI (especificación técnica). Estratos aún no lo saca: renderiza una cámara mirando al globo, que vale para un proyector. En la maqueta, esa imagen envuelve la esfera. Sacar el mapa equirectangular (un Render TOP en cubemap y su conversión) es trabajo de Estratos, no de la maqueta, y no está en ninguna fase del plan.
 - **Sin reverberación ni ruido de fondo de la sala**: por eso `Umbralonset` y `Umbralcorte` se siguen ajustando en la sala real.
 - **La cámara pone «la pared de la pantalla» al norte** (especificación «casilla probable»). Con la esfera en una esquina no hay pared de pantalla: queda por decidir qué lado de la zona es el norte del planeta (lo natural, el del fondo, donde está la esfera).
-- En el simulador de pruebas solo se comprueba que todo se monta y calcula; cómo se ve, solo en TouchDesigner.
+- En el simulador de pruebas solo se comprueba que todo se monta y calcula; cómo se ve, solo en TouchDesigner. En la v2 hay cuatro ajustes que el simulador no conoce y que hay que mirar al lanzarla en TouchDesigner (si alguno no entra, el informe lo dice con `..` y qué poner a mano): la mezcla aditiva de `mat_haz`, la sombra de los focos (*Shadow Type*), la atenuación de `luz_esfera` y la colocación del plano y de la esfera en las esquinas del monitor (Over TOP: *Fixed Layer* = Input 2, *Prefit* = Native Resolution, *Justify*).
+- **La bruma es un truco**: un cono aditivo por haz, no humo de verdad. Se ve bien desde dentro; desde muy cerca de un foco el cono se nota.
