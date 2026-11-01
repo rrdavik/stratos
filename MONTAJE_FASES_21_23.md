@@ -5,6 +5,22 @@
 
 ---
 
+### ¿Qué script lanzo? `recargar_todo.py`
+
+Cualquier fase recarga el motor y todo lo común (`install_core`), así que **no hace falta lanzar una fase concreta para actualizar**. Para no pensar cuál, un solo comando las deja todas al día, en orden, conservando el mundo:
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/recargar_todo.py').read())
+```
+
+- Proyecto nuevo (no existe `/project1/FASE1`): empieza por `fase12_base.py`. Si ya existe, no la lanza.
+- Lanza fase 3 … 21 (las que haya), para en la primera que falle y termina con un resumen OK/FALLO por fase.
+- Relanza `sala_virtual.py` solo si `/project1/SALA` ya existe (`SALA = True` en el script para montarla también si no).
+- No lanza `ajuste_vista.py` (pisa lo ajustado a mano).
+- Una fase suelta sigue valiendo para probar solo lo último.
+
+---
+
 ### Estado en una frase
 
 La sala entra en la pieza: desde la fase 21 el micrófono escucha al público, y cada sonido que empieza (una palmada, una tos, unos pasos) es un golpe de erosión de un pad 9 que no está en la batería; si la sala hace mucho ruido durante un rato, se abre un corte.
