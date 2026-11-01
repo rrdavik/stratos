@@ -25,7 +25,7 @@ import td
 import copy
 import math
 
-VERSION_COMUN = 'comun v46'
+VERSION_COMUN = 'comun v47'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -570,7 +570,8 @@ def onPulse(par):
 
 
 def onValueChange(par, prev):
-    if par.name in ('Modoactuacion', 'Escena', 'Variantes'):
+    if par.name in ('Modoactuacion', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
+                    'Torsionmax'):
         op('motor').module.on_value(par.name, par.eval())
     return
 '''
@@ -688,6 +689,8 @@ out Vertex {
     vec3 pPos;
     float hrel;
     vec3 hoja;
+    vec3 bPos;
+    vec3 bNorm;
     flat int inst;
     flat int camIndex;
 } oVert;
@@ -735,6 +738,17 @@ void main()
     // fase 11 v8: el uv de los ejemplares (tipo: 1 corteza, 2 hoja, 3 tarjeta de
     // racimo; profundidad en la copa; nivel de rama, para el viento)
     oVert.hoja = uv[0];
+    // fase 11 v10: los edificios (uv.x >= 10) llevan su posicion a escala del mundo
+    // (la escala de la instancia sale de TDDeform): la fachada cuenta plantas y vanos
+    // de verdad, sin estirarse al crecer
+    oVert.bPos = p;
+    oVert.bNorm = nrm;
+    if (uv[0].x > 9.5) {
+        vec3 ex = TDDeform(p + vec3(1.0, 0.0, 0.0)).xyz - wPos.xyz;
+        vec3 ey = TDDeform(p + vec3(0.0, 1.0, 0.0)).xyz - wPos.xyz;
+        vec3 ez = TDDeform(p + vec3(0.0, 0.0, 1.0)).xyz - wPos.xyz;
+        oVert.bPos = p * vec3(length(ex), length(ey), length(ez));
+    }
     oVert.color = TDInstanceColor(Cd);
 #else
     TDWritePickingValues();
@@ -771,6 +785,9 @@ uniform vec4 uCultivo;      // rgb Colorcultivo, w Pasoterraza (unidades del mun
 uniform vec4 uBancal;       // x Muroterraza, y Setos, z texeles por parcela, w alto de un nivel de meseta
 uniform vec4 uRiego;        // rgb el agua de los bancales (el azul de rio con menos croma)
 uniform sampler2D sCultivo; // r relieve sin aterrazar, g tope de los bancales, b desde donde se inunda, a meseta (+10 acequia)
+uniform vec4 uCiudad;       // fase 11 v10: x alto de planta, y ancho de vano (en el mundo), z 1 con Tema ciudad
+uniform vec4 uSeq1;         // el color del SEQ1 (el tinte de las ventanas)
+uniform vec4 uSeq2;         // el del SEQ2
 
 in Vertex {
     vec4 color;
@@ -780,6 +797,8 @@ in Vertex {
     vec3 pPos;
     float hrel;
     vec3 hoja;
+    vec3 bPos;
+    vec3 bNorm;
     flat int inst;
     flat int camIndex;
 } iVert;
@@ -841,6 +860,22 @@ vec3 foco(vec4 t, vec4 c, vec3 d)
     return c.rgb * smoothstep(t.w, c.w, dot(d, t.xyz));
 }
 
+// fase 11 v10: la paleta de la ciudad (PALETA_CIUDAD del motor): lenguaje x materia.
+// 0-3 las plantas informales, 4 cubierta, 5 cuerpo planificado, 6 piedra o zocalo,
+// 7 estructura. Sin el azul de los rios ni el cian de las cicatrices.
+const vec3 PALETA[24] = vec3[24](
+    vec3(0.62, 0.63, 0.62), vec3(0.52, 0.32, 0.22), vec3(0.72, 0.58, 0.36), vec3(0.62, 0.24, 0.19),
+    vec3(0.30, 0.30, 0.31), vec3(0.66, 0.64, 0.60), vec3(0.46, 0.45, 0.43), vec3(0.34, 0.34, 0.35),
+    vec3(0.62, 0.32, 0.22), vec3(0.55, 0.55, 0.53), vec3(0.80, 0.56, 0.52), vec3(0.56, 0.60, 0.38),
+    vec3(0.36, 0.29, 0.25), vec3(0.17, 0.18, 0.18), vec3(0.60, 0.31, 0.22), vec3(0.40, 0.40, 0.41),
+    vec3(0.92, 0.90, 0.85), vec3(0.71, 0.53, 0.38), vec3(0.90, 0.76, 0.40), vec3(0.90, 0.68, 0.62),
+    vec3(0.64, 0.52, 0.42), vec3(0.90, 0.89, 0.86), vec3(0.81, 0.74, 0.62), vec3(0.55, 0.42, 0.30));
+
+vec3 paleta(int leng, int slot)
+{
+    return PALETA[clamp(leng, 0, 2) * 8 + clamp(slot, 0, 7)];
+}
+
 void main()
 {
     TDCheckDiscard();
@@ -865,6 +900,9 @@ void main()
     bool vegetal = fam > 0.5 && fam < 1.5;
     bool tierra = fam > 2.5 && fam < 3.5;
     bool agua = fam > 3.5;
+    // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
+    bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
+    vec3 emis = vec3(0.0);
     float sombra = uPisos.z;
     if (tierra) {
         // los pisos por la altura sobre el suelo local: verde mate y granulado
@@ -966,6 +1004,145 @@ void main()
         ks = mix(0.30, 0.02, rug);
         wrap = 0.5;
         amb = 1.6;
+    } else if (edificio) {
+        // fase 11 v10: la fachada la dibuja el shader con los datos de cada volumen.
+        // alfa = rugosidad + 2 x ventanas + 10 x lenguaje
+        float a = iVert.color.a;
+        float lg = floor(a / 10.0 + 0.0001);
+        a -= 10.0 * lg;
+        nivelv = floor(a * 0.5 + 0.0001);
+        rug = clamp(a - 2.0 * nivelv, 0.02, 1.0);
+        luces = min(1.0, nivelv * 0.25);
+        int leng = int(clamp(lg, 0.0, 2.0));
+        // r: el tinte de la nota (secuenciador + intensidad); g: lo visible (x 1000) y lo
+        // terminado (fraccion); b: el modo de obra (1 esqueleto, 2 bloque gris) + sombra
+        float sq = floor(iVert.color.r + 0.0001);
+        float tin = sq > 0.5 ? clamp(fract(iVert.color.r) / 0.99, 0.0, 1.0) : 0.0;
+        vec3 tinCol = sq > 1.5 ? uSeq2.rgb : uSeq1.rgb;
+        float vis = floor(iVert.color.g + 0.0001) / 1000.0;
+        float fin = fract(iVert.color.g);
+        fin = fin > 0.998 ? 1.0 : fin;
+        float modo = floor(iVert.color.b + 0.0001);
+        float sombraE = clamp(fract(iVert.color.b) / 0.9, 0.0, 1.0);
+        float yrel = iVert.oPos.y;
+        if (vis > 0.0005 && yrel > vis + 0.002)
+            discard;                    // la torre autoconstruida crece por corte
+        // uv: 10 + 8 x fachada + materia + 0,95 x hueco | alto de planta | 4 x semilla + vano
+        float code = iVert.hoja.x - 10.0;
+        float fs = floor(code + 0.0001);
+        float hueco = clamp(fract(code) / 0.95, 0.0, 1.0);
+        float fach = floor(fs / 8.0 + 0.0001);
+        int slot = int(fs - fach * 8.0 + 0.5);
+        float hm = iVert.hoja.y;
+        float sem = floor(iVert.hoja.z / 4.0 + 0.0001);
+        float vm = max(0.05, iVert.hoja.z - 4.0 * sem);
+        base = paleta(leng, slot) * (0.92 + 0.16 * hash13(vec3(float(iVert.inst) * 0.37, sem, 3.1)));
+        bool cubierta = abs(iVert.bNorm.y) > 0.5;
+        bool enObra = yrel > fin + 0.0005;
+        float hp = max(1e-4, uCiudad.x * max(0.2, abs(hm)));
+        float vano = max(1e-4, uCiudad.y * vm);
+        vec3 bp = iVert.bPos;
+        vec2 tg = normalize(vec2(-iVert.bNorm.z, iVert.bNorm.x) + vec2(1e-5, 0.0));
+        float u = dot(bp.xz, tg);
+        float fx = u / vano;
+        float fy = bp.y / hp;
+        vec2 g = vec2(fract(fx), fract(fy));
+        vec2 cel = vec2(floor(fx), floor(fy));
+        float h1 = hash13(vec3(cel, sem + float(iVert.inst) * 0.113));
+        float h2 = hash13(vec3(cel.yx + 7.1, sem + 1.7));
+        if (enObra && modo > 0.5 && modo < 1.5) {
+            // esqueleto: forjados y pilares sin fachada; el resto, hueco
+            float forjado = step(0.84, g.y);
+            float pilar = step(fract(fx * 0.5), 0.1);
+            if (cubierta || forjado + pilar < 0.5)
+                discard;
+            base = vec3(0.60, 0.59, 0.56);
+            rug = 0.9;
+        } else if (enObra && modo > 1.5) {
+            // la planta nueva de la informal: bloque gris sin revocar, huecos sin carpinteria
+            float junta = step(0.9, fract(fy * 5.0)) + step(0.95, fract(fx * 3.0 + 0.5 * step(0.5, fract(fy * 2.5))));
+            base = vec3(0.56, 0.56, 0.54) * (1.0 - 0.18 * min(1.0, junta));
+            rug = 0.95;
+            if (!cubierta) {
+                float ven = step(0.25, g.x) * step(g.x, 0.25 + 0.5 * hueco) * step(0.3, g.y) * step(g.y, 0.75)
+                    * step(0.45, h1);
+                base = mix(base, vec3(0.05), ven);
+            }
+        } else if (cubierta) {
+            base *= 0.72;               // la cubierta (la losa de la azotea)
+        } else if (fach > 0.5) {
+            // la fachada: bandas de forjado (cuentan las plantas) y huecos
+            float banda = step(0.88, g.y);
+            float ven = 0.0;
+            float lit = 0.0;
+            vec3 luzCol = vec3(1.0, 0.88, 0.70);    // planificada: blanco calido en reticula
+            bool zocalo = (fach > 3.5 && fach < 4.5) || (hm < 0.0 && bp.y < 1.6 * uCiudad.x);
+            vec2 lc = vec2(dot(iVert.oPos.xz, tg), iVert.oPos.y);
+            if (fach > 1.5 && fach < 2.5) {
+                // informal: huecos irregulares, de tamanos distintos, luz ambar
+                float w0 = 0.12 + 0.2 * h2;
+                float w1 = w0 + (0.25 + 0.35 * hueco) * (0.6 + 0.6 * h1);
+                ven = step(w0, g.x) * step(g.x, min(0.92, w1)) * step(0.22 + 0.12 * h2, g.y) * step(g.y, 0.78)
+                    * step(0.3, h1);
+                luzCol = vec3(1.0, 0.62, 0.25);
+                banda *= 0.5;
+            } else if (zocalo) {
+                ven = step(0.06, g.x) * step(g.x, 0.94) * step(0.12, g.y) * step(g.y, 0.82);
+                lit = 0.6;              // el zocalo comercial, iluminado
+                luzCol = vec3(1.0, 0.80, 0.55);
+            } else if (fach > 4.5 && fach < 5.5) {
+                // capsula: una ventana redonda por cara (Nakagin)
+                ven = 1.0 - step(0.26, length(vec2(lc.x, (lc.y - 0.5))));
+                banda = 0.0;
+            } else if (fach > 5.5 && fach < 6.5) {
+                // loggias (Unite): el hueco hondo con un panel de color al lado
+                ven = step(0.1, g.x) * step(g.x, 0.9) * step(0.08, g.y) * step(g.y, 0.86);
+                float panel = step(0.1, g.x) * step(g.x, 0.3) * ven;
+                vec3 poli = h1 < 0.33 ? vec3(0.75, 0.18, 0.12) : (h1 < 0.66 ? vec3(0.90, 0.72, 0.20)
+                                                                             : vec3(0.30, 0.55, 0.25));
+                base = mix(base, poli, panel);
+                ven *= 1.0 - panel;
+            } else if (fach > 6.5) {
+                // la nave de dientes de sierra: ventana corrida alta
+                ven = step(0.58, g.y) * step(g.y, 0.84) * step(0.04, g.x) * step(g.x, 0.96);
+            } else if (fach > 2.5 && fach < 3.5) {
+                // la corona del rascacielos: luz propia
+                ven = step(0.18, g.x) * step(g.x, 0.82) * step(0.12, g.y) * step(g.y, 0.88);
+                emis += vec3(1.0, 0.86, 0.60) * (0.30 + 0.40 * max(uVentanas.x, 0.5)) * (0.35 + 0.65 * ven);
+            } else {
+                // reticula planificada, por lenguaje: frio ventanas pequenas y hondas;
+                // templado muro cortina de vidrio; calido celosia o parasol blanco
+                float h = hueco * (leng == 0 ? 0.62 : (leng == 1 ? 1.3 : 1.0));
+                float m0 = 0.5 - 0.5 * min(0.94, 0.3 + 0.6 * h);
+                ven = step(m0, g.x) * step(g.x, 1.0 - m0) * step(0.18, g.y) * step(g.y, 0.80);
+                if (leng == 0) {
+                    float marco = step(m0 - 0.07, g.x) * step(g.x, 1.07 - m0) * step(0.11, g.y) * step(g.y, 0.87);
+                    base = mix(base, base * 0.5, marco * (1.0 - ven));
+                } else if (leng == 1) {
+                    rug *= 0.35;
+                } else {
+                    float lama = step(0.55, fract(fx * 7.0));
+                    base = mix(base, vec3(0.93, 0.92, 0.89), lama * ven);
+                    ven *= 1.0 - lama;
+                }
+            }
+            vec3 vidrio = (leng == 1 && fach < 1.5) ? vec3(0.06, 0.07, 0.08) : vec3(0.04, 0.04, 0.05);
+            base = mix(base, base * 0.75, banda * (1.0 - step(1.5, fach)));
+            base = mix(base, vidrio, ven);
+            // las luces: las de la estacion (que ventanas, la semilla; el parpadeo, fase 17)
+            // y el tinte de la nota: todas las del edificio a la vez, del color de su SEQ
+            float enc = max(step(h1, luces - 0.001) * uVentanas.x, lit);
+            vec3 lcol = luzCol;
+            if (tin > 0.001) {
+                enc = max(enc, tin);
+                lcol = mix(luzCol, tinCol, 0.85);
+            }
+            emis += ven * enc * lcol * (0.9 + 0.3 * tin);
+        }
+        base *= 1.0 - 0.5 * sombraE;    // bajo el marco, en sombra
+        emis *= 1.0 - 0.3 * sombraE;
+        expo = mix(90.0, 6.0, rug);
+        ks = mix(0.9, 0.03, rug);
     } else {
         // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
         base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
@@ -999,6 +1176,9 @@ void main()
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
         float tras = pow(max(dot(-l0, v), 0.0), 3.0) * (1.0 - 0.5 * rug);
         col += tras * base * uLuz0Col.rgb * 0.35 + fres * vec3(0.05, 0.08, 0.05);
+    } else if (edificio) {
+        // fase 11 v10: las ventanas y las coronas, emisivas; reflejo de borde del vidrio
+        col += emis + fres * (1.0 - rug) * vec3(0.20, 0.21, 0.22);
     } else if (fam > 1.5 && fam < 2.5) {
         // ciudad: vidrio negro con reflejo de borde; ventanas ambar (fase 17): de
         // cada edificio se encienden tantas como diga su nivel (1 de 4 ... todas)
@@ -2246,6 +2426,10 @@ PIEL_UNIFORMES = [
     ('uCultivo', tuple(PIEL_U % ('uCultivo', q) for q in range(4))),
     ('uBancal', tuple(PIEL_U % ('uBancal', q) for q in range(4))),
     ('uRiego', tuple(PIEL_U % ('uRiego', q) for q in range(3)) + ('0',)),
+    # fase 11 v10: la fachada de la ciudad (alto de planta, ancho de vano) y el tinte de las ventanas
+    ('uCiudad', tuple(PIEL_U % ('uCiudad', q) for q in range(3)) + ('0',)),
+    ('uSeq1', tuple(PIEL_U % ('uSeq1', q) for q in range(3)) + ('0',)),
+    ('uSeq2', tuple(PIEL_U % ('uSeq2', q) for q in range(3)) + ('0',)),
 ]
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua']
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
@@ -2641,6 +2825,22 @@ def construir_modelos(base, m, solo_nuevos=False):
         base.op('motor').store('variantes_td', m.VARIANTES_TD)
     except Exception:
         pass
+    # comun v47 (fase 11 v10): la biblioteca de la ciudad, un Script SOP por ejemplar
+    # (el mismo callback: el motor reconoce edi_<diseno>_<v>)
+    m.VARIANTES_CIU_TD = 0
+    m.biblioteca_ciudad(c)
+    edis = m.edificios_de(c)
+    fila1 = fila0 + len(nombres) // 12 + 2
+    for k, nm in enumerate(edis):
+        if solo_nuevos and modelos.op(nm) is not None:
+            continue
+        construir_ejemplar(modelos, nm, (k % 12) * 220, -(fila1 + k // 12) * 160)
+        hechos += 1
+    m.VARIANTES_CIU_TD = m.variantes_ciudad(c)
+    try:
+        base.op('motor').store('variantes_ciu_td', m.VARIANTES_CIU_TD)
+    except Exception:
+        pass
     return modelos, hechos, piezas, ajustadas
 
 
@@ -2662,7 +2862,9 @@ def catalogo_al_dia(base, m):
         return len(filas_def) - 1
     if actual != filas_def:
         for r in actual[1:]:
-            if len(r) > 4 and r[4] not in m.MODELOS and r[4] not in m.ETAPAS:
+            if len(r) > 4 and r[4] not in m.MODELOS and r[4] not in m.ETAPAS and r[4] not in m.PLANTAS \
+                    and r[4] not in m.FORMAS and r[4] not in m.CIUDAD_FORMAS and r[4] not in m.DISENOS \
+                    and not m.es_edificio(r[4]):
                 fail('catalogo: el modelo o etapa %r no existe; se ignora' % r[4])
     return None
 

@@ -11,14 +11,55 @@ malla ortogonal.
     SEQ1             vegetacion                  ciudad informal
     SEQ2             relieve (basalto)           ciudad planificada
 
-    ocupacion  1     matorral pionero            caseta / bloque
-               2     arbol joven (2 derivac.)    anadidos / plantas
-               3     arbol adulto (completo)
-               Umbralram   arboleda (3 a 7)      pasarelas / manzana
-               fusion      bosque (timidez)      barrio / podio
-               Umbralmonte monte boscoso         torre de antenas / rascacielos
+    ocupacion  1     matorral pionero            caseta / pabellon
+               2     arbol joven (2 derivac.)    casa que crece / bloque
+               3     arbol adulto (completo)     tres plantas / bloque
+               Umbralram-1 arboleda (3 a 7)      racimo / manzana
+               fusion-1    bosque (timidez)      barrio denso / podio
+               Umbralmonte monte boscoso
+               corona-1                          torre autoconstruida / rascacielos
     (los umbrales son los de la fase 4: Umbralram y, a Pasoumbral, la fusion
     y la corona; el del monte, Umbralmonte)
+
+CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
+--------------------------------------------------------------------
+  Lo mismo que la v8 hizo con la naturaleza. Ninguna etapa es una caja
+  desnuda: cada una es un TIPO de edificio, con variantes, con pie, cuerpo
+  con ritmo y remate. Sale de una BIBLIOTECA DE EDIFICIOS precalculada (al
+  cargar y al cambiar Variantesciudad, Oblicuidad, Retranqueo o Torsionmax)
+  por una gramatica de particion (solar -> masa -> plantas -> fachada):
+  volumenes (prismas de planta rectangular u octogonal; las L, H, peines y
+  patios son varios), datos de fachada por volumen (en el uv de la malla) y
+  puntos de remate (deposito, antena, maquinaria, varillas, escalera,
+  cable...: instancias ciu_). La fachada NO es geometria: la dibuja el GLSL
+  MAT de la ciudad, que cuenta plantas y vanos a la escala del mundo. En TD,
+  un Script SOP por ejemplar (modelos/edi_<diseno>_<v>).
+    informal     caseta (chabola, contenedor, cubo de cal), casa que crece
+                 (laje con varillas), tres plantas (bandas de colores, la de
+                 arriba en voladizo), racimo, barrio denso (Kowloon) y torre
+                 autoconstruida (cuartos dentados, mastil y valla)
+    planificada  pabellon (dientes de sierra, pilotis), bloque (lamina con
+                 loggias, torre-punto, H), manzana (Cerda con chaflan y patio,
+                 peine), podio y rascacielos (deco con aguja, haz de tubos,
+                 torsionada, prisma con corona)
+  CRECEN       la informal por agregacion (un cuarto por gate, desplazado e
+               inclinado hasta Oblicuidad); la planificada por repeticion (las
+               plantas del mismo modulo, una o Plantasligado por gate).
+  LENGUAJE     por la latitud (Lenguaje = latitud): frio (hormigon y chapa),
+               templado (ladrillo y vidrio), calido (cal y celosia); o fijo, o
+               mezcla, en directo: cada edificio conserva el suyo.
+  OBRA         solar, excavacion, nucleo con grua, esqueleto, fachada
+               (Desfasefachada plantas por detras), coronacion y terminada; la
+               informal, en bloque gris con varillas hasta el gate siguiente.
+  MUTANTES     COLONIA (informal sobre planificada: parasitos de la azotea
+               hacia abajo) y MARCO (planificada sobre informal: la Ville
+               Spatiale, con pilares en los callejones y capsulas). Mutacion
+               (o la saturacion del modular, Mutacionfuente) dice hasta donde.
+  CLUSTER      el racimo se funde en barrio; las torres se buscan: pasarela
+               celeste (2-3 celdas), bucle (4-6), losa en la cumbre (7+).
+  COLOR        el de la ciudad es suyo; una nota enciende las ventanas del
+               edificio con el color de su secuenciador (Tinteventanas,
+               Pasostinte). De lejos (Lodciudad), sin los remates pequenos.
 
 BROTES, ARBOLES Y TERRAZAS (v8)
 -------------------------------
@@ -98,7 +139,8 @@ QUE ANADE
                'modelos': la biblioteca de ejemplares para la vegetacion
                (v8; antes un L-system a 30 grados, bolas y conos),
                prismas hexagonales (Tube SOP de 6 lados) para el basalto y
-               pilas de cajas (Box SOP) para la ciudad. Un Geometry
+               la biblioteca de edificios para la ciudad (v10; antes, pilas
+               de cajas), con sus remates de cajas (Box SOP). Un Geometry
                COMP instanciado por modelo, pulido y poroso (hasta la fase 12).
   VECINDAD     P = ocupacion + Pesovecina x ocupacion de las vecinas de su
                especie. Dos vecinas con P >= Umbralvecindad se funden en un
@@ -133,7 +175,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v9  (pagina mas corta: siete ajustes finos de la geometria, fijos)'
+VERSION = 'fase11 v10  (ciudad legible: edificios por etapa, lenguajes, obra y construcciones mutantes)'
 banner(VERSION)
 
 base = require_base(11)
@@ -186,13 +228,44 @@ add_par(base, page, 'int', 'Maxniveles', 'Niveles maximos de la meseta', 3, 1, 6
 add_par(base, page, 'menu', 'Marco', 'Marco de los frutales', 'tresbolillo', menu=m.MARCOS,
         menu_labels=['Marco real', 'Tresbolillo'])
 add_par(base, page, 'toggle', 'Setos', 'Setos entre las parcelas de la meseta', True)
+# v10: la ciudad legible
+add_par(base, page, 'menu', 'Lenguaje', 'Lenguaje de la ciudad', 'latitud', menu=m.LENGUAJE_MODOS,
+        menu_labels=['Por latitud (como los biomas)', 'Frio: hormigon y chapa', 'Templado: ladrillo y vidrio',
+                     'Calido: cal y celosia', 'Mezcla'])
+add_par(base, page, 'int', 'Variantesciudad', 'Variantes por diseno (biblioteca de la ciudad)', 3, 1, 6,
+        clamp=True)
+add_par(base, page, 'menu', 'Fijartipo', 'Fijar el diseno (para probar)', 'auto', menu=m.FIJAR_TIPOS,
+        menu_labels=['Auto (el mapa logistico)', 'Diseno 1', 'Diseno 2', 'Diseno 3'])
+add_par(base, page, 'float', 'Oblicuidad', 'Oblicuidad de los anadidos informales (grados)', 6.0, 0.0, 30.0)
+add_par(base, page, 'float', 'Alturaplanta', 'Alto de una planta (x el limite)', 0.08, 0.01, 0.5)
+add_par(base, page, 'float', 'Anchovano', 'Ancho de un vano (x el limite)', 0.05, 0.005, 0.5)
+add_par(base, page, 'float', 'Retranqueo', 'Retranqueo de las torres', 0.15, 0.0, 0.4)
+add_par(base, page, 'float', 'Torsionmax', 'Giro maximo de la torsionada (grados)', 90.0, 0.0, 360.0)
+add_par(base, page, 'float', 'Parasitospornota', 'Parasitos por nota del SEQ1 (colonia)', 4.0, 0.0, 16.0)
+add_par(base, page, 'int', 'Maxparasitos', 'Parasitos maximos', 24, 1, 64, clamp=True)
+add_par(base, page, 'float', 'Modulomarco', 'Modulo del marco (x la celda)', 0.25, 0.1, 0.5)
+add_par(base, page, 'int', 'Maxmarco', 'Niveles maximos del marco', 3, 1, 6, clamp=True)
+add_par(base, page, 'float', 'Capsulas', 'Huecos del marco con capsula', 0.4, 0.0, 1.0)
+add_par(base, page, 'float', 'Mutacion', 'Mutacion (hasta donde llegan las formas mutantes)', 0.5, 0.0, 1.0)
+add_par(base, page, 'menu', 'Mutacionfuente', 'La mutacion la lleva', 'manual', menu=m.MUTACION_FUENTES,
+        menu_labels=['El mando Mutacion', 'La saturacion del modular (fase 19)'])
+add_par(base, page, 'toggle', 'Obra', 'La obra se ve entre etapas', True)
+add_par(base, page, 'int', 'Desfasefachada', 'Plantas de la fachada por detras del esqueleto', 2, 0, 10, clamp=True)
+add_par(base, page, 'toggle', 'Gruas', 'Gruas en las obras', True)
+add_par(base, page, 'int', 'Maxgruas', 'Gruas a la vez', 6, 0, 32, clamp=True)
+add_par(base, page, 'toggle', 'Tinteventanas', 'Una nota enciende las ventanas con el color de su SEQ', True)
+add_par(base, page, 'float', 'Pasostinte', 'Pasos que tarda en apagarse ese color', 4.0, 0.25, 32.0)
+add_par(base, page, 'float', 'Lodciudad', 'Remates pequenos desde (px por celda)', 60.0, 0.0, 400.0)
 ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
    'Maxpiezas 6, Avance (gates), Pasosetapa 2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
    'Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
    'Ligero, Refresconat 0,25, Biomas, Variantes 2, Traslucidez 0,35, '
    'Timidez 0,12, Emergentes 0,1, Orla, Mezcla 0,3, Impostores, Terrazaspornota 1, Maxterrazas 8, '
    'Pasoterraza 0,12, Riego, Colorcultivo, Alturameseta 0,15, Maxniveles 3, Marco '
-   '(tresbolillo), Setos')
+   '(tresbolillo), Setos; v10: Lenguaje (latitud), Variantesciudad 3, Fijartipo (auto), Oblicuidad 6, '
+   'Alturaplanta 0,08, Anchovano 0,05, Retranqueo 0,15, Torsionmax 90, Parasitospornota 4, Maxparasitos 24, '
+   'Modulomarco 0,25, Maxmarco 3, Capsulas 0,4, Mutacion 0,5, Mutacionfuente (manual), Obra, '
+   'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -212,9 +285,10 @@ else:
 # -----------------------------------------------------------------------------
 
 modelos, n_modelos, n_piezas, ajustadas = construir_modelos(base, m)
-ok('modelos: %d modelos (%d piezas y %d ejemplares de la biblioteca: %d plantas x %d variantes x '
-   'derivaciones, cerca y lejos) generados en %s'
-   % (n_modelos, n_piezas, len(m.ejemplares_de(m.cfg())), len(m.PLANTAS), m.variantes(m.cfg()), modelos.path))
+ok('modelos: %d modelos (%d piezas, %d ejemplares de la biblioteca: %d plantas x %d variantes x '
+   'derivaciones, cerca y lejos; y %d edificios: %d disenos x %d variantes) generados en %s'
+   % (n_modelos, n_piezas, len(m.ejemplares_de(m.cfg())), len(m.PLANTAS), m.variantes(m.cfg()),
+      len(m.edificios_de(m.cfg())), len(m.DISENOS), m.variantes_ciudad(m.cfg()), modelos.path))
 if ajustadas:
     info('la caja o el prisma unidad no salian de lado 1 y centrados (%d, p. ej. %s): se han llevado '
          'a la unidad midiendo sus puntos' % (len(ajustadas), ajustadas[0]))
@@ -254,7 +328,14 @@ leeme(base, 11, """FASE 11 - LA PIEL
   meseta-jardin (Alturameseta, Maxniveles, Marco, Setos); textura
   'cultivos' para el shader. Ligero (por defecto): la naturaleza se
   recalcula cada Refresconat s (a saltos), 6 arboles por celda de bosque y
-  tarjetas de racimo con la camara de globo.""")
+  tarjetas de racimo con la camara de globo.
+  v10, ciudad legible: cada etapa es un tipo de edificio (biblioteca de
+  edificios por gramatica, modelos/edi_*; la fachada la dibuja el shader),
+  con lenguaje por latitud (Lenguaje), obra visible entre etapas (Obra,
+  Desfasefachada, Gruas, Maxgruas), construcciones mutantes (colonia:
+  Parasitospornota, Maxparasitos; marco: Modulomarco, Maxmarco, Capsulas;
+  Mutacion, Mutacionfuente), torres que se buscan en los clusters, el tinte
+  del secuenciador en las ventanas (Tinteventanas, Pasostinte) y Lodciudad.""")
 
 print_report()
 
@@ -334,12 +415,16 @@ def _prueba(t, m):
             n_cl = len(cl['celdas'][k]) if k >= 0 else 0
             inst = m.build_instances(W, c, absTime.seconds + 10.0)
             pm = m.modelos_de(c, tema, esp, 'puente')[0]
-            geos = dict((mo, set()) for mo in list(m.MODELOS) + m.ejemplares_de(c) + m.PLANTAS + m.FORMAS)
+            geos = dict((mo, set()) for mo in list(m.MODELOS) + m.ejemplares_de(c) + m.PLANTAS + m.FORMAS
+                        + m.edificios_de(c))
             for g, mo, _ in m.geometrias_piel(c):
                 geos[mo].add(g)
             puentes = sum(len(inst.get(g, [])) for g in geos[pm])
             prot = m.modelos_de(c, tema, esp, 'protagonista')[m.clase_cluster(n_cl)]
-            n_prot = sum(len(inst.get(g, [])) for g in geos[prot])
+            if tema == 'ciudad':            # v10: la pieza del cluster (pasarela, bucle o losa)
+                n_prot = sum((W.get('piel') or {}).get('ciudad', {}).get('protagonistas', {}).values())
+            else:
+                n_prot = sum(len(inst.get(g, [])) for g in geos.get(prot, ()))
             enlaces = sum(len(x) for x in cl['mascara'])
             if esp == 'vegetacion':          # motor v32: el dosel cierra cada hueco entre tres celdas
                 mk_ = cl['mascara']
@@ -361,11 +446,15 @@ def _prueba(t, m):
                         n_cl == 1 + len(m.NEIGH[i]) and ter['cordilleras'] == 1 and altos == n_cl
                         and puentes == 0 and n_prot == 0 and not otro,
                         'cordilleras %d, puentes %d, protagonista %d' % (ter['cordilleras'], puentes, n_prot))
-            else:
-                t.check('%s, %s: Sembrarzona x2 -> cluster de %d celdas, %d puentes y protagonista'
-                        % (tema, esp, n_cl, puentes),
-                        n_cl == 1 + len(m.NEIGH[i]) and puentes == enlaces > 0 and n_prot == 1 and not otro,
-                        'cluster %d, puentes %d de %d, protagonista %d, del otro tema %d'
+            else:                           # v10: la ciudad, con su pieza de cluster en la planificada
+                edis = sum(len(f) for g, f in inst.items() if g.startswith('mod_edi_') and 'zocalo' not in g)
+                en_obra = len(m.obras_ciudad(W, c))
+                t.check('%s, %s: Sembrarzona x2 -> cluster de %d celdas, %d edificios (%d en obra), %d puentes%s'
+                        % (tema, esp, n_cl, edis, en_obra, puentes,
+                           ' y la pieza del cluster' if esp == 'planificada' else ''),
+                        n_cl == 1 + len(m.NEIGH[i]) and puentes == enlaces > 0 and edis + en_obra >= n_cl
+                        and n_prot == (1 if esp == 'planificada' else 0) and not otro,
+                        'cluster %d, puentes %d de %d, pieza %d, del otro tema %d'
                         % (n_cl, puentes, enlaces, n_prot, len(otro)))
         if tema == 'naturaleza':
             sim = all(a in cl['mascara'][b] for a in range(m.N) for b in cl['mascara'][a])
@@ -467,7 +556,7 @@ def _prueba(t, m):
     fin = m.rebote(cp, Wn, i, now + paso, paso)
     t.check('nacimiento: rebote y destello que acaban en un paso',
             medio[0] > 1.0 and medio[1] > 0 and fin == (1.0, 0.0), 'escala %.2f' % medio[0])
-    # 8. coronacion y particulas (ciudad planificada): grua -> fachada -> aguja
+    # 8. la ciudad planificada coronada (v10): un rascacielos terminado, sin grua
     cz = dict(cp)
     cz.update(tema=1, avance=0)
     Wz = m.new_world()
@@ -476,24 +565,14 @@ def _prueba(t, m):
             m.note_on(Wz, cz, m.ARQ, m.cell_note(x), 100, now, 120.0)
     for _ in range(60):
         m.note_on(Wz, cz, m.ARQ, nota, 100, now, 120.0)
+    m.cerrar_obras(Wz, cz)
     Wz['vh'] = list(Wz['h'])
     instz = m.build_instances(Wz, cz, now + 10.0)
-    cuerpo = m.modelos_de(cz, 'ciudad', 'planificada', 'coronacion')[0]
-    t.check('coronacion de la ciudad planificada: rascacielos con aguja',
-            Wz['et_c'][i] == 3 and len(instz.get(m.geometria_de(cuerpo, True, cz['nivel'] < 12), [])) == 1
-            and len(instz.get(m.geometria_de('pla_aguja', True, cz['nivel'] < 12), [])) == 1,
-            'etapa %d' % Wz['et_c'][i])
-    Wz2 = m.new_world()
-    for _ in range(2):
-        for x in zona[:3]:
-            m.note_on(Wz2, cz, m.ARQ, m.cell_note(x), 100, now, 120.0)
-    cl2 = m.clusters(Wz2, cz)
-    for x in cl2['celdas'].get(cl2['de'][i], []):
-        Wz2['et_f'][x] = 3                       # 'obreros'
-    Wz2['vh'] = list(Wz2['h'])
-    instp = m.build_instances(Wz2, cz, now + 10.0)
-    t.check('obra de la ciudad: valla, foso y obreros (particulas del motor)',
-            instp.get('mod_ciu_valla') and instp.get('mod_ciu_foso') and len(instp.get('particulas', [])) >= 8)
+    infz = m.info_ciudad(Wz, cz, i)
+    t.check('ciudad planificada coronada: un rascacielos (%s) terminado, sin grua' % infz['diseno'],
+            infz['tipo'] == 'rascacielos' and instz.get(m.geometria_de(m.nombre_edificio(infz['diseno'],
+                                                                                          infz['var'])))
+            and not instz.get('mod_ciu_grua'), 'tipo %s' % infz['tipo'])
     # 9. nada pasa de la altura maxima (la camara de globo lo encuadra)
     tope = m.top_radius(Wz, cz) + m.altura_max(cz) + 1e-6
     lejos = 0.0
@@ -524,6 +603,7 @@ def _prueba(t, m):
     t.check('la caja de la fase 3 ya no dibuja formaciones (solo huellas)',
             not m._CACHE['inst']['formas_pulidas'])
     _prueba_natural(t, m)
+    _prueba_ciudad(t, m)
 
 
 def _prueba_natural(t, m):
@@ -831,6 +911,430 @@ def _prueba_natural(t, m):
             all(cf[k] == m.DEFAULT_CFG[k] for k in ('rebote', 'max_caos_nat', 'var_angulo', 'cuantizar30',
                                                      'inclinacion', 'densidad_hoja', 'muro_terraza')))
 
+
+
+def _prueba_ciudad(t, m):
+    """Las pruebas de la ciudad legible (v10): edificios por etapa, lenguajes,
+    obra y construcciones mutantes."""
+    import math
+    import time
+    guarda = {}
+    for nm in ('Tema', 'Lenguaje', 'Mutacion', 'Mutacionfuente', 'Fijartipo', 'Avance'):
+        try:
+            guarda[nm] = getattr(base.par, nm).eval()
+        except Exception:
+            pass
+    try:
+        _prueba_ciudad_(t, m)
+    finally:
+        for nm, v in guarda.items():
+            try:
+                getattr(base.par, nm).val = v
+            except Exception:
+                pass
+
+
+def _prueba_ciudad_(t, m):
+    import math
+    import time
+    base.par.Tema = 'ciudad'
+    base.par.Lenguaje = 'latitud'
+    base.par.Fijartipo = 'auto'
+    base.par.Mutacion = 0.5
+    base.par.Mutacionfuente = 'manual'
+    nota = int(base.par.Nota)
+    i = m.note_cell(nota)
+    c = m.cfg()
+    c12 = dict(c, nivel=max(12, c['nivel']), respaldo=0)    # las filas con el shader (alfa y canales)
+    ahora = absTime.seconds + 10.0
+    unico = [10.0]
+
+    def t_unico():
+        unico[0] += 1.0             # cada mundo, su cuenta de colonas (la piel la guarda por celda)
+        return unico[0]
+
+    def mundo(celdas, own, occ, vel=100, cerrar=True):
+        W = m.new_world()
+        for x in celdas:
+            W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, vel
+            W['h'][x] = W['vh'][x] = m.height_for(m.cfg(), occ)
+            W['t_nac'][x] = -50.0
+        if cerrar:
+            m.cerrar_obras(W, m.cfg())
+        return W
+
+    def edis(inst, celda=None, pref='mod_edi_'):
+        """[(geometria, fila)] de los ejemplares de la ciudad (de una celda)."""
+        out = []
+        for g, fs in inst.items():
+            if g.startswith(pref):
+                for f in fs:
+                    if celda is None or max(range(m.N), key=lambda x: sum(f[q] * m.NORMALS[x][q]
+                                                                          for q in range(3))) == celda:
+                        out.append((g, f))
+        return out
+
+    def filas(inst, g):
+        return inst.get(m.geometria_de(g), [])
+
+    # 0. la biblioteca: disenos x variantes, cada etapa con pie, cuerpo con ritmo y remate
+    n_bib = m.biblioteca_ciudad(c)
+    desnudas = []
+    for esp in ('informal', 'planificada'):
+        for tipo in m.TIPOS[esp]:
+            for d in m.DISENOS_TIPO[tipo]:
+                ex = m.edificio(c, d, 0)
+                ritmo = any(v['fach'] in (m.F_RETICULA, m.F_IRREGULAR, m.F_LOGGIA, m.F_SIERRA, m.F_ZOCALO,
+                                          m.F_CORONA) for v in ex['vols'])
+                remate = bool(ex['rem']) or len(ex['vols']) > 1
+                if not (ritmo and remate):
+                    desnudas.append(d)
+    P, Nn, U, T = m.malla_edificio('edi_punto_0', c)
+    t.check('biblioteca de la ciudad: %d ejemplares (%d disenos x %d variantes); ninguna etapa es una caja '
+            'desnuda; la fachada va en el uv (%d puntos, %d triangulos en la torre-punto)'
+            % (n_bib, len(m.DISENOS), m.variantes_ciudad(c), len(P), len(T)),
+            n_bib == len(m.DISENOS) * m.variantes_ciudad(c) and not desnudas and P and min(u[0] for u in U) >= 10.0
+            and max(p[1] for p in P) <= 1.0 + 1e-9 and min(p[1] for p in P) >= -1e-9,
+            'desnudas: %s' % desnudas)
+    # 1. escalera informal: ocupacion 1 a 9 en una celda
+    serie = []
+    for o in range(1, 10):
+        W = mundo([i], m.GEO, o)
+        inf = m.info_ciudad(W, c, i)
+        inst = m.build_instances(W, c, ahora)
+        serie.append((o, inf['tipo'], inf['diseno'], len(edis(inst, i)), inst))
+    esperado = ['caseta', 'casa', 'tresplantas', 'racimo', 'racimo', 'barrio', 'barrio', 'torre', 'torre']
+    casa = serie[1][4]
+    varillas = bool(filas(casa, 'ciu_varillas')) or not m.lod_ciudad(mundo([i], m.GEO, 2), c, i)
+    tres = m.edificio(c, serie[2][2], m.info_ciudad(mundo([i], m.GEO, 3), c, i)['var'])
+    bandas = len(set(v['slot'] for v in tres['vols'][:3]))
+    t.check('escalera informal 1 -> 9: %s; la casa que crece con varillas, tres plantas de %d colores'
+            % (' / '.join('%d %s' % (o, d) for o, _, d, _, _ in serie), bandas),
+            [x[1] for x in serie] == esperado and all(x[3] >= 1 for x in serie) and varillas and bandas == 3,
+            'tipos %s' % [x[1] for x in serie])
+    # 2. escalera planificada, con la obra entre etapas (grua, esqueleto, fachada con desfase)
+    serie = []
+    for o in range(1, 10):
+        W = mundo([i], m.ARQ, o)
+        serie.append((o, m.info_ciudad(W, c, i)['tipo'], m.info_ciudad(W, c, i)['diseno']))
+    esperado = ['pabellon', 'bloque', 'bloque', 'manzana', 'manzana', 'podio', 'podio', 'rascacielos',
+                'rascacielos']
+    cg = dict(c12)
+    cg.update(avance=0)
+    Wo = m.new_world()
+    t0 = 100.0
+    vistas = []
+    k = 0
+    while Wo['occ'][i] < 8 and k < 400:         # notas del SEQ2 hasta el rascacielos
+        m.note_on(Wo, cg, m.ARQ, nota, 100, t0 + 0.01 * k, 120.0)
+        k += 1
+    pasos_ = m.pasos_obra('planificada', 'rascacielos')
+    gruas = esq = fachada = 0
+    for q in range(len(pasos_) + 1):
+        Wo['vh'] = list(Wo['h'])
+        tq = t0 + 10.0 + q
+        inst = m.build_instances(Wo, cg, tq + 5.0)
+        vistas.append(m.obras_ciudad(Wo, cg).get(i, 'terminada'))
+        ed = edis(inst, i)
+        if filas(inst, 'ciu_grua'):
+            gruas += 1
+        if ed and any(int(f[11]) == 1 for _, f in ed):
+            esq += 1
+        if vistas[-1] == 'fachada' and ed and any(0.0 < f[10] % 1.0 < 0.998 for _, f in ed):
+            fachada += 1
+        m.note_on(Wo, cg, m.ARQ, nota, 100, tq, 120.0)
+        m.note_off(Wo, cg, m.ARQ, nota, tq + 0.01, 120.0)
+        while Wo['occ'][i] > 8:
+            break
+    fin_ok = vistas[-1] == 'terminada'
+    t.check('escalera planificada 1 -> 9: %s; la obra entre etapas: %s (grua en %d pasos, esqueleto en %d, '
+            'fachada con desfase en %d)' % (' / '.join('%d %s' % (o, d) for o, _, d in serie), ' -> '.join(vistas),
+                                            gruas, esq, fachada),
+            [x[1] for x in serie] == esperado and vistas[:len(pasos_)] == pasos_ and fin_ok and gruas >= 3
+            and esq >= 1 and fachada >= 1, 'tipos %s' % [x[1] for x in serie])
+    # 3. semilla: Velprueba 100 dos veces, el mismo edificio; 101, otro
+    def edificio_de(vel):
+        W = mundo([i], m.ARQ, 8, vel)
+        inf = m.info_ciudad(W, c, i)
+        return (inf['diseno'], inf['var'], inf['giro']), sorted(tuple(round(v, 5) for v in f)
+                                                             for _, f in edis(m.build_instances(W, c, ahora), i))
+    a, b, a2 = edificio_de(100), edificio_de(101), edificio_de(100)
+    t.check('semilla: Velprueba 100 dos veces da el mismo edificio (%s %d); 101, otro (%s %d)'
+            % (a[0][0], a[0][1], b[0][0], b[0][1]), a == a2 and a[0] != b[0])
+    # 4. lenguaje: la misma tipologia en el ecuador, templada y en el polo; en directo
+    def por_leng(lg):
+        return [x for x in range(m.N) if m.lenguaje_celda(c, x) == lg and not m.is_pole(x)]
+    lengs = []
+    for lg in (2, 1, 0):
+        x = por_leng(lg)[len(por_leng(lg)) // 2]
+        W = mundo([x], m.ARQ, 3)
+        f = edis(m.build_instances(W, c12, ahora), x)
+        lengs.append(m.lenguaje_fila(f[0][1][12]) if f else -1)
+    base.par.Lenguaje = 'latitud'
+    W = m.world()
+    m.reset_world()
+    W = m.world()
+    ce = por_leng(2)[0]
+    for _ in range(3):
+        m.note_on(W, m.cfg(), m.ARQ, m.cell_note(ce), 100, ahora, 120.0)
+    m.tick(W, m.cfg(), ahora + 0.01, 120.0, True)
+    antes = W['leng'][ce]
+    base.par.Lenguaje = 'frio'
+    m.tick(W, m.cfg(), ahora + 0.02, 120.0, True)
+    sigue = W['leng'][ce]
+    o0 = W['occ'][ce]
+    k = 0
+    while m.etapa_ciudad(m.cfg(), 'planificada', W['occ'][ce]) == m.etapa_ciudad(m.cfg(), 'planificada', o0) \
+            and k < 200:
+        m.note_on(W, m.cfg(), m.ARQ, m.cell_note(ce), 100, ahora + 0.03, 120.0)
+        k += 1
+    nuevo = W['leng'][ce]
+    base.par.Lenguaje = 'latitud'
+    t.check('lenguaje: ecuador cal y celosia, templado ladrillo y vidrio, polo hormigon y chapa (%s); en directo, '
+            'lo construido conserva el suyo (%d -> %d) y la etapa siguiente sale fria (%d)'
+            % ('/'.join(str(x) for x in lengs), antes, sigue, nuevo),
+            lengs == [2, 1, 0] and antes == 2 and sigue == 2 and nuevo == 0)
+    # 5. colonizacion: torre-punto con 1, 3 y 6 notas del SEQ1
+    base.par.Fijartipo = '2'
+    c = m.cfg()
+    res5 = []
+    for notas in (1, 3, 6):
+        W = mundo([i], m.ARQ, 3)
+        W['t_nac'][i] = t_unico()
+        for _ in range(notas):
+            m.note_on(W, c, m.GEO, nota, 100, 2.0, 120.0)
+        W['occ'][i] = 3
+        m.cerrar_obras(W, c)
+        W['vh'] = list(W['h'])
+        inst = m.build_instances(W, c, ahora)
+        inf = m.info_ciudad(W, c, i)
+        pts = m.puestos_colonia(inf['ex'], W['par_vis'][i], inf['mut'], 0.5, inf['plantas'])
+        par = [f for g, f in edis(inst, i) if g.startswith(('mod_edi_cuarto', 'mod_edi_chabola'))]
+        res5.append((notas, W['par_vis'][i], len(par), pts))
+    azotea = all(p[5] == 0 for p in res5[0][3])
+    bajan = sum(1 for p in res5[1][3] if p[5] >= 1) > 0
+    arrecife = len(res5[2][3]) == int(c['max_parasitos']) and min(p[1] for p in res5[2][3]) < 0.6
+    t.check('colonia sobre la torre-punto: 1, 3 y 6 notas del SEQ1 -> %s parasitos; primero la azotea, '
+            'luego bajan por la fachada y al final un arrecife' % '/'.join(str(x[2]) for x in res5),
+            [x[1] for x in res5] == [4, 12, 24] and [x[2] for x in res5] == [4, 12, 24] and azotea and bajan
+            and arrecife, 'logicos %s' % [x[1] for x in res5])
+    base.par.Fijartipo = 'auto'
+    c = m.cfg()
+    # 6. ciudad espacial: barrio de 4 celdas con 1 y 3 notas del SEQ2
+    z4 = [i] + list(m.NEIGH[i])[:3]
+    res6 = []
+    for notas in (1, 3):
+        W = mundo(z4, m.GEO, 6)
+        tn = t_unico()
+        for x in z4:
+            W['t_nac'][x] = tn
+        for x in z4:
+            for _ in range(notas):
+                m.note_on(W, c, m.ARQ, m.cell_note(x), 100, 2.0, 120.0)
+            W['occ'][x] = 6
+        m.cerrar_obras(W, c)
+        W['vh'] = list(W['h'])
+        inst = m.build_instances(W, c, ahora)
+        inf = m.info_ciudad(W, c, i)
+        libres, g, paso_m = m.pilares_marco(inf['ex'], c['modulo_marco'])
+        sobre_casa = [p for p in libres if m._dentro(inf['ex'], p[0], p[1], 0.0)]
+        caps = len([1 for g_, f in edis(inst) if g_.startswith('mod_edi_capsula')])
+        res6.append(((W['marco_vis'][i] + 1) // 2, len(filas(inst, 'ciu_marco')), caps, len(filas(inst, 'ciu_pilar')),
+                     sobre_casa))
+    t.check('ciudad espacial sobre un barrio de 4 celdas: 1 y 3 notas del SEQ2 -> marco de %d y %d niveles, '
+            '%d y %d capsulas, %d pilares; ninguno sobre una casa' % (res6[0][0], res6[1][0], res6[0][2],
+                                                                     res6[1][2], res6[1][3]),
+            res6[0][0] == 1 and res6[1][0] == 3 and res6[1][1] > res6[0][1] > 0 and res6[1][2] > 0
+            and res6[1][3] > 0 and not res6[0][4] and not res6[1][4])
+    # 7. torres que se buscan: clusters planificados de 2, 5 y 8 celdas
+    def cluster_de(n_celdas, mut=0.5):
+        base.par.Mutacion = mut
+        cc = m.cfg()
+        celdas = [i]
+        frente = list(m.NEIGH[i])
+        while len(celdas) < n_celdas and frente:
+            x = frente.pop(0)
+            if x not in celdas and not m.is_pole(x):
+                celdas.append(x)
+                frente += [y for y in m.NEIGH[x] if y not in celdas]
+        W = mundo(celdas, m.ARQ, 8)
+        cl = m.clusters(W, cc)
+        tf, _ = m.objetivos(W, cc, cl)
+        for x in celdas:
+            W['et_f'][x] = W['ant_et_f'][x] = tf[x]
+            W['mut'][x] = mut
+        inst = m.build_instances(W, cc, ahora)
+        return W['piel'].get('ciudad', {}).get('protagonistas', {}), len(cl['celdas'].get(cl['de'][i], []))
+    p2, p5, p8 = cluster_de(2), cluster_de(5), cluster_de(8)
+    p5_0, _ = cluster_de(5, 0.0)
+    t.check('torres que se buscan: clusters de %d, %d y %d celdas -> %s, %s y %s; con Mutacion 0, pasarela'
+            % (p2[1], p5[1], p8[1], list(p2[0]), list(p5[0]), list(p8[0])),
+            list(p2[0]) == ['pasarela'] and list(p5[0]) == ['bucle'] and list(p8[0]) == ['losa']
+            and list(p5_0) == ['pasarela'])
+    base.par.Mutacion = 0.5
+    # 8. mutacion: la misma escena a 0 y a 1; con Mutacionfuente = saturacion la lleva el modular
+    def colonia_mut(mut):
+        W = mundo([i], m.ARQ, 3)
+        W['t_nac'][i] = t_unico()
+        for _ in range(6):
+            m.note_on(W, c, m.GEO, nota, 100, 2.0, 120.0)
+        W['occ'][i] = 3
+        m.cerrar_obras(W, c)
+        inf = m.info_ciudad(W, c, i)
+        pts = m.puestos_colonia(inf['ex'], 24, mut, 0.5, inf['plantas'])
+        return max(max(abs(p[3]), abs(p[4])) for p in pts), sum(1 for p in pts if p[5] == 2)
+    v0, v1 = colonia_mut(0.0), colonia_mut(1.0)
+    cs = dict(c)
+    cs.update(mutacion_fuente=1, nivel=19)
+    Ws = m.new_world()
+    Ws['modular']['saturacion'] = 0.2
+    s1 = m.mutacion_actual(Ws, cs)
+    Ws['modular']['saturacion'] = 0.9
+    s2 = m.mutacion_actual(Ws, cs)
+    Wt = mundo([i], m.ARQ, 9)
+    Wt['mut'][i] = 0.0
+    tor0 = [m.diseno_celda(Wt, dict(c, fijar_tipo=3), i)[0]]
+    Wt['mut'][i] = 1.0
+    tor1 = [m.diseno_celda(Wt, dict(c, fijar_tipo=3), i)[0]]
+    t.check('mutacion: a 0 parasitos pegados (%.2f) y torre recta (%s); a 1 voladizo maximo (%.2f), %d '
+            'parasitos colgados de otros y torsionada (%s); la saturacion la lleva (%.1f -> %.1f)'
+            % (v0[0], tor0[0], v1[0], v1[1], tor1[0], s1, s2),
+            v0[0] <= 0.5 + 1e-9 and v0[1] == 0 and v1[0] > 1.2 and v1[1] > 0 and tor0 == ['prisma']
+            and tor1 == ['torsion'] and abs(s1 - 0.2) < 1e-9 and abs(s2 - 0.9) < 1e-9)
+    # 9. lectura a distancia: siluetas a 20 px, como la fila inferior de la lamina
+    sil = dict((d, m.silueta_edificio(c, d, 0, 20)) for d in m.RASCACIELOS)
+    pares = [(p, q, m.iou(sil[p], sil[q])) for k, p in enumerate(m.RASCACIELOS) for q in m.RASCACIELOS[k + 1:]]
+    peor = max(pares, key=lambda x: x[2])
+    bp = m.iou(m.silueta_edificio(c, 'kowloon', 0, 20, 20), m.silueta_edificio(c, 'podio', 0, 20, 20))
+    t.check('a 20 px los cuatro rascacielos se distinguen (el par mas parecido, %s y %s, %.2f) y un barrio '
+            'denso no se confunde con un podio (%.2f)' % (peor[0], peor[1], peor[2], bp),
+            peor[2] < 0.75 and bp < 0.75)
+    # 10. derribo: un aranazo sobre la colonia quita los parasitos de abajo; sobre el marco, las capsulas
+    W = mundo([i], m.ARQ, 3)
+    W['t_nac'][i] = t_unico()
+    for _ in range(6):
+        m.note_on(W, c, m.GEO, nota, 100, 2.0, 120.0)
+    W['occ'][i] = 3
+    m.cerrar_obras(W, c)
+    inf = m.info_ciudad(W, c, i)
+    todos = m.puestos_colonia(inf['ex'], W['par_vis'][i], inf['mut'], 0.5, inf['plantas'])
+    m._quitar_colona(W, i, 3.0)
+    tt = 3.0
+    for _ in range(12):
+        tt += 1.0
+        m.ciudad_tick(W, c, tt, 0.5)
+    quedan = m.puestos_colonia(inf['ex'], W['par_vis'][i], inf['mut'], 0.5, inf['plantas'])
+    abajo = quedan == todos[:len(quedan)] and len(quedan) < len(todos) and \
+        min(p[1] for p in todos[len(quedan):]) <= min(p[1] for p in quedan)
+    Wm = mundo([i], m.GEO, 6)
+    Wm['t_nac'][i] = t_unico()
+    for _ in range(3):
+        m.note_on(Wm, c, m.ARQ, nota, 100, 2.0, 120.0)
+    Wm['occ'][i] = 6
+    m.cerrar_obras(Wm, c)
+    u0 = Wm['marco_vis'][i]
+    m._quitar_colona(Wm, i, 3.0)
+    m.ciudad_tick(Wm, c, 10.0, 0.5)
+    u1 = Wm['marco_vis'][i]
+    m.ciudad_tick(Wm, c, 11.0, 0.5)
+    u2 = Wm['marco_vis'][i]
+    t.check('derribo: un golpe sobre la colonia quita los parasitos mas bajos (%d -> %d); sobre el marco, '
+            'primero las capsulas (%d -> %d) y despues el nivel (%d)' % (len(todos), len(quedan), u0, u1, u2),
+            abajo and u0 == 6 and u1 == 5 and u2 == 4)
+    # 11. el derribo de la fase 14: un edificio a medias que recibe un aranazo va hacia atras
+    cd_ = dict(c, nivel=14, avance=0)
+    Wd = mundo([i], m.ARQ, 3)
+    Wd['obra'][i], Wd['t_obra'][i] = 3, 0.0
+    m.derribar(Wd, cd_, i, 1.0)
+    medio = Wd['obra'][i]
+    tt = 1.0
+    for _ in range(20):
+        tt += cd_['pasos_etapa'] * 0.125 + 0.01
+        m.tick_piel(Wd, cd_, tt, 0.125)
+    t.check('derribo de un edificio a medias: retrocede un paso (3 -> %d) y sigue hacia atras hasta el solar (%d)'
+            % (medio, Wd['obra'][i]), medio == 2 and Wd['obra'][i] == 0 and not Wd['derribo'][i])
+    # 12. el tinte del secuenciador en las ventanas: todas a la vez, y se apaga en Pasostinte pasos
+    W = mundo([i], m.ARQ, 3)
+    W['t_gate'][i], W['lat_s'][i] = ahora, 2
+    W['paso'] = 0.125
+    f1 = edis(m.build_instances(W, c12, ahora), i)
+    f2 = edis(m.build_instances(W, c12, ahora + c['pasos_tinte'] * 0.125 + 0.01), i)
+    t1 = f1[0][1][9] if f1 else 0.0
+    t2 = f2[0][1][9] if f2 else 9.0
+    t.check('tinte de las ventanas: una nota del SEQ2 enciende el edificio con su color (r %.2f) y se apaga '
+            'en Pasostinte pasos (%.2f)' % (t1, t2), 2.0 < t1 < 3.0 and t2 == 0.0)
+    # 13. la paleta: la misma en el motor y en el shader; sin el azul de los rios ni el cian
+    import re
+    txt = PIEL_PIXEL[PIEL_PIXEL.index('const vec3 PALETA[24]'):]
+    txt = txt[:txt.index(');')]
+    nums = [float(x) for x in re.findall(r'[0-9]+\.[0-9]+', txt)]
+    mot = [v for lg in m.PALETA_CIUDAD for col in lg for v in col]
+    frios = [col for lg in m.PALETA_CIUDAD for col in lg if col[2] > col[0] + 0.08 and col[2] > col[1] - 0.02]
+    t.check('la paleta de la ciudad, la misma en el motor y en el shader (%d colores), sin azules ni cianes'
+            % (len(mot) // 3), nums == mot and not frios, 'frios %s' % frios)
+    # 14. de lejos (Lodciudad) se apagan los remates pequenos; la silueta se queda
+    W = mundo([i], m.GEO, 2)
+    cl_ = dict(c)
+    cl_['lod_ciudad'] = 0.0
+    ce_ = m.build_instances(W, cl_, ahora)
+    cl_['lod_ciudad'] = 1e9
+    le_ = m.build_instances(W, cl_, ahora)
+    t.check('Lodciudad: de cerca, varillas y escalera (%d); de lejos, no (%d), y el edificio sigue'
+            % (len(filas(ce_, 'ciu_varillas')) + len(filas(ce_, 'ciu_escalera')),
+               len(filas(le_, 'ciu_varillas')) + len(filas(le_, 'ciu_escalera'))),
+            filas(ce_, 'ciu_varillas') and not filas(le_, 'ciu_varillas') and not filas(le_, 'ciu_escalera')
+            and edis(le_, i))
+    # 15. fase 15 y 16: el registro guarda la tipologia; los cortes ensenan sus cimientos
+    W = mundo([i, m.NEIGH[i][0]], m.ARQ, 1)
+    W['occ'][m.NEIGH[i][0]] = 3
+    reg = m.registro_concha(W, dict(c, nivel=15))
+    sh = dict(tema='ciudad', tipo=['pilotis', 'podio', 'laje'] + [''] * (m.N - 3))
+    t.check('registro de la concha con la tipologia de cada celda (%s); cimientos: pilotes, sotano y zapatas'
+            % reg['tipo'][i], reg['tipo'][i] in m.DISENOS_TIPO['pabellon']
+            and [m.cimiento_de(sh, k, 'planificada') for k in range(3)] == ['arq_pilotes', 'arq_sotano',
+                                                                             'arq_cimientos'])
+    # 16. la leyenda CIUDAD, OBRA, COLONIA y MARCO
+    m.reset_world()
+    Wl = m.world()
+    for x, v in ((i, m.ARQ), (m.NEIGH[i][0], m.GEO)):
+        Wl['occ'][x], Wl['own'][x], Wl['sp'][x], Wl['vel'][x] = 3 if v == m.ARQ else 6, v, m.HIB, 100
+        Wl['h'][x] = Wl['vh'][x] = m.height_for(m.cfg(), Wl['occ'][x])
+        Wl['t_nac'][x] = -50.0
+    Wl['par_vis'][i] = 8
+    Wl['marco_vis'][m.NEIGH[i][0]] = 3
+    Wl['obra'] = [0] * m.N
+    m.build_instances(Wl, m.cfg(), absTime.seconds + 10.0)
+    ley = m.legend()
+    t.check('leyenda CIUDAD (lenguajes F/T/C, edificios, tipos, MUTACION), COLONIA y MARCO',
+            'CIUDAD   lenguajes F/T/C' in ley and 'MUTACION 0,50 (manual)' in ley and 'COLONIA  celda' in ley
+            and 'MARCO' in ley, ' '.join([l.strip() for l in ley.split('\n') if 'CIUDAD' in l][:1]))
+    Wl['edi'] = [-1] * m.N
+    m.tick(Wl, m.cfg(), absTime.seconds + 10.0, 120.0, True)
+    m.build_instances(Wl, m.cfg(), absTime.seconds + 10.0)
+    ley = m.legend()
+    t.check('leyenda OBRA (pasos y gruas)', 'OBRA     ' in ley and 'gruas' in ley,
+            ' '.join([l.strip() for l in ley.split('\n') if 'OBRA' in l][:1]))
+    # 17. rendimiento: las 85 celdas en ciudad a ocupacion maxima frente a la naturaleza
+    tiempos = {}
+    for tema in ('naturaleza', 'ciudad'):
+        base.par.Tema = tema
+        cc = m.cfg()
+        W = mundo(range(m.N), m.GEO, 14, cerrar=False)
+        for x in range(0, m.N, 3):
+            W['own'][x] = W['sp'][x] = m.ARQ
+        m.cerrar_obras(W, cc)
+        m.build_instances(W, cc, absTime.seconds + 10.0)
+        m.build_instances(W, cc, absTime.seconds + 10.0)
+        ts = []
+        for _ in range(5):
+            t0 = time.time()
+            m.build_instances(W, cc, absTime.seconds + 10.0)
+            ts.append(time.time() - t0)
+        tiempos[tema] = min(ts)
+    base.par.Tema = 'ciudad'
+    t.check('rendimiento: %d celdas a ocupacion maxima, ciudad %.1f ms por fotograma, naturaleza %.1f ms'
+            % (m.N, 1000 * tiempos['ciudad'], 1000 * tiempos['naturaleza']),
+            tiempos['ciudad'] <= 1.1 * tiempos['naturaleza'] + 0.002)
 
 run_test(base, prueba)
 print('  Ahora: Sembrarzona dos veces (pagina Fase11) y mira el cluster, sus')

@@ -18,7 +18,13 @@ QUE HACE
                vegetacion (arboles, brotes y dosel), hoja cerosa <-> musgo
                seco, con los lados pardos y luz a contraluz (motor v32).
                Ciudad: vidrio negro <-> hormigon brutalista, con ventanas
-               ambar apagadas hasta la fase 17.
+               ambar apagadas hasta la fase 17. Desde la fase 11 v10 la
+               fachada de los edificios la dibuja mat_piel_ciudad (reticula
+               planificada o huecos informales, bandas de forjado, zocalo
+               comercial, loggias, capsulas, coronas) con los datos del uv de
+               cada ejemplar, la paleta del lenguaje y la escala del mundo
+               (uCiudad), y el tinte del secuenciador en las ventanas (uSeq1,
+               uSeq2); el alfa de un edificio lleva tambien su lenguaje.
                Materialmodo: binario (Umbralvel, como hasta ahora) o continuo
                (de Rugmax a velocidad 0 a Rugmin a 127).
   GATE -> VIGOR
@@ -47,7 +53,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v7  (autoprueba: cuenta las geometrias de la biblioteca de ejemplares de la fase 11 v8)'
+VERSION = 'fase12 v8  (la fachada de la ciudad en el shader: biblioteca de edificios de la fase 11 v10)'
 banner(VERSION)
 
 base = require_base(12)
@@ -122,7 +128,7 @@ def _prueba(t, m):
     dobles = [o.name for o in base.children if o.name.startswith('mod_')
               and (o.name.endswith('_pul') or o.name.endswith('_por'))]
     t.check('una geometria por modelo (%d), sin las pulidas y porosas de la fase 11' % len(geos),
-            len(geos) == len(m.MODELOS) + len(m.ejemplares_de(c))      # fase 11 v8: y la biblioteca
+            len(geos) == len(m.MODELOS) + len(m.ejemplares_de(c)) + len(m.edificios_de(c))  # y las bibliotecas
             and all(base.op(g) is not None for g, _, _ in geos) and not dobles,
             '%d duplicadas' % len(dobles))
     malas = []
@@ -154,6 +160,12 @@ def _prueba(t, m):
                 except Exception as e:
                     malos.append('%s.vec%dvalue%s: %s' % (x.name if x is not None else '?', q, comp, e))
     col = [m.luz_color(nm, k) for nm in ('luz_principal', 'luz_relleno') for k in range(3)]
+    nombres = [nm for nm, _ in PIEL_UNIFORMES]
+    t.check('la fachada de la ciudad en el shader: uCiudad (alto de planta, vano), uSeq1 y uSeq2; los '
+            'edificios (edi_) con mat_piel_ciudad',
+            all(x in nombres for x in ('uCiudad', 'uSeq1', 'uSeq2')) and 'edificio' in PIEL_PIXEL
+            and all(mat == 'mat_piel_ciudad' for g, mo, mat in geos if mo.startswith('edi_'))
+            and any(mo.startswith('edi_') for g, mo, mat in geos))
     t.check('los uniformes del shader (luces, familia) se evaluan sin error',
             not malos and all(v > 0 for v in col), '; '.join(malos[:2]) or
             'color x dimmer %s' % ' '.join('%.2f' % v for v in col))

@@ -50,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase17 v1  (tiempo: pulso en fase con el beat, transporte, frente y biblioteca de patterns)'
+VERSION = 'fase17 v2  (autoprueba: las ventanas de los edificios de la biblioteca de la ciudad, fase 11 v10)'
 banner(VERSION)
 
 base = require_base(17)
@@ -268,9 +268,9 @@ def _prueba(t, m):
             vias and len(faros) == 2 * len(vias) and W['tiempo']['trafico'] == len(faros))
     t.check('el trafico se mueve con el pulso (a 120 BPM, un tramo cada segundo)',
             faros and [f[:3] for f in faros] != [f[:3] for f in faros2])
-    edif = [f for g, filas in ins.items() if g.startswith(('mod_inf_', 'mod_pla_')) and '_puente' not in g
-            for f in filas]
-    niveles = set(int(math.floor(f[12] * 0.5 + 0.0001)) for f in edif)
+    edif = [f for g, filas in ins.items() if g.startswith('mod_edi_') and 'zocalo' not in g
+            for f in filas]                 # fase 11 v10: los edificios de la biblioteca
+    niveles = set(m.nivel_ventanas(f[12]) for f in edif)
     t.check('ventanas: cada edificio lleva su nivel en el alfa (y el shader las ve desde la fase 17)',
             edif and 4 in niveles and m.ventanas_luz() == 1.0,
             'niveles %s' % ' '.join(str(x) for x in sorted(niveles)))
@@ -278,7 +278,7 @@ def _prueba(t, m):
     for b in range(1, 8):
         W['pulso']['beat'] = float(b)
         otro = m.build_instances(W, c, reloj[0])
-        e2 = [f for g, filas in otro.items() if g.startswith(('mod_inf_', 'mod_pla_')) and '_puente' not in g
+        e2 = [f for g, filas in otro.items() if g.startswith('mod_edi_') and 'zocalo' not in g
               for f in filas]
         if [round(f[12], 4) for f in e2] != [round(f[12], 4) for f in edif]:
             parpadea = True
