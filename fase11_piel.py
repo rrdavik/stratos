@@ -1621,6 +1621,11 @@ def _prueba_industria_(t, m):
     t.check('a 20 px la central se distingue de la ciudad (el mas parecido, %.2f): torres blancas (%.2f), humo y '
             'brillo naranja de la colada' % (peor, min(blanca)), peor < 0.75 and min(blanca) > 0.7 and brillo
             and m.edificio(c, 'central', 0)['fuentes'])
+    # 10b. el violeta de la red, reservado: fuera de la paleta de conchas (y de la industria)
+    tonos = [m.palette_hue(n, c['paleta_tono'], m.bandas_de(c)) for n in range(200)]
+    t.check('el violeta de la red queda fuera de la paleta de conchas (%d generaciones) y de la industria'
+            % len(tonos), not any(m.BANDA_RED[0] <= h < m.BANDA_RED[1] for h in tonos)
+            and all(col[2] <= max(col[0], col[1]) + 0.02 for fila in m.PALETA_CIUDAD[m.PALETA_IND:] for col in fila))
     # 11. leyenda INDUSTRIA
     m.reset_world()
     Wl = m.world()

@@ -45,7 +45,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase18 v1  (escenas por tema, luz local, diagnostico y criterios de cierre)'
+VERSION = 'fase18 v2  (la escena de la industria)'
 banner(VERSION)
 
 base = require_base(18)
@@ -58,6 +58,8 @@ m = motor.module
 
 page = get_page(base, 'Fase18')
 add_par(base, page, 'menu', 'Escena', 'Escena (carga su preset)', 'naturaleza', menu=m.ESCENAS)
+if menu_al_dia(base, 'Escena', m.ESCENAS):
+    info('v2: Escena gana la industria')
 add_par(base, page, 'pulse', 'Guardarescena', 'Guardar lo que hay en la escena elegida')
 add_par(base, page, 'pulse', 'Cargarescena', 'Volver a la escena elegida')
 add_par(base, page, 'float', 'Luzcalida', 'Luz calida (0 fria de la fase 10, 1 de dia)', 0.0, 0.0, 1.0,
@@ -72,9 +74,15 @@ if tabla.numRows <= 1 or tabla[0, 0] is None or tabla[0, 0].val != 'escena':
     for esc in m.ESCENAS:
         for k, v in m.escena_defecto(esc).items():
             tabla.appendRow([esc, k, str(v)])
-    ok('tabla escenas: naturaleza y ciudad, %d parametros cada una' % len(m.ESCENA_PARS))
+    ok('tabla escenas: naturaleza, ciudad e industria, %d parametros cada una' % len(m.ESCENA_PARS))
 else:
-    ok('tabla escenas: se conserva la que habia (%d filas)' % (tabla.numRows - 1))
+    hay = set(tabla[r, 0].val for r in range(1, tabla.numRows))
+    nuevas = [esc for esc in m.ESCENAS if esc not in hay]
+    for esc in nuevas:                      # v2: la escena de la industria, sin tocar las demas
+        for k, v in m.escena_defecto(esc).items():
+            tabla.appendRow([esc, k, str(v)])
+    ok('tabla escenas: se conserva la que habia (%d filas)%s'
+       % (tabla.numRows - 1, '; anadida %s' % ', '.join(nuevas) if nuevas else ''))
 
 # -----------------------------------------------------------------------------
 # GEOMETRIAS: luz local (aditiva) y diagnostico
@@ -161,6 +169,12 @@ def _prueba(t, m):
     base.par.Maxpiezas = 6
     m.on_pulse('Cargarescena')
     t.check('Cargarescena vuelve a lo guardado', m.cfg()['max_piezas'] == 4)
+    escena('industria')                             # v2: la escena de la industria
+    c = m.cfg()
+    t.check('Escena industria: Tema industria, paleta mineral calida, Caos 3,82, menos balanceo',
+            m.tema_de(c) == 'industria' and abs(c['caos'] - 3.82) < 1e-6 and abs(c['sway_max'] - 2.0) < 1e-6
+            and abs(c['paleta_tono'] - 30.0) < 1e-6)
+    escena('ciudad')
     # 2. luz local: focos en las obras a medias
     m.reset_world()
     W = m.world()

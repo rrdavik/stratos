@@ -193,7 +193,7 @@ def pads_corte(cfg):
     impulso no corta, tenga la profundidad que tenga."""
     return [k for k, p in enumerate(cfg['perfiles']) if p[2] > 0 and not es_impulso(cfg, k)]
 
-COL_RED_DEF = (0.62, 0.30, 0.95)           # el violeta electrico de la red de la industria (reservado)
+COL_RED_DEF = (0.60, 0.36, 0.92)           # el violeta electrico de la red (OKLCH 0,62 0,21 300; reservado)
 DEFAULT_CFG = dict(
     nivel=3,
     core_radius=6.0,
@@ -1685,8 +1685,15 @@ def shell_color(gen):
 PALETAS = ['generaciones', 'mineral']
 # tono OKLCH reservado: ambar del SEQ2 (55-100); desde el motor v46, una sola
 # banda de 120 a 275 con los verdes de los pisos (120-165), el cian de la
-# cicatriz (165-235) y el azul de los rios (235-275)
+# cicatriz (165-235) y el azul de los rios (235-275). Motor v68: con la industria,
+# tambien el violeta electrico de su red (285-315; las demas paletas no cambian)
 BANDAS_RESERVADAS = ((55.0, 100.0), (120.0, 275.0))
+BANDA_RED = (285.0, 315.0)
+BANDAS_INDUSTRIA = BANDAS_RESERVADAS + (BANDA_RED,)
+
+
+def bandas_de(cfg):
+    return BANDAS_INDUSTRIA if cfg is not None and tema_de(cfg) == 'industria' else BANDAS_RESERVADAS
 AUREO = 0.6180339887
 # luminosidad (motor v53, conchas discretas): media Paletaluz, alternando
 # +- Paletaalterna / 2 (par oscura, impar clara); la loseta ocupada,
@@ -1706,21 +1713,22 @@ def palette_l(cfg, gen, ocupada):
 COL_ZOCALO_NEUTRO = (0.12, 0.12, 0.13)                  # zocalo: oscuro y neutro
 
 
-def _en_banda(h):
-    return any(a <= h < b for a, b in BANDAS_RESERVADAS)
+def _en_banda(h, bandas=BANDAS_RESERVADAS):
+    return any(a <= h < b for a, b in bandas)
 
 
-def palette_hue(n, t0=20.0):
+def palette_hue(n, t0=20.0, bandas=BANDAS_RESERVADAS):
     """Tono OKLCH (grados) de la generacion n: t0 + frac(n * aureo) * arco
     libre, recorriendo el circulo y saltando las bandas reservadas."""
-    libre = 360.0 - sum(b - a for a, b in BANDAS_RESERVADAS)
+    libre = 360.0 - sum(b - a for a, b in bandas)
     x = ((int(n) * AUREO) % 1.0) * libre
     h = float(t0) % 360.0
-    for a, b in BANDAS_RESERVADAS:          # si el tono base cae en una banda, empieza a su salida
-        if a <= h < b:
-            h = b
-    for _ in range(2 * len(BANDAS_RESERVADAS) + 2):
-        dist, fin = min(((a - h) % 360.0 or 360.0, b) for a, b in BANDAS_RESERVADAS)
+    for _ in range(2):
+        for a, b in bandas:                 # si el tono base cae en una banda, empieza a su salida
+            if a <= h < b:
+                h = b
+    for _ in range(2 * len(bandas) + 2):
+        dist, fin = min(((a - h) % 360.0 or 360.0, b) for a, b in bandas)
         if x < dist:
             return (h + x) % 360.0
         x -= dist
@@ -1754,7 +1762,7 @@ def generation_color(cfg, gen, ocupada):
     col = _PAL.get(key)
     if col is None:
         L = palette_l(cfg, gen, ocupada)
-        col = oklch_to_srgb(L, cfg['paleta_croma'], palette_hue(gen, cfg['paleta_tono']))[0]
+        col = oklch_to_srgb(L, cfg['paleta_croma'], palette_hue(gen, cfg['paleta_tono'], bandas_de(cfg)))[0]
         if len(_PAL) > 4096:
             _PAL.clear()
         _PAL[key] = col
@@ -1774,7 +1782,7 @@ def zocalo_color(cfg):
 
 
 def palette_key(cfg):
-    return (cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'),
+    return (cfg.get('tema'), cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'),
             cfg.get('paleta_luz'), cfg.get('paleta_alterna'), cfg.get('contraste_ocupada'),
             cfg.get('tapa_neutra'), cfg.get('tapa_luz'),
             cfg['nivel'] >= 15, cfg.get('respaldo', 0))
@@ -9937,6 +9945,8 @@ def ventanas_celda(W, cfg, i, bq):
     base = int(W['estacion']['ventanas'])
     f = W['frente']
     q = progreso_frente(W, cfg)
+    if tema_de(cfg) == 'industria' and not cfg.get('turno', 1):
+        f = None                        # fase 17 v3: sin Turno, el frente no cambia los focos
     if f and q is not None:
         base = int(f['de']['ventanas'])
         if f['a'] is not None and latitud(i) <= lat_frente(q):
@@ -10033,19 +10043,20 @@ def build_tiempo(W, cfg, now, out):
 # actuacion lo oculta, como la reticula y la leyenda.
 
 ENCUADRE_DEF, RETICULA_SOBRE_DEF = 0.85, 0.2     # los de la camara de globo (ver ENCUADRE)
-ESCENAS = ['naturaleza', 'ciudad']
-# los parametros de una escena: (nombre, naturaleza, ciudad). 'luz_principal.dimmer'
+ESCENAS = ['naturaleza', 'ciudad', 'industria']      # fase 18 v2: la escena de la industria
+# los parametros de una escena: (nombre, naturaleza, ciudad, industria). 'luz_principal.dimmer'
 # y 'luz_relleno.dimmer' son de las luces, no de FASE1.
 ESCENA_PARS = [
-    ('Tema', 'naturaleza', 'ciudad'),
-    ('Paleta', 'generaciones', 'mineral'), ('Paletatono', 20.0, 205.0), ('Paletacroma', 0.04, 0.03),
-    ('Umbralvecindad', 4.0, 4.5), ('Pesovecina', 0.5, 0.5), ('Mincluster', 2, 2),
-    ('Umbraldensidad', 0.6, 0.6),
-    ('Caos', 3.91, 3.74), ('Maxpiezas', 6, 5),
-    ('Rugmin', 0.05, 0.1), ('Rugmax', 0.85, 0.9),
-    ('Swaymax', 6.0, 4.0), ('Trafico', 2, 3),
-    ('Luzcalida', 0.35, 0.0),
-    ('luz_principal.dimmer', 1.15, 1.0), ('luz_relleno.dimmer', 0.16, 0.24),
+    ('Tema', 'naturaleza', 'ciudad', 'industria'),
+    ('Paleta', 'generaciones', 'mineral', 'mineral'), ('Paletatono', 20.0, 205.0, 30.0),
+    ('Paletacroma', 0.04, 0.03, 0.03),
+    ('Umbralvecindad', 4.0, 4.5, 4.5), ('Pesovecina', 0.5, 0.5, 0.5), ('Mincluster', 2, 2, 2),
+    ('Umbraldensidad', 0.6, 0.6, 0.6),
+    ('Caos', 3.91, 3.74, 3.82), ('Maxpiezas', 6, 5, 5),
+    ('Rugmin', 0.05, 0.1, 0.15), ('Rugmax', 0.85, 0.9, 0.95),
+    ('Swaymax', 6.0, 4.0, 2.0), ('Trafico', 2, 3, 2),
+    ('Luzcalida', 0.35, 0.0, 0.1),
+    ('luz_principal.dimmer', 1.15, 1.0, 0.95), ('luz_relleno.dimmer', 0.16, 0.24, 0.26),
 ]
 LUZ_CALIDA = (1.00, 0.88, 0.72)             # la luz de dia de la escena de naturaleza
 COL_FOCO, COL_CHARCO = (1.00, 0.62, 0.20), (0.30, 0.17, 0.05)
@@ -10056,7 +10067,7 @@ COL_DIAG_BAJA, COL_DIAG_ALTA = (0.25, 0.85, 0.35), (0.95, 0.25, 0.2)
 
 
 def escena_defecto(nombre):
-    """{parametro: valor} de la escena por defecto 'naturaleza' o 'ciudad'."""
+    """{parametro: valor} de la escena por defecto 'naturaleza', 'ciudad' o 'industria'."""
     k = 1 + ESCENAS.index(nombre)
     return dict((fila[0], fila[k]) for fila in ESCENA_PARS)
 
