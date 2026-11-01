@@ -277,7 +277,8 @@ def _prueba_industria(t, m):
         vec = list(m.NEIGH[i])
         m.reset_world()
         W = m.world()
-        for x, own, occ in ((i, m.ARQ, 8), (vec[0], m.GEO, 8), (vec[2], m.ARQ, 4)):
+        o_cen, o_ref = m.occ_inicio(c, 'energia', 5), m.occ_inicio(c, 'mina', 5)     # central y refineria
+        for x, own, occ in ((i, m.ARQ, o_cen), (vec[0], m.GEO, o_ref), (vec[2], m.ARQ, m.occ_inicio(c, 'energia', 3))):
             W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, 100
             W['h'][x] = W['vh'][x] = m.height_for(c, occ)
             W['t_nac'][x] = -50.0

@@ -517,7 +517,8 @@ def _prueba_industria_(t, m):
             'carga %s' % fc['carga'])
     # 8. una central y seis formaciones: el arbol desde la central, pulsos violeta, apagon
     vec = list(m.NEIGH[i])
-    zona_ = [(i, m.ARQ, 8)] + [(x, m.GEO if k % 2 else m.ARQ, 3) for k, x in enumerate(vec[:6])]
+    zona_ = [(i, m.ARQ, m.occ_inicio(c, 'energia', 5))] + [(x, m.GEO if k % 2 else m.ARQ, 3)
+                                                         for k, x in enumerate(vec[:6])]
     W = mundo(zona_)
     red = m.tejido(W, c)['red']
     inst = m.build_instances(W, c, absTime.seconds + 10.0)
