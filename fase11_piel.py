@@ -205,7 +205,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v11  (tema industria: mina y energia, recurso de la concha, epoca, corta e integrada)'
+VERSION = 'fase11 v12  (rendimiento en TD: giro y uniformes una vez por fotograma; el render, solo el tema activo)'
 banner(VERSION)
 
 base = require_base(11)
@@ -654,6 +654,7 @@ def _prueba(t, m):
     _prueba_natural(t, m)
     _prueba_ciudad(t, m)
     _prueba_industria(t, m)
+    _prueba_rendimiento_td(t, m)
 
 
 def _prueba_natural(t, m):
@@ -1668,6 +1669,45 @@ def _prueba_industria_(t, m):
     t.check('rendimiento: %d celdas al maximo, industria %.1f ms (humo %d de %d), ciudad %.1f ms'
             % (m.N, 1000 * tiempos['industria'], nh, int(c['max_humo']), 1000 * tiempos['ciudad']),
             tiempos['industria'] <= 1.1 * tiempos['ciudad'] + 0.002 and nh <= int(c['max_humo']))
+
+
+def _prueba_rendimiento_td(t, m):
+    """v12 (comun v49, motor v69): lo que se calcula una vez por fotograma y lo que
+    no se dibuja."""
+    tema0 = str(base.par.Tema.eval())
+    fu = base.op('frame_u')
+    try:
+        if fu is not None:
+            fu.cook(force=True)
+        con_python = []
+        for g in [o for o in base.children if o.name.startswith(PIEL_PREFIJO)]:
+            for nm in ('rx', 'ry'):
+                e = getattr(g.par, nm).expr or ''
+                if 'module.' in e:
+                    con_python.append('%s.%s' % (g.name, nm))
+        canales = [ch.name for ch in getattr(fu, '_chans', [])] if fu is not None else []
+        t.check('el giro y el balanceo, una vez por fotograma en frame_u: ninguna geometria llama a Python '
+                'para girar (%d canales en frame_u)' % len(canales),
+                fu is not None and fu['ry'] is not None and fu['rx'] is not None and not con_python,
+                ', '.join(con_python[:3]))
+        res = []
+        for tema in m.TEMAS:
+            base.par.Tema = tema
+            c = m.cfg()
+            m._CACHE.pop('render_tema', None)
+            m.render_tema_al_dia(c)
+            geos = [g for g in str(base.op('render').par.geometry.eval()).split() if g.startswith('mod_')]
+            mods = dict((g, mo) for g, mo, _ in m.geometrias_piel(c))
+            ajenas = [g for g in geos if m.tema_de(c) not in m.temas_de_modelo(mods.get(g, ''))]
+            res.append((tema, len(geos), len(mods), ajenas))
+        t.check('el render solo dibuja las geometrias del tema activo (%s)'
+                % ', '.join('%s %d de %d' % (a, b, n) for a, b, n, _ in res),
+                all(not x[3] and 0 < x[1] < x[2] for x in res), str([x[3][:2] for x in res]))
+    finally:
+        base.par.Tema = tema0
+        m._CACHE.pop('render_tema', None)
+        m.render_tema_al_dia(m.cfg())
+
 
 run_test(base, prueba)
 print('  Ahora: Sembrarzona dos veces (pagina Fase11) y mira el cluster, sus')

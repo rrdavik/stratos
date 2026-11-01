@@ -1505,3 +1505,17 @@ Lo que la simulación no puede comprobar: el aspecto real en el render, los nomb
 | Fase 11 v5: el bosque sale con el color de la concha o de la nota | Proyecto con motor anterior al v46 | Relanza `fase11_piel.py` (o cualquier fase): la línea `motor cargado (motor v46)` |
 | Fase 13 v2: los ríos no se ven | `rios` no está en el render o `Rios` apagado | Relanza `fase13_tejido.py`: la línea `render dibuja: ... rios ...` |
 | Fase 12: el gate no cambia nada | Sin note off (el aparato no lo envía) o `Gateprueba` en los botones | Mira la línea `MOD`: sin `gate` es que no llega el note off |
+
+## Rendimiento en TD (comun v49, motor v69, fase11 v12, fase3 v14, fase7 v17)
+
+Antes había dos cosas que costaban mucho por fotograma.
+
+- **Expresiones Python.** Unas 930 expresiones llamaban a Python en cada fotograma. Eran `module.rotation(...)` y `wobble(...)` en el giro de cada geometría, más las uniformes de materiales.
+- **Geometrías en el Render.** El Render TOP dibujaba las 295 geometrías de todos los temas.
+
+**Lo que se ha cambiado:**
+
+- **CHOP `frame_u`.** Es un Script CHOP que calcula una sola vez por fotograma el giro (`ry`), el balanceo (`rx`) y las uniformes de piel, luces, modular y ventanas. Lo hace `motor.canales_frame` y lo fuerza `frame_tick`. Las geometrías y los materiales solo leen sus canales (`parent().op('frame_u')['ry']`), que son expresiones optimizadas y no pasan por Python. Quedan unas 26 expresiones Python por fotograma.
+- **`render_tema_al_dia`.** El Render solo lista las geometrías del tema activo. La lista se reescribe cuando cambia el tema, el nivel o las variantes. En el proyecto completo simulado (nivel 21) quedan 103 (naturaleza), 132 (ciudad) o 119 (industria), de 281.
+
+**Para aplicarlo:** relanza cualquier fase (reinstala comun y motor) y después la fase 12 o una posterior, para que las uniformes de los materiales pasen a `frame_u`.

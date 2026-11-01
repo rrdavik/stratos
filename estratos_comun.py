@@ -24,8 +24,9 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
 import td
 import copy
 import math
+import re
 
-VERSION_COMUN = 'comun v48'
+VERSION_COMUN = 'comun v49'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1841,6 +1842,7 @@ def install_core(base, carpeta, fase):
     setp_any(pulsos, ['onpulse'], True)
     ok('pulsos: botones de las paginas de fase -> motor')
 
+    frame_u_al_dia(base)             # comun v49: antes de poner el giro a las geometrias
     add_grid_pars(base)
     fase3_al_dia(base)
     fase4_al_dia(base)
@@ -2199,16 +2201,57 @@ def make_constant(base, name, x, y, rgb):
 
 SPIN_EXPR = "parent().op('ritmo').module.rotation(absTime.frame)"
 WOBBLE_EXPR = "parent().op('motor').module.wobble(absTime.frame)"
+# comun v49: el giro y el balanceo se calculan una vez por fotograma en el Script CHOP
+# 'frame_u'; cada geometria los lee con una expresion simple, que TouchDesigner evalua
+# sin pasar por Python (antes, dos llamadas a Python por geometria y fotograma)
+SPIN_FRAME = "parent().op('frame_u')['ry']"
+WOBBLE_FRAME = "parent().op('frame_u')['rx']"
 
 
 def set_spin(geo):
     """Giro del planeta en una geometria: ry = giro al tempo, rx = balanceo
     del eje, rz = inclinacion. Orden Ry Rx Rz: primero gira sobre su eje,
     luego el eje se balancea hacia la camara y al final se inclina."""
-    setexpr(geo, 'ry', SPIN_EXPR)
-    setexpr(geo, 'rx', WOBBLE_EXPR)
+    setexpr(geo, 'ry', SPIN_FRAME)
+    setexpr(geo, 'rx', WOBBLE_FRAME)
     setexpr(geo, 'rz', 'parent().par.Tilt')
     return setmenu(geo, ['rord'], ['yxz'])
+
+
+FRAME_U_CB = r'''# Script CHOP 'frame_u' (comun v49): lo que cambia en cada fotograma y leen muchos
+# operadores, calculado una sola vez: el giro del planeta (ry), el balanceo del eje
+# (rx) y los uniformes de la piel que dependen del mundo (los canales que pide
+# materiales_piel, guardados en 'spec'). Lo recuece el latido en cada fotograma.
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def onCook(scriptOp):
+    scriptOp.clear()
+    try:
+        vals = op('motor').module.canales_frame(scriptOp.fetch('spec', []), absTime.frame)
+    except Exception:
+        vals = [('ry', 0.0), ('rx', 0.0)]
+    scriptOp.numSamples = 1
+    for nm, v in vals:
+        scriptOp.appendChan(nm)[0] = v
+    return
+'''
+
+
+def frame_u_al_dia(base):
+    """comun v49: el Script CHOP 'frame_u' (giro, balanceo y uniformes de la piel,
+    una vez por fotograma). Conserva los canales que ya pedia."""
+    cb = get_or_make(base, 'textDAT', 'frame_u_callbacks', -880, -200)
+    cb.text = FRAME_U_CB
+    fu = get_or_make(base, 'scriptCHOP', 'frame_u', -880, -60)
+    setp_any(fu, ['callbacks', 'callbackdat', 'dat'], 'frame_u_callbacks')
+    try:
+        fu.cook(force=True)
+    except Exception:
+        pass
+    return fu
 
 
 GRID_PARS = ('Notapolosur', 'Notapolonorte', 'Fuerarango')
@@ -2281,7 +2324,7 @@ def apply_wobble(base):
             e = g.par.ry.expr or ''
         except Exception:
             continue
-        if 'rotation(' not in e:
+        if 'rotation(' not in e and 'frame_u' not in e:
             continue
         if not set_spin(g):
             sin_orden.append(g.name)
@@ -2479,6 +2522,29 @@ SIN_TINTE = ('ciudad', 'agua')
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
 
 
+_RE_PIEL = re.compile(r"piel_uniforme\('([^']+)', (\d+)")
+_RE_LUZ = re.compile(r"luz_color\('([^']+)', (\d+)")
+_RE_MOD = re.compile(r"modular_uniforme\('([^']+)', (\d+)")
+
+
+def _por_frame_u(v, spec):
+    """comun v49: un valor de uniforme que llamaba a Python en cada fotograma pasa a
+    leer su canal de 'frame_u' (una expresion simple, sin Python); el canal queda
+    en spec para que frame_u lo calcule. Los demas valores, tal cual."""
+    if not isinstance(v, str) or 'module.' not in v:
+        return v
+    for rx, tipo in ((_RE_PIEL, 'piel'), (_RE_LUZ, 'luz'), (_RE_MOD, 'mod')):
+        mt = rx.search(v)
+        if mt:
+            canal = '%s_%s_%s' % (tipo, mt.group(1), mt.group(2))
+            spec[canal] = (canal, tipo, mt.group(1), int(mt.group(2)))
+            return "parent().op('frame_u')['%s']" % canal
+    if 'ventanas_luz(' in v:
+        spec['ventanas'] = ('ventanas', 'ventanas', '', 0)
+        return "parent().op('frame_u')['ventanas']"
+    return v
+
+
 def _uniforme(mat, k, nombre, valores):
     """Uniforme vec4 k del GLSL MAT (pagina Vectors): nombre y cuatro valores,
     numeros o expresiones."""
@@ -2608,6 +2674,7 @@ def materiales_piel(base):
     pdat.text = PIEL_PIXEL
     mapas = mapas_terreno(base)
     malos, sin_rampa = [], []
+    spec = {}                        # comun v49: los canales de frame_u que leen los uniformes
     for k, fam in enumerate(FAMILIAS_PIEL):
         mat = get_or_make(base, 'glslMAT', 'mat_piel_' + fam, 1400, 1020 - 80 * k)
         bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'piel_vertex'))
@@ -2623,6 +2690,7 @@ def materiales_piel(base):
             sin_rampa.append(mat.name)
         for q, (nombre, valores) in enumerate(PIEL_UNIFORMES):
             vals = tuple(v % k if '%d' in v else v for v in valores)
+            vals = tuple(_por_frame_u(v, spec) for v in vals)     # comun v49
             if nombre == 'uTerreno':
                 vals = ('1' if fam == 'tierra' else '0',) + vals[1:3] + ('1' if rampa else '0',)
             elif fam in SIN_TINTE and (nombre.startswith('uTinte') or nombre in ('uPisos', 'uBorde')):
@@ -2630,6 +2698,12 @@ def materiales_piel(base):
             bien = _uniforme(mat, q, nombre, vals) and bien
         if not bien:
             malos.append(mat.name)
+    fu = frame_u_al_dia(base)        # los uniformes que cambian con el mundo, una vez por fotograma
+    try:
+        fu.store('spec', sorted(spec.values()))
+        fu.cook(force=True)
+    except Exception:
+        pass
     make_phong(base, 'mat_respaldo', 1400, 780, spec=0.5, shin=24, diff=1.0, amb=0.22, emit=0.03)
     if malos:
         info('%s: no pude fijar los shaders o los uniformes (Vertex/Pixel Shader = piel_vertex / '

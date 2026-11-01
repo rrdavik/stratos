@@ -336,6 +336,9 @@ class Channel(object):
     def __len__(self):
         return len(self._vals)
 
+    def __float__(self):                # en una expresion, el canal vale su muestra actual
+        return float(self._vals[0]) if self._vals else 0.0
+
 
 class OP(object):
     def __init__(self, sim, optype, name, parent):
