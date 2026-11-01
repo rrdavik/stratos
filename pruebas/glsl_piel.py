@@ -195,6 +195,50 @@ def escena_natural(m):
     return c, W, t, fila, i
 
 
+def escena_ciudad(m):
+    """Fase 11 v10: la ciudad legible. Una fila de celdas con la escalera
+    informal (1, 2, 3, 5, 6, 9) y otra con la planificada (1, 2, 4, 6, 8, 9), una
+    colonia sobre una torre-punto, un marco sobre un barrio y un cluster de
+    rascacielos en obra; con las ventanas de la fase 17 encendidas."""
+    c = dict(m.DEFAULT_CFG)
+    c.update(nivel=17, tema=1, avance=0)
+    W = m.new_world()
+    W['estacion'] = dict(tinte=[1.0, 1.0, 1.0], ventanas=1)
+    anillo = m.RINGS[3]
+    otro = m.RINGS[4]
+
+    def poner(x, own, occ, vel=100):
+        W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, vel
+        W['h'][x] = W['vh'][x] = m.height_for(c, occ)
+        W['t_nac'][x] = -50.0
+    for k, o in enumerate((1, 2, 3, 5, 6, 9)):
+        poner(anillo[k], m.GEO, o, 90 + 7 * k)
+    for k, o in enumerate((1, 2, 4, 6, 8, 9)):
+        poner(otro[k], m.ARQ, o, 60 + 11 * k)
+    m.cerrar_obras(W, c)
+    col = anillo[7]                              # colonia: torre-punto con 6 notas del SEQ1
+    poner(col, m.ARQ, 3)
+    W['t_nac'][col] = 7.0
+    for _ in range(6):
+        m.note_on(W, c, m.GEO, m.cell_note(col), 100, 1.0, 120.0)
+    W['occ'][col] = 3
+    mar = otro[7]                                # marco: barrio con 3 notas del SEQ2
+    poner(mar, m.GEO, 6)
+    W['t_nac'][mar] = 8.0
+    for _ in range(3):
+        m.note_on(W, c, m.ARQ, m.cell_note(mar), 100, 1.0, 120.0)
+    W['occ'][mar] = 6
+    m.cerrar_obras(W, c)
+    obra = otro[9]                               # un rascacielos en obra (esqueleto y fachada)
+    poner(obra, m.ARQ, 8)
+    m.ciudad_sync(W, c, obra, 1.0)
+    W['obra'][obra] = 3
+    W['t_obra'][obra] = -10.0
+    t = 2.0
+    W['paso'] = 0.125
+    return c, W, t, anillo[2], otro[3]
+
+
 def esfera(filas=256, cols=512):
     """La malla del terreno: esfera unidad (posicion y normal)."""
     v = []
@@ -252,7 +296,7 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
     luces = dict(uLuz0=(0.0, R * 2 + 14, 4.0, 0), uLuz0Col=(0.82 * 1.15, 0.90 * 1.15, 1.15, 0),
                  uLuz1=(14.0, -10.0, 18.0, 0), uLuz1Col=(0.10, 0.14, 0.20, 0),
                  uLuz2=(0, 0, 0, 0), uLuz2Col=(0, 0, 0, 0), uAmbiente=(0.16, 0.16, 0.18, 0),
-                 uVentanas=(0, 0, 0, 0))
+                 uVentanas=(1.0 if c['nivel'] >= 17 else 0.0, 0, 0, 0))
     for k, v in luces.items():
         if k in prog:
             prog[k].value = v
@@ -297,7 +341,8 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
         if 'uFamilia' in prog:
             prog['uFamilia'].value = (float(m.FAMILIAS.index(m.familia_de(mo))) if mo[:3] != 'ciu' else 0.0,
                                       0, 0, 0)
-        tri = malla(m, mo if m.es_ejemplar(mo) else m.MODELOS[mo], c)
+        es_malla = m.es_ejemplar(mo) or (hasattr(m, 'es_edificio') and m.es_edificio(mo))
+        tri = malla(m, mo if es_malla else m.MODELOS[mo], c)
         vbo = ctx.buffer(tri.tobytes())
         datos = np.array([list(f[:12]) + [f[12] if len(f) > 12 else 1.0] for f in filas], dtype='f4')
         ibo = ctx.buffer(datos.tobytes())
@@ -349,9 +394,22 @@ def main():
               % (pz['ejemplares'], pz['hojas'], pz['montes'], pz['cordilleras'], pz['nevadas'],
                  W['rios_res']['rios'], W['rios_res']['lagos'], pz['hibridos']['arrozales'],
                  pz['hibridos']['mesetas']))
+    if hasattr(m, 'build_ciudad'):              # fase 11 v10: la ciudad legible, cerca y lejos
+        c, W, now, a, b = escena_ciudad(m)
+        m.build_instances(W, c, now)
+        mid = m._norm(m._add(m.normal_i(a), m.normal_i(b)))
+        R = m.top_radius(W, c)
+        for dist in (R * 1.75, R * 4.6):
+            cam = m._add(m._mul(mid, dist), m._mul(m.tangents(mid)[1], dist * 0.18))
+            img, inst = dibujar(ctx, prog, m, c, W, now, cam, m._mul(mid, R * 0.85))
+            imgs.append(img)
+        pz = W['piel'].get('ciudad', {})
+        print('       ciudad legible: %d edificios de %d tipos, lenguajes F/T/C %s, colonias %s, marcos %s'
+              % (pz.get('edificios', 0), pz.get('tipos', 0), pz.get('lenguajes'), pz.get('colonias'),
+                 pz.get('marcos')))
     filas_img = [fila(imgs[0], imgs[1]), fila(imgs[2], imgs[3])]
-    if len(imgs) >= 6:
-        filas_img.append(fila(imgs[4], imgs[5]))
+    for k in range(4, len(imgs) - 1, 2):
+        filas_img.append(fila(imgs[k], imgs[k + 1]))
     Image.fromarray(np.concatenate(filas_img, axis=0)).save(salida)
     print('       %s' % salida)
     return 0
