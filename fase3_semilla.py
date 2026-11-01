@@ -174,15 +174,21 @@ def prueba(t):
             W2['h'][i] <= m.height_for(c, W2['occ'][i] + 1) + 1e-9
             and W2['h'][i] - h3 <= (c['gate_max'] - 1.0) * c['grow_frac'] * lim / 2 + 1e-9,
             '%.3f -> %.3f' % (h3, W2['h'][i]))
-    for k in range(6):
+    # cuantas notas hacen falta sale de la configuracion del proyecto (Costemax,
+    # umbrales...): con los valores de fabrica son 10 hasta la madurez y 11 hasta el limite
+    n = 4
+    while W['occ'][i] < c['th_branch'] - 1 and n < 200:
         t.midi(0x9C, 0x40, 0x64)
-    t.check('10 notas -> madurez, aun bajo el limite',
+        n += 1
+    t.check('%d notas -> madurez, aun bajo el limite' % n,
             W['occ'][i] == c['th_branch'] - 1 and W['h'][i] < lim,
             'ocupacion %d, altura %.2f de %.2f' % (W['occ'][i], W['h'][i], lim))
-    t.midi(0x9C, 0x40, 0x64)
+    while W['occ'][i] < c['th_branch'] and n < 200:
+        t.midi(0x9C, 0x40, 0x64)
+        n += 1
     o11 = W['occ'][i]
     desborda = c['nivel'] >= 4            # relanzada sobre un proyecto ya avanzado
-    t.check('11 notas -> limite de altura' + ('' if desborda else ', sin desbordar'),
+    t.check('%d notas -> limite de altura' % n + ('' if desborda else ', sin desbordar'),
             abs(W['h'][i] - lim) < 1e-6 and o11 == c['th_branch']
             and (desborda or m.occupied(W) == 1),
             'altura %.2f de %.2f, celdas %d' % (W['h'][i], lim, m.occupied(W)))
