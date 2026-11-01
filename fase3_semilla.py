@@ -160,11 +160,23 @@ def prueba(t):
     for k in range(3):
         t.midi(0x9C, 0x40, 0x64)
         hs.append(W['h'][i])
-    t.check('4 notas -> crecimiento (ocupacion 3)', W['occ'][i] == 3 and hs[-1] > hs[0],
+    # lo esperado sale del coste del proyecto (Costemax): la nota 1 siembra y
+    # cada nota despues suma 1 a la carga, que dispara el trigger al llegar a cost(ocupacion)
+    occ_e, carga_e, ks = 1, 0, []
+    for k in range(3):
+        ks.append(m.cost(c, occ_e))
+        carga_e += 1
+        if carga_e >= m.cost(c, occ_e):
+            occ_e, carga_e = occ_e + 1, 0
+    t.check('4 notas -> crecimiento (ocupacion %d)' % occ_e,
+            W['occ'][i] == occ_e and hs[-1] > hs[0],
             'ocupacion %d, altura %.2f' % (W['occ'][i], W['h'][i]))
-    t.check('frenada: la nota 3 sube menos que la 2', hs[2] - hs[1] < hs[1] - hs[0] - 1e-6,
-            '%.3f < %.3f' % (hs[2] - hs[1], hs[1] - hs[0]))
-    t.check('carga: la nota 3 no dispara trigger', m.cost(c, 2) == 2)
+    dif = [hs[k + 1] - hs[k] for k in range(3)]
+    t.check('frenada: cada nota sube Growstep / coste (menos cuanto mas cuesta el trigger)',
+            all(abs(dif[k] * ks[k] - c['grow_frac'] * lim) < 1e-6 for k in range(3)),
+            ' , '.join('%.3f (coste %d)' % (dif[k], ks[k]) for k in range(3)))
+    t.check('carga: las notas sin trigger se acumulan (carga %d)' % carga_e,
+            W['carga'][i] == carga_e, '%d' % W['carga'][i])
     W2 = m.new_world()
     for k in range(3):
         m.note_on(W2, c, m.GEO, 64, 100, float(k))
