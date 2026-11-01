@@ -851,7 +851,7 @@ def _prueba_natural(t, m):
     for _ in range(2):
         m.note_on(Wm, c, m.ARQ, m.cell_note(i), 100, 2.0, 120.0)
     Wm['vh'] = list(Wm['h'])
-    instm = m.build_instances(Wm, c, 3.0)
+    instm = m.build_instances(Wm, dict(c, sway_max=0.0, viento_max=0.0), 3.0)   # sin balanceo ni viento
     term = m.terreno(Wm, c)
     alt = c['altura_meseta'] * m.limit(c)
     dentro = [q[4] for q in plantas(instm, i) if q[0] in m.ARBOLES]
@@ -1053,29 +1053,30 @@ def _prueba_ciudad_(t, m):
         inf = m.info_ciudad(W, c, i)
         inst = m.build_instances(W, c, ahora)
         serie.append((o, inf['tipo'], inf['diseno'], len(edis(inst, i)), inst))
-    esperado = ['caseta', 'casa', 'tresplantas', 'racimo', 'racimo', 'barrio', 'barrio', 'torre', 'torre']
+    # lo esperado, con los umbrales de la fase 4 del proyecto (Umbralram, Pasoumbral)
+    esperado = [m.TIPOS['informal'][m.etapa_ciudad(c, 'informal', o) - 1] for o in range(1, 10)]
     casa = serie[1][4]
     varillas = bool(filas(casa, 'ciu_varillas')) or not m.lod_ciudad(mundo([i], m.GEO, 2), c, i)
     tres = m.edificio(c, serie[2][2], m.info_ciudad(mundo([i], m.GEO, 3), c, i)['var'])
     bandas = len(set(v['slot'] for v in tres['vols'][:3]))
     t.check('escalera informal 1 -> 9: %s; la casa que crece con varillas, tres plantas de %d colores'
             % (' / '.join('%d %s' % (o, d) for o, _, d, _, _ in serie), bandas),
-            [x[1] for x in serie] == esperado and all(x[3] >= 1 for x in serie) and varillas and bandas == 3,
+            [x[1] for x in serie] == esperado and set(esperado) == set(m.TIPOS['informal'])
+            and all(x[3] >= 1 for x in serie) and varillas and bandas == 3,
             'tipos %s' % [x[1] for x in serie])
     # 2. escalera planificada, con la obra entre etapas (grua, esqueleto, fachada con desfase)
     serie = []
     for o in range(1, 10):
         W = mundo([i], m.ARQ, o)
         serie.append((o, m.info_ciudad(W, c, i)['tipo'], m.info_ciudad(W, c, i)['diseno']))
-    esperado = ['pabellon', 'bloque', 'bloque', 'manzana', 'manzana', 'podio', 'podio', 'rascacielos',
-                'rascacielos']
+    esperado = [m.TIPOS['planificada'][m.etapa_ciudad(c, 'planificada', o) - 1] for o in range(1, 10)]
     cg = dict(c12)
     cg.update(avance=0)
     Wo = m.new_world()
     t0 = 100.0
     vistas = []
     k = 0
-    while Wo['occ'][i] < 8 and k < 400:         # notas del SEQ2 hasta el rascacielos
+    while m.etapa_ciudad(cg, 'planificada', Wo['occ'][i]) < 5 and k < 400:   # notas del SEQ2 hasta el rascacielos
         m.note_on(Wo, cg, m.ARQ, nota, 100, t0 + 0.01 * k, 120.0)
         k += 1
     pasos_ = m.pasos_obra('planificada', 'rascacielos')
@@ -1100,7 +1101,8 @@ def _prueba_ciudad_(t, m):
     t.check('escalera planificada 1 -> 9: %s; la obra entre etapas: %s (grua en %d pasos, esqueleto en %d, '
             'fachada con desfase en %d)' % (' / '.join('%d %s' % (o, d) for o, _, d in serie), ' -> '.join(vistas),
                                             gruas, esq, fachada),
-            [x[1] for x in serie] == esperado and vistas[:len(pasos_)] == pasos_ and fin_ok and gruas >= 3
+            [x[1] for x in serie] == esperado and set(esperado) == set(m.TIPOS['planificada'])
+            and vistas[:len(pasos_)] == pasos_ and fin_ok and gruas >= 3
             and esq >= 1 and fachada >= 1, 'tipos %s' % [x[1] for x in serie])
     # 3. semilla: Velprueba 100 dos veces, el mismo edificio; 101, otro
     def edificio_de(vel):
@@ -1174,7 +1176,7 @@ def _prueba_ciudad_(t, m):
     z4 = [i] + list(m.NEIGH[i])[:3]
     res6 = []
     for notas in (1, 3):
-        W = mundo(z4, m.GEO, 6)
+        W = mundo(z4, m.GEO, m.occ_inicio(c, 'informal', 5))         # un barrio denso
         tn = t_unico()
         for x in z4:
             W['t_nac'][x] = tn
@@ -1276,7 +1278,7 @@ def _prueba_ciudad_(t, m):
     quedan = m.puestos_colonia(inf['ex'], W['par_vis'][i], inf['mut'], 0.5, inf['plantas'])
     abajo = quedan == todos[:len(quedan)] and len(quedan) < len(todos) and \
         min(p[1] for p in todos[len(quedan):]) <= min(p[1] for p in quedan)
-    Wm = mundo([i], m.GEO, 6)
+    Wm = mundo([i], m.GEO, m.occ_inicio(c, 'informal', 5))
     Wm['t_nac'][i] = t_unico()
     for _ in range(3):
         m.note_on(Wm, c, m.ARQ, nota, 100, 2.0, 120.0)
@@ -1471,18 +1473,17 @@ def _prueba_industria_(t, m):
         inf = m.info_ciudad(W, c, i)
         inst = m.build_instances(W, c, ahora)
         serie.append((o, inf['tipo'], inf['diseno'], len(edis(inst, i))))
-    esperado = ['brote', 'mina', 'mina', 'complejo', 'complejo', 'fundicion', 'fundicion', 'refineria',
-                'refineria']
+    esperado = [m.TIPOS['mina'][m.etapa_ciudad(c, 'mina', o) - 1] for o in range(1, 10)]
     t.check('escalera de la mina 1 -> 9: %s' % ' / '.join('%d %s' % (o, d) for o, _, d, _ in serie),
-            [x[1] for x in serie] == esperado and all(x[3] >= 1 for x in serie), 'tipos %s' % [x[1] for x in serie])
+            [x[1] for x in serie] == esperado and set(esperado) == set(m.TIPOS['mina'])
+            and all(x[3] >= 1 for x in serie), 'tipos %s' % [x[1] for x in serie])
     # 2. escalera de la energia, con la obra: chimenea deslizante, torre por anillos y primer humo
     serie = [(o, m.info_ciudad(mundo([i], m.ARQ, o), c, i)['tipo']) for o in range(1, 10)]
-    esperado = ['aserradero', 'serreria', 'serreria', 'fabrica', 'fabrica', 'termica', 'termica', 'central',
-                'central']
+    esperado = [m.TIPOS['energia'][m.etapa_ciudad(c, 'energia', o) - 1] for o in range(1, 10)]
     cg = dict(c12, avance=0)
     Wo = m.new_world()
     k = 0
-    while Wo['occ'][i] < 8 and k < 400:
+    while m.etapa_ciudad(cg, 'energia', Wo['occ'][i]) < 5 and k < 400:      # hasta la central
         m.note_on(Wo, cg, m.ARQ, nota, 100, 100.0 + 0.01 * k, 120.0)
         k += 1
     for x in range(m.N):                    # sin los satelites del desborde (humean por su cuenta)
@@ -1505,7 +1506,8 @@ def _prueba_industria_(t, m):
         m.note_on(Wo, cg, m.ARQ, nota, 100, tq, 120.0)
     t.check('escalera de la energia 1 -> 9: %s; la obra: %s (encofrado %d, humo en obra %d, al terminar %d)'
             % (' / '.join('%d %s' % s_ for s_ in serie), ' -> '.join(vistas), encofrado, humo_obra, humo_fin),
-            [x[1] for x in serie] == esperado and vistas[:len(pasos_)] == pasos_ and vistas[-1] == 'terminada'
+            [x[1] for x in serie] == esperado and set(esperado) == set(m.TIPOS['energia'])
+            and vistas[:len(pasos_)] == pasos_ and vistas[-1] == 'terminada'
             and encofrado >= 1 and humo_obra == 0 and humo_fin > 0)
     # 3. recurso: la concha de abajo (naturaleza: carbon; ciudad: chatarra)
     res3 = []
@@ -1531,14 +1533,16 @@ def _prueba_industria_(t, m):
         eps.append(m.info_ciudad(W, c, i)['epoca'])
     t.check('epoca por las eras enterradas: 0 -> vapor, 3 -> acero, 6 -> quimica (%s)' % eps, eps == [0, 1, 2])
     # 5. corta que devora: fabrica y 1, 3 y 5 notas del SEQ1
+    o_fab = m.occ_inicio(c, 'energia', 3)
+    o_com = m.occ_inicio(c, 'mina', 3)
     res5 = []
     for notas in (1, 3, 5):
-        W = mundo([i], m.ARQ, 4)
+        W = mundo([i], m.ARQ, o_fab)            # una fabrica
         W['t_nac'][i] = t_unico()
         cols0 = [list(map(list, x)) for x in W['cols']]
         for _ in range(notas):
             m.note_on(W, c, m.GEO, nota, 100, 2.0, 120.0)
-        W['occ'][i] = 4
+        W['occ'][i] = o_fab
         m.cerrar_obras(W, c)
         W['vh'] = list(W['h'])
         inst = m.build_instances(W, c, ahora)
@@ -1556,11 +1560,11 @@ def _prueba_industria_(t, m):
     # 6. planta integrada: complejo minero y 1 y 3 notas del SEQ2
     res6 = []
     for notas in (1, 3):
-        W = mundo([i], m.GEO, 4)
+        W = mundo([i], m.GEO, o_com)            # un complejo minero
         W['t_nac'][i] = t_unico()
         for _ in range(notas):
             m.note_on(W, c, m.ARQ, nota, 100, 2.0, 120.0)
-        W['occ'][i] = 4
+        W['occ'][i] = o_com
         m.cerrar_obras(W, c)
         W['vh'] = list(W['h'])
         inst = m.build_instances(W, c, ahora)
