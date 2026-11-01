@@ -42,7 +42,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase15 v2  (el ciclo como era: entierro tematico, registro y herencia)'
+VERSION = 'fase15 v3  (industria: el recurso de la concha de abajo, la epoca por las eras y las vias heredadas)'
 banner(VERSION)
 
 base = require_base(15)
@@ -84,7 +84,7 @@ print_report()
 def prueba(t):
     m = t.m
     guarda = {}
-    for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Pesotraza', 'Rebrote', 'Temaenciclo', 'Materialrespaldo',
+    for nm in ('Tema', 'Nota', 'Nota2', 'Velprueba', 'Pesotraza', 'Rebrote', 'Temaenciclo', 'Materialrespaldo', 'Epoca',
                'Herencia'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
@@ -92,6 +92,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
             try:
@@ -267,6 +268,69 @@ def _prueba(t, m):
     t.check('Temaenciclo apagado: el cambio de Tema es inmediato', m.tema_de(m.cfg()) == 'ciudad')
     base.par.Temaenciclo = True
     t.check('leyenda ERA', 'ERA' in m.legend() and 'herencia' in m.legend())
+
+
+def _prueba_industria(t, m):
+    """v3: la industria lee la concha de abajo (recurso), avanza de epoca con las
+    eras, guarda su veta de escoria y hereda sus vias como trazas."""
+    base.par.Temaenciclo = False
+    base.par.Velprueba = 100
+    base.par.Herencia = 0.5
+    i = m.note_cell(64)
+
+    def zona(pulso, nota, veces=3):
+        base.par.Nota = nota
+        base.par.Nota2 = nota
+        for _ in range(veces):
+            m.on_pulse(pulso)
+    # 1. prueba 3: un mundo de naturaleza, Forzarciclo, Tema industria: carbon; sobre ciudad, chatarra
+    recs = []
+    for tema in ('naturaleza', 'ciudad'):
+        base.par.Tema = tema
+        m.reset_world()
+        m.world()['tema'] = m.TEMAS.index(tema)
+        zona('Sembrarzona', 64, 4)
+        m.on_pulse('Forzarciclo')
+        base.par.Tema = 'industria'
+        zona('Sembrarzona', 64, 3)
+        W, c = m.world(), m.cfg()
+        W['vh'] = list(W['h'])
+        m.cerrar_obras(W, c)
+        inst = m.build_instances(W, c, absTime.seconds + 10.0)
+        terril = [tuple(f[9:12]) for f in inst.get(m.geometria_de('ciu_terril'), [])]
+        recs.append((m.recurso_celda(W, c, i), terril))
+    t.check('recurso por el camino real: Forzarciclo sobre naturaleza -> carbon; sobre ciudad -> chatarra (%s)'
+            % ', '.join(r for r, _ in recs), [r for r, _ in recs] == ['carbon', 'chatarra'])
+    # 2. prueba 4: seis eras de industria: vapor, acero, quimica; la concha guarda su epoca y su escoria
+    base.par.Tema = 'industria'
+    base.par.Epoca = 'eras'
+    m.reset_world()
+    m.world()['tema'] = m.TEMAS.index('industria')
+    epocas = []
+    for g in range(7):
+        zona('Sembrarzona', 64, 2)
+        zona('Sembrarzona2', 70, 2)
+        epocas.append(m.epoca_actual(m.cfg(), m.world()))
+        m.on_pulse('Forzarciclo')
+    W, c = m.world(), m.cfg()
+    regs = [sh.get('epoca') for sh in W['shells'] if sh.get('tema') == 'industria']
+    sh = W['shells'][-1]
+    s_ = len(W['shells']) - 1
+    mina = next((x for x in range(m.N) if sh['esp'][x] == 1 + m.RUINA_ESP.index('mina')), None)
+    col, rug = m.tile_material(c, sh, s_, mina) if mina is not None else ((1, 1, 1), 0)
+    t.check('epoca: %s; cada concha guarda la suya (%s); la de industria lleva su veta de escoria'
+            % ('/'.join(m.EPOCAS[e] for e in epocas), regs),
+            epocas[0] == 0 and epocas[3] == 1 and epocas[6] == 2 and regs == sorted(regs) and regs[-1] == 2
+            and sum(col) < 1.2)
+    # 3. de la industria a la industria: las trazas son sus vias
+    vias = set((min(a, b), max(a, b)) for a, b in m.tejido(m.world(), m.cfg())['vias'])
+    zona('Sembrarzona', 64, 3)
+    zona('Sembrarzona2', 70, 3)
+    vias = set((min(a, b), max(a, b)) for a, b in m.tejido(m.world(), m.cfg())['vias'])
+    m.on_pulse('Forzarciclo')
+    trazas = set((a, b) for a, b in m.world()['trazas'])
+    t.check('de la industria a la industria: las trazas son sus vias (%d tramos)' % len(vias),
+            vias and trazas == vias)
 
 
 run_test(base, prueba)

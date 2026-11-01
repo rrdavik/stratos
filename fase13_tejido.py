@@ -504,9 +504,7 @@ def _prueba_industria_(t, m):
     i = m.note_cell(64)
     anillo = m.RINGS[m.RING_OF[i]]
     q = anillo.index(i)
-    minas = [anillo[(q + 3) % len(anillo)], anillo[(q - 3) % len(anillo)]]
-    otro = m.RINGS[m.RING_OF[i] + 2] if m.RING_OF[i] + 2 < len(m.RINGS) else m.RINGS[m.RING_OF[i] - 2]
-    minas.append(min(otro, key=lambda x: -sum(m.NORMALS[x][k] * m.NORMALS[i][k] for k in range(3))))
+    minas = [anillo[(q + k) % len(anillo)] for k in (2, 3, 4)]     # en abanico, del mismo lado
     W = mundo([(i, m.ARQ, 6)] + [(x, m.GEO, 4) for x in minas])
     tj = m.tejido(W, c)
     fc = tj['fc']
@@ -515,7 +513,8 @@ def _prueba_industria_(t, m):
     t.check('trenes: tres minas y una planta -> %d lineas que confluyen (%d tramos de doble via) y acaban en '
             '%d playa' % (len(fc['lineas']), len(doble), len(fc['playas'])),
             len(fc['lineas']) == 3 and all(l[-1] == i for l in fc['lineas']) and fc['playas'] == [i]
-            and len(inst.get('tejido', [])) > 3 * len(fc['vias']), 'carga %s' % fc['carga'])
+            and doble and max(fc['carga'].values()) == 3 and len(inst.get('tejido', [])) > 3 * len(fc['vias']),
+            'carga %s' % fc['carga'])
     # 8. una central y seis formaciones: el arbol desde la central, pulsos violeta, apagon
     vec = list(m.NEIGH[i])
     zona_ = [(i, m.ARQ, 8)] + [(x, m.GEO if k % 2 else m.ARQ, 3) for k, x in enumerate(vec[:6])]

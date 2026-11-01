@@ -49,7 +49,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase16 v2  (arqueologia tematica: lo que ensenan los cortes, canon y galeria de metro)'
+VERSION = 'fase16 v3  (industria: galerias entibadas, vagonetas fosiles y pozos; las epocas antiguas, abajo)'
 banner(VERSION)
 
 base = require_base(16)
@@ -82,6 +82,9 @@ instanciar_modelos(base, m)
 set_render(base)
 
 leeme(base, 16, """FASE 16 - ARQUEOLOGIA TEMATICA: CORTES
+  v3, industria: los cortes ensenan galerias de mina con entibado,
+  vagonetas fosiles y pozos, con el color de su epoca (las antiguas, mas
+  abajo); dos cortes que se unen forman una galeria.
   Los cortes (pads con profundidad) ensenan lo que hubo en cada concha:
   naturaleza, troncos fosiles en la veta de carbon y columnas de basalto;
   ciudad, cimientos, sotanos y tramos de calle. En el fondo y en las paredes
@@ -109,6 +112,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
             try:
@@ -260,6 +264,43 @@ def _prueba(t, m):
     W['cortes'] = [[absTime.seconds - 100.0, a, 2, 1]]
     u = m.unir_cortes(W, c, b, 2, 1, absTime.seconds)
     t.check('pasada Ventanaescalada, no se unen', u is None)
+
+
+def _prueba_industria(t, m):
+    """v3: lo que ensenan los cortes en las conchas de la industria."""
+    c = m.cfg()
+    cortes = m.pads_corte(c)
+    if not cortes:
+        return
+    pad = max(cortes, key=lambda k: c['perfiles'][k][2])
+    base.par.Padprueba = pad + 1
+    base.par.Temaenciclo = False
+    base.par.Tema = 'industria'
+    m.reset_world()
+    m.world()['tema'] = m.TEMAS.index('industria')
+
+    def zona(pulso, nota, veces=3):
+        base.par.Nota = nota
+        base.par.Nota2 = nota
+        for _ in range(veces):
+            m.on_pulse(pulso)
+    for g in range(4):
+        zona('Sembrarzona', 64)
+        zona('Sembrarzona2', 52)
+        m.on_pulse('Forzarciclo')
+    i = m.note_cell(64)
+    m.world()['last'] = {1: dict(note=64, cell=i, t=absTime.seconds, vel=100)}
+    m.on_pulse('Erosionar')
+    W, c = m.world(), m.cfg()
+    inst = m.build_instances(W, c, absTime.seconds)
+    ind = dict((g, f) for g, f in inst.items() if g.startswith('mod_ind_') and f)
+    obj = (W['ev'].get('corte') or {}).get('celda', i)
+    zona_c = [x for x, _ in m.rings(obj, c['perfiles'][pad][1] + 1)]
+    nombres = [nm for _, nm in m.eras_expuestas(W, c, zona_c)]
+    epocas = [sh.get('epoca') for sh in W['shells']]
+    t.check('industria: el corte ensena galerias, vagonetas y pozos (%s); las eras: %s; las epocas de abajo '
+            'arriba %s' % (', '.join(sorted(ind)), ', '.join(nombres), epocas),
+            ind and 'galerias' in nombres and epocas == sorted(epocas) and m.cfg().get('tema') == 2)
 
 
 run_test(base, prueba)

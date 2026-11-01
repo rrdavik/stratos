@@ -1648,7 +1648,7 @@ def _prueba_industria_(t, m):
         m.cerrar_obras(W, cc)
         m.build_instances(W, cc, absTime.seconds + 10.0)
         ts = []
-        for _ in range(5):
+        for _ in range(9):
             t0 = time.time()
             m.build_instances(W, cc, absTime.seconds + 10.0)
             ts.append(time.time() - t0)
