@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v69'
+MOTOR_VERSION = 'motor v70'
 
 import math
 
@@ -11253,6 +11253,19 @@ def instance_rows(chop_name):
 
 # --- pulsos de los parametros ------------------------------------------------
 
+def subir_escalon(W, c, s, x, vel, now, tempo=120.0):
+    """Motor v70: notas en la celda x hasta que su ocupacion sube 1, las que
+    cueste (Costemax): una celda vacia, 1 nota (la semilla). Lo usan Sembrarzona
+    (antes, una nota por pulsacion: con Costemax alto, dos pulsaciones no
+    formaban el cluster) y las autopruebas. Devuelve las notas tocadas."""
+    o0 = W['occ'][x]
+    for k in range(max(1, int(c['cost_max'])) + 1):
+        note_on(W, c, s, cell_note(x), vel, now, tempo)
+        if W['occ'][x] != o0:
+            return k + 1
+    return k + 1
+
+
 def _gate_prueba(W, c, s, note, now):
     """Fase 12: los botones de prueba sueltan la nota tras Gateprueba pasos."""
     if c['nivel'] >= 12:
@@ -11385,7 +11398,7 @@ def on_pulse(name):
             print('SEMBRARZONA  %s fuera de rango' % note_name(note))
         else:
             for x in [ci] + list(NEIGH[ci]):
-                note_on(W, c, s, cell_note(x), _p('Velprueba', 100), now, tempo())
+                subir_escalon(W, c, s, x, _p('Velprueba', 100), now, tempo())
                 _gate_prueba(W, c, s, cell_note(x), now)
             if s == GEO:
                 _seq1_beacon(note)

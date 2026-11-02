@@ -192,11 +192,14 @@ def prueba(t):
     c['corteza_max'] = 0.0              # sin compactar: el radio es el tiempo
     c['tapa_neutra'] = 0.0              # sin tapa: una instancia por loseta (la tapa se prueba aparte)
     W = m.new_world()
-    for g in range(4):
-        for k in range(16):
-            m.note_on(W, c, 1, 64, 100, g * 10 + k)
-        m.end_cycle(W, c, g * 10 + 9)
     i = m.note_cell(64)
+    for g in range(4):
+        k = 0                           # 16 notas, o las que hagan falta para pasar el limite
+        while (k < 16 or W['occ'][i] < c['th_branch'] + 1                 # y heredar al menos 2
+               or W['occ'][i] * c['herencia'] + W['resto'][i] < 2.0 - 1e-9) and k < 400:
+            m.note_on(W, c, 1, 64, 100, g * 10 + 0.01 * k)
+            k += 1
+        m.end_cycle(W, c, g * 10 + 9)
     t.check('4 ciclos -> 4 conchas', m.n_shells(W) == 4)
     t.check('el radio crece 4 grosores',
             abs(m.top_radius(W, c) - (c['core_radius'] + 4 * c['shell_thick'])) < 1e-6,

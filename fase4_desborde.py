@@ -103,23 +103,35 @@ def prueba(t):
     c = m.cfg()
     i = m.note_cell(64)
     W = m.world()
-    for k in range(11):
-        t.midi(0x9C, 0x40, 0x64)
-    t.check('11 notas en mi4 -> limite y primer desborde',
+    # cuantas notas hacen falta sale de la configuracion del proyecto (Umbralram,
+    # Pasoumbral, Costemax): con los valores de fabrica son 11, 15, 31 y 41
+    n = [0]
+
+    def hasta(occ):
+        while W['occ'][i] < occ and n[0] < 400:
+            t.midi(0x9C, 0x40, 0x64)
+            n[0] += 1
+
+    hasta(c['th_branch'])
+    t.check('%d notas en mi4 -> limite y primer desborde' % n[0],
             W['occ'][i] == c['th_branch'] and len(m.satellites_of(W, i)) == 1,
             'ocupacion %d' % W['occ'][i])
-    for k in range(4):
+    cm = m.cost(c, W['occ'][i])
+    for k in range(cm - 1):
         t.midi(0x9C, 0x40, 0x64)
-    t.check('4 notas mas solo cargan', W['occ'][i] == c['th_branch'] and W['carga'][i] == 4,
+        n[0] += 1
+    t.check('%d notas mas solo cargan' % (cm - 1),
+            W['occ'][i] == c['th_branch'] and W['carga'][i] == cm - 1,
             'carga %d/%d' % (W['carga'][i], m.cost(c, W['occ'][i])))
-    for k in range(16):
-        t.midi(0x9C, 0x40, 0x64)
+    hasta(c['th_crown'])
     sats = m.satellites_of(W, i)
-    t.check('31 notas en mi4 -> ocupacion 9', W['occ'][i] == 9, '%d' % W['occ'][i])
+    t.check('%d notas en mi4 -> ocupacion %d' % (n[0], c['th_crown']),
+            W['occ'][i] == c['th_crown'], '%d' % W['occ'][i])
     t.check('aparecen satelites en celdas vecinas',
             len(sats) >= 1 and all(j in m.NEIGH[i] for j in sats),
             'satelites en %s' % sats)
-    t.check('estado: coronacion', m.state_name(c, W['occ'][i], c['nivel']) == 'coronacion')
+    t.check('estado: coronacion', m.state_name(c, W['occ'][i], c['nivel']) == 'coronacion',
+            m.state_name(c, W['occ'][i], c['nivel']))
     W['vh'] = list(W['h'])
     c10 = dict(c)
     c10['nivel'] = min(c10['nivel'], 10)   # las coronas en caja (desde la fase 11, del tema)
@@ -128,11 +140,10 @@ def prueba(t):
     cor.cook(force=True)
     t.check('i_coronas: una corona', cor.numSamples == 1, '%d' % cor.numSamples)
     largo0 = m._CACHE['inst']['coronas'][0][7]
-    for k in range(10):
-        t.midi(0x9C, 0x40, 0x64)
+    hasta(c['th_cumbre'])
     W['vh'] = list(W['h'])
     largo1 = m.build_instances(W, c10, 0.0)['coronas'][0][7]
-    t.check('41 notas -> cumbre: la corona crece',
+    t.check('%d notas -> cumbre: la corona crece' % n[0],
             m.state_name(c, W['occ'][i], c['nivel']) == 'cumbre' and largo1 > largo0 * 1.2,
             'corona %.2f -> %.2f' % (largo0, largo1))
     j = m.NEIGH[i][0]
@@ -144,8 +155,11 @@ def prueba(t):
     n_nb = len(m.NEIGH[i])
     vel = 0 if c['neigh_mode'] == 0 else (n_nb - c['th_branch'] % n_nb) % n_nb
     m.overflow(W2, c, i, m.GEO, vel, 1.0)          # desborda a la vecina 0
-    t.check('presion: suma 1 a la carga de la vecina',
-            W2['carga'][j] == k_j + 1 and W2['occ'][j] == o_j,
+    # la presion suma 1 a la carga de la vecina; si con eso llega al coste (Costemax),
+    # dispara su trigger: la ocupacion sube 1 y la carga vuelve a 0
+    dispara = k_j + 1 >= m.cost(c, o_j)
+    t.check('presion: suma 1 a la carga de la vecina' + (' (y dispara su trigger)' if dispara else ''),
+            (W2['carga'][j], W2['occ'][j]) == ((0, o_j + 1) if dispara else (k_j + 1, o_j)),
             'carga %d -> %d' % (k_j, W2['carga'][j]))
     vec = [len(m.NEIGH[x]) for x in range(m.N) if not m.is_pole(x)]
     t.check('vecindad: hasta 6 vecinas entre anillos; el polo, todo su anillo',

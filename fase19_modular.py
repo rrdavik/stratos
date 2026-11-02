@@ -199,8 +199,10 @@ def _prueba(t, m):
     base.par.Nota = 64
     for _ in range(3):
         m.on_pulse('Sembrarzona')
-    for _ in range(12):
-        m.on_pulse('Sembrar')
+    ci, k = m.note_cell(64), 0
+    while (k < 12 or m.world()['occ'][ci] < m.cfg()['th_branch']) and k < 200:
+        m.on_pulse('Sembrar')                   # hasta ramificar (Umbralram): 12 de fabrica
+        k += 1
     W = m.world()
     for i in range(m.N):
         if W['occ'][i] > 0:
