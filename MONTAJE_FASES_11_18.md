@@ -1528,3 +1528,13 @@ Las autopruebas daban por hechos los valores de fábrica de `Umbralram` (5), `Pa
 - **Probadas en el simulado** con `Umbralram` 4 a 8, `Pasoumbral` 2 a 4 y `Costemax` 3 a 8, también cambiando varios a la vez: todas las fases OK.
 - **Siguen fallando con valores extremos** (`Umbralram` 2, 3 o 10; `Pasoumbral` 1; `Costemax` 1, 2 o 12): ahí los estados se pisan (una semilla ya en el límite, una etapa por ocupación...) y algunas pruebas no tienen sentido tal como están.
 - La medida de rendimiento de la fase 11 (`rendimiento: ... ms por fotograma`) depende de la carga del ordenador y a veces falla en el simulado.
+
+## Las autopruebas no dependen de lo ajustado (comun v50)
+
+Las autopruebas comprueban el código, no los ajustes del proyecto. Cada vez que el tuyo tenía otro `Umbralram`, `Costemax`, `Bancospornota` o una función apagada (`Biomas`, `Riego`, `Obra`...), alguna fallaba sin que fallara el motor.
+
+- **Durante la autoprueba**, `Prueba` pone los parámetros de las páginas de fase en su valor por defecto, rehace la retícula con los polos de fábrica y deja probar. Al terminar te devuelve **tus valores**, tu retícula y tu mundo, como antes devolvía el mundo, `Nota` y `Nota2`. No toca `Nivel`, los pulsos ni los parámetros que van por expresión o exportados.
+- **El valor por defecto** es el de esta versión: al relanzar una fase, cada parámetro que ya existía toma el valor por defecto actual, sin tocar su valor.
+- **Las migraciones de valores por defecto, una sola vez.** `renew_default` (y la calibración: `Ciclomin`, `Compasesquietos`, `Grosormax`) cambiaba tu valor por el nuevo si seguía en el viejo, y lo hacía **en cada relanzamiento**: quien pusiera a propósito `Umbralram` 4, `Compasesquietos` 4, `Ciclomax` 32 o `Ciclomin` 8 lo perdía cada vez (y `recargar_todo.py` relanza todas). Ahora cada migración se apunta en el storage de FASE1 (`migraciones`) y no se repite. En un proyecto anterior a comun v50 se aplican una última vez, la primera vez que relances.
+- **Probado en el simulado:** cada uno de los 198 parámetros de las páginas de fase, uno a uno, en otro valor, relanzando de la fase 3 a la 21: todas las fases OK y el valor se conserva.
+- **Lo que se pierde:** una autoprueba ya no ve un fallo del motor que solo aparezca con tus valores (como el ancho del río, motor v71, que no seguía a `Anchorio`). Esos hay que verlos en la pieza.

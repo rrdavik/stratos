@@ -449,12 +449,26 @@ def menu_al_dia(base, name, menu, labels=None):
 def renew_default(base, name, old, new):
     """Cambia el valor por defecto de un parametro que ya existia. Solo
     toca el valor si seguia en el defecto viejo: lo ajustado a mano se
-    respeta."""
+    respeta. comun v50: una sola vez por proyecto (se apunta en el storage
+    de FASE1, 'migraciones'); antes se repetia en cada relanzamiento, y quien
+    pusiera a proposito el valor viejo (Umbralram 4, Compasesquietos 4...) lo
+    perdia cada vez que relanzaba una fase."""
     p = getattr(base.par, name, None) if has_par(base, name) else None
     if p is None:
         return False
     try:
         p.default = new
+    except Exception:
+        pass
+    clave = '%s:%r:%r' % (name, old, new)
+    try:
+        hechas = set(base.fetch('migraciones', [], search=False) or [])
+    except Exception:
+        hechas = set()
+    if clave in hechas:
+        return False
+    try:
+        base.store('migraciones', sorted(hechas | {clave}))
     except Exception:
         pass
     try:
@@ -3165,6 +3179,15 @@ class Prueba(object):
                     self.pars.append((p, v))
             except Exception:
                 pass
+        self._reticula()
+
+    def _reticula(self):
+        """La reticula sale de Notapolosur y Notapolonorte: se rehace ya, y no
+        en la primera llamada a world() (la prueba mezclaria dos tamanos)."""
+        try:
+            self.m.sync_grid()
+        except Exception:
+            pass
 
     def devolver_pars(self):
         for p, v in reversed(self.pars):
@@ -3172,6 +3195,8 @@ class Prueba(object):
                 p.val = v
             except Exception:
                 pass
+        if self.pars:
+            self._reticula()
         self.pars = []
 
     def check(self, label, cond, detail=''):
