@@ -60,11 +60,8 @@ ok('pagina Fase9: Cicatriz (4 s), Destello (3)')
 
 luz = get_or_make(base, 'lightCOMP', 'luz_destello', 260, -580)
 setmenu(luz, ['lighttype'], ['point'], 0)
-for k, ax in enumerate(('tx', 'ty', 'tz')):
-    setexpr(luz, ax, "parent().op('motor').module.flash_value(%d, absTime.frame)" % k)
-setexpr(luz, 'dimmer', "parent().op('motor').module.flash_value(3, absTime.frame)")
-if color_luz_expr(luz, ["parent().op('motor').module.flash_value(%d, absTime.frame)" % (4 + k)
-                         for k in range(3)]):
+destello_al_dia(base)                   # comun v52: los 7 valores, de frame_u
+if color_luz_expr(luz, [DESTELLO_FRAME % ch for ch in DESTELLO_COL]):
     ok('luz_destello: golpe de luz sobre cada destruccion, del color de su pad, sigue el giro')
 else:
     info('luz_destello: no encontre su color (cr cg cb); el destello saldra blanco')

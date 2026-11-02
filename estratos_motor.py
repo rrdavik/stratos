@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v72'
+MOTOR_VERSION = 'motor v73'
 
 import math
 
@@ -11703,6 +11703,14 @@ def canales_frame(spec, frame=None):
         out.append(('rx', float(wobble(frame))))
     except Exception:
         out.append(('rx', 0.0))
+    # motor v73: la luz de destello (posicion, dimmer y color), para que luz_destello
+    # solo lea canales y no evalue 7 expresiones Python por fotograma
+    try:
+        fl = flash_light()
+    except Exception:
+        fl = (0.0, 0.0, 0.0, 0.0) + tuple(FLASH_COL)
+    for canal, v in zip(DESTELLO_CANALES, fl):
+        out.append((canal, float(v)))
     for canal, tipo, nombre, k in spec or ():
         try:
             if tipo == 'piel':
@@ -11832,6 +11840,9 @@ def flash_light():
     v = world_dir(normal_i(f['cell']), ang, tilt, wobble())
     d = suelo(W, c, f['cell']) + W['vh'][f['cell']] + 4.0   # sobre su suelo y su formacion
     return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env) + tuple(flash_color(W, c))
+
+
+DESTELLO_CANALES = ('fl_tx', 'fl_ty', 'fl_tz', 'fl_dim', 'fl_r', 'fl_g', 'fl_b')
 
 
 def flash_value(k, frame=None):
