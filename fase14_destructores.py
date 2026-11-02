@@ -141,12 +141,17 @@ def _prueba(t, m):
             and len(pads) + len(m.pads_corte(c)) + len(m.pads_impulso(c)) == len(c['perfiles']))
     pad = pads[0]
 
-    def zona(tema, s, nota, veces=2, centro=0):
+    def zona(tema, s, nota, veces=2, centro=0, hasta=None):
         base.par.Tema = tema
         base.par.Nota = nota
         base.par.Nota2 = nota
         for _ in range(veces):
             m.on_pulse('Sembrarzona' if s == m.GEO else 'Sembrarzona2')
+        if hasta is not None:           # el centro, hasta esa ocupacion (las notas que cueste)
+            ci, k = m.note_cell(nota), 0
+            while m.world()['occ'][ci] < hasta and k < 400:
+                m.on_pulse('Sembrar' if s == m.GEO else 'Sembrar2')
+                k += 1
         for _ in range(centro):
             m.on_pulse('Sembrar' if s == m.GEO else 'Sembrar2')
         W = m.world()
@@ -338,7 +343,8 @@ def _prueba(t, m):
     acc = []
     for s, centro, esp in ((m.GEO, 0, 'mina'), (m.ARQ, 0, 'energia'), (m.GEO, 60, 'refineria')):
         m.reset_world()
-        W, c = zona('industria', s, 64, centro=centro)
+        cc = m.cfg()                    # la refineria: como en la escalada (abajo)
+        W, c = zona('industria', s, 64, hasta=2 * (int(cc['th_crown']) - 1) if centro else None)
         objetivo = m.pick_target(W, c, pad, 100)
         v, e0 = m.victima(W, c, objetivo)
         polvo0 = len(W['polvo'])
@@ -353,7 +359,12 @@ def _prueba(t, m):
     otras = []
     for s, centro, esp in ((m.GEO, 0, 'mina'), (m.ARQ, 0, 'energia'), (m.GEO, 60, 'refineria')):
         m.reset_world()
-        W, c = zona('industria', s, 64, veces=4, centro=centro)
+        # la refineria (ultima etapa de la mina): el centro, a 2 x (Umbralcorona - 1)
+        # (16 de fabrica), y no 60 notas: con Costemax bajo, tantas empujan a las
+        # vecinas hasta el limite y la victima (la mas alta) deja de ser el centro
+        cc = m.cfg()
+        W, c = zona('industria', s, 64, veces=4,
+                    hasta=2 * (int(cc['th_crown']) - 1) if centro else None)
         m.erosion(W, c, pad, 100, now)
         ev = m.erosion(W, c, pad, 100, now)
         pasos(W, c, 60)

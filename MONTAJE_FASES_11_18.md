@@ -1519,3 +1519,12 @@ Antes había dos cosas que costaban mucho por fotograma.
 - **`render_tema_al_dia`.** El Render solo lista las geometrías del tema activo. La lista se reescribe cuando cambia el tema, el nivel o las variantes. En el proyecto completo simulado (nivel 21) quedan 103 (naturaleza), 132 (ciudad) o 119 (industria), de 281.
 
 **Para aplicarlo:** relanza cualquier fase (reinstala comun y motor) y después la fase 12 o una posterior, para que las uniformes de los materiales pasen a `frame_u`.
+
+## Autopruebas con los umbrales del proyecto (motor v70; fases 3, 4, 7, 8, 11, 14, 17 y 19)
+
+Las autopruebas daban por hechos los valores de fábrica de `Umbralram` (5), `Pasoumbral` (2) y `Costemax` (5): «11 notas hasta el límite», «16 notas = límite y 2 desbordes», «escalera de 1 a 9»... En un proyecto con otros valores fallaban sin que fallara el motor, y `recargar_todo.py` paraba en ellas. Ahora cuentan las notas y las ocupaciones que hacen falta con la configuración del proyecto; con los valores de fábrica dan lo mismo que antes.
+
+- **`Sembrarzona` (motor v70).** Cada pulsación sube **un escalón** a la celda de `Nota` y a sus vecinas, con las notas que cueste (`Costemax`; `subir_escalon` en el motor). Antes era una nota por celda: con `Costemax` 6 o más, dos pulsaciones no formaban el cluster. Con los valores de fábrica, dos pulsaciones siguen dejando la zona en ocupación 2; desde la tercera, la zona sube más deprisa que antes (un escalón por pulsación).
+- **Probadas en el simulado** con `Umbralram` 4 a 8, `Pasoumbral` 2 a 4 y `Costemax` 3 a 8, también cambiando varios a la vez: todas las fases OK.
+- **Siguen fallando con valores extremos** (`Umbralram` 2, 3 o 10; `Pasoumbral` 1; `Costemax` 1, 2 o 12): ahí los estados se pisan (una semilla ya en el límite, una etapa por ocupación...) y algunas pruebas no tienen sentido tal como están.
+- La medida de rendimiento de la fase 11 (`rendimiento: ... ms por fotograma`) depende de la carga del ordenador y a veces falla en el simulado.

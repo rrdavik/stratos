@@ -174,8 +174,10 @@ def _prueba(t, m):
             '%.2f' % W['pulso']['beat'])
     # 2. naturaleza: el dosel se balancea con el beat; las esporas derivan
     zona('Sembrarzona', 64, 4)
-    for _ in range(10):
-        m.on_pulse('Sembrar')
+    ci, k = m.note_cell(int(base.par.Nota)), 0
+    while (k < 10 or m.world()['occ'][ci] < m.cfg()['th_branch']) and k < 200:
+        m.on_pulse('Sembrar')                   # hasta ramificar (Umbralram): 10 de fabrica
+        k += 1
     W, c = correr(3.0)                          # que crezcan (stop-motion)
     W['pulso']['beat'] = 0.5
     i0 = m.build_instances(W, c, reloj[0])

@@ -436,10 +436,12 @@ def prueba(t):
     m.reset_world()
     c = m.cfg()
     c['nivel'] = min(c['nivel'], 13)              # desde la fase 14 un aranazo es tambien un accidente
-    for k in range(16):                           # limite + 2 desbordes
-        t.midi(0x9C, 0x40, 0x64)
     W = m.world()
     i = m.note_cell(64)
+    n = 0                                         # limite + 2 desbordes (16 notas de fabrica)
+    while W['occ'][i] < c['th_branch'] + 1 and n < 400:
+        t.midi(0x9C, 0x40, 0x64)
+        n += 1
     sats0 = sum(W['occ'][j] for j in m.satellites_of(W, i))
     occ0 = W['occ'][i]
     c['perfiles'] = [(1, 0, 0)] * 8
@@ -625,16 +627,20 @@ def prueba(t):
             m.pads_corte(cd) == [1] and m.pads_impulso(cd) == [0, 2]
             and not m.es_aranazo(cd, 0) and not m.es_aranazo(cd, 2) and m.es_aranazo(cd, 3))
     # 4. pad 7 repetido sobre una celda en crecimiento, con el SEQ1 tocando
-    W6 = m.new_world()
-    for k in range(3):
-        m.note_on(W6, cd, 1, 64, 100, 0.0)
-
     def notas(Wx):      # notas de construccion acumuladas en la celda
         o = Wx['occ'][i]
         return (1 + sum(m.cost(cd, x) for x in range(1, o)) + Wx['carga'][i]) if o else 0
+    # notas hasta el limite (11 de fabrica): la prueba se queda por debajo, en
+    # crecimiento (en el limite la erosion quita primero los satelites)
+    n_lim = 1 + sum(m.cost(cd, x) for x in range(1, int(cd['th_branch'])))
+    n_ini = max(1, min(3, n_lim - 6))
+    rondas = max(1, min(4, n_lim - n_ini - 2))
+    W6 = m.new_world()
+    for k in range(n_ini):
+        m.note_on(W6, cd, 1, 64, 100, 0.0)
     n_ini, h_ini = notas(W6), W6['h'][i]
     bajadas, pasos = [], []
-    for r in range(4):
+    for r in range(rondas):
         m.note_on(W6, cd, 1, 64, 100, 1.0 + r)
         m.note_on(W6, cd, 1, 64, 100, 1.0 + r)
         h0, n0 = W6['h'][i], notas(W6)
@@ -643,12 +649,14 @@ def prueba(t):
         pasos.append(n0 - notas(W6))
     t.check('pad 7: cada golpe deshace una nota (baja un poco, sin vaciar la carga) y, '
             'con el SEQ1 tocando mas, la celda sigue creciendo',
-            all(b > 0 for b in bajadas) and pasos == [1] * 4
-            and notas(W6) == n_ini + 4 and W6['h'][i] > h_ini,
+            all(b > 0 for b in bajadas) and pasos == [1] * rondas
+            and notas(W6) == n_ini + rondas and W6['h'][i] > h_ini,
             'bajadas %s' % bajadas)
     # 5. simetria: N notas de construccion y N de erosion
     malos = []
-    for base_n, extra in ((3, 1), (3, 5), (4, 6), (6, 4)):
+    pares = [(b, e) for b, e in ((3, 1), (3, 5), (4, 6), (6, 4)) if b + e < n_lim] \
+        or [(1, max(1, n_lim - 2))]                # por debajo del limite (todos, de fabrica)
+    for base_n, extra in pares:
         W7 = m.new_world()
         for k in range(base_n):
             m.note_on(W7, cd, 1, 64, 100, 0.0)
@@ -825,8 +833,9 @@ def prueba_impulso(t, m, cd):
     t.check('impulso 3: el golpe no cambia el limite ni los umbrales; la celda queda como una de '
             'ocupacion 5 (altura y estado)',
             antes == (m.limit(c10), c10['th_branch'], c10['th_fusion'], c10['th_crown'], c10['th_cumbre'])
-            and W3['h'][i] == m.height_for(c10, 5) == W3b['h'][i]
-            and m.state_name(c10, W3['occ'][i]) == m.state_name(c10, 5) and not hasattr(m, 'cfg_celda'))
+            and abs(W3['h'][i] - m.height_for(c10, 5)) < 1e-9 and abs(W3b['h'][i] - W3['h'][i]) < 1e-9
+            and m.state_name(c10, W3['occ'][i]) == m.state_name(c10, 5) and not hasattr(m, 'cfg_celda'),
+            'ocupacion %d, altura %.3f / %.3f / %.3f' % (W3['occ'][i], W3['h'][i], m.height_for(c10, 5), W3b['h'][i]))
     # 4. en el limite, cada pulso desborda; y llega a fusion y corona
     W4 = mundo(c10['th_branch'])
     ev4 = m.erosion(W4, c10, 0, 100, 1.0)
