@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v50'
+VERSION_COMUN = 'comun v51'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1890,7 +1890,28 @@ def install_core(base, carpeta, fase):
     apply_wobble(base)
     patch_ritmo(base)
     piel_al_dia(base, motor.module)
+    nucleo_al_dia(base)
+    try:
+        motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
+    except Exception:
+        pass
     return motor
+
+
+NUCLEO_R = "parent(2).op('motor').module.nucleo_radius()"
+
+
+def nucleo_al_dia(base):
+    """comun v51: el radio del nucleo es fijo; su expresion ya no lleva absTime.frame,
+    asi que la esfera (Sphere SOP de 48 x 48) no se rehace en cada fotograma."""
+    geo = base.op('nucleo')
+    esfera = geo.op('esfera') if geo is not None else None
+    if esfera is None:
+        return
+    for ax in ('radx', 'rady', 'radz'):
+        p = getattr(esfera.par, ax, None)
+        if p is not None and 'nucleo_radius(absTime.frame)' in (getattr(p, 'expr', '') or ''):
+            setexpr(esfera, ax, NUCLEO_R)
 
 
 def piel_al_dia(base, m):
@@ -3156,7 +3177,16 @@ class Prueba(object):
             self.nota2 = int(base.par.Nota2)
         except Exception:
             self.nota2 = None
+        self._cfg_foto(True)
         self.a_fabrica()
+
+    def _cfg_foto(self, off):
+        """comun v51: la configuracion por fotograma del motor (v72), apagada
+        mientras corre la prueba (cambia parametros dentro del mismo fotograma)."""
+        try:
+            self.m.cfg_foto_pausa(off)
+        except Exception:
+            pass
 
     def a_fabrica(self):
         """comun v50: durante la autoprueba, los parametros de las paginas de fase
@@ -3208,6 +3238,7 @@ class Prueba(object):
 
     def finish(self):
         self.devolver_pars()
+        self._cfg_foto(False)
         if self.saved is None:
             self.m.reset_world()
         else:
