@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v49'
+VERSION_COMUN = 'comun v50'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -368,6 +368,7 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
     """Anade un parametro si no existe. Si ya existe no lo toca: conserva
     lo que hayas ajustado a mano."""
     if has_par(base, name) or (kind == 'rgb' and has_par(base, name + 'r')):
+        _default_al_dia(base, kind, name, default)
         return False
     if kind == 'float':
         p = page.appendFloat(name, label=label)
@@ -411,6 +412,21 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
     return True
 
 
+def _default_al_dia(base, kind, name, default):
+    """comun v50: un parametro que ya existe toma el valor por defecto de esta
+    version (sin tocar su valor): las autopruebas lo usan como valor de fabrica."""
+    if default is None or kind == 'pulse':
+        return
+    try:
+        if kind == 'rgb':
+            for k, c in enumerate('rgb'):
+                getattr(base.par, name + c).default = default[k]
+        else:
+            getattr(base.par, name).default = default
+    except Exception:
+        pass
+
+
 def menu_al_dia(base, name, menu, labels=None):
     """comun v48: un menu que ya existia toma las opciones nuevas (Tema + industria,
     Escena + industria) sin perder lo elegido."""
@@ -433,12 +449,26 @@ def menu_al_dia(base, name, menu, labels=None):
 def renew_default(base, name, old, new):
     """Cambia el valor por defecto de un parametro que ya existia. Solo
     toca el valor si seguia en el defecto viejo: lo ajustado a mano se
-    respeta."""
+    respeta. comun v50: una sola vez por proyecto (se apunta en el storage
+    de FASE1, 'migraciones'); antes se repetia en cada relanzamiento, y quien
+    pusiera a proposito el valor viejo (Umbralram 4, Compasesquietos 4...) lo
+    perdia cada vez que relanzaba una fase."""
     p = getattr(base.par, name, None) if has_par(base, name) else None
     if p is None:
         return False
     try:
         p.default = new
+    except Exception:
+        pass
+    clave = '%s:%r:%r' % (name, old, new)
+    try:
+        hechas = set(base.fetch('migraciones', [], search=False) or [])
+    except Exception:
+        hechas = set()
+    if clave in hechas:
+        return False
+    try:
+        base.store('migraciones', sorted(hechas | {clave}))
     except Exception:
         pass
     try:
@@ -3110,6 +3140,7 @@ class Prueba(object):
         self.m = self.motor.module
         self.saved = copy.deepcopy(self.motor.fetch('W', None))
         self.checks = []
+        self.pars = []
         self.ciclos = None
         tb = base.op('ciclos')
         if tb is not None:
@@ -3125,6 +3156,48 @@ class Prueba(object):
             self.nota2 = int(base.par.Nota2)
         except Exception:
             self.nota2 = None
+        self.a_fabrica()
+
+    def a_fabrica(self):
+        """comun v50: durante la autoprueba, los parametros de las paginas de fase
+        en su valor por defecto (la prueba comprueba el codigo, no lo ajustado:
+        Umbralram, Costemax, Biomas apagado...). finish() devuelve los tuyos. No
+        toca Nivel, los pulsos ni los que van por expresion o exportados."""
+        for p in list(getattr(self.base, 'customPars', [])):
+            try:
+                if p.name == 'Nivel' or getattr(p, 'readOnly', False) or getattr(p, 'isPulse', False) \
+                        or getattr(p, 'kind', '') == 'pulse':
+                    continue
+                modo = getattr(p, 'mode', None)
+                if modo is not None and 'CONSTANT' not in str(modo).upper():
+                    continue
+                if modo is None and getattr(p, 'expr', ''):
+                    continue
+                v, d = p.val, p.default
+                if v != d:
+                    p.val = d
+                    self.pars.append((p, v))
+            except Exception:
+                pass
+        self._reticula()
+
+    def _reticula(self):
+        """La reticula sale de Notapolosur y Notapolonorte: se rehace ya, y no
+        en la primera llamada a world() (la prueba mezclaria dos tamanos)."""
+        try:
+            self.m.sync_grid()
+        except Exception:
+            pass
+
+    def devolver_pars(self):
+        for p, v in reversed(self.pars):
+            try:
+                p.val = v
+            except Exception:
+                pass
+        if self.pars:
+            self._reticula()
+        self.pars = []
 
     def check(self, label, cond, detail=''):
         self.checks.append((bool(cond), label, detail))
@@ -3134,6 +3207,7 @@ class Prueba(object):
         mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes(byts))
 
     def finish(self):
+        self.devolver_pars()
         if self.saved is None:
             self.m.reset_world()
         else:
