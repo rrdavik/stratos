@@ -273,8 +273,14 @@ def prueba(t):
     W = m.world()
     t.check('Forzarciclo cierra al instante (forzado)',
             W['ciclo_n'] == n0 + 1 and W['ev']['fin_de_ciclo']['motivo'] == 'forzado')
-    t.check('tabla ciclos: fila nueva', tabla.numRows == len(filas) + 1
-            and tabla[tabla.numRows - 1, 'motivo'].val == 'forzado')
+    # la tabla guarda como mucho CICLOS_MAX ciclos: llena, la fila nueva entra al
+    # final y sale la mas antigua (un proyecto con muchas sesiones)
+    llena = len(filas) >= m.CICLOS_MAX + 1
+    t.check('tabla ciclos: fila nueva' + (' (llena: %d ciclos, sale la mas antigua)' % m.CICLOS_MAX
+                                          if llena else ''),
+            tabla.numRows == (len(filas) if llena else len(filas) + 1)
+            and tabla[tabla.numRows - 1, 'motivo'].val == 'forzado',
+            '%d -> %d filas' % (len(filas), tabla.numRows))
     t.midi(0xFA)
     t.check('START por MIDI llega al motor', m.world()['clock']['start_t'] > -99.0)
     t.midi(0xBC, 0x7B, 0x00)
