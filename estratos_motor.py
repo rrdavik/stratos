@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v70'
+MOTOR_VERSION = 'motor v71'
 
 import math
 
@@ -10649,8 +10649,6 @@ def cfg():
     # escalones iguales de la semilla al limite. Gatemax 1 apaga el gate.
     c['grow_frac'] = growstep_coherente(c['seed_frac'], c['th_branch'])
     c['gate_mode'] = int(c['gate_max'] > 1.0 + 1e-6)
-    # motor v64: el rio mas caudaloso, ANCHO_MAX_RIO_K veces el mas fino
-    c['ancho_max_rio'] = ANCHO_MAX_RIO_K * c['ancho_rio']
     # motor v62: el gris de la tapa sigue a la luminosidad de las conchas
     c['tapa_luz'] = TAPA_LUZ_K * c['paleta_luz']
     # motor v59: fusion, corona y cumbre, a Pasoumbral ocupaciones una de otra
@@ -10821,6 +10819,9 @@ def cfg():
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
                  escena=_menu('Escena', ESCENAS, 0))
+    # motor v64: el rio mas caudaloso, ANCHO_MAX_RIO_K veces el mas fino. Motor v71:
+    # despues de leer Anchorio (antes se calculaba con el 0,10 de fabrica)
+    c['ancho_max_rio'] = ANCHO_MAX_RIO_K * c['ancho_rio']
     return c
 
 

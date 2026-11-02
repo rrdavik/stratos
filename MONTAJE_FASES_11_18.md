@@ -697,7 +697,7 @@ Une las formaciones con algo que ninguna señal pide: el sistema lo deduce del e
 
 `Rios` (encendido) · `Carreteras` (encendido) · `Minvia` 2 · `Grosorvia` 0,18 (carreteras) · `Maxrio` 12 (tramos) · v2: `Colorrio` (v4: OKLCH 0,65 · 0,18 · 250; hasta la v3, 0,55 · 0,15 · 255) · `Anchorio` 0,10 (el máximo, 3,4 ×) · `Emisivorio` 0,6 (hasta la v3, 0,25) · `Lagos` (encendido)
 
-**Página Fase13 (v6).** 12 parámetros en vez de 14. `Anchomaxrio` sale de `Anchorio` (3,4 ×: el mismo 0,34 con el valor por defecto) y `Pendientemin` queda fijo en 0,01. `Grosorvia` es solo el ancho de las carreteras (los ríos tienen su ancho desde la v2). Relanzar cualquier fase los quita de un proyecto anterior y avisa con `..` si los habías cambiado.
+**Página Fase13 (v6).** 12 parámetros en vez de 14. `Anchomaxrio` sale de `Anchorio` (3,4 ×: el mismo 0,34 con el valor por defecto) y `Pendientemin` queda fijo en 0,01. *Motor v71: hasta la v70 el 3,4 × se calculaba antes de leer `Anchorio`, así que el río más caudaloso medía siempre 0,34 aunque cambiaras `Anchorio`; ahora sigue a `Anchorio`.* `Grosorvia` es solo el ancho de las carreteras (los ríos tienen su ancho desde la v2). Relanzar cualquier fase los quita de un proyecto anterior y avisa con `..` si los habías cambiado.
 
 ### Leyenda
 
