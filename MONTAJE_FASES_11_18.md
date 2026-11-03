@@ -1562,3 +1562,13 @@ El humo y el vapor de la industria eran cajas opacas (instancias de la Box SOP d
 - **Lo que no cambia**: las balizas de las chimeneas y la antorcha siguen en `particulas`. `Maxhumo` cuenta bocanadas. Con `Materialrespaldo`, el humo usa `mat_particulas`.
 - **Para aplicarlo**: relanzar cualquier fase crea `humo` y `mat_humo` (`humo_al_dia`). Si el Textport dice que no pudo fijar la mezcla, en la página Common de `mat_humo`: Blending on, Source Color *One*, Destination Color *One Minus Source Alpha* y Depth Writing off.
 - **Comprobado fuera de TouchDesigner** con `pruebas/glsl_humo.py` (OpenGL 4.5: compila y dibuja las bocanadas reales del motor en tres fotos del pulso). Lo que no se ha podido comprobar: los nombres de los parámetros de mezcla del GLSL MAT y el aspecto en TouchDesigner.
+
+## Las demás partículas, motas suaves (motor v75, comun v54)
+
+Con el mismo camino que el humo, el resto de las partículas deja de ser cajas.
+
+- **`particulas` es una lámina con el GLSL MAT `mat_motas`** (`motas_vertex`, `motas_pixel`): esporas, brasas, ceniza, polvo, semillas, smog, obreros, balizas, la antorcha, los faros, los pulsos de la red y las nubes del frente. Las filas son las de siempre (el motor las calcula a saltos, como antes); el shader dibuja cada una como un punto suave que mira a la cámara **sin perder su eje**: el ancho de `sx`/`sz`, el alto de `sy` a lo largo de su normal (la antorcha sigue alargada; las nubes, anchas) y el mismo centro que tenía la caja. Transparente, sin escribir profundidad. Con `Materialrespaldo`, `mat_particulas`.
+- **Los trenes, en cajas**: la locomotora y los vagones pasan a su geometría `vagones` (`i_vagones`, `mat_particulas`): son objetos, no motas.
+- **Arreglo del humo (v74)**: el motor solo recuece los Script CHOP de `chop_names()`, y `i_humo` no estaba: sus filas no se habrían actualizado al aparecer una planta o teñirse una bocanada. Ahora están `i_humo` e `i_vagones`, y la autoprueba de la fase 11 comprueba que cada geometría instanciada tiene su Script CHOP en esa lista.
+- **Para aplicarlo**: relanzar cualquier fase rehace `particulas` como lámina y crea `vagones` y `mat_motas` (`particulas_al_dia`). La mezcla de `mat_motas` es la del humo (Common: Blending on, Source Color One, Destination Color One Minus Source Alpha, Depth Writing off); si no se pudo fijar, el Textport lo dice.
+- **Comprobado fuera de TouchDesigner** con `pruebas/glsl_humo.py`, que ahora compila y dibuja también las motas (pulsos de la red y esporas).
