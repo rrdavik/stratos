@@ -321,8 +321,14 @@ def prueba(t):
     hx = lambda col: '#%02X%02X%02X' % tuple(int(round(v * 255)) for v in col)
     ref = [('#452B2A', '#503534'), ('#4C3C50', '#57465B'), ('#37341B', '#413E25'), ('#543A43', '#5F444D'),
            ('#342F45', '#3F3950'), ('#563B34', '#61453F'), ('#3F2B3C', '#4A3546'), ('#41452D', '#4B5037')]
-    t.check('paleta: los colores de referencia (vacia y ocupada)',
-            [(hx(m.generation_color(cp, n, False)), hx(m.generation_color(cp, n, True))) for n in range(8)] == ref)
+    # motor v76: con la industria la paleta salta tambien el violeta de su red; los colores
+    # que se guardan de un tema no pueden salir en otro (pintar antes en industria)
+    ci = dict(cp, tema=m.TEMAS.index('industria'))
+    ind = [hx(m.generation_color(ci, n, False)) for n in range(8)]
+    cp['tema'] = m.TEMAS.index('naturaleza')
+    t.check('paleta: los colores de referencia (vacia y ocupada), aunque antes se haya pintado en industria',
+            [(hx(m.generation_color(cp, n, False)), hx(m.generation_color(cp, n, True))) for n in range(8)] == ref
+            and ind != [r[0] for r in ref])
     t.check('paleta: la loseta ocupada, algo mas clara que la vacia',
             all(sum(m.generation_color(cp, n, False)) < sum(m.generation_color(cp, n, True))
                 < sum(m.generation_color(cp, n, False)) + 0.25 for n in range(200)))
