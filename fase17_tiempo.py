@@ -337,18 +337,20 @@ def _prueba_industria_(t, m):
     m.cerrar_obras(W, c)
     trenes = lambda ins: [tuple(round(v, 4) for v in f[:3]) for f in ins.get('particulas', [])
                           if tuple(f[9:12]) == (0.18, 0.18, 0.2)]
-    humo = lambda ins: [tuple(round(v, 4) for v in f[:3]) for f in ins.get('particulas', [])
-                        if tuple(round(v, 3) for v in f[9:12]) in [tuple(round(v, 3) for v in col)
-                                                                   for col in m.COL_HUMO.values()]]
+    # motor v74: el humo lo mueve la GPU con el reloj humo_t (frame_u); sus filas no cambian
+    humo = lambda ins: [tuple(round(v, 4) for v in f) for f in ins.get('humo', [])]
     W['pulso']['beat'] = 1.0
     a = m.build_instances(W, c, absTime.seconds + 10.0)
+    ra = m.humo_reloj()[0]
     b = m.build_instances(W, c, absTime.seconds + 12.0)      # STOP: el pulso no avanza (huelga)
+    rb = m.humo_reloj()[0]
     W['pulso']['beat'] = 2.5
     d = m.build_instances(W, c, absTime.seconds + 12.0)
-    t.check('industria: %d trenes (locomotoras) y el humo se mueven con el pulso; con el pulso quieto (STOP, '
-            'huelga) todo se queda quieto' % len(trenes(a)),
-            trenes(a) and humo(a) and trenes(a) == trenes(b) and humo(a) == humo(b)
-            and trenes(a) != trenes(d) and humo(a) != humo(d))
+    rd = m.humo_reloj()[0]
+    t.check('industria: %d trenes (locomotoras) y el humo se mueven con el pulso (el reloj del humo %.2f -> '
+            '%.2f); con el pulso quieto (STOP, huelga) todo se queda quieto' % (len(trenes(a)), ra, rd),
+            trenes(a) and humo(a) and trenes(a) == trenes(b) and ra == rb
+            and trenes(a) != trenes(d) and ra != rd and humo(a) == humo(d))
     # el cambio de turno: con el frente a medio pasar, los focos cambian en ola (o no, sin Turno)
     W['estacion'] = dict(tinte=[1.0, 1.0, 1.0], ventanas=1)
     m.on_pulse('Frenteprueba')

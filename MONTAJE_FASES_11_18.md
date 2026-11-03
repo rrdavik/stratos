@@ -1550,3 +1550,15 @@ Medido en TouchDesigner con el Performance Monitor: 117 ms por fotograma (unos 8
 - **La luz de destello lee `frame_u` (motor v73).** Sus 7 valores (posición, dimmer y color) son canales de `frame_u` (`fl_tx`... `fl_b`), calculados una vez por fotograma; antes eran 7 expresiones Python. Su posición ya lleva el giro (sigue a la celda golpeada): no es hija de `planeta`. Lo que no cambia en la ejecución (`Destello`, los colores de los pads) se lee de la configuración por fotograma.
 - **Lo que queda** (sin tocar): los cuatro GLSL MAT y el propio fotograma del motor.
 - **Definición:** con la GPU libre, `Impostores` apagado da árboles completos sin perder fps; el Anti-Alias del Render TOP `render` no lo fija ningún script.
+
+## El humo en la GPU (motor v74, comun v53)
+
+El humo y el vapor de la industria eran cajas opacas (instancias de la Box SOP de `particulas` con un Constant MAT) que Python movía en cada foto. Ahora son bocanadas suaves que dibuja y anima la GPU.
+
+- **La geometría `humo`**: una lámina de 1 × 1 (Rectangle SOP) instanciada desde `i_humo`, con el GLSL MAT `mat_humo` (`humo_vertex`, `humo_pixel`).
+- **Una fila por bocanada, fija**: `tx ty tz` la fuente; `sx` el tamaño de partida, `sy` lo que sube (el alto del edificio) y `sz` la deriva; `r g b` el color; `a` el desfase (0-1), más 2 si es vapor que respira con el LFO (las torres). Las filas no dependen del pulso: el motor las guarda y no las recalcula en cada foto (en el simulado, con todo el planeta de industria, el motor pasa de 4,4 a 3,5 ms por fotograma).
+- **El vertex shader** sube, hincha y deriva cada bocanada con el reloj `humo_t` de `frame_u` (el pulso en beats **a saltos de stop-motion**, como el resto; STOP lo congela) y la gira hacia la cámara. `humo_lfo` hace respirar el vapor.
+- **El pixel shader** la dibuja como un disco suave de borde deshilachado que aparece, se abre y se desvanece al subir. Mezcla con alfa premultiplicado y sin escribir profundidad, para que las bocanadas se fundan.
+- **Lo que no cambia**: las balizas de las chimeneas y la antorcha siguen en `particulas`. `Maxhumo` cuenta bocanadas. Con `Materialrespaldo`, el humo usa `mat_particulas`.
+- **Para aplicarlo**: relanzar cualquier fase crea `humo` y `mat_humo` (`humo_al_dia`). Si el Textport dice que no pudo fijar la mezcla, en la página Common de `mat_humo`: Blending on, Source Color *One*, Destination Color *One Minus Source Alpha* y Depth Writing off.
+- **Comprobado fuera de TouchDesigner** con `pruebas/glsl_humo.py` (OpenGL 4.5: compila y dibuja las bocanadas reales del motor en tres fotos del pulso). Lo que no se ha podido comprobar: los nombres de los parámetros de mezcla del GLSL MAT y el aspecto en TouchDesigner.
