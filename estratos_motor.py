@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v71'
+MOTOR_VERSION = 'motor v73'
 
 import math
 
@@ -10825,6 +10825,31 @@ def cfg():
     return c
 
 
+_CFG_FOTO = {}
+
+
+def cfg_foto():
+    """Motor v72: la configuracion, una vez por fotograma, para lo que se evalua
+    en cada fotograma desde las expresiones (luces, uniformes, camara...). cfg()
+    lee unos 180 parametros; se llamaba unas 32 veces por fotograma. NO se puede
+    modificar el dict que devuelve (es compartido). Las autopruebas y los scripts
+    de fase siguen usando cfg(), que lee siempre lo ultimo."""
+    if _CFG_FOTO.get('off'):            # durante una autoprueba: siempre lo ultimo
+        return cfg()
+    f = absTime.frame
+    if _CFG_FOTO.get('f') != f:
+        _CFG_FOTO['c'] = cfg()
+        _CFG_FOTO['f'] = f
+    return _CFG_FOTO['c']
+
+
+def cfg_foto_pausa(off):
+    """Las autopruebas (Prueba, comun v51) la apagan mientras corren."""
+    _CFG_FOTO.clear()
+    _CFG_FOTO['off'] = bool(off)
+    _CACHE.pop('flash_f', None)
+
+
 def _master_beat():
     """El valor de master_beat (el primer canal del CHOP de Masterbeat), o
     None si no hay ninguno: entonces el pulso lo cuenta el motor."""
@@ -10900,19 +10925,19 @@ def playing():
 
 
 def surface_radius(frame=None):
-    return top_radius(world(), cfg())
+    return top_radius(world(), cfg_foto())
 
 
 def nucleo_radius(frame=None):
     """La esfera del nucleo ya no crece (motor v23): lo que no se dibuja de
     cada columna lo cubre su zocalo, y una esfera a cota comun taparia las
     hondonadas."""
-    return cfg()['core_radius']
+    return cfg_foto()['core_radius']
 
 
 def floor_radius(i, frame=None):
     """Suelo de la celda i (lo usa la reticula)."""
-    return suelo(world(), cfg(), i)
+    return suelo(world(), cfg_foto(), i)
 
 
 def giro_factor(frame=None):
@@ -11237,7 +11262,7 @@ def piel_uniforme(nombre, k, frame=None):
     try:
         u = _CACHE.get('uni')
         if u is None:
-            W, c = world(), cfg()
+            W, c = world(), cfg_foto()
             u = _CACHE['uni'] = uniformes_piel(W, c, absTime.seconds)
         return float(u.get(nombre, (0.0, 0.0, 0.0, 0.0))[int(k)])
     except Exception:
@@ -11678,6 +11703,14 @@ def canales_frame(spec, frame=None):
         out.append(('rx', float(wobble(frame))))
     except Exception:
         out.append(('rx', 0.0))
+    # motor v73: la luz de destello (posicion, dimmer y color), para que luz_destello
+    # solo lea canales y no evalue 7 expresiones Python por fotograma
+    try:
+        fl = flash_light()
+    except Exception:
+        fl = (0.0, 0.0, 0.0, 0.0) + tuple(FLASH_COL)
+    for canal, v in zip(DESTELLO_CANALES, fl):
+        out.append((canal, float(v)))
     for canal, tipo, nombre, k in spec or ():
         try:
             if tipo == 'piel':
@@ -11792,7 +11825,7 @@ def flash_color(W, c):
 
 def flash_light():
     """(x, y, z, dimmer, r, g, b) de la luz de destello."""
-    W, c = world(), cfg()
+    W, c = world(), cfg_foto()
     f = W.get('flash')
     if not f or c['nivel'] < 9:
         return (0.0, 0.0, 0.0, 0.0) + FLASH_COL
@@ -11809,8 +11842,18 @@ def flash_light():
     return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env) + tuple(flash_color(W, c))
 
 
+DESTELLO_CANALES = ('fl_tx', 'fl_ty', 'fl_tz', 'fl_dim', 'fl_r', 'fl_g', 'fl_b')
+
+
 def flash_value(k, frame=None):
-    return flash_light()[k]
+    """Motor v72: los 7 valores de la luz de destello, calculados una vez por fotograma."""
+    f = absTime.frame
+    if _CFG_FOTO.get('off'):
+        return flash_light()[k]
+    if _CACHE.get('flash_f') != f:
+        _CACHE['flash_v'] = flash_light()
+        _CACHE['flash_f'] = f
+    return _CACHE['flash_v'][k]
 
 
 LUZ_COLOR = ('c%s', 'lightcolor%s', 'color%s')     # el color de una Light COMP es cr cg cb
@@ -12041,7 +12084,7 @@ def _slerp_dir(a, b, t):
 def camera_state():
     if _CACHE.get('cam_frame') == absTime.frame:
         return _CACHE['cam']
-    W, c = world(), cfg()
+    W, c = world(), cfg_foto()
     R = top_radius(W, c)
     t = absTime.seconds
     last = _CACHE.get('cam_t')
@@ -12419,7 +12462,7 @@ def modular_uniforme(nombre, k, frame=None):
         md = _CACHE.get('modular')
         if md is None:
             return 0.0 if nombre != 'nieblacol' else NIEBLA_COL[int(k)] if int(k) < 3 else 0.0
-        c = cfg()
+        c = cfg_foto()
         if nombre == 'niebla':
             cs = camera_state()
             v = niebla(world(), c, cs['d'], cs['R'])
@@ -12438,7 +12481,7 @@ def niebla_camara(cosa, frame=None):
     'cerca' y 'lejos'."""
     try:
         cs = camera_state()
-        e, cerca, lejos = niebla(world(), cfg(), cs['d'], cs['R'])
+        e, cerca, lejos = niebla(world(), cfg_foto(), cs['d'], cs['R'])
         if e <= 0.01:                   # sin espacialidad, la niebla empieza lejisimos
             return 1.0e5 if cosa == 'cerca' else 2.0e5
         # la niebla lineal de la camara es total en 'lejos': se estira para que
@@ -12524,7 +12567,7 @@ def luz_tiempo(k, frame=None):
         t = _CACHE.get('tinte')
         cal = _CACHE.get('luz_calida', 0.0)       # fase 18: la escena calienta la luz
         if t is None:
-            W, c = world(), cfg()
+            W, c = world(), cfg_foto()
             t = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
             cal = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
         k = int(k)

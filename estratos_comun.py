@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v50'
+VERSION_COMUN = 'comun v52'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1890,7 +1890,47 @@ def install_core(base, carpeta, fase):
     apply_wobble(base)
     patch_ritmo(base)
     piel_al_dia(base, motor.module)
+    nucleo_al_dia(base)
+    destello_al_dia(base)
+    try:
+        motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
+    except Exception:
+        pass
     return motor
+
+
+DESTELLO_FRAME = "parent().op('frame_u')['%s']"
+DESTELLO_POS = ('fl_tx', 'fl_ty', 'fl_tz')
+DESTELLO_COL = ('fl_r', 'fl_g', 'fl_b')
+
+
+def destello_al_dia(base):
+    """comun v52: la luz de destello lee sus 7 valores de frame_u (motor v73), que
+    los calcula una vez por fotograma; antes eran 7 expresiones Python. Su posicion
+    ya lleva el giro: no es hija de 'planeta'."""
+    luz = base.op('luz_destello')
+    if luz is None:
+        return False
+    bien = all(setexpr(luz, ax, DESTELLO_FRAME % ch) for ax, ch in zip(('tx', 'ty', 'tz'), DESTELLO_POS))
+    bien = setexpr(luz, 'dimmer', DESTELLO_FRAME % 'fl_dim') and bien
+    color_luz_expr(luz, [DESTELLO_FRAME % ch for ch in DESTELLO_COL])
+    return bien
+
+
+NUCLEO_R = "parent(2).op('motor').module.nucleo_radius()"
+
+
+def nucleo_al_dia(base):
+    """comun v51: el radio del nucleo es fijo; su expresion ya no lleva absTime.frame,
+    asi que la esfera (Sphere SOP de 48 x 48) no se rehace en cada fotograma."""
+    geo = base.op('nucleo')
+    esfera = geo.op('esfera') if geo is not None else None
+    if esfera is None:
+        return
+    for ax in ('radx', 'rady', 'radz'):
+        p = getattr(esfera.par, ax, None)
+        if p is not None and 'nucleo_radius(absTime.frame)' in (getattr(p, 'expr', '') or ''):
+            setexpr(esfera, ax, NUCLEO_R)
 
 
 def piel_al_dia(base, m):
@@ -2238,13 +2278,77 @@ SPIN_FRAME = "parent().op('frame_u')['ry']"
 WOBBLE_FRAME = "parent().op('frame_u')['rx']"
 
 
+PLANETA = 'planeta'
+
+
+def planeta_de(base):
+    """comun v52: el Null COMP 'planeta' gira, se balancea y se inclina; las
+    geometrias del planeta son sus hijas en la jerarquia 3D (conectadas a su
+    salida, en la misma red: no cambia ninguna ruta). Antes cada geometria leia
+    el giro de frame_u y TouchDesigner cocinaba las ~300 en cada fotograma.
+    ry = giro al tempo, rx = balanceo del eje, rz = inclinacion; orden Ry Rx Rz:
+    primero gira sobre su eje, luego el eje se balancea hacia la camara y al
+    final se inclina."""
+    pl = base.op(PLANETA)
+    if pl is None:
+        pl = mk(base, 'nullCOMP', PLANETA, -880, 80)
+    setexpr(pl, 'ry', SPIN_FRAME)
+    setexpr(pl, 'rx', WOBBLE_FRAME)
+    setexpr(pl, 'rz', 'parent().par.Tilt')
+    setmenu(pl, ['rord'], ['yxz'])
+    return pl
+
+
+def constante(o, name, v):
+    """El parametro en modo constante con el valor v (quita su expresion)."""
+    p = getattr(o.par, name, None)
+    if p is None:
+        return False
+    try:
+        p.expr = ''
+    except Exception:
+        pass
+    try:
+        p.mode = ParMode.CONSTANT
+    except Exception:
+        pass
+    try:
+        p.val = v
+        return True
+    except Exception:
+        return False
+
+
+def gira_con_planeta(geo):
+    """La geometria gira con el planeta: es hija de 'planeta' (comun v52) o, en un
+    proyecto anterior, lee el giro en su propio ry."""
+    try:
+        if any(getattr(x, 'name', '') == PLANETA for x in (geo.inputCOMPs or [])):
+            return True
+    except Exception:
+        pass
+    try:
+        e = geo.par.ry.expr or ''
+    except Exception:
+        return False
+    return 'rotation(' in e or 'frame_u' in e
+
+
 def set_spin(geo):
-    """Giro del planeta en una geometria: ry = giro al tempo, rx = balanceo
-    del eje, rz = inclinacion. Orden Ry Rx Rz: primero gira sobre su eje,
-    luego el eje se balancea hacia la camara y al final se inclina."""
-    setexpr(geo, 'ry', SPIN_FRAME)
-    setexpr(geo, 'rx', WOBBLE_FRAME)
-    setexpr(geo, 'rz', 'parent().par.Tilt')
+    """La geometria gira con el planeta: hija de 'planeta' en la jerarquia 3D, y su
+    propio giro a cero (lo hereda)."""
+    pl = planeta_de(geo.parent())
+    try:
+        if not any(getattr(x, 'name', '') == PLANETA for x in (geo.inputCOMPs or [])):
+            geo.inputCOMPConnectors[0].connect(pl)
+    except Exception:
+        # sin jerarquia 3D: como antes, el giro en la propia geometria
+        setexpr(geo, 'ry', SPIN_FRAME)
+        setexpr(geo, 'rx', WOBBLE_FRAME)
+        setexpr(geo, 'rz', 'parent().par.Tilt')
+        return setmenu(geo, ['rord'], ['yxz'])
+    for ax in ('rx', 'ry', 'rz'):
+        constante(geo, ax, 0.0)
     return setmenu(geo, ['rord'], ['yxz'])
 
 
@@ -2350,18 +2454,14 @@ def apply_wobble(base):
     _relabel(base, 'Balanceo', BALANCEO_LABEL)
     names, sin_orden = [], []
     for g in list(base.children):
-        try:
-            e = g.par.ry.expr or ''
-        except Exception:
-            continue
-        if 'rotation(' not in e and 'frame_u' not in e:
+        if g.name == PLANETA or not gira_con_planeta(g):
             continue
         if not set_spin(g):
             sin_orden.append(g.name)
         names.append(g.name)
     piel = [n for n in names if n.startswith(PIEL_PREFIJO)]
     resto = [n for n in names if not n.startswith(PIEL_PREFIJO)]
-    ok('balanceo del eje en %d geometrias (%s%s): Balanceo, Balanceoper'
+    ok('balanceo del eje en %d geometrias (%s%s): Balanceo, Balanceoper; giran todas con planeta'
        % (len(names), ', '.join(resto), ' y %d de modelos' % len(piel) if piel else ''))
     for n in sin_orden:
         info('%s: no pude fijar Rotate Order = Ry Rx Rz; ponlo a mano' % n)
@@ -3156,7 +3256,16 @@ class Prueba(object):
             self.nota2 = int(base.par.Nota2)
         except Exception:
             self.nota2 = None
+        self._cfg_foto(True)
         self.a_fabrica()
+
+    def _cfg_foto(self, off):
+        """comun v51: la configuracion por fotograma del motor (v72), apagada
+        mientras corre la prueba (cambia parametros dentro del mismo fotograma)."""
+        try:
+            self.m.cfg_foto_pausa(off)
+        except Exception:
+            pass
 
     def a_fabrica(self):
         """comun v50: durante la autoprueba, los parametros de las paginas de fase
@@ -3208,6 +3317,7 @@ class Prueba(object):
 
     def finish(self):
         self.devolver_pars()
+        self._cfg_foto(False)
         if self.saved is None:
             self.m.reset_world()
         else:

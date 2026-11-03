@@ -1687,17 +1687,22 @@ def _prueba_rendimiento_td(t, m):
     try:
         if fu is not None:
             fu.cook(force=True)
-        con_python = []
+        # comun v52: gira solo 'planeta'; las geometrias, sus hijas, no leen el giro
+        con_giro, sueltas = [], []
         for g in [o for o in base.children if o.name.startswith(PIEL_PREFIJO)]:
             for nm in ('rx', 'ry'):
-                e = getattr(g.par, nm).expr or ''
-                if 'module.' in e:
-                    con_python.append('%s.%s' % (g.name, nm))
+                if (getattr(g.par, nm).expr or ''):
+                    con_giro.append('%s.%s' % (g.name, nm))
+            if not gira_con_planeta(g):
+                sueltas.append(g.name)
         canales = [ch.name for ch in getattr(fu, '_chans', [])] if fu is not None else []
-        t.check('el giro y el balanceo, una vez por fotograma en frame_u: ninguna geometria llama a Python '
-                'para girar (%d canales en frame_u)' % len(canales),
-                fu is not None and fu['ry'] is not None and fu['rx'] is not None and not con_python,
-                ', '.join(con_python[:3]))
+        t.check('el giro y el balanceo, una vez por fotograma en frame_u y solo en planeta: las geometrias '
+                'son sus hijas y no leen el giro (%d canales en frame_u)' % len(canales),
+                fu is not None and fu['ry'] is not None and fu['rx'] is not None and not con_giro and not sueltas,
+                ', '.join((con_giro + sueltas)[:3]))
+        t.check('la luz de destello lee sus 7 valores de frame_u (sin Python)',
+                base.op('luz_destello') is None or ("frame_u')['fl_tx']" in (base.op('luz_destello').par.tx.expr or '')
+                                                    and fu['fl_dim'] is not None))
         res = []
         for tema in m.TEMAS:
             base.par.Tema = tema

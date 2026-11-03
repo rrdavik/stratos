@@ -160,7 +160,7 @@ conchas_al_dia(base, motor.module)     # desde la fase 15, las conchas con el sh
 set_render(base)
 
 esfera = base.op('nucleo').op('esfera')
-R_EXPR = "parent(2).op('motor').module.nucleo_radius(absTime.frame)"
+R_EXPR = "parent(2).op('motor').module.nucleo_radius()"   # comun v51: sin absTime (fijo)
 done = all(setexpr(esfera, ax, R_EXPR) for ax in ('radx', 'rady', 'radz'))
 if done:
     ok('nucleo: esfera fija en el radio base; lo que no se dibuja de cada columna, en su zocalo')

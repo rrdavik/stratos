@@ -53,7 +53,7 @@ _DEFAULTS = {'sx': 1.0, 'sy': 1.0, 'sz': 1.0, 'scale': 1.0, 'rord': 'xyz', 'xord
              'resolutionw': 1280, 'resolutionh': 720, 'lighttype': 'point'}
 STRICT = {
     'baseCOMP': [],
-    'nullCOMP': list(_XFORM),
+    'nullCOMP': list(_XFORM) + ['xord', 'rord'],
     'geometryCOMP': list(_XFORM) + [
         'xord', 'rord', 'material', 'render', 'drawpriority', 'pickpriority',
         'instancing', 'instanceop', 'instancetx', 'instancety', 'instancetz',
@@ -296,6 +296,30 @@ class OutConnector(object):
         target._inputs[k] = self.owner
 
 
+class COMPConnector(object):
+    """Conector de jerarquia 3D de un COMP (arriba la entrada, abajo la salida):
+    el hijo hereda la transformacion del padre, como en TouchDesigner."""
+    def __init__(self, owner, salida):
+        self.owner, self.salida = owner, salida
+
+    def connect(self, otro):
+        padre, hijo = (self.owner, otro) if self.salida else (otro, self.owner)
+        if hijo._padre3d is not None and hijo in hijo._padre3d._hijos3d:
+            hijo._padre3d._hijos3d.remove(hijo)
+        hijo._padre3d = padre
+        if hijo not in padre._hijos3d:
+            padre._hijos3d.append(hijo)
+
+    def disconnect(self):
+        if self.salida:
+            for h in list(self.owner._hijos3d):
+                h._padre3d = None
+            self.owner._hijos3d = []
+        elif self.owner._padre3d is not None:
+            self.owner._padre3d._hijos3d.remove(self.owner)
+            self.owner._padre3d = None
+
+
 class Cell(object):
     def __init__(self, table, r, c):
         self.table, self.row, self.col = table, r, c
@@ -365,6 +389,7 @@ class OP(object):
         self.par = ParCollection(self)
         self.inputConnectors = [Connector(self, i) for i in range(4)]
         self.outputConnectors = [OutConnector(self)]
+        self._padre3d, self._hijos3d = None, []
         self.tempo, self.signature1, self.play = 120.0, 4, True     # /local/time
 
     def __repr__(self):
@@ -396,6 +421,22 @@ class OP(object):
     @property
     def inputs(self):
         return [self._inputs[k] for k in sorted(self._inputs)]
+
+    @property
+    def inputCOMPConnectors(self):
+        return [COMPConnector(self, False)] if self.isCOMP else []
+
+    @property
+    def outputCOMPConnectors(self):
+        return [COMPConnector(self, True)] if self.isCOMP else []
+
+    @property
+    def inputCOMPs(self):
+        return [self._padre3d] if self._padre3d is not None else []
+
+    @property
+    def outputCOMPs(self):
+        return list(self._hijos3d)
 
     @property
     def isCOMP(self):
@@ -471,6 +512,10 @@ class OP(object):
     def destroy(self):
         if self._parent is not None:
             self._parent._children.pop(self._name, None)
+        if self._padre3d is not None and self in self._padre3d._hijos3d:     # la jerarquia 3D
+            self._padre3d._hijos3d.remove(self)
+        for h in self._hijos3d:
+            h._padre3d = None
         self.destroyed = True
 
     # paginas propias

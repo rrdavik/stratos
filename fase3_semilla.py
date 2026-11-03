@@ -226,9 +226,13 @@ def prueba(t):
             '%d piezas' % chop2.numSamples)
     leg = m.legend()
     t.check('leyenda MUNDO', 'MUNDO' in leg and ('ocupadas %d/%d' % (m.occupied(W), m.N)) in leg)
+    # comun v52: giran y se balancean con 'planeta' (hijas suyas en la jerarquia 3D)
     sin_bal = [n for n in ('nucleo', 'reticula', 'luz_celda', 'formas_pulidas', 'formas_porosas')
-               if not any(x in (base.op(n).par.rx.expr or '') for x in ('wobble(', "frame_u')['rx']"))]
-    t.check('balanceo del eje en el planeta', not sin_bal,
+               if not gira_con_planeta(base.op(n))]
+    pl = base.op('planeta')
+    t.check('balanceo del eje en el planeta: las geometrias son hijas de planeta, que gira y se balancea',
+            not sin_bal and pl is not None and "frame_u')['rx']" in (pl.par.rx.expr or '')
+            and "frame_u')['ry']" in (pl.par.ry.expr or ''),
             'sin balanceo: %s' % ', '.join(sin_bal) if sin_bal else '')
     # luz de celda: la nota del SEQ1 enciende el centro de su celda
     Wl = m.new_world()

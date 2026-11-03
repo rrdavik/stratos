@@ -737,9 +737,8 @@ def prueba(t):
             all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
                 for col in cd['colores_drum'] for ref in (cian, ambar, blanco)))
     geo = base.op('luz_celda')
-    t.check('luz_celda gira y se balancea con el planeta',
-            geo is not None and any(x in (geo.par.ry.expr or '') for x in ('rotation(', "frame_u')['ry']"))
-            and any(x in (geo.par.rx.expr or '') for x in ('wobble(', "frame_u')['rx']")))
+    t.check('luz_celda gira y se balancea con el planeta (hija de planeta)',
+            geo is not None and gira_con_planeta(geo))
     t.check('leyenda EROSION (pad 4)', 'EROSION' in m.legend() and 'IMPULSO' not in m.legend())
     prueba_impulso(t, m, cd)
 
