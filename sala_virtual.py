@@ -41,6 +41,9 @@ QUE MONTA
                luz tenue para ver la sala con los focos apagados (0,06: la
                sala, a oscuras como la de verdad).
   ESFERA       la imagen de FASE1 (su Render TOP 'render') sobre una esfera.
+               v3: sale de FASE1 por el Out TOP 'out_render' y SALA la coge
+               con el Select TOP 'imagen_fase1' (no se puede cablear entre
+               redes).
                OJO: la esfera real pide un mapa equirectangular 2:1, que
                Estratos aun no saca; aqui se ve la vista de la camara del
                planeta envolviendo la esfera.
@@ -72,7 +75,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v2  (estar en la sala: un monitor, vista de visitante, haces en la bruma y sombras)'
+VERSION = 'sala_virtual v3  (el render de FASE1 sale por un Out TOP: out_render -> imagen_fase1)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -326,16 +329,34 @@ for attr in ('render', 'display'):
         pass
 for ax in ('tx', 'ty', 'tz'):
     setexpr(esfera, ax, "%s.valor('esfera', '%s', absTime.frame)" % (SM, ax))
+# v3: el render de FASE1 sale por un Out TOP ('out_render', sin el rotulo) y
+# SALA lo recoge con un Select TOP ('imagen_fase1'). Antes se cableaba
+# FASE1/render directo a esfera_mini, pero TouchDesigner no deja cablear entre
+# redes distintas: el cable no se hacia y esfera_mini, esfera_media, con_esfera,
+# con_rotulo y monitor_sala se quedaban en error por falta de entrada.
+out_render = get_or_make(fase1, 'outTOP', 'out_render', 960, -300)
+connect(out_render, fase1.op('render'), 0)
+try:
+    out_render.color = (0.1, 0.8, 0.9)
+except Exception:
+    pass
+sel_fase1 = get_or_make(sala, 'selectTOP', 'imagen_fase1', 660, -120)
+sale_render = setp_any(sel_fase1, ['top'], out_render.path)
+if sale_render and out_render.inputs:
+    ok('out_render: el render de FASE1 sale por un Out TOP; SALA lo coge con imagen_fase1 (Select TOP)')
+else:
+    info('out_render / imagen_fase1: revisa que %s este cableado a %s/render y que imagen_fase1 '
+         'apunte a el' % (out_render.path, fase1.path))
 mat_esfera = make_constant(sala, 'mat_esfera', 660, -40, (1.0, 1.0, 1.0))
-imagen = setp_any(mat_esfera, ['colormap', 'map'], fase1.path + '/render')
+imagen = setp_any(mat_esfera, ['colormap', 'map'], 'imagen_fase1')
 setp(esfera, 'material', 'mat_esfera')
 if imagen:
-    ok('esfera: 1 m con la imagen de FASE1/render (la real pide un mapa equirectangular 2:1)')
+    ok('esfera: 1 m con la imagen de FASE1 (imagen_fase1; la real pide un mapa equirectangular 2:1)')
 else:
-    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = %s/render' % fase1.path)
+    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = imagen_fase1')
 # v2: la imagen de la esfera, pequena, para el monitor y para medir su color medio
 mini = get_or_make(sala, 'resolutionTOP', 'esfera_mini', 880, -40)
-connect(mini, fase1.op('render'), 0)
+connect(mini, sel_fase1, 0)
 setmenu(mini, ['outputresolution', 'resolution'], ['custom'], None)
 setp_any(mini, ['resolutionw'], 320)
 setp_any(mini, ['resolutionh'], 180)
@@ -671,6 +692,10 @@ def _prueba(t, m):
     t.check('render_cenital (320 x 288) y profundidad, para la fase 22',
             sala.op('render_cenital') is not None and sala.op('profundidad') is not None)
     t.check('la esfera lleva la imagen de FASE1', bool(imagen))
+    t.check('v3: el render de FASE1 sale por out_render y SALA lo coge con imagen_fase1, sin cables entre redes',
+            fase1.op('out_render') is not None and bool(fase1.op('out_render').inputs)
+            and sala.op('imagen_fase1') is not None and bool(sala.op('esfera_mini').inputs)
+            and sala.op('esfera_mini').inputs[0] == sala.op('imagen_fase1'))
 
     # 5b. v2: estar en la sala
     t.check('un monitor con todo: salida_sala <- monitor_sala, con el plano, la esfera y el rotulo encima',
