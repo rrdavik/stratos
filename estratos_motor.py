@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v76'
+MOTOR_VERSION = 'motor v77'
 
 import math
 
@@ -5360,7 +5360,7 @@ def build_piel(W, cfg, now, out):
         por_celda = cauces(W, cfg, cl, ter)['por_celda'] if cfg['nivel'] >= 13 else {}
         cult = cultivos(W, cfg, ter, por_celda, now, paso)     # fase 11 v8: bancales, riego y acequias
         ctx = dict(cl=cl, ter=ter, bases=suelos, cauces=por_celda,
-                   sway=(lambda i: balanceo(W, cfg, i, bq)) if tiempo else (lambda i: (0.0, 0.0)),
+                   sway=(lambda i: balanceo_filas(W, cfg, i, bq)) if tiempo else (lambda i: (0.0, 0.0)),
                    cerca=lambda i: (cfg.get('superficie') if cfg.get('ligero', 1) else lod_cerca(W, cfg, i))
                    and not (cfg.get('impostores', 1) and _PRESUPUESTO['lleno']),
                    rio_cerca=lambda i: any(c in por_celda for c in [i] + list(NEIGH[i])),
@@ -9946,15 +9946,60 @@ def tinte_actual(W, cfg):
     return [x + (y - x) * q for x, y in zip(f['de']['tinte'], a)]
 
 
+def viento_lfo(W, cfg):
+    """El empuje del viento (grados): fase 19, el LFO del modular (Vientomax)."""
+    if cfg['nivel'] >= 19:
+        return cfg['viento_max'] * (2.0 * W['modular']['lfo'] - 1.0)
+    return 0.0
+
+
+def vaiven(amp, viento, bq, lon):
+    """El vaiven del dosel en grados (con signo): Swaymax en fase con el beat, con
+    una onda suave por longitud, mas el viento. Lo mismo calcula el vertex shader de
+    la piel (motor v77)."""
+    return amp * math.sin(2.0 * math.pi * bq / SWAY_BEATS + 0.5 * lon) + viento
+
+
+def balanceo_gpu(cfg):
+    """Motor v77: el vaiven y el viento del dosel los hace el vertex shader de la piel
+    (desde la fase 12, y sin Materialrespaldo, que es un Phong sin shader)."""
+    return cfg['nivel'] >= 12 and not cfg.get('respaldo', 0)
+
+
+def balanceo_filas(W, cfg, i, bq):
+    """El balanceo que va en las filas de los ejemplares: con el shader (motor v77),
+    solo el empuje del frente (el vaiven y el viento los pone la GPU, y las filas no
+    cambian con el pulso); sin el, todo, como antes."""
+    if not balanceo_gpu(cfg):
+        return balanceo(W, cfg, i, bq)
+    q = progreso_frente(W, cfg)
+    if q is not None and 0.0 < q < 1.0:
+        d = abs(latitud(i) - lat_frente(q))
+        if d < FRENTE_ANCHO:
+            return round(FRENTE_INCL * (1.0 - d / FRENTE_ANCHO) * 2.0) / 2.0, 270.0
+    return 0.0, 0.0
+
+
+def viento_reloj(frame=None):
+    """(amplitud, viento, pulso) del vaiven del dosel para el shader de la piel:
+    Swaymax, el viento del LFO y el pulso en beats a saltos de stop-motion. Ceros
+    antes de la fase 17 (el dosel no se mueve) o sin el shader."""
+    try:
+        W, c = world(), cfg_foto()
+        if c['nivel'] < 17 or not balanceo_gpu(c):
+            return 0.0, 0.0, 0.0
+        return float(c['sway_max']), float(viento_lfo(W, c)), float(beat_stop(W, c))
+    except Exception:
+        return 0.0, 0.0, 0.0
+
+
 def balanceo(W, cfg, i, bq):
     """(inclinacion, rumbo) del dosel de la celda i: el vaiven del pulso
     (Swaymax, en fase con el beat, con una onda suave por longitud) y, si pasa
     el frente, el empuje hacia el norte."""
     n = normal_i(i)
     lon = math.atan2(n[2], n[0])
-    sw = cfg['sway_max'] * math.sin(2.0 * math.pi * bq / SWAY_BEATS + 0.5 * lon)
-    if cfg['nivel'] >= 19:              # fase 19: el LFO del modular es viento
-        sw += cfg['viento_max'] * (2.0 * W['modular']['lfo'] - 1.0)
+    sw = vaiven(cfg['sway_max'], viento_lfo(W, cfg), bq, lon)
     incl, rumbo = abs(sw), (0.0 if sw >= 0 else 180.0)
     q = progreso_frente(W, cfg)
     if q is not None and 0.0 < q < 1.0:
@@ -11742,6 +11787,9 @@ def canales_frame(spec, frame=None):
     t_h, lfo_h = humo_reloj(frame)             # motor v74: el reloj de mat_humo
     out.append(('humo_t', float(t_h)))
     out.append(('humo_lfo', float(lfo_h)))
+    amp, vto, _ = viento_reloj(frame)          # motor v77: el vaiven del dosel, en la GPU
+    out.append(('viento_amp', amp))
+    out.append(('viento_lfo', vto))
     for canal, tipo, nombre, k in spec or ():
         try:
             if tipo == 'piel':
