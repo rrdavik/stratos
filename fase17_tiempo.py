@@ -335,7 +335,7 @@ def _prueba_industria_(t, m):
         W['h'][x] = W['vh'][x] = m.height_for(c, occ)
         W['t_nac'][x] = -50.0
     m.cerrar_obras(W, c)
-    trenes = lambda ins: [tuple(round(v, 4) for v in f[:3]) for f in ins.get('particulas', [])
+    trenes = lambda ins: [tuple(round(v, 4) for v in f[:3]) for f in ins.get('vagones', [])     # motor v75
                           if tuple(f[9:12]) == (0.18, 0.18, 0.2)]
     # motor v74: el humo lo mueve la GPU con el reloj humo_t (frame_u); sus filas no cambian
     humo = lambda ins: [tuple(round(v, 4) for v in f) for f in ins.get('humo', [])]

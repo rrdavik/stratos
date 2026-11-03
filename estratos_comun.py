@@ -26,12 +26,12 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v53'
+VERSION_COMUN = 'comun v54'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'particulas', 'diagnostico', 'humo', 'luz_celda', 'luz_conchas',
-                'luz_local']                    # lo transparente (humo) y las capas aditivas, al final
+                'coronas', 'vagones', 'diagnostico', 'particulas', 'humo', 'luz_celda', 'luz_conchas',
+                'luz_local']                    # lo transparente (motas, humo) y las capas aditivas, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
@@ -1892,7 +1892,8 @@ def install_core(base, carpeta, fase):
     piel_al_dia(base, motor.module)
     nucleo_al_dia(base)
     destello_al_dia(base)
-    if humo_al_dia(base):               # comun v53: el humo en la GPU
+    motas = particulas_al_dia(base)     # comun v54: las particulas, motas suaves
+    if humo_al_dia(base) or motas:      # comun v53: el humo en la GPU
         set_render(base)
     try:
         motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
@@ -2041,11 +2042,7 @@ def humo_al_dia(base, crear=False):
     except Exception:
         pass
     bien = _uniforme(mat, 0, 'uHumo', (HUMO_U % 'humo_t', HUMO_U % 'humo_lfo', '0', '0')) and bien
-    # transparencia: alfa premultiplicado, sin escribir profundidad
-    mezcla = bool(setp_any(mat, ['blending'], True))
-    mezcla = setmenu(mat, ['srcblend'], ['one']) and mezcla
-    mezcla = setmenu(mat, ['destblend'], ['omsa', 'oneminussrcalpha', 'one_minus_src_alpha']) and mezcla
-    prof = bool(setp_any(mat, ['depthwriting', 'depthwrite', 'writedepth'], False))
+    _transparente(mat)
     geo = base.op('humo')
     if geo is None or crear:
         make_instanced(base, 'humo', 520, 940, 'mat_humo', sop='rect', quiet=True)
@@ -2057,11 +2054,116 @@ def humo_al_dia(base, crear=False):
         ok('humo: en la GPU (mat_humo, GLSL): bocanadas suaves que suben y se funden, a saltos')
     else:
         fail('mat_humo: no pude enlazar los DAT (humo_vertex, humo_pixel) o el uniforme uHumo')
+    return bien
+
+
+def _transparente(mat):
+    """comun v54: un GLSL MAT transparente (alfa premultiplicado) que no escribe
+    profundidad. Si no encuentra los parametros, dice que poner a mano."""
+    mezcla = bool(setp_any(mat, ['blending'], True))
+    mezcla = setmenu(mat, ['srcblend'], ['one']) and mezcla
+    mezcla = setmenu(mat, ['destblend'], ['omsa', 'oneminussrcalpha', 'one_minus_src_alpha']) and mezcla
+    prof = bool(setp_any(mat, ['depthwriting', 'depthwrite', 'writedepth'], False))
     if not mezcla:
-        info('mat_humo: pon a mano en Common: Blending on, Source Color One, Destination Color '
-             'One Minus Source Alpha')
+        info('%s: pon a mano en Common: Blending on, Source Color One, Destination Color '
+             'One Minus Source Alpha' % mat.name)
     if not prof:
-        info('mat_humo: pon a mano en Common: Depth Writing off (que las bocanadas no se tapen)')
+        info('%s: pon a mano en Common: Depth Writing off (que no se tapen entre si)' % mat.name)
+    return mezcla and prof
+
+
+# --- las demas particulas, motas suaves (comun v54, motor v75) -----------------
+MOTAS_VERTEX = r"""// Estratos - motas (motor v75): vertex shader. Cada instancia de 'particulas'
+// (esporas, brasas, ceniza, polvo, semillas, smog, obreros, balizas, antorcha,
+// faros, pulsos de la red, nubes) es una lamina que mira a la camara sin perder su
+// eje: la caja de antes tenia la base en la instancia y medidas sx sy sz (sy a lo
+// largo de su eje, la normal); la mota tiene el mismo centro, el ancho de sx y sz
+// y el alto de sy (de frente a su eje; mirandola por su eje, redonda).
+out Vertex {
+    vec4 color;
+    vec2 lam;
+    flat int camIndex;
+} oVert;
+
+void main()
+{
+    vec4 c0 = TDDeform(vec3(0.0));
+    vec3 ex = TDDeform(vec3(1.0, 0.0, 0.0)).xyz - c0.xyz;
+    vec3 ey = TDDeform(vec3(0.0, 1.0, 0.0)).xyz - c0.xyz;
+    vec3 ez = TDDeform(vec3(0.0, 0.0, 1.0)).xyz - c0.xyz;
+    float w = max(length(ex), length(ez));
+    float h = length(ey);
+    vec3 centro = c0.xyz + 0.5 * ey;
+    mat4 ci = uTDMats[TDCameraIndex()].camInverse;
+    vec3 v = normalize(ci[3].xyz - centro);
+    vec3 eje = ey / max(h, 1e-6);
+    vec3 arr = eje - dot(eje, v) * v;
+    float lado = length(arr);
+    arr = lado > 1e-3 ? arr / lado : normalize(ci[1].xyz);
+    vec3 der = normalize(cross(arr, v));
+    float hv = mix(w, h, clamp(lado, 0.0, 1.0));
+    vec3 pos = centro + (P.x * der * w + P.y * arr * hv) * 1.8;
+    gl_Position = TDWorldToProj(vec4(pos, 1.0));
+#ifndef TD_PICKING_ACTIVE
+    oVert.camIndex = TDCameraIndex();
+    oVert.color = TDInstanceColor(Cd);
+    oVert.lam = P.xy * 2.0;
+#else
+    TDWritePickingValues();
+#endif
+}
+"""
+
+MOTAS_PIXEL = r"""// Estratos - motas (motor v75): pixel shader. Un punto suave con el centro algo
+// mas vivo; alfa premultiplicado, sin escribir profundidad.
+in Vertex {
+    vec4 color;
+    vec2 lam;
+    flat int camIndex;
+} iVert;
+
+layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
+
+void main()
+{
+    TDCheckDiscard();
+    float r = length(iVert.lam);
+    float a = (1.0 - smoothstep(0.25, 1.0, r)) * 0.95;
+    if (a < 0.01)
+        discard;
+    vec3 col = iVert.color.rgb * (0.85 + 0.35 * (1.0 - smoothstep(0.0, 0.5, r)));
+    oFragColor[0] = TDOutputSwizzle(vec4(col * a, a));
+}
+"""
+
+
+def particulas_al_dia(base, crear=False):
+    """comun v54: las particulas, motas suaves (mat_motas, GLSL) en una lamina que
+    mira a la camara; los trenes, en su geometria de cajas 'vagones'. Con
+    Materialrespaldo, mat_particulas. Solo desde la fase 11 (con 'particulas', o
+    crear=True, que las rehace); un proyecto con las particulas en caja se pone al dia."""
+    geo = base.op('particulas')
+    if geo is None and not crear:
+        return False
+    make_constant(base, 'mat_particulas', 780, 860, (1.0, 1.0, 1.0))
+    vdat = get_or_make(base, 'textDAT', 'motas_vertex', 1180, 540)
+    vdat.text = MOTAS_VERTEX
+    pdat = get_or_make(base, 'textDAT', 'motas_pixel', 1180, 460)
+    pdat.text = MOTAS_PIXEL
+    mat = get_or_make(base, 'glslMAT', 'mat_motas', 1400, 500)
+    bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'motas_vertex'))
+    bien = bool(setp_any(mat, ['pdat', 'pixeldat'], 'motas_pixel')) and bien
+    _transparente(mat)
+    if crear or geo is None or geo.op('lamina') is None:
+        make_instanced(base, 'particulas', 520, 860, 'mat_motas', sop='rect', quiet=True)
+        geo = base.op('particulas')
+    setexpr(geo, 'material', "'mat_particulas' if parent().par.Materialrespaldo else 'mat_motas'")
+    if crear or base.op('vagones') is None:
+        make_instanced(base, 'vagones', 520, 1020, 'mat_particulas', quiet=True)
+    if bien:
+        ok('particulas: motas suaves (mat_motas, GLSL) que miran a la camara; los trenes, en vagones')
+    else:
+        fail('mat_motas: no pude enlazar los DAT (motas_vertex, motas_pixel)')
     return bien
 
 

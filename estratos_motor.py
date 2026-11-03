@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v74'
+MOTOR_VERSION = 'motor v75'
 
 import math
 
@@ -8837,8 +8837,8 @@ def build_industria_tejido(W, cfg, now, out):
             f = (tau * 0.5 - 0.25 * h) % 1.0
             parts.append([pa[0] + d[0] * f, pa[1] + d[1] * f, pa[2] + d[2] * f, rx, ry, 0.0, s_, s_, s_,
                           col[0], col[1], col[2]])
-    if cfg['nivel'] >= 17:                          # fase 17: los trenes
-        trenes(fijo[1], tau, lim, parts)
+    if cfg['nivel'] >= 17:                          # fase 17: los trenes (motor v75: en 'vagones', cajas)
+        trenes(fijo[1], tau, lim, out.setdefault('vagones', []))
 
 
 def _tejido_ind_fijo(W, cfg, t, doce):
@@ -10503,7 +10503,10 @@ def chop_names(c=None):
         return list(CHOP_NAMES)
     extra = ['i_tejido', 'i_rios'] if c['nivel'] >= 13 else []
     extra += ['i_luz_local', 'i_diagnostico'] if c['nivel'] >= 18 else []
-    return CHOP_NAMES + ['i_particulas'] + extra + ['i_' + g for g, _, _ in geometrias_piel(c)]
+    # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
+    # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
+    return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
+        ['i_' + g for g, _, _ in geometrias_piel(c)]
 
 TARGET_MODES = ['seq1', 'seq2', 'alterna', 'velocidad']
 

@@ -345,8 +345,7 @@ if ajustadas:
 
 instanciar_modelos(base, m)
 terreno_al_dia(base, m)                 # v5: la malla del relieve (esfera desplazada por el mapa de alturas)
-make_constant(base, 'mat_particulas', 780, 860, (1.0, 1.0, 1.0))
-make_instanced(base, 'particulas', 520, 860, 'mat_particulas')
+particulas_al_dia(base, crear=True)     # comun v54: motas suaves (mat_motas) y los trenes en 'vagones'
 humo_al_dia(base, crear=True)           # comun v53: el humo, en la GPU (mat_humo)
 set_render(base)
 
@@ -1701,6 +1700,24 @@ def _prueba_rendimiento_td(t, m):
                 'son sus hijas y no leen el giro (%d canales en frame_u)' % len(canales),
                 fu is not None and fu['ry'] is not None and fu['rx'] is not None and not con_giro and not sueltas,
                 ', '.join((con_giro + sueltas)[:3]))
+        # motor v75: cada geometria instanciada tiene su Script CHOP en chop_names (el
+        # motor solo recuece esos: el humo de la v74 no estaba y no se habria actualizado)
+        nombres = set(m.chop_names(m.cfg()))
+        sin_cocer = []
+        for g in base.children:
+            try:
+                iop = str(g.par.instanceop.eval() or '') if g.OPType == 'geometryCOMP' else ''
+            except Exception:
+                iop = ''
+            iop = iop.split('/')[-1]
+            if iop.startswith('i_') and base.op(iop) is not None and iop not in nombres:
+                sin_cocer.append(iop)
+        t.check('cada geometria instanciada tiene su Script CHOP en chop_names (humo y vagones incluidos)',
+                not sin_cocer and 'i_humo' in nombres and 'i_vagones' in nombres, ', '.join(sin_cocer[:4]))
+        pa = base.op('particulas')
+        t.check('particulas: motas suaves (una lamina con mat_motas) y los trenes en cajas (vagones)',
+                pa is not None and pa.op('lamina') is not None and 'mat_motas' in (pa.par.material.expr or '')
+                and base.op('vagones') is not None and base.op('mat_motas') is not None)
         t.check('la luz de destello lee sus 7 valores de frame_u (sin Python)',
                 base.op('luz_destello') is None or ("frame_u')['fl_tx']" in (base.op('luz_destello').par.tx.expr or '')
                                                     and fu['fl_dim'] is not None))
