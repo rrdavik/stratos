@@ -165,7 +165,32 @@ def main():
         fila2.append((np.clip(img, 0, 1) * 255).astype('u1'))
         print('       %s: %d motas (%d vagones aparte), %.1f%% de la imagen' %
               (nombre, len(filas), len(inst.get('vagones') or []), 100 * float((h[..., 3] > 0.05).mean())))
-    fila2.append(np.zeros_like(fila2[0]))
+    # motor v77: el vaiven del dosel en el vertex shader de la piel (uViento): la misma
+    # naturaleza en dos pulsos se mueve; con Swaymax 0, quieta
+    if 'uViento' not in piel:
+        print('FALLO  el shader de la piel no tiene uViento')
+        return 1
+    filas_n = m.build_instances(Wn, cn, nown)
+    veg = [f for g, fs in filas_n.items() if g.startswith('mod_veg_') for f in fs]
+    centro = [sum(f[q] for f in veg) / len(veg) for q in range(3)]
+    mid3 = m._norm(centro)
+    Rn = m.top_radius(Wn, cn)
+    foco3 = m._mul(mid3, Rn)
+    cam3 = m._add(m._mul(mid3, Rn * 1.45), m._mul(m.tangents(mid3)[0], Rn * 0.35))
+    vistas = []
+    for amp, pulso in ((6.0, 0.5), (6.0, 1.0), (0.0, 0.5), (0.0, 1.0)):
+        piel['uViento'].value = (amp, 0.0, pulso, 2.0)
+        img, _ = gp.dibujar(ctx, piel, m, cn, Wn, nown, cam3, foco3)
+        vistas.append(img)
+    piel['uViento'].value = (0.0, 0.0, 0.0, 2.0)
+    mueve = float(np.abs(vistas[0].astype('f4') - vistas[1].astype('f4')).mean())
+    quieto = float(np.abs(vistas[2].astype('f4') - vistas[3].astype('f4')).mean())
+    print('       vaiven del dosel en la GPU: %d ejemplares; Swaymax 6, pulso 0,5 -> 1: %.2f de diferencia media; '
+          'Swaymax 0: %.2f' % (len(veg), mueve, quieto))
+    if not (mueve > 0.05 and quieto < 1e-6):
+        print('FALLO  el dosel no se balancea en la GPU (o se mueve con Swaymax 0)')
+        return 1
+    fila2.append(vistas[0])
     Image.fromarray(np.concatenate([np.concatenate(fotos, axis=1), np.concatenate(fila2, axis=1)],
                                    axis=0)).save(salida)
     print('       imagen: %s' % salida)

@@ -1576,3 +1576,13 @@ Con el mismo camino que el humo, el resto de las partículas deja de ser cajas.
 ## Los colores de las conchas al cambiar de tema (motor v76)
 
 Con la industria, la paleta de las conchas salta también el violeta de su red, así que el mismo color de generación es otro que en naturaleza o ciudad. El motor guardaba los colores calculados sin tener en cuenta el tema: tras pintar en industria, al pasar a otro tema las conchas salían con los colores de la industria (y la autoprueba de la fase 8, que corre con los valores de fábrica, fallaba en «paleta: los colores de referencia»). Ahora cada color se guarda con las bandas de su tema; la autoprueba pinta antes en industria y comprueba que los de naturaleza siguen siendo los de referencia.
+
+## El viento del dosel en la GPU (motor v77, comun v55)
+
+El vaivén del dosel (`Swaymax`, en fase con el beat, con una onda suave por longitud) y el viento del LFO del modular (`Vientomax`, fase 19) los calculaba el motor y los metía en el giro de cada fila de ejemplar. Como cambian con el pulso, en cada refresco (`Refresconat`) cambiaban todas las filas de la vegetación y TouchDesigner recocía todos sus Script CHOP.
+
+- **Ahora los hace el vertex shader de la piel** (`mat_piel_dosel`): cada ejemplar de la biblioteca (`uv.x` 1-3) se inclina entero sobre su base, a medio grado como antes, con el uniforme `uViento` (x `Swaymax`, y el viento del LFO, z el pulso a saltos de stop-motion, w los beats por vaivén). Lo calcula `frame_u` una vez por fotograma (`viento_amp`, `viento_lfo` y el mismo `humo_t` del humo); antes de la fase 17, cero.
+- **Las filas del dosel ya no cambian con el pulso** (`balanceo_filas`): solo llevan el empuje del frente, que sigue en el motor. Entre dos cambios del mundo, los Script CHOP de la vegetación no se recuecen.
+- **`Refresconat`**: ya no hace falta que sea bajo para que el dosel se mueva suave; el vaivén va a saltos de stop-motion, como el resto. Lo que sigue yendo a saltos de `Refresconat` es el latido, el rebote del nacimiento y el pumping de la naturaleza.
+- **Con `Materialrespaldo`** (un Phong, sin shader) el vaivén vuelve a las filas, como antes.
+- **Comprobado fuera de TouchDesigner** con `pruebas/glsl_humo.py`: el shader de la piel compila con el vaivén y la naturaleza se mueve entre dos pulsos (con `Swaymax` 0, quieta). `pruebas/glsl_piel.py` declara ahora `uTDMats[].world`, que el vaivén usa.

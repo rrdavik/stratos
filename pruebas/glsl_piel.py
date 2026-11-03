@@ -30,7 +30,7 @@ import vista_previa as vp  # noqa: E402
 
 TD_VERTEX = """#version 450
 #define TD_NUM_COLOR_BUFFERS 1
-struct TDMatrix { mat4 camInverse; mat4 worldInverse; };
+struct TDMatrix { mat4 camInverse; mat4 worldInverse; mat4 world; };
 uniform TDMatrix uTDMats[1];
 in vec3 P;
 in vec3 N;
@@ -63,7 +63,7 @@ void TDWritePickingValues() {}
 
 TD_PIXEL = """#version 450
 #define TD_NUM_COLOR_BUFFERS 1
-struct TDMatrix { mat4 camInverse; mat4 worldInverse; };
+struct TDMatrix { mat4 camInverse; mat4 worldInverse; mat4 world; };
 uniform TDMatrix uTDMats[1];
 void TDCheckDiscard() {}
 vec4 TDOutputSwizzle(vec4 c) { return c; }
@@ -320,6 +320,8 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
     prog['uTDMats[0].camInverse'].write(np.linalg.inv(Ci).T.astype('f4').tobytes())
     if 'uTDMats[0].worldInverse' in prog:
         prog['uTDMats[0].worldInverse'].write(np.identity(4).astype('f4').tobytes())
+    if 'uTDMats[0].world' in prog:              # motor v77: el vaiven del dosel lo usa
+        prog['uTDMats[0].world'].write(np.identity(4).astype('f4').tobytes())
     uni = m.uniformes_piel(W, c, now) if hasattr(m, 'uniformes_piel') else {}
     for k, v in uni.items():
         if k in prog and k != 'uTerreno':

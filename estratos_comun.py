@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v54'
+VERSION_COMUN = 'comun v55'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -730,6 +730,8 @@ def onCook(scriptOp):
 PIEL_VERTEX = r"""// Estratos - piel (fase 12; terreno, fase 11 v5): vertex shader
 uniform vec4 uTerreno;      // x: 1 la malla del terreno, y: altura de los pisos, z: lo que se hunde sin relieve
 uniform sampler2D sAlturas; // r: relieve sobre el suelo local, g: radio del suelo (lat/lon, fila 0 = polo sur)
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua
+uniform vec4 uViento;       // motor v77: x Swaymax, y el viento del LFO (grados), z el pulso a saltos, w beats por vaiven
 
 out Vertex {
     vec4 color;
@@ -748,6 +750,11 @@ out Vertex {
 vec2 uvDe(vec3 d)
 {
     return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+}
+
+vec3 rotar(vec3 v, vec3 k, float a)
+{
+    return v * cos(a) + cross(k, v) * sin(a) + k * dot(k, v) * (1.0 - cos(a));
 }
 
 vec3 sobre(vec3 d)
@@ -776,12 +783,31 @@ void main()
         h = max(textureLod(sAlturas, uvDe(d), 0.0).r, 0.0) / max(1e-4, uTerreno.y);
     }
     vec4 wPos = TDDeform(p);
+    vec3 wN = TDDeformNorm(nrm);
+    // motor v77: el vaiven del dosel (Swaymax, en fase con el beat, con una onda por
+    // longitud) y el viento del LFO, en la GPU: cada ejemplar de la biblioteca (uv.x 1-3)
+    // se inclina entero sobre su base, como hacia antes el motor en sus filas
+    if (uFamilia.x > 0.5 && uFamilia.x < 1.5 && uv[0].x > 0.5 && uv[0].x < 9.5
+            && (uViento.x > 0.0 || uViento.y != 0.0)) {
+        vec3 bW = TDDeform(vec3(0.0)).xyz;
+        vec3 upL = normalize((uTDMats[TDCameraIndex()].worldInverse * vec4(bW, 1.0)).xyz);
+        float lon = atan(upL.z, upL.x);
+        float sw = uViento.x * sin(6.2831853 * uViento.z / max(uViento.w, 1e-3) + 0.5 * lon) + uViento.y;
+        sw = sign(sw) * floor(abs(sw) * 2.0 + 0.5) * 0.5;          // a medio grado, como el motor
+        mat3 w3 = mat3(uTDMats[TDCameraIndex()].world);
+        vec3 up = normalize(w3 * upL);
+        vec3 tL = normalize(cross(vec3(0.0, 1.0, 0.0), upL) + vec3(1e-4, 0.0, 0.0));
+        vec3 ax = normalize(cross(up, normalize(w3 * tL)));
+        float a = radians(sw);
+        wPos.xyz = bW + rotar(wPos.xyz - bW, ax, a);
+        wN = rotar(wN, ax, a);
+    }
     gl_Position = TDWorldToProj(wPos);
 #ifndef TD_PICKING_ACTIVE
     oVert.camIndex = TDCameraIndex();
     oVert.inst = TDInstanceID();
     oVert.wPos = wPos.xyz;
-    oVert.wNorm = normalize(TDDeformNorm(nrm));
+    oVert.wNorm = normalize(wN);
     oVert.oPos = p;
     oVert.pPos = (uTDMats[TDCameraIndex()].worldInverse * wPos).xyz;
     oVert.hrel = h;
@@ -2887,6 +2913,8 @@ PIEL_UNIFORMES = [
     ('uTerreno', ('0', PIEL_U % ('uTerreno', 1), PIEL_U % ('uTerreno', 2), '0')),
     ('uPisos', tuple(PIEL_U % ('uPisos', k) for k in range(3)) + ('0',)),
     ('uBorde', (PIEL_U % ('uBorde', 0), '0', '0', '0')),
+    ('uViento', ("parent().op('frame_u')['viento_amp']", "parent().op('frame_u')['viento_lfo']",
+                 "parent().op('frame_u')['humo_t']", '2')),          # motor v77: el vaiven en la GPU
 ] + [(nm % k, tuple(PIEL_U % (nm % k, q) for q in range(4)))
      for k in range(3) for nm in ('uTinte%d', 'uTinteCol%d')] + [
     ('uAgua', (PIEL_U % ('uAgua', 0), '0', '0', '0')),

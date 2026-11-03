@@ -179,22 +179,32 @@ def _prueba(t, m):
         m.on_pulse('Sembrar')                   # hasta ramificar (Umbralram): 10 de fabrica
         k += 1
     W, c = correr(3.0)                          # que crezcan (stop-motion)
+    # motor v77: el vaiven lo pone el vertex shader de la piel con uViento (frame_u:
+    # viento_amp = Swaymax y el pulso a saltos); las filas del dosel no cambian con el pulso
     W['pulso']['beat'] = 0.5
     i0 = m.build_instances(W, c, reloj[0])
+    r0 = m.viento_reloj()
     W['pulso']['beat'] = 1.5
     i1 = m.build_instances(W, c, reloj[0])
+    r1 = m.viento_reloj()
     veg = [g for g in i0 if g.startswith('mod_veg_') and i0[g]]
-    gira = any([f[3:6] for f in i0[g]] != [f[3:6] for f in i1.get(g, [])] for g in veg)
+    filas_quietas = all([f[3:6] for f in i0[g]] == [f[3:6] for f in i1.get(g, [])] for g in veg)
+    lon = [math.atan2(m.normal_i(x)[2], m.normal_i(x)[0]) for x in range(m.N)]
+    vaiven = [abs(m.vaiven(r0[0], r0[1], r0[2], lo)) for lo in lon]
+    se_mueve = any(abs(m.vaiven(r0[0], r0[1], r0[2], lo) - m.vaiven(r1[0], r1[1], r1[2], lo)) > 0.5 for lo in lon)
     inc = [m.balanceo(W, c, x, 0.5)[0] for x in range(m.N)]
     base.par.Swaymax = 0.0
-    c0 = m.cfg()
-    j0 = m.build_instances(W, c0, reloj[0])
-    W['pulso']['beat'] = 0.5
-    j1 = m.build_instances(W, c0, reloj[0])
-    quieto = all([f[3:6] for f in j0.get(g, [])] == [f[3:6] for f in j1.get(g, [])] for g in veg)
+    quieto = m.viento_reloj()[0] == 0.0
     base.par.Swaymax = 6.0
-    t.check('naturaleza: el dosel se balancea en fase con el beat (Swaymax 0: quieto)',
-            veg and gira and quieto and 0 < max(inc) <= 6.5, 'hasta %.1f grados' % max(inc))
+    t.check('naturaleza: el dosel se balancea en fase con el beat en la GPU (uViento: Swaymax %.0f, pulso %.2f -> '
+            '%.2f; las filas no cambian con el pulso; Swaymax 0: quieto)' % (r0[0], r0[2], r1[2]),
+            veg and filas_quietas and se_mueve and quieto and r0[0] == 6.0 and 0 < max(vaiven) <= 6.5
+            and abs(max(inc) - max(vaiven)) < 0.6, 'hasta %.1f grados' % max(vaiven))
+    cr = dict(c, respaldo=1)               # Materialrespaldo: un Phong sin shader, el vaiven en las filas
+    t.check('con Materialrespaldo el vaiven sigue en las filas; con el shader, en las filas solo el frente',
+            all(m.balanceo_filas(W, cr, x, 0.5) == m.balanceo(W, cr, x, 0.5) for x in range(m.N))
+            and (m.progreso_frente(W, c) is not None or all(m.balanceo_filas(W, c, x, 0.5) == (0.0, 0.0)
+                                                           for x in range(m.N))))
     esporas = [f for f in i0.get('particulas', []) if abs(f[9] - m.COL_ESPORA[0]) < 1e-6]
     t.check('esporas sobre los bosques ramificados', len(esporas) >= 3, '%d' % len(esporas))
     # 3. el frente: Frenteprueba, de polo a polo, y la biblioteca
