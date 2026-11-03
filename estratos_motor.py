@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v75'
+MOTOR_VERSION = 'motor v76'
 
 import math
 
@@ -1760,13 +1760,14 @@ _PAL = {}
 
 def generation_color(cfg, gen, ocupada):
     """Color de una loseta de la generacion gen (paleta de generaciones)."""
+    bandas = bandas_de(cfg)             # motor v76: la industria salta tambien el violeta de su red
     key = (round(cfg['paleta_tono'], 6), round(cfg['paleta_croma'], 6), round(cfg.get('paleta_luz', 0.35), 6),
            round(cfg.get('paleta_alterna', 0.06), 6), round(cfg.get('contraste_ocupada', 0.04), 6),
-           int(gen), bool(ocupada))
+           int(gen), bool(ocupada), bandas)
     col = _PAL.get(key)
     if col is None:
         L = palette_l(cfg, gen, ocupada)
-        col = oklch_to_srgb(L, cfg['paleta_croma'], palette_hue(gen, cfg['paleta_tono'], bandas_de(cfg)))[0]
+        col = oklch_to_srgb(L, cfg['paleta_croma'], palette_hue(gen, cfg['paleta_tono'], bandas))[0]
         if len(_PAL) > 4096:
             _PAL.clear()
         _PAL[key] = col

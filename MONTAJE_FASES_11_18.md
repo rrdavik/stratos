@@ -1572,3 +1572,7 @@ Con el mismo camino que el humo, el resto de las partículas deja de ser cajas.
 - **Arreglo del humo (v74)**: el motor solo recuece los Script CHOP de `chop_names()`, y `i_humo` no estaba: sus filas no se habrían actualizado al aparecer una planta o teñirse una bocanada. Ahora están `i_humo` e `i_vagones`, y la autoprueba de la fase 11 comprueba que cada geometría instanciada tiene su Script CHOP en esa lista.
 - **Para aplicarlo**: relanzar cualquier fase rehace `particulas` como lámina y crea `vagones` y `mat_motas` (`particulas_al_dia`). La mezcla de `mat_motas` es la del humo (Common: Blending on, Source Color One, Destination Color One Minus Source Alpha, Depth Writing off); si no se pudo fijar, el Textport lo dice.
 - **Comprobado fuera de TouchDesigner** con `pruebas/glsl_humo.py`, que ahora compila y dibuja también las motas (pulsos de la red y esporas).
+
+## Los colores de las conchas al cambiar de tema (motor v76)
+
+Con la industria, la paleta de las conchas salta también el violeta de su red, así que el mismo color de generación es otro que en naturaleza o ciudad. El motor guardaba los colores calculados sin tener en cuenta el tema: tras pintar en industria, al pasar a otro tema las conchas salían con los colores de la industria (y la autoprueba de la fase 8, que corre con los valores de fábrica, fallaba en «paleta: los colores de referencia»). Ahora cada color se guarda con las bandas de su tema; la autoprueba pinta antes en industria y comprueba que los de naturaleza siguen siendo los de referencia.
