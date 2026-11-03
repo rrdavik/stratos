@@ -26,12 +26,12 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v52'
+VERSION_COMUN = 'comun v53'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'particulas', 'diagnostico', 'luz_celda', 'luz_conchas',
-                'luz_local']                    # las capas aditivas, al final
+                'coronas', 'particulas', 'diagnostico', 'humo', 'luz_celda', 'luz_conchas',
+                'luz_local']                    # lo transparente (humo) y las capas aditivas, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
@@ -1892,6 +1892,8 @@ def install_core(base, carpeta, fase):
     piel_al_dia(base, motor.module)
     nucleo_al_dia(base)
     destello_al_dia(base)
+    if humo_al_dia(base):               # comun v53: el humo en la GPU
+        set_render(base)
     try:
         motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
     except Exception:
@@ -1914,6 +1916,152 @@ def destello_al_dia(base):
     bien = all(setexpr(luz, ax, DESTELLO_FRAME % ch) for ax, ch in zip(('tx', 'ty', 'tz'), DESTELLO_POS))
     bien = setexpr(luz, 'dimmer', DESTELLO_FRAME % 'fl_dim') and bien
     color_luz_expr(luz, [DESTELLO_FRAME % ch for ch in DESTELLO_COL])
+    return bien
+
+
+# --- el humo en la GPU (comun v53, motor v74) ---------------------------------
+HUMO_VERTEX = r"""// Estratos - humo (motor v74): vertex shader. Cada instancia es una bocanada:
+// tx ty tz la fuente, sx el tamano de partida, sy lo que sube (H), sz la deriva,
+// r g b el color y a el desfase (0-1; +2 si es vapor que respira con el LFO). La
+// GPU la sube, la hincha y la deriva con el reloj, y la gira hacia la camara.
+uniform vec4 uHumo;         // x: el pulso en beats a saltos de stop-motion, y: el LFO del modular
+
+out Vertex {
+    vec4 color;
+    vec2 lam;
+    float vida;
+    float semilla;
+    flat int camIndex;
+} oVert;
+
+void main()
+{
+    vec4 c0 = TDDeform(vec3(0.0));
+    float s = length(TDDeform(vec3(1.0, 0.0, 0.0)).xyz - c0.xyz);
+    float H = length(TDDeform(vec3(0.0, 1.0, 0.0)).xyz - c0.xyz);
+    float m = length(TDDeform(vec3(0.0, 0.0, 1.0)).xyz - c0.xyz);
+    vec4 col = TDInstanceColor(Cd);
+    float pen = step(1.5, col.a);
+    float off = fract(col.a);
+    float f = fract(uHumo.x * 0.5 + off);
+    float respira = 1.0 + 0.5 * uHumo.y * pen;
+    float s0 = s * (0.9 + 2.0 * f) * respira;
+    vec3 n = normalize(c0.xyz);
+    vec3 e = normalize(cross(vec3(0.0, 1.0, 0.0), n) + vec3(1e-4, 0.0, 0.0));
+    vec3 t = cross(n, e);
+    vec3 centro = c0.xyz + n * H * (0.05 + 0.5 * f) + e * (0.12 * f * m) + t * (0.05 * f * m);
+    mat4 ci = uTDMats[TDCameraIndex()].camInverse;
+    vec3 der = normalize(ci[0].xyz);
+    vec3 arr = normalize(ci[1].xyz);
+    vec3 w = centro + (P.x * der + P.y * arr) * (1.6 * s0);
+    gl_Position = TDWorldToProj(vec4(w, 1.0));
+#ifndef TD_PICKING_ACTIVE
+    oVert.camIndex = TDCameraIndex();
+    oVert.color = col;
+    oVert.lam = P.xy * 2.0;
+    oVert.vida = f;
+    oVert.semilla = off * 17.0 + float(TDInstanceID()) * 0.37;
+#else
+    TDWritePickingValues();
+#endif
+}
+"""
+
+HUMO_PIXEL = r"""// Estratos - humo (motor v74): pixel shader. Un disco suave de borde deshilachado
+// (ruido) que aparece, se abre y se desvanece al subir; mezcla con alfa premultiplicado
+// y no escribe profundidad (las bocanadas se funden entre si).
+uniform vec4 uHumo;
+
+in Vertex {
+    vec4 color;
+    vec2 lam;
+    float vida;
+    float semilla;
+    flat int camIndex;
+} iVert;
+
+layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
+
+float hash12(vec2 p)
+{
+    vec3 q = fract(vec3(p.xyx) * 0.1031);
+    q += dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+
+float ruido2(vec2 x)
+{
+    vec2 i = floor(x);
+    vec2 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), f.x),
+               mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+void main()
+{
+    TDCheckDiscard();
+    vec2 q = iVert.lam;
+    float r = length(q);
+    vec2 sem = vec2(iVert.semilla, iVert.semilla * 1.7);
+    float borde = 0.62 + 0.38 * (0.65 * ruido2(q * 2.3 + sem) + 0.35 * ruido2(q * 5.1 - sem));
+    float a = 1.0 - smoothstep(0.35 * borde, borde, r);
+    a *= smoothstep(0.0, 0.10, iVert.vida) * (1.0 - smoothstep(0.45, 1.0, iVert.vida));
+    a *= 0.85;
+    if (a < 0.01)
+        discard;
+    vec3 col = iVert.color.rgb * (0.80 + 0.30 * (1.0 - r) + 0.10 * ruido2(q * 3.0 + sem));
+    oFragColor[0] = TDOutputSwizzle(vec4(col * a, a));
+}
+"""
+
+HUMO_U = "parent().op('frame_u')['%s']"
+
+
+def humo_al_dia(base, crear=False):
+    """comun v53: el humo de la industria en la GPU. La geometria 'humo' (una lamina
+    instanciada por bocanada, desde i_humo) con el GLSL MAT mat_humo: el vertex
+    shader sube, hincha y deriva cada bocanada con el reloj humo_t de frame_u (a
+    saltos de stop-motion) y la gira hacia la camara; el pixel shader la dibuja
+    suave y transparente. Con Materialrespaldo, mat_particulas. Solo desde la
+    fase 11 (con 'particulas'); crear=True la rehace."""
+    if base.op('particulas') is None:
+        return False
+    vdat = get_or_make(base, 'textDAT', 'humo_vertex', 1180, 700)
+    vdat.text = HUMO_VERTEX
+    pdat = get_or_make(base, 'textDAT', 'humo_pixel', 1180, 620)
+    pdat.text = HUMO_PIXEL
+    mat = get_or_make(base, 'glslMAT', 'mat_humo', 1400, 660)
+    bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'humo_vertex'))
+    bien = bool(setp_any(mat, ['pdat', 'pixeldat'], 'humo_pixel')) and bien
+    try:
+        sec = mat.seq.vec
+        if sec.numBlocks < 1:
+            sec.numBlocks = 1
+    except Exception:
+        pass
+    bien = _uniforme(mat, 0, 'uHumo', (HUMO_U % 'humo_t', HUMO_U % 'humo_lfo', '0', '0')) and bien
+    # transparencia: alfa premultiplicado, sin escribir profundidad
+    mezcla = bool(setp_any(mat, ['blending'], True))
+    mezcla = setmenu(mat, ['srcblend'], ['one']) and mezcla
+    mezcla = setmenu(mat, ['destblend'], ['omsa', 'oneminussrcalpha', 'one_minus_src_alpha']) and mezcla
+    prof = bool(setp_any(mat, ['depthwriting', 'depthwrite', 'writedepth'], False))
+    geo = base.op('humo')
+    if geo is None or crear:
+        make_instanced(base, 'humo', 520, 940, 'mat_humo', sop='rect', quiet=True)
+        geo = base.op('humo')
+    if not setp_any(geo, ['instancea'], 'a'):
+        info('humo: pon a mano Instance 2 -> Color A = a (el desfase de cada bocanada)')
+    setexpr(geo, 'material', "'mat_particulas' if parent().par.Materialrespaldo else 'mat_humo'")
+    if bien:
+        ok('humo: en la GPU (mat_humo, GLSL): bocanadas suaves que suben y se funden, a saltos')
+    else:
+        fail('mat_humo: no pude enlazar los DAT (humo_vertex, humo_pixel) o el uniforme uHumo')
+    if not mezcla:
+        info('mat_humo: pon a mano en Common: Blending on, Source Color One, Destination Color '
+             'One Minus Source Alpha')
+    if not prof:
+        info('mat_humo: pon a mano en Common: Depth Writing off (que las bocanadas no se tapen)')
     return bien
 
 
@@ -2549,6 +2697,10 @@ def make_instanced(base, name, x, y, mat, sop='box', quiet=False):
         if not setp_any(s, ['sop', 'sops', 'soppath'], sop.split(':', 1)[1]):
             info('%s: no encontre el parametro SOP del Select SOP; pon a mano %s'
                  % (name, sop.split(':', 1)[1]))
+    elif sop == 'rect':                  # comun v53: una lamina de 1 x 1 centrada (el humo)
+        s = mk(geo, 'rectangleSOP', 'lamina', 0, 0)
+        for ax in ('sizex', 'sizey'):
+            setp(s, ax, 1.0)
     elif sop == 'sphere':
         s = mk(geo, 'sphereSOP', 'bola', 0, 0)
         for ax in ('radx', 'rady', 'radz'):

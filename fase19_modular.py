@@ -292,11 +292,12 @@ def _prueba_industria(t, m):
             W['modular'].update(ruido=ruido, saturacion=sat, lfo=lfo, activo=True)
             ins = m.build_instances(W, c, absTime.seconds + 10.0)
             ps = ins.get('particulas', [])
-            humo = [f for f in ps if tuple(round(v, 3) for v in f[9:12]) in
-                    [tuple(round(v, 3) for v in col) for col in m.COL_HUMO.values()]]
+            humo = ins.get('humo', [])          # motor v74: el humo, en la GPU
             ll = [f[7] for f in ps if tuple(round(v, 3) for v in f[9:12]) == llama]
-            vapor = [f[6] for f in ps if tuple(round(v, 3) for v in f[9:12]) == blanco]
-            return len(humo), max(ll or [0.0]), max(vapor or [0.0])
+            # el vapor de las torres respira con el LFO en el shader: lo que se mide es lo
+            # que le llega (humo_lfo) y que haya vapor marcado para respirar
+            vapor = [f for f in humo if tuple(round(v, 3) for v in f[9:12]) == blanco and f[12] >= m.HUMO_PENACHO]
+            return len(humo), max(ll or [0.0]), m.humo_reloj()[1] if vapor else 0.0
         h0, l0, v0 = medir(0.0, 0.0, 0.0)
         h1, l1, v1 = medir(1.0, 1.0, 1.0)
         t.check('industria: el ruido sube el humo (%d -> %d), la saturacion aviva la antorcha (%.3f -> %.3f) y el '

@@ -347,6 +347,7 @@ instanciar_modelos(base, m)
 terreno_al_dia(base, m)                 # v5: la malla del relieve (esfera desplazada por el mapa de alturas)
 make_constant(base, 'mat_particulas', 780, 860, (1.0, 1.0, 1.0))
 make_instanced(base, 'particulas', 520, 860, 'mat_particulas')
+humo_al_dia(base, crear=True)           # comun v53: el humo, en la GPU (mat_humo)
 set_render(base)
 
 leeme(base, 11, """FASE 11 - LA PIEL
@@ -1457,7 +1458,7 @@ def _prueba_industria_(t, m):
 
     def humo(inst, cols=None, celda=None):
         cols = cols or list(m.COL_HUMO.values())
-        return [f for f in inst.get('particulas', []) if tuple(round(v, 3) for v in f[9:12])
+        return [f for f in inst.get('humo', []) if tuple(round(v, 3) for v in f[9:12])     # motor v74
                 in [tuple(round(v, 3) for v in col) for col in cols]
                 and (celda is None or max(range(m.N), key=lambda x: sum(f[q] * m.NORMALS[x][q]
                                                                         for q in range(3))) == celda)]
@@ -1611,7 +1612,7 @@ def _prueba_industria_(t, m):
     W['paso'] = 0.125
     inst = m.build_instances(W, c, ahora)
     sq = m.seq_color(c, 2)
-    tenidas = [f for f in inst.get('particulas', []) if abs(f[9] - m.COL_HUMO['negro'][0]) > 0.05
+    tenidas = [f for f in inst.get('humo', []) if abs(f[9] - m.COL_HUMO['negro'][0]) > 0.05
                and abs(f[9] - m.COL_HUMO['gris'][0]) > 0.05 and abs(f[9] - m.COL_HUMO['blanco'][0]) > 0.02
                and f[9] > f[11]]
     t.check('tinte: una nota del SEQ2 sobre una central termica suelta una bocanada de su color (%d particulas)'

@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v73'
+MOTOR_VERSION = 'motor v74'
 
 import math
 
@@ -6486,49 +6486,69 @@ def color_humo(ctx, inf, i, tipo):
 
 
 def _humo(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, hecho, now, paso, out):
-    """El humo, el vapor y la llama de la planta terminada (particulas del motor):
-    bocanadas al pulso, cantidad por la ocupacion y Emisiones (y el ruido del
-    modular), sin pasar de Maxhumo. Una nota tine la bocanada de su chimenea
-    del color de su secuenciador; con STOP (huelga) el humo se queda quieto."""
+    """El humo, el vapor y la llama de la planta terminada: bocanadas al pulso,
+    cantidad por la ocupacion y Emisiones (y el ruido del modular), sin pasar de
+    Maxhumo. Una nota tine la bocanada de su chimenea del color de su secuenciador;
+    con STOP (huelga) el humo se queda quieto.
+    Motor v74: las bocanadas son filas fijas de la geometria 'humo' (una por
+    bocanada: su fuente, tamano, altura y desfase) que anima la GPU (mat_humo: sube,
+    se hincha, deriva y se desvanece con el reloj humo_t de frame_u, a saltos de
+    stop-motion). No dependen del pulso, asi que se guardan y no se recalculan en
+    cada foto. Las balizas y la llama siguen en 'particulas'."""
     if not hecho:
         return 0
-    parts = out.setdefault('particulas', [])
+    hum = out.setdefault('humo', [])
     tope = int(cfg.get('max_humo', 6000))
-    # a saltos de stop-motion (FOTOS_PASO por paso): las mismas filas se guardan y se
-    # copian mientras el humo no cambia de foto
-    kq = max(1, int(cfg.get('steps_per_beat', 4))) * FOTOS_PASO
-    tau_q = math.floor(ctx['bq'] * kq) / kq
     tin_q = 0
     if W['lat_s'][i] in (1, 2):
         It = 1.0 - (now - W['t_gate'][i]) / max(1e-6, cfg.get('pasos_tinte', 4) * paso)
         if 0.0 < It <= 1.0:
             tin_q = W['lat_s'][i] * 100 + int(It * 20)
-    clave = (i, tau_q, round(H, 4), round(sx, 4), round(sz, 4), id(inf['ex']), inf['epoca'], inf['etapa'],
-             tin_q, round(ctx['ruido'], 2), round(ctx['lfo'], 2), round(ctx['saturacion'], 2), ctx['carbon'](i),
-             cfg.get('emisiones'), p0)
+    clave = (i, round(H, 4), round(sx, 4), round(sz, 4), id(inf['ex']), inf['epoca'], inf['etapa'],
+             tin_q, round(ctx['ruido'], 2), ctx['carbon'](i), cfg.get('emisiones'), p0)
     filas = _HUMO.get(clave)
     if filas is None:
         if len(_HUMO) > 3000:
             _HUMO.clear()
         filas = _HUMO[clave] = []
-        ctx_q = dict(ctx, bq=tau_q, humo=[0])
-        _humo_filas(W, cfg, ctx_q, i, inf, ej, p0, sx, sz, H, now, paso, filas, 10 ** 6)
+        _humo_filas(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, now, paso, filas)
     libres = max(0, tope - ctx['humo'][0])
     usar = filas if len(filas) <= libres else filas[:libres]
-    parts.extend(usar)
+    hum.extend(usar)
     ctx['humo'][0] += len(usar)
-    return len(usar)
+    return len(usar) + _luces_humo(cfg, ctx, inf, ej, p0, sx, sz, H, out.setdefault('particulas', []))
 
 
 _HUMO = {}
 
+HUMO_PENACHO = 2.0      # en el canal a de una bocanada: desfase (0-1) + 2 si es vapor que respira con el LFO
 
-def _humo_filas(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, now, paso, parts, tope):
+
+def fila_humo(p, s, H, m_, col, desfase, penacho=False):
+    """Una bocanada de la geometria 'humo' (motor v74): la fuente p, el tamano de
+    partida s, la altura que sube H (hasta 0,55 x H), la deriva m_ (en sx, sy y sz:
+    el shader los lee como la longitud de cada eje), el color y en a el desfase
+    (0-1), mas HUMO_PENACHO si el vapor respira con el LFO."""
+    return [p[0], p[1], p[2], 0.0, 0.0, 0.0, max(1e-4, s), max(1e-4, H), max(1e-4, m_),
+            col[0], col[1], col[2], (desfase % 1.0) + (HUMO_PENACHO if penacho else 0.0)]
+
+
+def humo_reloj(frame=None):
+    """(tiempo, lfo) de mat_humo: el pulso en beats a saltos de stop-motion
+    (FOTOS_PASO por paso; STOP lo congela; 0 antes de la fase 17) y el LFO del
+    modular (0,5 sin senal o antes de la fase 19)."""
+    try:
+        W, c = world(), cfg_foto()
+        t = beat_stop(W, c) if c['nivel'] >= 17 else 0.0
+        lfo = float(W['modular'].get('lfo', 0.5)) if c['nivel'] >= 19 else 0.5
+        return t, lfo
+    except Exception:
+        return 0.0, 0.5
+
+
+def _humo_filas(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, now, paso, filas):
+    """Las bocanadas de la planta (filas de 'humo')."""
     k = 0
-    n = normal_i(i)
-    e_, t_ = tangents(n)
-    rx, ry = orient(n)                          # una vez por celda: todas las particulas miran igual
-    tau = ctx['bq']                             # en beats: STOP lo congela
     cant = cfg.get('emisiones', 0.5) * (1.0 + ctx['ruido'])
     tin = None
     if W['lat_s'][i] in (1, 2):
@@ -6536,37 +6556,43 @@ def _humo_filas(W, cfg, ctx, i, inf, ej, p0, sx, sz, H, now, paso, parts, tope):
         if 0.0 < It <= 1.0:
             tin = (seq_color(cfg, W['lat_s'][i]), It)
     for r in inf['ex']['fuentes']:
+        if r['tipo'] in ('baliza', 'llama'):
+            continue
         p = _en_edi(p0, ej, r['x'] * sx, r['y'] * H, r['z'] * sz)
         m_ = min(sx, sz)
-        if r['tipo'] == 'baliza':               # balizas de las chimeneas altas: parpadean
+        col = color_humo(ctx, inf, i, r['tipo'])
+        q_n = max(1, min(6, int(round(cant * (1 + inf['etapa']) * 0.8))))     # pocas bocanadas, grandes
+        pen = r['tipo'] == 'penacho'            # el vapor de las torres respira con el LFO
+        if pen:
+            q_n = max(3, q_n)
+        ct = _mix(col, tin[0], 0.85 * tin[1]) if tin is not None else col
+        for q in range(q_n):
+            filas.append(fila_humo(p, r['s'] * m_, H, m_, ct, q / float(q_n), pen))
+            k += 1
+    return k
+
+
+def _luces_humo(cfg, ctx, inf, ej, p0, sx, sz, H, parts):
+    """Las balizas de las chimeneas altas (parpadean) y la antorcha (crece con la
+    saturacion), en 'particulas', con el pulso a saltos."""
+    kq = max(1, int(cfg.get('steps_per_beat', 4))) * FOTOS_PASO
+    tau = math.floor(ctx['bq'] * kq) / kq
+    n = None
+    k = 0
+    for r in inf['ex']['fuentes']:
+        if r['tipo'] not in ('baliza', 'llama'):
+            continue
+        p = _en_edi(p0, ej, r['x'] * sx, r['y'] * H, r['z'] * sz)
+        n = n or _norm(p0)
+        m_ = min(sx, sz)
+        if r['tipo'] == 'baliza':
             if int(tau * 2.0) % 2 == 0:
                 parts.append(_row(p, n, 0.02 * m_, 0.02 * m_, 0.02 * m_, COL_BALIZA))
                 k += 1
             continue
-        if r['tipo'] == 'llama':                # la antorcha: incandescente, crece con la saturacion
-            g = 0.05 * m_ * (1.0 + 0.6 * ctx['saturacion'])
-            parts.append(_row(p, n, g, 2.2 * g * (0.8 + 0.4 * abs(math.sin(7.0 * tau))), g, COL_LLAMA))
-            k += 1
-            continue
-        col = color_humo(ctx, inf, i, r['tipo'])
-        q_n = max(1, min(6, int(round(cant * (1 + inf['etapa']) * 0.8))))     # pocas bocanadas, grandes
-        if r['tipo'] == 'penacho':              # el vapor de las torres respira con el LFO
-            q_n = max(3, q_n)
-        q_n = min(q_n, tope - ctx['humo'][0])
-        if q_n <= 0:
-            return k
-        respira = 1.0 + (0.5 * ctx['lfo'] if r['tipo'] == 'penacho' else 0.0)
-        ct = _mix(col, tin[0], 0.85 * tin[1]) if tin is not None else col
-        for q in range(q_n):
-            f = (tau / 2.0 + q / float(q_n)) % 1.0
-            s0 = r['s'] * m_ * (0.9 + 2.0 * f) * respira
-            h = H * (0.05 + 0.5 * f)
-            a_, b_ = 0.12 * f * m_, 0.05 * f * m_
-            c = ct if f < 0.5 else col          # la bocanada de la nota, del color de su SEQ
-            parts.append([p[0] + n[0] * h + e_[0] * a_ + t_[0] * b_, p[1] + n[1] * h + e_[1] * a_ + t_[1] * b_,
-                          p[2] + n[2] * h + e_[2] * a_ + t_[2] * b_, rx, ry, 0.0, s0, s0, s0, c[0], c[1], c[2]])
-        ctx['humo'][0] += q_n
-        k += q_n
+        g = 0.05 * m_ * (1.0 + 0.6 * ctx['saturacion'])
+        parts.append(_row(p, n, g, 2.2 * g * (0.8 + 0.4 * abs(math.sin(7.0 * tau))), g, COL_LLAMA))
+        k += 1
     return k
 
 
@@ -6745,12 +6771,10 @@ def _torres_cluster(W, cfg, ctx, i, pc, out):
             _fila_edi(ctx, p, mk, (0.42 * cw, Ht, 0.42 * cl_), PALETA_CIUDAD[info[i]['leng']][3], 0.6,
                       ctx['luces'](i), info[i]['leng']))
         k += 1
-        if ctx['humo'][0] < int(cfg.get('max_humo', 6000)):     # su penacho
+        if ctx['humo'][0] < int(cfg.get('max_humo', 6000)):     # su penacho (motor v74: en la GPU)
             for q in range(3):
-                f = (ctx['bq'] / 2.0 + q / 3.0) % 1.0
-                s0 = 0.18 * cw * (0.6 + 1.4 * f) * (1.0 + 0.5 * ctx['lfo'])
-                out.setdefault('particulas', []).append(_row(_add(p, nn, Ht * (1.0 + 0.5 * f)), nn, s0, s0, s0,
-                                                             COL_HUMO['blanco']))
+                out.setdefault('humo', []).append(fila_humo(_add(p, nn, 0.95 * Ht), 0.12 * cw, Ht, 0.3 * cw,
+                                                            COL_HUMO['blanco'], q / 3.0, True))
                 ctx['humo'][0] += 1
     ctx['res']['protagonistas'][pc['nombre']] = ctx['res']['protagonistas'].get(pc['nombre'], 0) + 1
     return k
@@ -11711,6 +11735,9 @@ def canales_frame(spec, frame=None):
         fl = (0.0, 0.0, 0.0, 0.0) + tuple(FLASH_COL)
     for canal, v in zip(DESTELLO_CANALES, fl):
         out.append((canal, float(v)))
+    t_h, lfo_h = humo_reloj(frame)             # motor v74: el reloj de mat_humo
+    out.append(('humo_t', float(t_h)))
+    out.append(('humo_lfo', float(lfo_h)))
     for canal, tipo, nombre, k in spec or ():
         try:
             if tipo == 'piel':
