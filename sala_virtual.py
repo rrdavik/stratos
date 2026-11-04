@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v10  (la esfera con coordenadas de textura; la miniatura es la camara cenital)'
+VERSION = 'sala_virtual v11  (diagnostico de la esfera: de donde sale su imagen y si llega)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -662,6 +662,100 @@ setp_any(pulsos, ['onpulse'], True)
 ok('latido_sala y pulsos_sala: la sala avanza cada fotograma; Palmada y Reiniciarsala')
 
 print_report()
+
+
+def diagnostico_esfera():
+    """v11: la cadena de la imagen de la esfera, eslabon a eslabon, para saber
+    donde se pierde (la esfera sale gris). Pasa el texto entero si sale FALLO."""
+    print('DIAGNOSTICO DE LA ESFERA')
+    print('-' * 66)
+
+    def linea(bien, que, detalle=''):
+        print('  %-6s %-28s %s' % ('OK' if bien else 'FALLO', que, detalle))
+
+    def errores(o):
+        try:
+            return '; '.join(x for x in (o.errors(recurse=False), o.warnings(recurse=False)) if x)
+        except Exception:
+            try:
+                return o.errors() or ''
+            except Exception:
+                return ''
+
+    def tam(o):
+        try:
+            return '%d x %d' % (o.width, o.height)
+        except Exception:
+            return '?'
+    try:
+        r = fase1.op('render')
+        linea(r is not None, 'FASE1/render', tam(r) if r is not None else 'no existe')
+        o = fase1.op('out_render')
+        linea(o is not None and bool(o.inputs), 'FASE1/out_render', (tam(o) + '  ' + errores(o)) if o else 'no existe')
+        for nm in ('imagen_fase1', 'esfera_imagen', 'esfera_mini'):
+            x = sala.op(nm)
+            linea(x is not None and not errores(x) and getattr(x, 'width', 0) > 1, nm,
+                  (tam(x) + '  ' + errores(x)) if x is not None else 'no existe')
+        x = sala.op('esfera_imagen')
+        if x is not None:
+            print('         esfera_imagen: crop left %s right %s (unidades %s)'
+                  % (x.par.cropleft.eval() if hasattr(x.par, 'cropleft') else '?',
+                     x.par.cropright.eval() if hasattr(x.par, 'cropright') else '?',
+                     getattr(getattr(x.par, 'cropleftunit', None), 'eval', lambda: '?')()))
+        m = sala.op('mat_esfera')
+        cm = str(getattr(m.par, 'colormap', None).eval()) if m is not None and hasattr(m.par, 'colormap') else None
+        destino = m.op(cm) if m is not None and cm else None
+        if destino is None and m is not None and cm:
+            destino = m.parent().op(cm)
+        linea(m is not None and destino is not None, 'mat_esfera Color Map',
+              '%r -> %s' % (cm, destino.path if destino is not None else 'NO ENCONTRADO'))
+        if m is not None:
+            print('         mat_esfera: tipo %s  color %s' % (m.OPType, tuple(
+                round(float(getattr(m.par, 'color' + ch).eval()), 2) if hasattr(m.par, 'color' + ch) else '?'
+                for ch in 'rgb')))
+        g = sala.op('esfera')
+        mat = str(g.par.material.eval()) if g is not None else ''
+        mo = g.op(mat) if g is not None and mat else None
+        if mo is None and g is not None and mat:
+            mo = g.parent().op(mat)
+        linea(g is not None and mo is not None and mo.path == (m.path if m else ''), 'esfera Material',
+              '%r -> %s' % (mat, mo.path if mo is not None else 'NO ENCONTRADO'))
+        if g is not None:
+            dibuja = [k.name for k in g.children if getattr(k, 'render', False)]
+            linea(dibuja == ['uvs'], 'esfera dibuja', ' '.join(dibuja) or 'nada')
+            u = g.op('uvs')
+            if u is not None:
+                try:
+                    tipo = '%s / eje %s' % (u.par.type.eval(), u.par.axis.eval())
+                except Exception:
+                    tipo = '?'
+                try:
+                    attrs = [a.name for a in u.pointAttribs] + [a.name for a in u.vertexAttribs]
+                except Exception:
+                    attrs = []
+                try:
+                    muestras = sorted(set(tuple(round(float(v), 2) for v in u.points[k].uv[:2])
+                                          for k in range(0, len(u.points), max(1, len(u.points) // 8))))
+                except Exception:
+                    muestras = '?'
+                linea('uv' in attrs, 'uvs (Texture SOP)', '%s  atributos %s  %s' % (tipo, attrs, errores(u)))
+                print('         uv de algunos puntos: %s' % (muestras,))
+            b = g.op('bola')
+            if b is not None:
+                try:
+                    print('         bola: tipo %s, %d puntos' % (b.par.type.eval(), len(b.points)))
+                except Exception:
+                    pass
+        r1 = sala.op('render_sala')
+        if r1 is not None:
+            linea('esfera' in str(r1.par.geometry.eval()).split(), 'render_sala dibuja la esfera',
+                  str(r1.par.geometry.eval()))
+    except Exception as e:
+        print('  FALLO  el diagnostico se paro: %s' % e)
+    print()
+
+
+diagnostico_esfera()
 
 
 # -----------------------------------------------------------------------------
