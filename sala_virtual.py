@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v11  (diagnostico de la esfera: de donde sale su imagen y si llega)'
+VERSION = 'sala_virtual v12  (diagnostico de la esfera; autoprueba del monitor corregida)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -904,14 +904,16 @@ def _prueba(t, m):
             and sala.op('esfera_mini').inputs[0] == sala.op('imagen_fase1'))
 
     # 5b. v2: estar en la sala
+    faltan = [nm for nm in ('salida_sala', 'monitor_sala', 'con_plano', 'render_plano', 'esfera_mini',
+                            'esfera_imagen', 'rotulo_sala') if sala.op(nm) is None]
     t.check('un monitor con todo: salida_sala <- monitor_sala, con el plano y el rotulo encima (v7: sin el '
-            'recuadro de la esfera)',
-            sala.op('salida_sala') is not None and sala.op('monitor_sala') is not None
-            and sala.op('con_esfera') is None
-            and sala.op('vista_plano') is None and str(sala.op('render_plano').par.camera.eval()) == 'vista_cenital'
-            and sala.op('esfera').op('uvs') is not None
-            and all(sala.op(nm) is not None for nm in ('con_plano', 'render_plano', 'esfera_mini',
-                                                       'esfera_imagen', 'rotulo_sala')))
+            'recuadro de la esfera)', not faltan and sala.op('con_esfera') is None,
+            ('faltan ' + ' '.join(faltan)) if faltan else ('sobra con_esfera' if sala.op('con_esfera') else ''))
+    cam_p = sala.op('render_plano').par.camera.eval() if sala.op('render_plano') is not None else None
+    cam_n = getattr(cam_p, 'name', str(cam_p).split('/')[-1])      # eval() da el operador, no el texto
+    t.check('v10: la miniatura es la camara cenital (sin vista_plano)',
+            sala.op('vista_plano') is None and cam_n == 'vista_cenital', 'camara %s' % cam_n)
+    t.check('v10: la esfera tiene su Texture SOP (uvs)', sala.op('esfera').op('uvs') is not None)
     t.check('v7: sin rayas bajo la esfera: el sub, dentro de la peana, no se dibuja',
             not any(abs(r[0] - por['sub'][0]['x']) < 1e-9 and abs(r[2] - por['sub'][0]['z']) < 1e-9
                     and abs(r[7] - sm.TAM_EQUIPO['sub'][1]) < 1e-9 for r in sm._filas_equipos(c, eq, 5.0)))
