@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v16  (el planeta derecho: volteo vertical; los volteos, en la pagina Sala)'
+VERSION = 'sala_virtual v17  (avisa y para las copias de la sala que no son /project1/SALA)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -105,6 +105,25 @@ if sala is None:
     ok('SALA: componente nuevo en /project1, al lado de FASE1')
 else:
     ok('SALA: ya existia; se conserva la tabla de equipos')
+
+# v17: otras salas (copias de SALA con otro nombre, como 'salap'). Este script solo usa
+# /project1/SALA; una copia sigue moviendo su publico y dibujando su render cada
+# fotograma. Se paran su latido y sus botones (no se borran) y se avisa.
+copias = []
+for o_ in op('/project1').children:
+    try:
+        es_copia = o_.isCOMP and o_.path != sala.path and o_.op('sala_motor') is not None
+    except Exception:
+        es_copia = False
+    if es_copia:
+        copias.append(o_.path)
+        for nm in ('latido_sala', 'pulsos_sala'):
+            d = o_.op(nm)
+            if d is not None:
+                setp(d, 'active', False)
+if copias:
+    info('OTRA SALA: %s es una copia de SALA (no la crea este script). Su latido y sus botones quedan '
+         'parados; si no tiene nada tuyo, borrala' % ', '.join(copias))
 
 sm_dat = get_or_make(sala, 'textDAT', 'sala_motor', -660, -340)
 src = read_text(CARPETA, 'sala_motor.py')
