@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v15  (el planeta ya no sale en espejo)'
+VERSION = 'sala_virtual v16  (el planeta derecho: volteo vertical; los volteos, en la pagina Sala)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -151,6 +151,17 @@ add_par(sala, page, 'float', 'Luzcasa', 'Luz de casa (para ver la sala a oscuras
 renew_default(sala, 'Luzcasa', 0.25, 0.06)          # v2: la sala, a oscuras como la de verdad
 add_par(sala, page, 'float', 'Luzesfera', 'Luz de la esfera sobre la sala (0 = apagada)', 0.0, 0.0, 1.0,
         clamp=True)
+add_par(sala, page, 'toggle', 'Espejosfera', 'Esfera: voltear la imagen en horizontal (espejo)', False)
+add_par(sala, page, 'toggle', 'Volteosfera', 'Esfera: voltear la imagen en vertical (boca abajo)', True)
+try:                    # v16: el planeta estaba boca abajo, no en espejo (una vez por proyecto)
+    if not sala.fetch('volteo_v16', False, search=False):
+        sala.store('volteo_v16', True)
+        sala.par.Espejosfera = False
+        sala.par.Volteosfera = True
+        sala.par.Espejosfera.default = False
+except Exception as e:
+    info('Espejosfera / Volteosfera: no pude ponerlos (%s); deja Espejosfera apagado y Volteosfera '
+         'encendido' % e)
 add_par(sala, page, 'float', 'Girosfera', 'Giro de la esfera (grados; 0 = el planeta mira a la sala)', 0.0,
         -180.0, 180.0)
 add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 = aire limpio)', 0.5, 0.0, 1.0,
@@ -500,18 +511,21 @@ if not recortada:
     info('esfera_imagen: no pude recortar el centro del render (Crop TOP: Left %.3f, Right %.3f)'
          % (lado, 1.0 - lado))
 mat_esfera = make_constant(sala, 'mat_esfera', 660, -40, (1.0, 1.0, 1.0))
-# v15: la proyeccion equirectangular del Texture SOP recorre la bola al reves que la
-# imagen: el planeta salia como en un espejo. Un Flip TOP en horizontal lo endereza
-# (el centro de la imagen no se mueve, asi que el giro hacia la entrada no cambia).
+# v15: un Flip TOP entre el recorte y el material endereza el planeta (el centro de la
+# imagen no se mueve al voltear, asi que el giro hacia la entrada no cambia).
 espejo = get_or_make(sala, 'flipTOP', 'esfera_espejo', 1100, -120)
 connect(espejo, recorte, 0)
-volteada = setp_any(espejo, ['flipx'], True)
+# v16: el planeta salia boca abajo, no en espejo: el volteo de la v15 (horizontal) lo
+# dejaba en espejo. Se voltea en vertical (Volteosfera) y no en horizontal
+# (Espejosfera); los dos, en la pagina Sala para cambiarlos en directo.
+volteada = (setexpr(espejo, 'flipx', "bool(parent().par.Espejosfera)")
+            and setexpr(espejo, 'flipy', "bool(parent().par.Volteosfera)"))
 if not volteada:
-    info('esfera_espejo: no pude voltear en horizontal; pon Flip X a mano o el planeta saldra en espejo')
+    info('esfera_espejo: no pude enlazar Flip X y Flip Y a Espejosfera y Volteosfera; ponlos a mano')
 imagen = setp_any(mat_esfera, ['colormap', 'map'], 'esfera_espejo')
 setp(esfera, 'material', 'mat_esfera')
 if imagen:
-    ok('esfera: 1 m con el centro de la imagen de FASE1, volteado (esfera_espejo; la real pide un mapa '
+    ok('esfera: 1 m con el centro de la imagen de FASE1, derecho (esfera_espejo; la real pide un mapa '
        'equirectangular 2:1)')
 else:
     info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = esfera_espejo')
@@ -983,8 +997,10 @@ def _prueba(t, m):
             sala.op('vista_plano') is None and cam_n == 'vista_cenital', 'camara %s' % cam_n)
     t.check('v10: la esfera tiene su Texture SOP (uvs)', sala.op('esfera').op('uvs') is not None)
     esp = sala.op('esfera_espejo')
-    t.check('v15: el planeta sin espejo: esfera_espejo voltea en horizontal y es el Color Map de la esfera',
-            esp is not None and bool(esp.par.flipx.eval()) and bool(esp.inputs)
+    t.check('v16: el planeta derecho: esfera_espejo voltea segun Espejosfera y Volteosfera y es el Color '
+            'Map de la esfera',
+            esp is not None and bool(esp.par.flipx.eval()) == bool(sala.par.Espejosfera.eval())
+            and bool(esp.par.flipy.eval()) == bool(sala.par.Volteosfera.eval()) and bool(esp.inputs)
             and str(sala.op('mat_esfera').par.colormap.val).split('/')[-1] == 'esfera_espejo')
     bola_ = sala.op('esfera').op('bola')
     try:
