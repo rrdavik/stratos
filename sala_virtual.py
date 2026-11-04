@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v14  (el planeta mira a la entrada; la Palmada sin el reloj adelantado)'
+VERSION = 'sala_virtual v15  (el planeta ya no sale en espejo)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -500,13 +500,21 @@ if not recortada:
     info('esfera_imagen: no pude recortar el centro del render (Crop TOP: Left %.3f, Right %.3f)'
          % (lado, 1.0 - lado))
 mat_esfera = make_constant(sala, 'mat_esfera', 660, -40, (1.0, 1.0, 1.0))
-imagen = setp_any(mat_esfera, ['colormap', 'map'], 'esfera_imagen')
+# v15: la proyeccion equirectangular del Texture SOP recorre la bola al reves que la
+# imagen: el planeta salia como en un espejo. Un Flip TOP en horizontal lo endereza
+# (el centro de la imagen no se mueve, asi que el giro hacia la entrada no cambia).
+espejo = get_or_make(sala, 'flipTOP', 'esfera_espejo', 1100, -120)
+connect(espejo, recorte, 0)
+volteada = setp_any(espejo, ['flipx'], True)
+if not volteada:
+    info('esfera_espejo: no pude voltear en horizontal; pon Flip X a mano o el planeta saldra en espejo')
+imagen = setp_any(mat_esfera, ['colormap', 'map'], 'esfera_espejo')
 setp(esfera, 'material', 'mat_esfera')
 if imagen:
-    ok('esfera: 1 m con el centro de la imagen de FASE1 (esfera_imagen; la real pide un mapa '
+    ok('esfera: 1 m con el centro de la imagen de FASE1, volteado (esfera_espejo; la real pide un mapa '
        'equirectangular 2:1)')
 else:
-    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = esfera_imagen')
+    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = esfera_espejo')
 # v2: la imagen de la esfera, pequena, para el monitor y para medir su color medio
 mini = get_or_make(sala, 'resolutionTOP', 'esfera_mini', 880, -40)
 connect(mini, sel_fase1, 0)
@@ -752,7 +760,7 @@ def diagnostico_esfera():
         linea(r is not None, 'FASE1/render', tam(r) if r is not None else 'no existe')
         o = fase1.op('out_render')
         linea(o is not None and bool(o.inputs), 'FASE1/out_render', (tam(o) + '  ' + errores(o)) if o else 'no existe')
-        for nm in ('imagen_fase1', 'esfera_imagen', 'esfera_mini'):
+        for nm in ('imagen_fase1', 'esfera_imagen', 'esfera_espejo', 'esfera_mini'):
             x = sala.op(nm)
             linea(x is not None and not errores(x) and getattr(x, 'width', 0) > 1, nm,
                   (tam(x) + '  ' + errores(x)) if x is not None else 'no existe')
@@ -965,7 +973,7 @@ def _prueba(t, m):
 
     # 5b. v2: estar en la sala
     faltan = [nm for nm in ('salida_sala', 'monitor_sala', 'con_plano', 'render_plano', 'esfera_mini',
-                            'esfera_imagen', 'rotulo_sala') if sala.op(nm) is None]
+                            'esfera_imagen', 'esfera_espejo', 'rotulo_sala') if sala.op(nm) is None]
     t.check('un monitor con todo: salida_sala <- monitor_sala, con el plano y el rotulo encima (v7: sin el '
             'recuadro de la esfera)', not faltan and sala.op('con_esfera') is None,
             ('faltan ' + ' '.join(faltan)) if faltan else ('sobra con_esfera' if sala.op('con_esfera') else ''))
@@ -974,6 +982,10 @@ def _prueba(t, m):
     t.check('v10: la miniatura es la camara cenital (sin vista_plano)',
             sala.op('vista_plano') is None and cam_n == 'vista_cenital', 'camara %s' % cam_n)
     t.check('v10: la esfera tiene su Texture SOP (uvs)', sala.op('esfera').op('uvs') is not None)
+    esp = sala.op('esfera_espejo')
+    t.check('v15: el planeta sin espejo: esfera_espejo voltea en horizontal y es el Color Map de la esfera',
+            esp is not None and bool(esp.par.flipx.eval()) and bool(esp.inputs)
+            and str(sala.op('mat_esfera').par.colormap.val).split('/')[-1] == 'esfera_espejo')
     bola_ = sala.op('esfera').op('bola')
     try:
         n_bola = len(bola_.points)
