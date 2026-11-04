@@ -17,20 +17,27 @@ QUE MONTA
                la zona que ve la camara (Zonaancho x Zonafondo, 5,4 x 4,5 m).
                v4: dibujada con lineas (geometria 'lineas', Constant MAT, se
                ve a oscuras): las doce aristas, el umbral de la puerta, una
-               reticula de 1 m en suelo y paredes y, sobre el suelo del
-               publico, una tarima, un borde claro y una reticula de 0,5 m.
+               reticula de 1 m en las paredes, una de 0,5 m en todo el suelo
+               (v5) y, en el suelo del publico, una tarima y un borde claro.
   EQUIPOS      la tabla 'equipos' (editable; relanzar no la pisa): la esfera
-               de LEDs de 1 m en la esquina del fondo a la izquierda, sobre su
+               de LEDs de 1 m en la esquina del fondo a la izquierda (v5: a
+               1 m de cada pared; si no lo esta, se rehace la tabla), sobre su
                peana con el subwoofer dentro; cuatro altavoces colgados en las
                esquinas; el microfono en lo alto, hacia el centro y lejos de la
                esfera y del estrobo; la camara cenital a 3,5 m; cuatro focos
                de bano (dos junto a la esfera, sin apuntarle) y el
                estroboscopio en el suelo junto a la esfera. Recolocar la
                rehace con las medidas de ahora.
-  PERSONAS     Personas (6) que entran por la puerta cada Llegada s (8),
-               pasean, se paran (v4: dentro del suelo del publico) y se van,
-               sin azar. Hacen ruido: pasos al
-               andar y palmadas o toses (Ruidopublico por segundo y persona;
+  PERSONAS     Personas (6), sin azar, segun la Demo (v5):
+                 paseo  entran por la puerta cada Llegada s (8), pasean, se
+                        paran dentro del suelo del publico y se van
+                 grupo  entran juntos en fila, hacen corro ante la esfera,
+                        se quedan casi un minuto y salen juntos
+                 llena  la sala se llena deprisa y se quedan casi quietos
+                 goteo  de uno en uno: van a la esfera, miran y se van
+                 vacia  nadie
+               Cada persona es un tronco de su altura (v5: sin cabeza).
+               Hacen ruido: pasos al andar y palmadas o toses (Ruidopublico por segundo y persona;
                Reaccion veces mas con el estrobo encendido).
   MICROFONO    el Script CHOP audio_mic: lo que oye el microfono virtual
                (pasos, palmadas, toses, el drone de los altavoces y el sub con
@@ -42,7 +49,8 @@ QUE MONTA
                Hzprueba, como mucho 3 Hz). Con Bruma, cada haz se ve en el aire
                (haces: un cono aditivo del color de su luz, del aparato al
                suelo). La esfera es una luz mas (luz_esfera): ilumina lo que
-               tiene cerca con el color medio de lo que muestra. Luzcasa, una
+               tiene cerca con el color medio de lo que muestra, con
+               Luzesfera (v5: 0 por defecto; dejaba una mancha en la pared). Luzcasa, una
                luz tenue para ver la sala con los focos apagados (0,06: la
                sala, a oscuras como la de verdad).
   ESFERA       la imagen de FASE1 (su Render TOP 'render') sobre una esfera.
@@ -83,7 +91,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v4  (la sala dibujada: suelo del publico con reticula, aristas, vista desde la entrada)'
+VERSION = 'sala_virtual v5  (demos de publico, la esfera a 1 m de la esquina, reticula en todo el suelo, sin cabezas)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -122,7 +130,9 @@ add_par(sala, page, 'float', 'Zonaancho', 'Zona de la camara: ancho (m)', 5.4, 1
 add_par(sala, page, 'float', 'Zonafondo', 'Zona de la camara: fondo (m)', 4.5, 1.0, 30.0)
 add_par(sala, page, 'pulse', 'Recolocar', 'Recolocar los equipos con estas medidas (rehace la tabla)')
 add_par(sala, page, 'int', 'Personas', 'Personas', 6, 0, 30, clamp=True)
-add_par(sala, page, 'float', 'Llegada', 'Segundos entre dos llegadas', 8.0, 0.0, 120.0, clamp=True)
+add_par(sala, page, 'menu', 'Demo', 'Demo de visita del publico', 'paseo', menu=sm.DEMOS,
+        menu_labels=sm.DEMOS_ETIQUETAS)
+add_par(sala, page, 'float', 'Llegada', 'Paseo: segundos entre dos llegadas', 8.0, 0.0, 120.0, clamp=True)
 add_par(sala, page, 'float', 'Ruidopublico', 'Palmadas y toses por segundo y persona', 0.05, 0.0, 2.0, clamp=True)
 add_par(sala, page, 'float', 'Reaccion', 'Con el estrobo, el publico hace x veces mas ruido', 3.0, 0.0, 10.0, clamp=True)
 add_par(sala, page, 'float', 'Volumendrone', 'Volumen del drone (altavoces y sub)', 0.5, 0.0, 2.0, clamp=True)
@@ -134,6 +144,8 @@ add_par(sala, page, 'menu', 'Modoluz', 'Luz de la sala', 'prueba', menu=sm.MODOS
 add_par(sala, page, 'float', 'Hzprueba', 'Prueba: destellos por segundo del estrobo (tope 3)', 2.5, 0.0, 3.0, clamp=True)
 add_par(sala, page, 'float', 'Luzcasa', 'Luz de casa (para ver la sala a oscuras)', 0.06, 0.0, 1.0, clamp=True)
 renew_default(sala, 'Luzcasa', 0.25, 0.06)          # v2: la sala, a oscuras como la de verdad
+add_par(sala, page, 'float', 'Luzesfera', 'Luz de la esfera sobre la sala (0 = apagada)', 0.0, 0.0, 1.0,
+        clamp=True)
 add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 = aire limpio)', 0.5, 0.0, 1.0,
         clamp=True)
 VISTAS_ETIQUETAS = ['Visitante (pasea entre el publico)', 'Entrada (la sala desde la puerta)', 'Orbita (desde fuera)',
@@ -184,10 +196,10 @@ if tabla is None:
        '4 focos y estrobo. Editala a mano: un foco mas es una fila mas')
 else:
     ok('equipos: se conserva como esta (%d filas)' % max(0, tabla.numRows - 1))
-if not sm.esfera_en_esquina():          # v4: la esfera, siempre en una esquina del fondo
+if not sm.esfera_en_esquina():          # v5: la esfera, en una esquina del fondo y a 1 m de cada pared
     sm.recolocar()
-    ok('equipos: la esfera no estaba en una esquina del fondo; tabla rehecha (esfera al fondo a la '
-       'izquierda, con su sub, su estrobo y los focos que la acompanan)')
+    ok('equipos: la esfera no estaba a 1 m de las paredes de su esquina; tabla rehecha (esfera al fondo a '
+       'la izquierda, con su sub, su estrobo y los focos que la acompanan)')
 
 # -----------------------------------------------------------------------------
 # OPERADORES
@@ -327,10 +339,12 @@ setmenu(mat_haz, ['cullface', 'cull'], ['neither', 'none', 'off'], None)
 instanciado('sala_caja', 0, 200, 'mat_sala')
 instanciado('equipos_geo', 0, 120, 'mat_equipos')
 instanciado('personas', 0, 40, 'mat_personas')
-instanciado('cabezas', 0, -120, 'mat_personas', sop='sphere')
+for vieja in ('cabezas', 'i_cabezas'):          # v5: el publico, sin cabeza
+    if sala.op(vieja) is not None:
+        sala.op(vieja).destroy()
 instanciado('haces', 0, 440, 'mat_haz', sop='haz')
 instanciado('lineas', 0, 520, 'mat_lineas')
-ok('sala_caja, equipos_geo, personas y cabezas: suelo, paredes, el suelo del publico, puerta, aparatos y '
+ok('sala_caja, equipos_geo y personas (un tronco, sin cabeza): suelo, paredes, el suelo del publico, puerta, aparatos y '
    'publico; haces: la luz de cada foco y del estrobo en la bruma (Bruma); lineas: aristas, umbral de la '
    'puerta, reticula de 1 m y la del suelo del publico (0,5 m)')
 
@@ -455,7 +469,7 @@ setp(plano, 'rx', -90.0)
 setexpr(plano, 'ty', "%s.plano('ty', absTime.frame)" % SM)
 orto = setmenu(plano, ['projection'], ['ortho', 'orthographic'], None)
 setexpr(plano, 'orthowidth', "%s.plano('ancho', absTime.frame)" % SM)
-geos = 'sala_caja lineas equipos_geo personas cabezas esfera haces'
+geos = 'sala_caja lineas equipos_geo personas esfera haces'
 r1 = get_or_make(sala, 'renderTOP', 'render_sala', 660, 360)
 setexpr(r1, 'camera', "'vista_cenital' if str(parent().par.Vista) == 'cenital' else 'vista'")
 setp(r1, 'geometry', geos)
@@ -472,13 +486,13 @@ setp(luz_plano, 'rx', -60.0)
 setp(luz_plano, 'dimmer', 0.5)
 rp = get_or_make(sala, 'renderTOP', 'render_plano', 660, 120)
 setp(rp, 'camera', 'vista_plano')
-setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas cabezas esfera')
+setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas esfera')
 setp(rp, 'lights', ' '.join(luces + ['plano_luz']))
 setp_any(rp, ['resolutionw'], 320)
 setp_any(rp, ['resolutionh'], 240)
 r2 = get_or_make(sala, 'renderTOP', 'render_cenital', 660, 280)
 setp(r2, 'camera', 'vista_cenital')
-setp(r2, 'geometry', 'sala_caja personas cabezas')
+setp(r2, 'geometry', 'sala_caja personas')
 setp(r2, 'lights', 'luz_casa')
 setp_any(r2, ['resolutionw'], 320)
 setp_any(r2, ['resolutionh'], 288)
@@ -592,7 +606,7 @@ print_report()
 def prueba(t):
     guarda = {}
     for o, nm in ((sala, 'Personas'), (sala, 'Ruidopublico'), (sala, 'Volumendrone'), (sala, 'Modoluz'),
-                  (sala, 'Hzprueba'), (sala, 'Activa'), (sala, 'Vista'), (sala, 'Bruma'),
+                  (sala, 'Hzprueba'), (sala, 'Activa'), (sala, 'Vista'), (sala, 'Bruma'), (sala, 'Demo'),
                   (fase1, 'Fuentemic'), (fase1, 'Chopmic')):
         try:
             guarda[(o, nm)] = getattr(o.par, nm).eval()
@@ -614,6 +628,7 @@ def prueba(t):
 
 def _prueba(t, m):
     sala.par.Activa = True
+    sala.par.Demo = 'paseo'
     c = sm.cfg()
     eq = sm.equipos()
     por = dict((tp, [e for e in eq if e['tipo'] == tp]) for tp in sm.TIPOS)
@@ -623,7 +638,7 @@ def _prueba(t, m):
     # 1. los equipos
     t.check('equipos: la esfera en una esquina del fondo, el sub debajo, 4 altavoces colgados, el micro '
             'en lo alto, la camara a 3,5 m, 4 focos y 1 estrobo',
-            esf is not None and esf['z'] < -hz + 1.5 and abs(esf['x']) > hx - 1.5
+            esf is not None and esf['z'] < 0.0 and sm.esfera_en_esquina(c, eq)
             and len(por['sub']) == 1 and distancia_xz(por['sub'][0], esf) < 0.3 and por['sub'][0]['y'] < esf['y']
             and len(por['altavoz']) == 4 and all(e['y'] >= 2.5 for e in por['altavoz'])
             and len(por['micro']) == 1 and por['micro'][0]['y'] >= 2.5
@@ -756,7 +771,9 @@ def _prueba(t, m):
     t.check('v4: entrada, desde detras de la puerta y por encima de la gente, mirando hacia abajo y al fondo',
             sm.vista('tz') > hz and sm.vista('ty') > sm.OJOS and sm.vista('my') < sm.vista('ty')
             and sm.vista('mz') < 0.0)
-    t.check('v4: la esfera en una esquina del fondo', sm.esfera_en_esquina(c, eq))
+    mg = sm.margen_esfera(c, eq)
+    t.check('v5: la esfera en una esquina del fondo, a 1 m de cada pared', sm.esfera_en_esquina(c, eq),
+            '%.2f m al fondo, %.2f m al lado' % mg if mg else 'sin esfera')
     lin = sm._filas_lineas(c)
     zx, zz = sm.zona(c)
     t.check('v4: la sala dibujada: aristas, reticula y el borde del suelo del publico',
@@ -768,11 +785,46 @@ def _prueba(t, m):
     sala.par.Personas = 4
     c = sm.cfg()
     ps = sm.personas(c, 120.0, ev)
-    cab = sm._filas_cabezas(c, eq, 120.0)
     cue = sm._filas_personas(c, eq, 120.0)
-    t.check('el publico tiene cabeza: una por persona, encima de su cuerpo',
-            len(cab) == len(cue) == len(ps) > 0
-            and all(abs(k[1] - (q[7] + 0.04 + 0.5 * sm.CABEZA)) < 1e-6 for k, q in zip(cab, cue)))
+    t.check('v5: el publico sin cabeza: un tronco por persona, de toda su altura',
+            len(cue) == len(ps) > 0 and sala.op('cabezas') is None
+            and all(abs(q[7] - p[3]) < 1e-9 for q, p in zip(cue, ps)))
+    # v5: las demos de visita
+    sala.par.Personas = 8
+    for demo in sm.DEMOS:
+        sala.par.Demo = demo
+        c = sm.cfg()
+        sm._PLANES.clear()
+        dentro, lejos, maximo = True, True, 0
+        for k in range(240):
+            ps = sm.personas(c, 1.0 + 2.5 * k, ev)
+            maximo = max(maximo, len(ps))
+            for i, x, z, h, andando in ps:
+                dentro = dentro and abs(x) <= hx - 0.3 and abs(z) <= hz
+                lejos = lejos and all(math.hypot(x - p[0], z - p[2]) > 0.9 for p in ev)
+        if demo == 'vacia':
+            t.check('demo vacia: nadie en la sala', maximo == 0)
+            continue
+        t.check('demo %s: el publico dentro de la sala y lejos de la esfera y del estrobo' % demo,
+                dentro and lejos and maximo > 0, 'hasta %d a la vez' % maximo)
+    sala.par.Demo = 'grupo'
+    c = sm.cfg()
+    sm._PLANES.clear()
+    ps = sm.personas(c, 40.0, ev)
+    t.check('demo grupo: a los 40 s estan todos en corro ante la esfera',
+            len(ps) == 8 and all(abs(math.hypot(x - esf['x'], z - esf['z']) - sm.CORRO) < 1.2
+                                 for _, x, z, _, _ in ps), '%d en la sala' % len(ps))
+    sala.par.Demo = 'goteo'
+    c = sm.cfg()
+    sm._PLANES.clear()
+    t.check('demo goteo: de uno en uno', max(len(sm.personas(c, 1.0 + 2.0 * k, ev)) for k in range(300)) <= 2)
+    sala.par.Demo = 'llena'
+    c = sm.cfg()
+    sm._PLANES.clear()
+    t.check('demo llena: a los 40 s estan todos', len(sm.personas(c, 40.0, ev)) == 8)
+    sala.par.Demo = 'paseo'
+    sala.par.Personas = 4
+    c = sm.cfg()
     sala.par.Modoluz = 'prueba'
     sala.par.Bruma = 0.5
     c = sm.cfg()
@@ -787,7 +839,7 @@ def _prueba(t, m):
     t.check('sin Bruma o con la luz apagada, ningun haz',
             not sm._filas_haces(dict(c, bruma=0.0), eq, 5.0)
             and not sm._filas_haces(dict(c, modo_luz=0), eq, 5.0))
-    t.check('la esfera es una luz: luz_esfera, en su sitio y con el color medio de su imagen',
+    t.check('la esfera es una luz: luz_esfera, en su sitio y con el color medio de su imagen (Luzesfera)',
             sala.op('luz_esfera') is not None and abs(sm.luz_esfera('ty') - esf['y']) < 1e-9
             and all(0.0 <= sm.luz_esfera(ch) <= 1.0 for ch in 'rgb'))
     t.check('el rotulo del monitor: la sala, la luz y la vista',
