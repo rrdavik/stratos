@@ -40,9 +40,18 @@
 #               bruma (Bruma), la esfera ilumina la sala con el color medio de
 #               lo que muestra, el publico tiene cabeza y sombra, y un plano
 #               cenital y un rotulo completan el monitor (monitor_sala).
+#   v3, LA SALA DIBUJADA
+#               Vista = entrada (por defecto): desde detras de la puerta y por
+#               encima de la gente, mirando al fondo, con la esfera en su
+#               esquina. El suelo del publico (Zonaancho x Zonafondo) se
+#               delimita con una tarima, un borde claro y una reticula de
+#               0,5 m; el publico se para dentro. Las aristas de la sala, el
+#               umbral de la puerta y una reticula de 1 m en suelo y paredes
+#               (geometria 'lineas', Constant MAT) dan la perspectiva aunque
+#               la sala este a oscuras.
 # =============================================================================
 
-SALA_VERSION = 'sala v2'
+SALA_VERSION = 'sala v3'
 
 import math
 
@@ -78,6 +87,16 @@ COL_SUELO = (0.10, 0.10, 0.11)
 COL_PARED = (0.17, 0.17, 0.18)
 COL_ZONA = (0.10, 0.38, 0.42)
 COL_PUERTA = (0.55, 0.40, 0.12)
+COL_TARIMA = (0.07, 0.17, 0.19)         # v3: el suelo del publico, algo mas claro que el resto
+# v3: las lineas (Constant MAT: se ven aunque la sala este a oscuras)
+LIN_ARISTA = (0.55, 0.55, 0.58)         # las aristas de la sala
+LIN_PARED = (0.16, 0.16, 0.18)          # la reticula de 1 m en paredes y suelo
+LIN_ZONA = (0.15, 0.75, 0.80)           # el borde del suelo del publico
+LIN_GRID = (0.06, 0.32, 0.35)           # su reticula
+GRID_ZONA = 0.5                         # m entre dos lineas de la reticula del publico
+GRID_SALA = 1.0                         # m entre dos lineas de la reticula de la sala
+GROSOR = 0.07                           # m: el grueso de una arista (mas que la pared, 0,05: si no, queda dentro)
+PUERTA_ANCHO = 1.2
 COL_EQUIPO = dict(altavoz=(0.05, 0.05, 0.06), sub=(0.05, 0.05, 0.06), micro=(0.75, 0.75, 0.78),
                   camara=(0.35, 0.35, 0.38), foco=(0.20, 0.20, 0.22), estrobo=(0.30, 0.30, 0.32),
                   esfera=(0.22, 0.22, 0.24))
@@ -194,8 +213,15 @@ def foco_alcanza(e, punto, radio=0.0):
 _PLANES = {}
 
 
+def zona(cfg):
+    """(medio ancho, medio fondo) del suelo del publico (v3): Zonaancho x
+    Zonafondo, centrado, sin pasar del margen de las paredes."""
+    return (max(0.3, min(0.5 * cfg.get('zona_ancho', cfg['ancho']), 0.5 * cfg['ancho'] - MARGEN)),
+            max(0.3, min(0.5 * cfg.get('zona_fondo', cfg['fondo']), 0.5 * cfg['fondo'] - MARGEN)))
+
+
 def _punto(cfg, i, v, k, evitar):
-    hx, hz = 0.5 * cfg['ancho'] - MARGEN, 0.5 * cfg['fondo'] - MARGEN
+    hx, hz = zona(cfg)                  # v3: el publico se para en su suelo (antes, en toda la sala)
     p = None
     for intento in range(10):
         p = (-hx + 2 * hx * h01(i, v, k, intento, 1), -hz + 2 * hz * h01(i, v, k, intento, 2))
@@ -205,7 +231,8 @@ def _punto(cfg, i, v, k, evitar):
 
 
 def _clave(cfg, evitar):
-    return (cfg['ancho'], cfg['fondo'], cfg['llegada'], tuple(evitar))
+    return (cfg['ancho'], cfg['fondo'], cfg.get('zona_ancho'), cfg.get('zona_fondo'), cfg['llegada'],
+            tuple(evitar))
 
 
 def plan(cfg, i, hasta, evitar=()):
@@ -572,7 +599,7 @@ def ojos(c=None, frame=None):
         x, z = paseo_visitante(c, ahora(), evitar_de(eq))
         return (x, OJOS, z), mira
     if modo == 'entrada':
-        return (0.0, OJOS, 0.5 * c['fondo'] - 0.5), mira
+        return vista_entrada(c, esf)
     if modo == 'cenital':
         cam = next((e for e in eq if e['tipo'] == 'camara'), None)
         p = cam['pos'] if cam is not None else (0.0, 3.5, 0.0)
@@ -582,6 +609,23 @@ def ojos(c=None, frame=None):
     return (R * math.sin(a), _p('Alturavista', 5.0), R * math.cos(a)), (0.0, 1.0, 0.0)
 
 
+ENTRADA_ATRAS = 2.2         # v3: m por detras de la puerta (la pared de la entrada esta abierta)
+ENTRADA_ALTO = 2.8          # m: algo por encima de los ojos, para ver la reticula del suelo
+
+
+def vista_entrada(c, esf=None):
+    """(posicion, a donde mira) de la vista entrada (v3): un poco por detras
+    de la puerta y por encima de la gente, mirando hacia abajo y hacia el
+    fondo, entre el centro del suelo del publico y la esfera. Se ven la
+    reticula del publico entera, la esfera en su esquina y las paredes en
+    perspectiva."""
+    hz = 0.5 * c['fondo']
+    p = (0.0, min(ENTRADA_ALTO, c['alto'] - 0.3), hz + ENTRADA_ATRAS)
+    if esf is None:
+        return p, (0.0, 0.0, -0.25 * hz)
+    return p, (0.3 * esf['x'], 0.25 * esf['y'], 0.2 * esf['z'])
+
+
 def vista(que, frame=None):
     """La camara principal (Vista): tx ty tz de su posicion, mx my mz de a
     donde mira (el Null 'mirada'), y fov."""
@@ -589,7 +633,8 @@ def vista(que, frame=None):
         c = cfg()
         p, m = ojos(c)
         if que == 'fov':
-            return 75.0 if VISTAS[c['vista'] % len(VISTAS)] == 'cenital' else 62.0
+            modo = VISTAS[c['vista'] % len(VISTAS)]
+            return {'cenital': 75.0, 'entrada': 80.0}.get(modo, 62.0)
         if que in ('mx', 'my', 'mz'):
             return m[('mx', 'my', 'mz').index(que)]
         return p[('tx', 'ty', 'tz').index(que)]
@@ -648,15 +693,74 @@ def luz_esfera(que, frame=None):
 def _filas_sala(c):
     W, F, H = c['ancho'], c['fondo'], c['alto']
     hx, hz = W / 2.0, F / 2.0
-    zx, zz = c['zona_ancho'] / 2.0, c['zona_fondo'] / 2.0
-    g = 0.03
-    f = [[0, -0.02, 0, 0, 0, 0, W, 0.02, F] + list(COL_SUELO),
-         [0, 0, -hz, 0, 0, 0, W, H, 0.05] + list(COL_PARED),
-         [-hx, 0, 0, 0, 0, 0, 0.05, H, F] + list(COL_PARED),
-         [hx, 0, 0, 0, 0, 0, 0.05, H, F] + list(COL_PARED),
-         [0, 0, hz, 0, 0, 0, 1.2, 0.01, 0.12] + list(COL_PUERTA)]
-    for x, z, sx, sz in ((0, -zz, 2 * zx, g), (0, zz, 2 * zx, g), (-zx, 0, g, 2 * zz), (zx, 0, g, 2 * zz)):
-        f.append([x, 0.0, z, 0, 0, 0, sx, 0.005, sz] + list(COL_ZONA))
+    zx, zz = zona(c)
+    return [[0, -0.02, 0, 0, 0, 0, W, 0.02, F] + list(COL_SUELO),
+            [0, 0, -hz, 0, 0, 0, W, H, 0.05] + list(COL_PARED),
+            [-hx, 0, 0, 0, 0, 0, 0.05, H, F] + list(COL_PARED),
+            [hx, 0, 0, 0, 0, 0, 0.05, H, F] + list(COL_PARED),
+            [0, 0, hz, 0, 0, 0, PUERTA_ANCHO, 0.01, 0.12] + list(COL_PUERTA),
+            [0, 0, 0, 0, 0, 0, 2 * zx, 0.006, 2 * zz] + list(COL_TARIMA)]     # v3: el suelo del publico
+
+
+def _marcas(a, b, paso):
+    """Las posiciones de a a b (incluidos) cada 'paso', centradas."""
+    n = max(1, int(round((b - a) / paso)))
+    return [a + (b - a) * k / float(n) for k in range(n + 1)]
+
+
+def _linea(p, q, col, g=GROSOR):
+    """Una linea recta de p a q, paralela a un eje: una caja fina (la caja
+    tiene la base en y = 0)."""
+    sx, sy, sz = (max(g, abs(q[0] - p[0])), max(g, abs(q[1] - p[1])), max(g, abs(q[2] - p[2])))
+    return [0.5 * (p[0] + q[0]), min(p[1], q[1]), 0.5 * (p[2] + q[2]), 0, 0, 0, sx, sy, sz] + list(col)
+
+
+def _filas_lineas(c):
+    """v3: el dibujo de la sala, para leerla en perspectiva aunque este a
+    oscuras: las doce aristas, el umbral de la puerta, una reticula de 1 m en
+    el suelo y en las tres paredes, y el suelo del publico (Zonaancho x
+    Zonafondo) con su borde y su reticula de GRID_ZONA m, donde se pararia
+    la gente."""
+    W, F, H = c['ancho'], c['fondo'], c['alto']
+    hx, hz = W / 2.0, F / 2.0
+    zx, zz = zona(c)
+    y0, yz = 0.004, 0.010           # la reticula de la sala y, encima, la del publico
+    f = []
+    # reticula de la sala: suelo y las tres paredes
+    for x in _marcas(-hx, hx, GRID_SALA)[1:-1]:
+        f.append(_linea((x, y0, -hz), (x, y0, hz), LIN_PARED, 0.012))
+        f.append(_linea((x, 0.0, -hz + 0.03), (x, H, -hz + 0.03), LIN_PARED, 0.012))
+    for z in _marcas(-hz, hz, GRID_SALA)[1:-1]:
+        f.append(_linea((-hx, y0, z), (hx, y0, z), LIN_PARED, 0.012))
+        for x in (-hx + 0.03, hx - 0.03):
+            f.append(_linea((x, 0.0, z), (x, H, z), LIN_PARED, 0.012))
+    for y in _marcas(0.0, H, GRID_SALA)[1:-1]:
+        f.append(_linea((-hx, y, -hz + 0.03), (hx, y, -hz + 0.03), LIN_PARED, 0.012))
+        for x in (-hx + 0.03, hx - 0.03):
+            f.append(_linea((x, y, -hz), (x, y, hz), LIN_PARED, 0.012))
+    # el suelo del publico: reticula y borde
+    for x in _marcas(-zx, zx, GRID_ZONA)[1:-1]:
+        f.append(_linea((x, yz, -zz), (x, yz, zz), LIN_GRID, 0.015))
+    for z in _marcas(-zz, zz, GRID_ZONA)[1:-1]:
+        f.append(_linea((-zx, yz, z), (zx, yz, z), LIN_GRID, 0.015))
+    for p, q in (((-zx, yz, -zz), (zx, yz, -zz)), ((-zx, yz, zz), (zx, yz, zz)),
+                 ((-zx, yz, -zz), (-zx, yz, zz)), ((zx, yz, -zz), (zx, yz, zz))):
+        f.append(_linea(p, q, LIN_ZONA, 0.04))
+    # las doce aristas
+    for y in (0.0, H - GROSOR):
+        f.append(_linea((-hx, y, -hz), (hx, y, -hz), LIN_ARISTA))
+        f.append(_linea((-hx, y, hz), (hx, y, hz), LIN_ARISTA))
+        f.append(_linea((-hx, y, -hz), (-hx, y, hz), LIN_ARISTA))
+        f.append(_linea((hx, y, -hz), (hx, y, hz), LIN_ARISTA))
+    for x in (-hx, hx):
+        for z in (-hz, hz):
+            f.append(_linea((x, 0.0, z), (x, H, z), LIN_ARISTA))
+    # la puerta: su umbral en el suelo, con un tope a cada lado (sin marco
+    # alto: la vista entrada mira a traves de ella y lo tendria delante)
+    px = 0.5 * PUERTA_ANCHO
+    f.append(_linea((-px, yz, hz - 0.06), (px, yz, hz - 0.06), COL_PUERTA, 0.06))
+    for x in (-px, px):
+        f.append(_linea((x, 0.0, hz - 0.06), (x, 0.25, hz - 0.06), COL_PUERTA, 0.06))
     return f
 
 
@@ -720,13 +824,15 @@ def _filas_haces(c, eq, t):
 
 
 def filas(nombre):
-    """Las instancias de los Script CHOP i_sala, i_equipos, i_personas y
-    (v2) i_cabezas e i_haces."""
+    """Las instancias de los Script CHOP i_sala, i_equipos, i_personas,
+    (v2) i_cabezas e i_haces y (v3) i_lineas."""
     c = cfg()
     eq = equipos()
     t = ahora()
     if nombre == 'i_sala':
         return _filas_sala(c)
+    if nombre == 'i_lineas':
+        return _filas_lineas(c)
     if nombre == 'i_equipos':
         return _filas_equipos(c, eq, t)
     if nombre == 'i_personas':
@@ -800,6 +906,15 @@ def palmada(donde=None):
     _SALA['manuales'].append((None, 'palmada', tuple(donde), len(_SALA['manuales']) + 1))
     _SALA['forzar'] = True
     return donde
+
+
+def esfera_en_esquina(c=None, eq=None):
+    """v3: la esfera esta en una esquina del fondo de la sala."""
+    c = c or cfg()
+    eq = equipos() if eq is None else eq
+    esf = next((e for e in eq if e['tipo'] == 'esfera'), None)
+    hx, hz = 0.5 * c['ancho'], 0.5 * c['fondo']
+    return esf is not None and esf['z'] < -hz + 1.5 and abs(esf['x']) > hx - 1.5
 
 
 def recolocar():
