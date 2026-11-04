@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v18  (el planeta se inclina hacia la camara de la entrada: Inclinasfera)'
+VERSION = 'sala_virtual v19  (la imagen de FASE1, de frente sobre la esfera: como se ve en FASE1)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -171,16 +171,15 @@ renew_default(sala, 'Luzcasa', 0.25, 0.06)          # v2: la sala, a oscuras com
 add_par(sala, page, 'float', 'Luzesfera', 'Luz de la esfera sobre la sala (0 = apagada)', 0.0, 0.0, 1.0,
         clamp=True)
 add_par(sala, page, 'toggle', 'Espejosfera', 'Esfera: voltear la imagen en horizontal (espejo)', False)
-add_par(sala, page, 'toggle', 'Volteosfera', 'Esfera: voltear la imagen en vertical (boca abajo)', True)
-try:                    # v16: el planeta estaba boca abajo, no en espejo (una vez por proyecto)
-    if not sala.fetch('volteo_v16', False, search=False):
-        sala.store('volteo_v16', True)
-        sala.par.Espejosfera = False
-        sala.par.Volteosfera = True
-        sala.par.Espejosfera.default = False
+add_par(sala, page, 'toggle', 'Volteosfera', 'Esfera: voltear la imagen en vertical (boca abajo)', False)
+try:                    # v19: la imagen va de frente y derecha: sin volteos (una vez por proyecto)
+    if not sala.fetch('volteo_v19', False, search=False):
+        sala.store('volteo_v19', True)
+        for nm in ('Espejosfera', 'Volteosfera'):
+            getattr(sala.par, nm).val = False
+            getattr(sala.par, nm).default = False
 except Exception as e:
-    info('Espejosfera / Volteosfera: no pude ponerlos (%s); deja Espejosfera apagado y Volteosfera '
-         'encendido' % e)
+    info('Espejosfera / Volteosfera: no pude apagarlos (%s); apagalos a mano' % e)
 add_par(sala, page, 'float', 'Inclinasfera', 'Inclinacion de la esfera (grados hacia arriba; 0 = mira '
         'a la camara de la entrada)', 0.0, -90.0, 90.0)
 add_par(sala, page, 'float', 'Girosfera', 'Giro de la esfera (grados; 0 = el planeta mira a la sala)', 0.0,
@@ -437,79 +436,68 @@ if malla and puntos > 1:
 else:
     info('esfera/bola: sigue siendo una esfera primitiva (%s puntos); pon a mano Primitive Type = '
          'Polygon Mesh o la esfera saldra gris' % puntos)
-# v10: la Sphere SOP no da coordenadas de textura: sin ellas el Constant MAT lee un
-# solo punto de la imagen y la esfera salia gris lisa. Un Texture SOP polar (eje Y)
-# se las pone; el planeta queda en el centro de la imagen, de cara a giro_esfera.
-uvs = mk(esfera, 'textureSOP', 'uvs', 0, -120)
-connect(uvs, bola, 0)
-proyeccion = menu_por_texto(uvs, ['type', 'texturetype'], ['polar', 'spher'])
-setmenu(uvs, ['axis'], ['y'], 1)
-# v18: dos Transform SOP tras las coordenadas de textura: 'centrar' lleva el centro de
-# la imagen al +Z de la bola y 'inclinar' lo levanta hacia la camara de la entrada
-# (antes el planeta parecia mirar al suelo). El giro hacia la entrada, en la esfera (ry).
-centrar = mk(esfera, 'transformSOP', 'centrar', 0, -240)
-connect(centrar, uvs, 0)
-setexpr(centrar, 'ry', "parent(2).op('sala_motor').module.centro_esfera(absTime.frame)")
-inclinar = mk(esfera, 'transformSOP', 'inclinar', 0, -360)
-connect(inclinar, centrar, 0)
+# v19: la imagen de FASE1 ya es un planeta visto de frente. Hasta la v18 se envolvia
+# alrededor de la bola (Texture SOP equirectangular): salia estirada, de lado y del revés
+# segun los volteos. Ahora el Script SOP 'frente' le pone a cada punto las coordenadas de
+# textura de una proyeccion de frente (u, v = x, y de la bola, de -r a r -> de 0 a 1):
+# la cara +Z de la bola muestra la imagen tal cual. 'inclinar' (rx) la levanta hacia la
+# camara de la entrada y la esfera (ry) la gira hacia ella.
+FRENTE_CB = r"""# Script SOP 'frente' de la esfera (sala_virtual v19): coordenadas de textura
+# de una proyeccion de frente, a lo largo de Z.
+
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def _uv(q, r):
+    return (0.5 + 0.5 * q.x / r, 0.5 + 0.5 * q.y / r, 0.0)
+
+
+def onCook(scriptOp):
+    scriptOp.clear()
+    if not scriptOp.inputs:
+        return
+    scriptOp.copy(scriptOp.inputs[0])
+    pts = scriptOp.points
+    r = max([max(abs(q.x), abs(q.y)) for q in pts] or [0.5]) or 0.5
+    if 'uv' not in [a.name for a in scriptOp.pointAttribs]:
+        scriptOp.pointAttribs.create('uv', (0.0, 0.0, 0.0))
+    for q in pts:
+        q.uv = _uv(q, r)
+    try:                                # si la malla trae uv por vertice, tambien
+        if 'uv' in [a.name for a in scriptOp.vertexAttribs]:
+            for pr in scriptOp.prims:
+                for v in pr:
+                    v.uv = _uv(v.point, r)
+    except Exception:
+        pass
+    return
+"""
+cb_frente = mk(esfera, 'textDAT', 'frente_callbacks', 200, -120)
+cb_frente.text = FRENTE_CB
+frente = mk(esfera, 'scriptSOP', 'frente', 0, -120)
+connect(frente, bola, 0)
+setp_any(frente, ['callbacks', 'callbackdat', 'dat'], 'frente_callbacks')
+inclinar = mk(esfera, 'transformSOP', 'inclinar', 0, -240)
+connect(inclinar, frente, 0)
 setexpr(inclinar, 'rx', "parent(2).op('sala_motor').module.inclina_esfera(absTime.frame)")
-for o_, si in ((bola, False), (uvs, False), (centrar, False), (inclinar, True)):
+for o_, si in ((bola, False), (frente, False), (inclinar, True)):
     for attr in ('render', 'display'):
         try:
             setattr(o_, attr, si)
         except Exception:
             pass
-
-
-def centro_imagen(sop):
-    """v14: el angulo (grados, 0 = +Z, 90 = +X) del punto de la malla cuyas
-    coordenadas de textura caen en el centro de la imagen (u, v = 0,5), o None."""
-    mejor = None
-    fuentes = []
-    try:
-        fuentes.append([(p_, p_) for p_ in sop.points])
-    except Exception:
-        pass
-    try:
-        fuentes.append([(v_, v_.point) for pr in sop.prims for v_ in pr])
-    except Exception:
-        pass
-    for fuente in fuentes:
-        for con_uv, punto in fuente:
-            try:
-                uv = con_uv.uv
-                d = (float(uv[0]) - 0.5) ** 2 + (float(uv[1]) - 0.5) ** 2
-                x, z = float(punto.x), float(punto.z)
-            except Exception:
-                break
-            if math.hypot(x, z) > 1e-4 and (mejor is None or d < mejor[0]):
-                mejor = (d, x, z)
-        if mejor is not None:
-            break
-    if mejor is None or mejor[0] > 0.01:
-        return None
-    return math.degrees(math.atan2(mejor[1], mejor[2]))
-
-
 try:
-    uvs.cook(force=True)
+    frente.cook(force=True)
+    con_uv = 'uv' in [a.name for a in frente.pointAttribs]
 except Exception:
-    pass
-ang = centro_imagen(uvs)
-if ang is not None:
-    sala.store('uv_centro', ang)
-    ok('esfera: el centro de la imagen cae a %.0f grados en la bola; giro_esfera lo pone mirando a la '
-       'entrada (Girosfera para retocar)' % ang)
+    con_uv = False
+if con_uv:
+    ok('esfera: la imagen de FASE1 de frente (Script SOP frente), mirando a la entrada: como se ve en FASE1')
 else:
-    sala.store('uv_centro', 0.0)
-    info('esfera: no pude medir donde cae el centro de la imagen en la bola; se toma +Z. Si el planeta '
-         'queda de lado, retoca Girosfera')
-if proyeccion:
-    ok('esfera: coordenadas de textura con un Texture SOP (%s, eje Y): el render de FASE1 se ve en la bola'
-       % proyeccion)
-else:
-    info('esfera/uvs: no encontre la proyeccion polar del Texture SOP; ponla a mano (Texture Type = Polar, '
-         'Axis = Y) o la esfera saldra gris')
+    info('esfera/frente: el Script SOP no puso las coordenadas de textura (%s); la esfera saldra gris'
+         % (frente.errors() if hasattr(frente, 'errors') else '?'))
 for ax in ('tx', 'ty', 'tz'):
     setexpr(esfera, ax, "%s.valor('esfera', '%s', absTime.frame)" % (SM, ax))
 setexpr(esfera, 'ry', "%s.giro_esfera(absTime.frame)" % SM)     # v9: el planeta mira a la sala
@@ -541,13 +529,10 @@ if not recortada:
     info('esfera_imagen: no pude recortar el centro del render (Crop TOP: Left %.3f, Right %.3f)'
          % (lado, 1.0 - lado))
 mat_esfera = make_constant(sala, 'mat_esfera', 660, -40, (1.0, 1.0, 1.0))
-# v15: un Flip TOP entre el recorte y el material endereza el planeta (el centro de la
-# imagen no se mueve al voltear, asi que el giro hacia la entrada no cambia).
+# v15: un Flip TOP entre el recorte y el material; desde la v19, con la imagen de frente,
+# sin volteos (Espejosfera y Volteosfera apagados), por si hiciera falta.
 espejo = get_or_make(sala, 'flipTOP', 'esfera_espejo', 1100, -120)
 connect(espejo, recorte, 0)
-# v16: el planeta salia boca abajo, no en espejo: el volteo de la v15 (horizontal) lo
-# dejaba en espejo. Se voltea en vertical (Volteosfera) y no en horizontal
-# (Espejosfera); los dos, en la pagina Sala para cambiarlos en directo.
 volteada = (setexpr(espejo, 'flipx', "bool(parent().par.Espejosfera)")
             and setexpr(espejo, 'flipy', "bool(parent().par.Volteosfera)"))
 if not volteada:
@@ -835,12 +820,9 @@ def diagnostico_esfera():
         if g is not None:
             dibuja = [k.name for k in g.children if getattr(k, 'render', False)]
             linea(dibuja == ['inclinar'], 'esfera dibuja', ' '.join(dibuja) or 'nada')
-            u = g.op('uvs')
+            u = g.op('frente')
             if u is not None:
-                try:
-                    tipo = '%s / eje %s' % (u.par.type.eval(), u.par.axis.eval())
-                except Exception:
-                    tipo = '?'
+                tipo = 'proyeccion de frente'
                 try:
                     attrs = [a.name for a in u.pointAttribs] + [a.name for a in u.vertexAttribs]
                 except Exception:
@@ -850,7 +832,7 @@ def diagnostico_esfera():
                                           for k in range(0, len(u.points), max(1, len(u.points) // 8))))
                 except Exception:
                     muestras = '?'
-                linea('uv' in attrs, 'uvs (Texture SOP)', '%s  atributos %s  %s' % (tipo, attrs, errores(u)))
+                linea('uv' in attrs, 'frente (Script SOP)', '%s  atributos %s  %s' % (tipo, attrs, errores(u)))
                 print('         uv de algunos puntos: %s' % (muestras,))
             b = g.op('bola')
             if b is not None:
@@ -1025,7 +1007,12 @@ def _prueba(t, m):
     cam_n = getattr(cam_p, 'name', str(cam_p).split('/')[-1])      # eval() da el operador, no el texto
     t.check('v10: la miniatura es la camara cenital (sin vista_plano)',
             sala.op('vista_plano') is None and cam_n == 'vista_cenital', 'camara %s' % cam_n)
-    t.check('v10: la esfera tiene su Texture SOP (uvs)', sala.op('esfera').op('uvs') is not None)
+    fr = sala.op('esfera').op('frente')
+    try:
+        fr_uv = 'uv' in [a.name for a in fr.pointAttribs]
+    except Exception:
+        fr_uv = False
+    t.check('v19: la imagen de frente: el Script SOP frente pone las coordenadas de textura', fr_uv)
     esp = sala.op('esfera_espejo')
     t.check('v16: el planeta derecho: esfera_espejo voltea segun Espejosfera y Volteosfera y es el Color '
             'Map de la esfera',
@@ -1065,15 +1052,14 @@ def _prueba(t, m):
             sm.vista('tz') > hz and sm.vista('ty') > sm.OJOS and sm.vista('my') < sm.vista('ty')
             and sm.vista('mz') < 0.0)
     mg = sm.margen_esfera(c, eq)
-    centro_uv = float(sala.fetch('uv_centro', 0.0, search=False))
-    g0 = math.radians(sm.giro_esfera())             # 'centrar' deja el centro de la imagen en +Z
+    g0 = math.radians(sm.giro_esfera())             # 'frente' pone la imagen en el +Z de la bola
     hacia = (math.sin(g0), math.cos(g0))
     he = sm.hacia_esfera(c)
     a_entrada = (he[0] - esf['x'], he[1] - esf['z'])
     t.check('v14: el planeta mira a la camara de la entrada (Girosfera 0)',
             float(sala.par.Girosfera) != 0.0
             or hacia[0] * a_entrada[0] + hacia[1] * a_entrada[1] > 0.99 * math.hypot(*a_entrada),
-            'giro %.0f grados; centro de la imagen medido a %.0f' % (sm.giro_esfera(), centro_uv))
+            'giro %.0f grados' % sm.giro_esfera())
     t.check('v18: el planeta se inclina hacia arriba, a la altura de la camara de la entrada (Inclinasfera 0)',
             float(sala.par.Inclinasfera) != 0.0 or sm.inclina_esfera() < 0.0,
             'rx %.1f grados' % sm.inclina_esfera())
