@@ -49,9 +49,13 @@
 #               umbral de la puerta y una reticula de 1 m en suelo y paredes
 #               (geometria 'lineas', Constant MAT) dan la perspectiva aunque
 #               la sala este a oscuras.
+#   v4          la esfera, a 1 m de cada pared de su esquina; la reticula de
+#               0,5 m cubre todo el suelo; el publico, sin cabeza (un tronco);
+#               Demo elige la visita (paseo, grupo, llena, goteo, vacia) y
+#               Luzesfera la luz de la esfera sobre la sala (0: apagada).
 # =============================================================================
 
-SALA_VERSION = 'sala v3'
+SALA_VERSION = 'sala v4'
 
 import math
 
@@ -97,6 +101,7 @@ GRID_ZONA = 0.5                         # m entre dos lineas de la reticula del 
 GRID_SALA = 1.0                         # m entre dos lineas de la reticula de la sala
 GROSOR = 0.07                           # m: el grueso de una arista (mas que la pared, 0,05: si no, queda dentro)
 PUERTA_ANCHO = 1.2
+ESFERA_MARGEN = 1.0                     # v4: m entre la esfera y cada pared de su esquina
 COL_EQUIPO = dict(altavoz=(0.05, 0.05, 0.06), sub=(0.05, 0.05, 0.06), micro=(0.75, 0.75, 0.78),
                   camara=(0.35, 0.35, 0.38), foco=(0.20, 0.20, 0.22), estrobo=(0.30, 0.30, 0.32),
                   esfera=(0.22, 0.22, 0.24))
@@ -107,7 +112,7 @@ TAM_EQUIPO = dict(altavoz=(0.32, 0.50, 0.30), sub=(0.60, 0.50, 0.60), micro=(0.0
 def equipos_defecto(ancho=8.0, fondo=6.0, alto=4.0):
     """Las filas de la tabla 'equipos' para una sala de ancho x fondo x alto:
     la esfera (1 m, sobre una peana de 0,8 m) en la esquina del fondo a la
-    izquierda con el sub dentro de la peana, cuatro altavoces colgados en las
+    izquierda, a ESFERA_MARGEN (1 m) de cada pared (v4), con el sub dentro de la peana, cuatro altavoces colgados en las
     esquinas a 3 m, el microfono en lo alto hacia el centro y lejos de la
     esfera y del estrobo, la camara cenital a 3,5 m en el centro, cuatro focos
     de bano colgados que apuntan al suelo y al publico (dos acompanan a la
@@ -115,7 +120,8 @@ def equipos_defecto(ancho=8.0, fondo=6.0, alto=4.0):
     hx, hz = ancho / 2.0, fondo / 2.0
     colg = min(3.0, alto - 0.6)                 # altavoces y microfono
     techo = alto - 0.4                          # focos
-    ex, ez = -hx + 0.8, -hz + 0.8               # la esfera
+    m = ESFERA_MARGEN + 0.5                     # v4: 1 m entre la esfera (1 m) y cada pared
+    ex, ez = -hx + m, -hz + m                   # la esfera
     filas = [
         ['esfera', 'esfera', ex, 1.3, ez, ex, 1.3, ez + 1.0, 1.0, 'LEDs, 1 m; peana de 0,8 m'],
         ['sub', 'sub', ex, 0.25, ez, 0.0, 0.25, 0.0, 0.6, 'dentro de la peana de la esfera'],
@@ -125,9 +131,9 @@ def equipos_defecto(ancho=8.0, fondo=6.0, alto=4.0):
         ['altavoz4', 'altavoz', hx - 0.4, colg, hz - 0.4, 0.0, 1.6, 0.0, 0.5, 'colgado, entrada derecha'],
         ['micro', 'micro', 1.0, colg, 1.0, 1.0, 0.0, 1.0, 0.18, 'en lo alto, lejos de la esfera y del estrobo'],
         ['camara', 'camara', 0.0, min(3.5, alto - 0.2), 0.0, 0.0, 0.0, 0.0, 0.28, 'cenital (Femto Bolt)'],
-        ['foco1', 'foco', -hx + 0.4, techo, -hz + 2.2, -hx + 2.6, 0.0, -hz + 3.4, 50.0,
+        ['foco1', 'foco', ex - 0.6, techo, ez + 1.6, ex + 0.6, 0.0, ez + 3.6, 50.0,
          'bano, junto a la esfera (no le apunta)'],
-        ['foco2', 'foco', -hx + 2.2, techo, -hz + 0.4, -hx + 3.4, 0.0, -hz + 2.6, 50.0,
+        ['foco2', 'foco', ex + 1.6, techo, ez - 0.6, ex + 3.6, 0.0, ez + 0.6, 50.0,
          'bano, junto a la esfera (no le apunta)'],
         ['foco3', 'foco', hx - 2.0, techo, -hz + 1.5, hx - 2.0, 0.0, -hz + 2.5, 50.0, 'bano, al suelo'],
         ['foco4', 'foco', 0.0, techo, hz - 1.5, 0.0, 0.0, hz - 2.5, 50.0, 'bano, al publico'],
@@ -232,41 +238,158 @@ def _punto(cfg, i, v, k, evitar):
 
 def _clave(cfg, evitar):
     return (cfg['ancho'], cfg['fondo'], cfg.get('zona_ancho'), cfg.get('zona_fondo'), cfg['llegada'],
-            tuple(evitar))
+            cfg.get('demo', 0), cfg['personas'], tuple(evitar))
+
+
+# v4: demos de visita, a elegir con el parametro Demo de SALA
+DEMOS = ['paseo', 'grupo', 'llena', 'goteo', 'vacia']
+DEMOS_ETIQUETAS = ['Paseo: llegan de uno en uno (Llegada), pasean, se paran y se van',
+                   'Grupo: entran juntos en fila, hacen corro ante la esfera y salen juntos',
+                   'Llena: la sala se llena deprisa y el publico se queda casi quieto',
+                   'Goteo: de uno en uno, van a la esfera, miran y se van',
+                   'Vacia: nadie']
+CICLO_GRUPO = 90.0          # s: el grupo entra, se queda y sale; luego vuelve a entrar
+ESTANCIA_GRUPO = 55.0       # s desde que entra el primero hasta que sale el primero
+CORRO = 2.2                 # m de la esfera al corro del grupo
+FILA_CORRO = 7              # personas por fila del corro
+TURNO_GOTEO = 35.0          # s entre dos visitantes del goteo
+
+
+def _libre(cfg, q, evitar):
+    """El punto q dentro del suelo del publico; si cae cerca de la esfera o
+    del estrobo, se aleja de ellos hasta quedar a APARTE."""
+    zx, zz = zona(cfg)
+    x, z = q
+    for _ in range(6):
+        x, z = max(-zx, min(zx, x)), max(-zz, min(zz, z))
+        cerca = [e for e in evitar if math.hypot(x - e[0], z - e[2]) <= APARTE]
+        if not cerca:
+            break
+        e = cerca[0]
+        d = math.hypot(x - e[0], z - e[2]) or 1e-6
+        k = (APARTE + 0.15) / d
+        x, z = e[0] + (x - e[0]) * k, e[2] + (z - e[2]) * k
+    return (x, z)
+
+
+def _corro(cfg, i, evitar):
+    """El sitio de la persona i en el corro del grupo: un arco de cara a la
+    esfera (filas de FILA_CORRO, cada una 0,7 m mas atras)."""
+    c = evitar[0] if evitar else (0.0, 0.0, -0.5 * cfg['fondo'])       # la esfera va primero
+    n = max(1, int(cfg['personas']))
+    fila, k = divmod(i, FILA_CORRO)
+    en_fila = min(FILA_CORRO, n - fila * FILA_CORRO)
+    base = math.atan2(-c[0], -c[2])              # de la esfera hacia el centro de la sala
+    a = base + math.radians(100.0) * ((k + 0.5) / en_fila - 0.5)
+    r = CORRO + 0.7 * fila
+    return _libre(cfg, (c[0] + r * math.sin(a), c[2] + r * math.cos(a)), evitar)
+
+
+def _sitio_lleno(cfg, i, v, evitar):
+    """Llena: el sitio de la persona i, repartido por el suelo del publico."""
+    zx, zz = zona(cfg)
+    n = max(1, int(cfg['personas']))
+    cols = max(1, int(round(math.sqrt(n * zx / zz))))
+    filas_ = int(math.ceil(n / float(cols)))
+    f, k = divmod(i, cols)
+    x = -zx + 2 * zx * (k + 0.2 + 0.6 * h01(i, v, 21)) / cols
+    z = -zz + 2 * zz * (f + 0.2 + 0.6 * h01(i, v, 22)) / filas_
+    return _libre(cfg, (x, z), evitar)
+
+
+def _andar(tr, t, p, q):
+    dt = math.hypot(q[0] - p[0], q[1] - p[1]) / VELOCIDAD
+    tr.append([t, t + dt, p, q, True, True])
+    return t + dt
+
+
+def _quieto(tr, t, p, d):
+    tr.append([t, t + max(0.5, d), p, p, True, False])
+    return t + max(0.5, d)
+
+
+def _visita(cfg, i, v, t, demo, evitar):
+    """Los tramos de una visita (de cruzar la puerta a volver a ella) y el
+    instante en que vuelve a estar en la puerta."""
+    hz = 0.5 * cfg['fondo']
+    puerta = (0.0, hz - 0.3)
+    tr = [[t, t + 1.0, (0.0, hz), puerta, True, True]]          # cruza la puerta
+    t, p = t + 1.0, puerta
+    if demo == 'grupo':
+        q = _corro(cfg, i, evitar)
+        t = _andar(tr, t, p, q)
+        sale = v * CICLO_GRUPO + ESTANCIA_GRUPO + 1.2 * i
+        t = _quieto(tr, t, q, sale - t)
+        p = q
+    elif demo == 'llena':
+        q = _sitio_lleno(cfg, i, v, evitar)
+        t = _andar(tr, t, p, q)
+        t = _quieto(tr, t, q, 50.0 + 60.0 * h01(i, v, 23))
+        a = 2 * math.pi * h01(i, v, 24)          # un paso corto y vuelve a quedarse
+        q2 = _libre(cfg, (q[0] + 0.45 * math.cos(a), q[1] + 0.45 * math.sin(a)), evitar)
+        t = _andar(tr, t, q, q2)
+        t = _quieto(tr, t, q2, 30.0 + 40.0 * h01(i, v, 25))
+        p = q2
+    elif demo == 'goteo':
+        c = evitar[0] if evitar else (0.0, 0.0, -hz)
+        a = math.atan2(-c[0], -c[2]) + math.radians(50.0) * (h01(i, v, 26) - 0.5)
+        r = APARTE + 0.5 + 0.6 * h01(i, v, 27)
+        q = _libre(cfg, (c[0] + r * math.sin(a), c[2] + r * math.cos(a)), evitar)
+        t = _andar(tr, t, p, q)
+        t = _quieto(tr, t, q, 10.0 + 8.0 * h01(i, v, 28))
+        q2 = _punto(cfg, i, v, 0, evitar)
+        t = _andar(tr, t, q, q2)
+        t = _quieto(tr, t, q2, 3.0 + 4.0 * h01(i, v, 29))
+        p = q2
+    else:                                        # paseo
+        for k in range(3 + int(5 * h01(i, v, 3))):
+            q = _punto(cfg, i, v, k, evitar)
+            t = _andar(tr, t, p, q)
+            t = _quieto(tr, t, q, 3.0 + 9.0 * h01(i, v, k, 4))
+            p = q
+    t = _andar(tr, t, p, puerta)
+    return tr, t
+
+
+def _llegada(cfg, i, v, demo):
+    """Cuando entra la persona i en su visita v (la primera, v = 0)."""
+    n = max(1, int(cfg['personas']))
+    if demo == 'grupo':
+        return v * CICLO_GRUPO + 2.0 + 1.2 * i
+    if demo == 'llena':
+        return 1.5 * i + 4.0 * h01(i, 0, 9)
+    if demo == 'goteo':
+        return (v * n + i) * TURNO_GOTEO + 2.0
+    return i * cfg['llegada'] + 4.0 * h01(i, 0, 9)
 
 
 def plan(cfg, i, hasta, evitar=()):
     """Los tramos de la persona i hasta el instante 'hasta' (s desde que se
-    abrio la sala): [t0, t1, (x0, z0), (x1, z1), dentro, andando]."""
+    abrio la sala): [t0, t1, (x0, z0), (x1, z1), dentro, andando]. v4: segun
+    la demo (cfg['demo'], el parametro Demo)."""
     clave = _clave(cfg, evitar)
     pl = _PLANES.get(i)
     if pl is None or pl['clave'] != clave:
         pl = _PLANES[i] = dict(clave=clave, tramos=[], t=0.0, vuelta=0)
-    puerta = (0.0, 0.5 * cfg['fondo'] - 0.3)
     fuera = (0.0, 0.5 * cfg['fondo'] + 1.0)
+    demo = DEMOS[cfg.get('demo', 0) % len(DEMOS)]
     tr = pl['tramos']
+    if demo == 'vacia':
+        tr[:] = [[0.0, hasta + 3600.0, fuera, fuera, False, False]]
+        return tr
     if not tr:
-        llega = i * cfg['llegada'] + 4.0 * h01(i, 0, 9)
-        tr.append([0.0, llega, fuera, fuera, False, False])
+        tr.append([0.0, _llegada(cfg, i, 0, demo), fuera, fuera, False, False])
     while tr[-1][1] <= hasta:
         v = pl['vuelta']
-        t = tr[-1][1]
-        p = puerta
-        tr.append([t, t + 1.0, (0.0, 0.5 * cfg['fondo']), puerta, True, True])     # cruza la puerta
-        t += 1.0
-        for k in range(3 + int(5 * h01(i, v, 3))):
-            q = _punto(cfg, i, v, k, evitar)
-            dt = math.hypot(q[0] - p[0], q[1] - p[1]) / VELOCIDAD
-            tr.append([t, t + dt, p, q, True, True])
-            t += dt
-            quieto = 3.0 + 9.0 * h01(i, v, k, 4)
-            tr.append([t, t + quieto, q, q, True, False])
-            t += quieto
-            p = q
-        dt = math.hypot(puerta[0] - p[0], puerta[1] - p[1]) / VELOCIDAD
-        tr.append([t, t + dt, p, puerta, True, True])
-        t += dt
-        tr.append([t, t + 20.0 + 40.0 * h01(i, v, 5), fuera, fuera, False, False])
+        visita, t = _visita(cfg, i, v, tr[-1][1], demo, evitar)
+        tr.extend(visita)
+        if demo in ('grupo', 'goteo'):
+            vuelve = max(t + 5.0, _llegada(cfg, i, v + 1, demo))
+        elif demo == 'llena':
+            vuelve = t + 5.0 + 10.0 * h01(i, v, 5)
+        else:
+            vuelve = t + 20.0 + 40.0 * h01(i, v, 5)
+        tr.append([t, vuelve, fuera, fuera, False, False])
         pl['vuelta'] = v + 1
     del tr[:-200]                       # memoria acotada: lo viejo ya no se pregunta
     return tr
@@ -506,7 +629,8 @@ def cfg():
                 volumen_drone=max(0.0, _p('Volumendrone', 0.5)),
                 modo_luz=_menu('Modoluz', MODOS_LUZ, 1), hz_prueba=_p('Hzprueba', 2.5),
                 luz_casa=max(0.0, _p('Luzcasa', 0.06)), vista=_menu('Vista', VISTAS, 0),
-                bruma=max(0.0, min(1.0, _p('Bruma', 0.5))))
+                bruma=max(0.0, min(1.0, _p('Bruma', 0.5))), demo=_menu('Demo', DEMOS, 0),
+                luz_esfera=max(0.0, _p('Luzesfera', 0.0)))
 
 
 def ahora():
@@ -683,8 +807,9 @@ def luz_esfera(que, frame=None):
         e = equipo('esfera')
         if que in ('tx', 'ty', 'tz'):
             return e['pos'][('tx', 'ty', 'tz').index(que)] if e is not None else 0.0
-        if que == 'd':
-            return 0.9 if cfg()['activa'] else 0.0
+        if que == 'd':                      # v4: Luzesfera (0 por defecto: la mancha en la pared sobraba)
+            c = cfg()
+            return c['luz_esfera'] if c['activa'] else 0.0
         return color_esfera()[('r', 'g', 'b').index(que)]
     except Exception:
         return 0.0
@@ -717,32 +842,31 @@ def _linea(p, q, col, g=GROSOR):
 
 def _filas_lineas(c):
     """v3: el dibujo de la sala, para leerla en perspectiva aunque este a
-    oscuras: las doce aristas, el umbral de la puerta, una reticula de 1 m en
-    el suelo y en las tres paredes, y el suelo del publico (Zonaancho x
-    Zonafondo) con su borde y su reticula de GRID_ZONA m, donde se pararia
-    la gente."""
+    oscuras: las doce aristas, el umbral de la puerta, una reticula de
+    GRID_ZONA m en todo el suelo (v4; antes solo en el del publico), una de
+    GRID_SALA m en las tres paredes, y el borde del suelo del publico
+    (Zonaancho x Zonafondo), donde se pararia la gente."""
     W, F, H = c['ancho'], c['fondo'], c['alto']
     hx, hz = W / 2.0, F / 2.0
     zx, zz = zona(c)
-    y0, yz = 0.004, 0.010           # la reticula de la sala y, encima, la del publico
+    y0, yz = 0.008, 0.012           # la reticula (sobre la tarima) y, encima, el borde del publico
     f = []
-    # reticula de la sala: suelo y las tres paredes
+    # v4: la reticula de GRID_ZONA m cubre todo el suelo de la sala
+    for x in _marcas(-hx, hx, GRID_ZONA)[1:-1]:
+        f.append(_linea((x, y0, -hz), (x, y0, hz), LIN_GRID, 0.015))
+    for z in _marcas(-hz, hz, GRID_ZONA)[1:-1]:
+        f.append(_linea((-hx, y0, z), (hx, y0, z), LIN_GRID, 0.015))
+    # las tres paredes, cada GRID_SALA m
     for x in _marcas(-hx, hx, GRID_SALA)[1:-1]:
-        f.append(_linea((x, y0, -hz), (x, y0, hz), LIN_PARED, 0.012))
         f.append(_linea((x, 0.0, -hz + 0.03), (x, H, -hz + 0.03), LIN_PARED, 0.012))
     for z in _marcas(-hz, hz, GRID_SALA)[1:-1]:
-        f.append(_linea((-hx, y0, z), (hx, y0, z), LIN_PARED, 0.012))
         for x in (-hx + 0.03, hx - 0.03):
             f.append(_linea((x, 0.0, z), (x, H, z), LIN_PARED, 0.012))
     for y in _marcas(0.0, H, GRID_SALA)[1:-1]:
         f.append(_linea((-hx, y, -hz + 0.03), (hx, y, -hz + 0.03), LIN_PARED, 0.012))
         for x in (-hx + 0.03, hx - 0.03):
             f.append(_linea((x, y, -hz), (x, y, hz), LIN_PARED, 0.012))
-    # el suelo del publico: reticula y borde
-    for x in _marcas(-zx, zx, GRID_ZONA)[1:-1]:
-        f.append(_linea((x, yz, -zz), (x, yz, zz), LIN_GRID, 0.015))
-    for z in _marcas(-zz, zz, GRID_ZONA)[1:-1]:
-        f.append(_linea((-zx, yz, z), (zx, yz, z), LIN_GRID, 0.015))
+    # el suelo del publico: su borde (la reticula ya pasa por encima)
     for p, q in (((-zx, yz, -zz), (zx, yz, -zz)), ((-zx, yz, zz), (zx, yz, zz)),
                  ((-zx, yz, -zz), (-zx, yz, zz)), ((zx, yz, -zz), (zx, yz, zz))):
         f.append(_linea(p, q, LIN_ZONA, 0.04))
@@ -782,25 +906,13 @@ def _filas_equipos(c, eq, t):
     return out
 
 
-CABEZA = 0.23               # m: diametro de la cabeza (v2)
-
-
 def _filas_personas(c, eq, t):
-    """El cuerpo de cada persona: una caja hasta los hombros, de ropa oscura
-    (en una sala a oscuras el publico se lee a contraluz)."""
+    """El cuerpo de cada persona: un tronco de toda su altura, de ropa oscura
+    (en una sala a oscuras el publico se lee a contraluz). v4: sin cabeza."""
     out = []
     for i, x, z, h, _ in personas(c, t, evitar_de(eq)):
         col = (0.10 + 0.22 * h01(i, 11), 0.10 + 0.22 * h01(i, 12), 0.10 + 0.22 * h01(i, 13))
-        out.append([x, 0.0, z, 0, 0, 0, 0.42, h - CABEZA - 0.04, 0.26] + list(col))
-    return out
-
-
-def _filas_cabezas(c, eq, t):
-    out = []
-    for i, x, z, h, _ in personas(c, t, evitar_de(eq)):
-        piel = 0.30 + 0.35 * h01(i, 14)
-        out.append([x, h - 0.5 * CABEZA, z, 0, 0, 0, CABEZA, 1.08 * CABEZA, CABEZA,
-                    piel, 0.78 * piel, 0.62 * piel])
+        out.append([x, 0.0, z, 0, 0, 0, 0.42, h, 0.26] + list(col))
     return out
 
 
@@ -825,7 +937,7 @@ def _filas_haces(c, eq, t):
 
 def filas(nombre):
     """Las instancias de los Script CHOP i_sala, i_equipos, i_personas,
-    (v2) i_cabezas e i_haces y (v3) i_lineas."""
+    (v2) i_haces y (v3) i_lineas."""
     c = cfg()
     eq = equipos()
     t = ahora()
@@ -837,8 +949,6 @@ def filas(nombre):
         return _filas_equipos(c, eq, t)
     if nombre == 'i_personas':
         return _filas_personas(c, eq, t) if c['activa'] else []
-    if nombre == 'i_cabezas':
-        return _filas_cabezas(c, eq, t) if c['activa'] else []
     if nombre == 'i_haces':
         return _filas_haces(c, eq, t)
     return []
@@ -848,7 +958,7 @@ def frame_tick():
     """Cada fotograma (latido_sala): las personas y los aparatos se redibujan."""
     if not _p('Activa', True):
         return
-    for nm in ('i_personas', 'i_cabezas', 'i_equipos', 'i_haces'):
+    for nm in ('i_personas', 'i_equipos', 'i_haces'):
         o = parent().op(nm)
         if o is not None:
             o.cook(force=True)
@@ -908,13 +1018,23 @@ def palmada(donde=None):
     return donde
 
 
-def esfera_en_esquina(c=None, eq=None):
-    """v3: la esfera esta en una esquina del fondo de la sala."""
+def margen_esfera(c=None, eq=None):
+    """(a la pared del fondo, a la de su lado) en m, de la superficie de la
+    esfera a cada pared; None si no hay esfera."""
     c = c or cfg()
     eq = equipos() if eq is None else eq
     esf = next((e for e in eq if e['tipo'] == 'esfera'), None)
-    hx, hz = 0.5 * c['ancho'], 0.5 * c['fondo']
-    return esf is not None and esf['z'] < -hz + 1.5 and abs(esf['x']) > hx - 1.5
+    if esf is None:
+        return None
+    r = 0.5 * esf['tam']
+    return (esf['z'] + 0.5 * c['fondo'] - r, 0.5 * c['ancho'] - abs(esf['x']) - r)
+
+
+def esfera_en_esquina(c=None, eq=None):
+    """La esfera esta en una esquina del fondo de la sala, a ESFERA_MARGEN
+    (1 m, v4) de cada pared, con 20 cm de tolerancia."""
+    m = margen_esfera(c, eq)
+    return m is not None and all(abs(d - ESFERA_MARGEN) <= 0.2 for d in m)
 
 
 def recolocar():
