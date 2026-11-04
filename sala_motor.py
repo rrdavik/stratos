@@ -62,9 +62,11 @@
 #               de la imagen medido en la malla (uv_centro), no supuesto.
 #   v11         ...y se inclina hacia la altura de esa camara (inclina_esfera;
 #               Inclinasfera lo retoca): antes parecia mirar al suelo.
+#   v12         la imagen de FASE1 va de frente sobre la bola (Script SOP
+#               'frente' en sala_virtual), no envuelta: se ve como en FASE1.
 # =============================================================================
 
-SALA_VERSION = 'sala v11'
+SALA_VERSION = 'sala v12'
 
 import math
 
@@ -882,20 +884,10 @@ def hacia_esfera(c=None):
     return (0.0, 0.5 * c['fondo'] + ENTRADA_ATRAS)
 
 
-def centro_esfera(frame=None):
-    """v11: el giro (ry, grados) del Transform SOP 'centrar' de la esfera, que
-    lleva el centro de la imagen al +Z de la bola. Donde cae lo mide
-    sala_virtual en el Texture SOP y lo guarda en 'uv_centro' (grados; 0 = +Z)."""
-    try:
-        return -float(parent().fetch('uv_centro', 0.0, search=False))
-    except Exception:
-        return 0.0
-
-
 def giro_esfera(frame=None):
-    """El giro (ry, grados) de la esfera para que su +Z, donde 'centrar' deja
-    el centro de la imagen (el planeta), mire a hacia_esfera(), mas Girosfera
-    para ajustarlo a mano."""
+    """El giro (ry, grados) de la esfera para que su +Z, donde el Script SOP
+    'frente' pone la imagen de FASE1 de frente (v12), mire a hacia_esfera(),
+    mas Girosfera para ajustarlo a mano."""
     try:
         e = equipo('esfera')
         if e is None:
