@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v13  (la esfera, malla de poligonos: se ve el render de FASE1)'
+VERSION = 'sala_virtual v14  (el planeta mira a la entrada; la Palmada sin el reloj adelantado)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -418,6 +418,51 @@ for o_, si in ((bola, False), (uvs, True)):
             setattr(o_, attr, si)
         except Exception:
             pass
+
+
+def centro_imagen(sop):
+    """v14: el angulo (grados, 0 = +Z, 90 = +X) del punto de la malla cuyas
+    coordenadas de textura caen en el centro de la imagen (u, v = 0,5), o None."""
+    mejor = None
+    fuentes = []
+    try:
+        fuentes.append([(p_, p_) for p_ in sop.points])
+    except Exception:
+        pass
+    try:
+        fuentes.append([(v_, v_.point) for pr in sop.prims for v_ in pr])
+    except Exception:
+        pass
+    for fuente in fuentes:
+        for con_uv, punto in fuente:
+            try:
+                uv = con_uv.uv
+                d = (float(uv[0]) - 0.5) ** 2 + (float(uv[1]) - 0.5) ** 2
+                x, z = float(punto.x), float(punto.z)
+            except Exception:
+                break
+            if math.hypot(x, z) > 1e-4 and (mejor is None or d < mejor[0]):
+                mejor = (d, x, z)
+        if mejor is not None:
+            break
+    if mejor is None or mejor[0] > 0.01:
+        return None
+    return math.degrees(math.atan2(mejor[1], mejor[2]))
+
+
+try:
+    uvs.cook(force=True)
+except Exception:
+    pass
+ang = centro_imagen(uvs)
+if ang is not None:
+    sala.store('uv_centro', ang)
+    ok('esfera: el centro de la imagen cae a %.0f grados en la bola; giro_esfera lo pone mirando a la '
+       'entrada (Girosfera para retocar)' % ang)
+else:
+    sala.store('uv_centro', 0.0)
+    info('esfera: no pude medir donde cae el centro de la imagen en la bola; se toma +Z. Si el planeta '
+         'queda de lado, retoca Girosfera')
 if proyeccion:
     ok('esfera: coordenadas de textura con un Texture SOP (%s, eje Y): el render de FASE1 se ve en la bola'
        % proyeccion)
@@ -962,13 +1007,15 @@ def _prueba(t, m):
             sm.vista('tz') > hz and sm.vista('ty') > sm.OJOS and sm.vista('my') < sm.vista('ty')
             and sm.vista('mz') < 0.0)
     mg = sm.margen_esfera(c, eq)
-    g0 = math.radians(sm.giro_esfera())
-    hacia = (math.sin(g0), math.cos(g0))           # el +Z de la esfera, girado
-    al_centro = (-esf['x'], -esf['z'])
-    t.check('v9: la esfera mira al centro de la sala (Girosfera 0)',
+    centro_uv = float(sala.fetch('uv_centro', 0.0, search=False))
+    g0 = math.radians(sm.giro_esfera() + centro_uv)  # donde queda el centro de la imagen, girado
+    hacia = (math.sin(g0), math.cos(g0))
+    he = sm.hacia_esfera(c)
+    a_entrada = (he[0] - esf['x'], he[1] - esf['z'])
+    t.check('v14: el planeta mira a la camara de la entrada (Girosfera 0)',
             float(sala.par.Girosfera) != 0.0
-            or hacia[0] * al_centro[0] + hacia[1] * al_centro[1] > 0.99 * math.hypot(*al_centro),
-            '%.0f grados' % sm.giro_esfera())
+            or hacia[0] * a_entrada[0] + hacia[1] * a_entrada[1] > 0.99 * math.hypot(*a_entrada),
+            'giro %.0f grados; centro de la imagen medido a %.0f' % (sm.giro_esfera(), centro_uv))
     t.check('v5: la esfera en una esquina del fondo, a 1 m de cada pared', sm.esfera_en_esquina(c, eq),
             '%.2f m al fondo, %.2f m al lado' % mg if mg else 'sin esfera')
     lin = sm._filas_lineas(c)
@@ -1071,15 +1118,25 @@ def _prueba(t, m):
         sala.par.Personas = 0
         fase1.par.Fuentemic = 'chop'
         fase1.par.Chopmic = audio.path
-        sm._SALA['forzar'] = True
-        for _ in range(3):
+        # v14: el reloj de la prueba va 500 s por delante. La hora del ultimo onset
+        # se guarda y se pone muy atras (un onset 'futuro' de otra prueba, o de antes
+        # de reabrir el proyecto, bloqueaba la palmada por el refractario) y al acabar
+        # se devuelve (si no, FASE1 se quedaba sorda hasta que el reloj real llegaba).
+        t_onset = W['mic'].get('t', 0.0)
+        W['mic']['t'] = -1e9
+        try:
             sm._SALA['forzar'] = True
-            m.mic_tick(W, m.cfg(), absTime.seconds + 500.0)
-        antes = W['mic']['n']
-        sm.palmada((mic[0] + 0.5, sm.BOCA, mic[2]))
-        m.mic_tick(W, m.cfg(), absTime.seconds + 500.5)
-        t.check('Palmada: FASE1 la oye por audio_mic y cuenta un onset', W['mic']['n'] == antes + 1,
-                'onsets %d -> %d' % (antes, W['mic']['n']))
+            for _ in range(3):
+                sm._SALA['forzar'] = True
+                m.mic_tick(W, m.cfg(), absTime.seconds + 500.0)
+            antes = W['mic']['n']
+            sm.palmada((mic[0] + 0.5, sm.BOCA, mic[2]))
+            m.mic_tick(W, m.cfg(), absTime.seconds + 500.5)
+            t.check('Palmada: FASE1 la oye por audio_mic y cuenta un onset', W['mic']['n'] == antes + 1,
+                    'onsets %d -> %d, flujo %.2f (umbral %.2f)'
+                    % (antes, W['mic']['n'], W['mic'].get('flujo', 0.0), m.cfg()['umbral_onset']))
+        finally:
+            W['mic']['t'] = t_onset
     t.check('leyenda SALA', sm.legend().startswith('SALA') and 'personas' in sm.legend())
 
 

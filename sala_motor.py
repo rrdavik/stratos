@@ -58,9 +58,11 @@
 #               sala, lejos de las paredes, la esfera y el estrobo.
 #   v8          la esfera gira para que el planeta mire al centro de la sala
 #               (giro_esfera; Girosfera lo ajusta a mano).
+#   v10         ...y desde la v10 mira a la camara de la entrada, con el centro
+#               de la imagen medido en la malla (uv_centro), no supuesto.
 # =============================================================================
 
-SALA_VERSION = 'sala v9'
+SALA_VERSION = 'sala v10'
 
 import math
 
@@ -869,17 +871,31 @@ def color_esfera(frame=None):
     return col
 
 
+def hacia_esfera(c=None):
+    """v10: el punto (x, z) al que mira el planeta: donde esta la camara de la
+    vista entrada, la que mira la sala desde la puerta (antes, el centro de la
+    sala, que desde la entrada lo dejaba unos 40 grados de lado)."""
+    c = c or cfg()
+    return (0.0, 0.5 * c['fondo'] + ENTRADA_ATRAS)
+
+
 def giro_esfera(frame=None):
-    """v8: el giro (ry, grados) de la esfera para que el centro de su imagen
-    (el planeta) mire al centro de la sala, mas Girosfera para ajustarlo a
-    mano. Se toma que el centro de la imagen cae en el +Z de la esfera, como
-    en una Sphere SOP sin girar vista desde delante."""
+    """El giro (ry, grados) de la esfera para que el centro de su imagen (el
+    planeta) mire a hacia_esfera(), mas Girosfera para ajustarlo a mano. v10:
+    donde cae el centro de la imagen en la esfera sin girar lo mide
+    sala_virtual en el Texture SOP y lo guarda en 'uv_centro' (grados; 0 = +Z)."""
     try:
         e = equipo('esfera')
         if e is None:
             return 0.0
-        base = math.degrees(math.atan2(0.0 - e['x'], 0.0 - e['z']))
-        return base + float(cfg()['giro_esfera'])
+        c = cfg()
+        hx, hz = hacia_esfera(c)
+        objetivo = math.degrees(math.atan2(hx - e['x'], hz - e['z']))
+        try:
+            centro = float(parent().fetch('uv_centro', 0.0, search=False))
+        except Exception:
+            centro = 0.0
+        return objetivo - centro + float(c['giro_esfera'])
     except Exception:
         return 0.0
 
