@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v12  (diagnostico de la esfera; autoprueba del monitor corregida)'
+VERSION = 'sala_virtual v13  (la esfera, malla de poligonos: se ve el render de FASE1)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -390,6 +390,21 @@ def menu_por_texto(o, nombres, textos):
     return None
 
 
+# v13: la esfera era una esfera primitiva de un solo punto (Primitive Type = prim: setp con
+# 'polymesh' no casaba con ningun nombre del menu y no hacia nada). Sin vertices no hay
+# coordenadas de textura y la bola salia gris lisa. Malla de poligonos, por nombre o etiqueta.
+malla = (setmenu(bola, ['type', 'primtype'], ['polymesh', 'polygonmesh', 'mesh'], None)
+         and bola.par.type.eval() != 'prim') or menu_por_texto(bola, ['type', 'primtype'], ['mesh', 'poly'])
+try:
+    puntos = len(bola.points)
+except Exception:
+    puntos = 0
+if malla and puntos > 1:
+    ok('esfera/bola: malla de poligonos (%s, %d puntos), con vertices para la imagen'
+       % (bola.par.type.eval(), puntos))
+else:
+    info('esfera/bola: sigue siendo una esfera primitiva (%s puntos); pon a mano Primitive Type = '
+         'Polygon Mesh o la esfera saldra gris' % puntos)
 # v10: la Sphere SOP no da coordenadas de textura: sin ellas el Constant MAT lee un
 # solo punto de la imagen y la esfera salia gris lisa. Un Texture SOP polar (eje Y)
 # se las pone; el planeta queda en el centro de la imagen, de cara a giro_esfera.
@@ -748,8 +763,8 @@ def diagnostico_esfera():
                     pass
         r1 = sala.op('render_sala')
         if r1 is not None:
-            linea('esfera' in str(r1.par.geometry.eval()).split(), 'render_sala dibuja la esfera',
-                  str(r1.par.geometry.eval()))
+            geo_r = str(r1.par.geometry.val).split()          # val: el texto (eval da los operadores)
+            linea('esfera' in geo_r, 'render_sala dibuja la esfera', ' '.join(geo_r))
     except Exception as e:
         print('  FALLO  el diagnostico se paro: %s' % e)
     print()
@@ -914,6 +929,13 @@ def _prueba(t, m):
     t.check('v10: la miniatura es la camara cenital (sin vista_plano)',
             sala.op('vista_plano') is None and cam_n == 'vista_cenital', 'camara %s' % cam_n)
     t.check('v10: la esfera tiene su Texture SOP (uvs)', sala.op('esfera').op('uvs') is not None)
+    bola_ = sala.op('esfera').op('bola')
+    try:
+        n_bola = len(bola_.points)
+    except Exception:
+        n_bola = 0
+    t.check('v13: la esfera es una malla (con vertices para la imagen), no una esfera primitiva de un punto',
+            n_bola > 1, '%s, %d puntos' % (bola_.par.type.eval() if bola_ else '?', n_bola))
     t.check('v7: sin rayas bajo la esfera: el sub, dentro de la peana, no se dibuja',
             not any(abs(r[0] - por['sub'][0]['x']) < 1e-9 and abs(r[2] - por['sub'][0]['z']) < 1e-9
                     and abs(r[7] - sm.TAM_EQUIPO['sub'][1]) < 1e-9 for r in sm._filas_equipos(c, eq, 5.0)))
