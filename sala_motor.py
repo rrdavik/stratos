@@ -60,7 +60,7 @@
 #               (giro_esfera; Girosfera lo ajusta a mano).
 # =============================================================================
 
-SALA_VERSION = 'sala v8'
+SALA_VERSION = 'sala v9'
 
 import math
 
@@ -797,7 +797,7 @@ def vista_entrada(c, esf=None):
     return p, (0.3 * esf['x'], 0.25 * esf['y'], 0.2 * esf['z'])
 
 
-CENITAL_ASPECTO = 320.0 / 288.0     # render_cenital
+CENITAL_ASPECTO = 320.0 / 288.0     # render_cenital (y la miniatura, 200 x 180, v9)
 
 
 def fov_cenital(c=None, frame=None):
@@ -830,14 +830,6 @@ def vista(que, frame=None):
         return p[('tx', 'ty', 'tz').index(que)]
     except Exception:
         return 0.0
-
-
-def plano(que, frame=None):
-    """La camara del plano (ortografica, desde arriba): ty y el ancho."""
-    c = cfg()
-    if que == 'ancho':
-        return 1.08 * max(c['ancho'], c['fondo'] * 4.0 / 3.0)
-    return c['alto'] + 2.0
 
 
 def haz(e):
