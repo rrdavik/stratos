@@ -43,7 +43,7 @@
 #   v3, LA SALA DIBUJADA
 #               Vista = entrada (por defecto): desde detras de la puerta y por
 #               encima de la gente, mirando al fondo, con la esfera en su
-#               esquina. El suelo del publico (Zonaancho x Zonafondo) se
+#               esquina. (Hasta la v6) el suelo del publico (Zonaancho x Zonafondo) se
 #               delimita con una tarima, un borde claro y una reticula de
 #               0,5 m; el publico se para dentro. Las aristas de la sala, el
 #               umbral de la puerta y una reticula de 1 m en suelo y paredes
@@ -53,9 +53,12 @@
 #               0,5 m cubre todo el suelo; el publico, sin cabeza (un tronco);
 #               Demo elige la visita (paseo, grupo, llena, goteo, vacia) y
 #               Luzesfera la luz de la esfera sobre la sala (0: apagada).
+#   v7          sin la zona de la camara: la camara cenital ve todo el suelo
+#               (fov_cenital) y el publico se para en cualquier sitio de la
+#               sala, lejos de las paredes, la esfera y el estrobo.
 # =============================================================================
 
-SALA_VERSION = 'sala v4'
+SALA_VERSION = 'sala v7'
 
 import math
 
@@ -91,11 +94,9 @@ COL_SUELO = (0.10, 0.10, 0.11)
 COL_PARED = (0.17, 0.17, 0.18)
 COL_ZONA = (0.10, 0.38, 0.42)
 COL_PUERTA = (0.55, 0.40, 0.12)
-COL_TARIMA = (0.07, 0.17, 0.19)         # v3: el suelo del publico, algo mas claro que el resto
 # v3: las lineas (Constant MAT: se ven aunque la sala este a oscuras)
 LIN_ARISTA = (0.55, 0.55, 0.58)         # las aristas de la sala
 LIN_PARED = (0.16, 0.16, 0.18)          # la reticula de 1 m en paredes y suelo
-LIN_ZONA = (0.15, 0.75, 0.80)           # el borde del suelo del publico
 LIN_GRID = (0.06, 0.32, 0.35)           # su reticula
 GRID_ZONA = 0.5                         # m entre dos lineas de la reticula del publico
 GRID_SALA = 1.0                         # m entre dos lineas de la reticula de la sala
@@ -220,10 +221,10 @@ _PLANES = {}
 
 
 def zona(cfg):
-    """(medio ancho, medio fondo) del suelo del publico (v3): Zonaancho x
-    Zonafondo, centrado, sin pasar del margen de las paredes."""
-    return (max(0.3, min(0.5 * cfg.get('zona_ancho', cfg['ancho']), 0.5 * cfg['ancho'] - MARGEN)),
-            max(0.3, min(0.5 * cfg.get('zona_fondo', cfg['fondo']), 0.5 * cfg['fondo'] - MARGEN)))
+    """(medio ancho, medio fondo) del suelo donde se para el publico. v7: todo
+    el suelo de la sala, menos MARGEN junto a las paredes (la camara cenital
+    lo ve entero; antes, la zona Zonaancho x Zonafondo)."""
+    return (max(0.3, 0.5 * cfg['ancho'] - MARGEN), max(0.3, 0.5 * cfg['fondo'] - MARGEN))
 
 
 def _punto(cfg, i, v, k, evitar):
@@ -231,13 +232,13 @@ def _punto(cfg, i, v, k, evitar):
     p = None
     for intento in range(10):
         p = (-hx + 2 * hx * h01(i, v, k, intento, 1), -hz + 2 * hz * h01(i, v, k, intento, 2))
-        if all(math.hypot(p[0] - e[0], p[1] - e[2]) > APARTE for e in evitar):
+        if all(math.hypot(p[0] - e[0], p[1] - e[2]) > APARTE for e in evitar) and not _escondido(p, evitar):
             return p
     return p
 
 
 def _clave(cfg, evitar):
-    return (cfg['ancho'], cfg['fondo'], cfg.get('zona_ancho'), cfg.get('zona_fondo'), cfg['llegada'],
+    return (cfg['ancho'], cfg['fondo'], cfg['llegada'],
             cfg.get('demo', 0), cfg['personas'], tuple(evitar))
 
 
@@ -255,21 +256,43 @@ FILA_CORRO = 7              # personas por fila del corro
 TURNO_GOTEO = 35.0          # s entre dos visitantes del goteo
 
 
+def _dist_tramo(p, q, e):
+    """Distancia en planta del aparato e (x, y, z) al tramo de p a q."""
+    dx, dz = q[0] - p[0], q[1] - p[1]
+    L2 = dx * dx + dz * dz
+    u = 0.0 if L2 < 1e-12 else max(0.0, min(1.0, ((e[0] - p[0]) * dx + (e[2] - p[1]) * dz) / L2))
+    return math.hypot(p[0] + u * dx - e[0], p[1] + u * dz - e[2])
+
+
+def _escondido(q, evitar):
+    """v7: el punto queda detras de la esfera o del estrobo, mirando desde el
+    centro de la sala (en su esquina): para llegar habria que pasar por encima."""
+    return any(_dist_tramo((0.0, 0.0), q, e) <= APARTE for e in evitar)
+
+
 def _libre(cfg, q, evitar):
-    """El punto q dentro del suelo del publico; si cae cerca de la esfera o
-    del estrobo, se aleja de ellos hasta quedar a APARTE."""
+    """El punto q dentro del suelo del publico, a APARTE de la esfera y del
+    estrobo y sin quedar escondido detras de ellos (si no, se acerca al
+    centro de la sala)."""
     zx, zz = zona(cfg)
     x, z = q
-    for _ in range(6):
+    for _ in range(12):
         x, z = max(-zx, min(zx, x)), max(-zz, min(zz, z))
         cerca = [e for e in evitar if math.hypot(x - e[0], z - e[2]) <= APARTE]
-        if not cerca:
+        if cerca:
+            e = cerca[0]
+            d = math.hypot(x - e[0], z - e[2]) or 1e-6
+            k = (APARTE + 0.15) / d
+            nx, nz = e[0] + (x - e[0]) * k, e[2] + (z - e[2]) * k
+            if abs(nx) > zx or abs(nz) > zz:            # contra la pared: hacia el centro
+                x, z = 0.85 * x, 0.85 * z
+            else:
+                x, z = nx, nz
+        elif _escondido((x, z), evitar):
+            x, z = 0.85 * x, 0.85 * z
+        else:
             break
-        e = cerca[0]
-        d = math.hypot(x - e[0], z - e[2]) or 1e-6
-        k = (APARTE + 0.15) / d
-        x, z = e[0] + (x - e[0]) * k, e[2] + (z - e[2]) * k
-    return (x, z)
+    return (max(-zx, min(zx, x)), max(-zz, min(zz, z)))
 
 
 def _corro(cfg, i, evitar):
@@ -297,10 +320,32 @@ def _sitio_lleno(cfg, i, v, evitar):
     return _libre(cfg, (x, z), evitar)
 
 
-def _andar(tr, t, p, q):
-    dt = math.hypot(q[0] - p[0], q[1] - p[1]) / VELOCIDAD
-    tr.append([t, t + dt, p, q, True, True])
-    return t + dt
+DESVIO = 0.4                # v7: m de mas al rodear la esfera o el estrobo
+
+
+def _camino(cfg, p, q, evitar, prof=0):
+    """Los puntos de p a q (sin p): si el tramo recto pasa a menos de APARTE
+    de la esfera o del estrobo, lo rodea por el lado que da al centro."""
+    if prof < 3:
+        for e in evitar:
+            if _dist_tramo(p, q, e) <= APARTE:
+                dx, dz = q[0] - p[0], q[1] - p[1]
+                L = math.hypot(dx, dz) or 1e-6
+                nx, nz = -dz / L, dx / L                # perpendicular al tramo
+                if nx * (0.0 - e[0]) + nz * (0.0 - e[2]) < 0:
+                    nx, nz = -nx, -nz                   # hacia el centro de la sala
+                w = _libre(cfg, (e[0] + nx * (APARTE + DESVIO), e[2] + nz * (APARTE + DESVIO)), evitar)
+                return _camino(cfg, p, w, evitar, prof + 1) + _camino(cfg, w, q, evitar, prof + 1)
+    return [q]
+
+
+def _andar(tr, t, p, q, cfg=None, evitar=()):
+    pts = _camino(cfg, p, q, evitar) if cfg is not None and evitar else [q]
+    for r in pts:
+        dt = math.hypot(r[0] - p[0], r[1] - p[1]) / VELOCIDAD
+        tr.append([t, t + dt, p, r, True, True])
+        t, p = t + dt, r
+    return t
 
 
 def _quieto(tr, t, p, d):
@@ -317,17 +362,17 @@ def _visita(cfg, i, v, t, demo, evitar):
     t, p = t + 1.0, puerta
     if demo == 'grupo':
         q = _corro(cfg, i, evitar)
-        t = _andar(tr, t, p, q)
+        t = _andar(tr, t, p, q, cfg, evitar)
         sale = v * CICLO_GRUPO + ESTANCIA_GRUPO + 1.2 * i
         t = _quieto(tr, t, q, sale - t)
         p = q
     elif demo == 'llena':
         q = _sitio_lleno(cfg, i, v, evitar)
-        t = _andar(tr, t, p, q)
+        t = _andar(tr, t, p, q, cfg, evitar)
         t = _quieto(tr, t, q, 50.0 + 60.0 * h01(i, v, 23))
         a = 2 * math.pi * h01(i, v, 24)          # un paso corto y vuelve a quedarse
         q2 = _libre(cfg, (q[0] + 0.45 * math.cos(a), q[1] + 0.45 * math.sin(a)), evitar)
-        t = _andar(tr, t, q, q2)
+        t = _andar(tr, t, q, q2, cfg, evitar)
         t = _quieto(tr, t, q2, 30.0 + 40.0 * h01(i, v, 25))
         p = q2
     elif demo == 'goteo':
@@ -335,19 +380,19 @@ def _visita(cfg, i, v, t, demo, evitar):
         a = math.atan2(-c[0], -c[2]) + math.radians(50.0) * (h01(i, v, 26) - 0.5)
         r = APARTE + 0.5 + 0.6 * h01(i, v, 27)
         q = _libre(cfg, (c[0] + r * math.sin(a), c[2] + r * math.cos(a)), evitar)
-        t = _andar(tr, t, p, q)
+        t = _andar(tr, t, p, q, cfg, evitar)
         t = _quieto(tr, t, q, 10.0 + 8.0 * h01(i, v, 28))
         q2 = _punto(cfg, i, v, 0, evitar)
-        t = _andar(tr, t, q, q2)
+        t = _andar(tr, t, q, q2, cfg, evitar)
         t = _quieto(tr, t, q2, 3.0 + 4.0 * h01(i, v, 29))
         p = q2
     else:                                        # paseo
         for k in range(3 + int(5 * h01(i, v, 3))):
             q = _punto(cfg, i, v, k, evitar)
-            t = _andar(tr, t, p, q)
+            t = _andar(tr, t, p, q, cfg, evitar)
             t = _quieto(tr, t, q, 3.0 + 9.0 * h01(i, v, k, 4))
             p = q
-    t = _andar(tr, t, p, puerta)
+    t = _andar(tr, t, p, puerta, cfg, evitar)
     return tr, t
 
 
@@ -588,7 +633,8 @@ def bloque_audio(cfg, equipos, ta, n, rate, evs, mic=None):
 # TouchDesigner (o del simulado de pruebas/).
 
 _SALA = dict(t0=None, frame=None, equipos=None, audio=None, t_audio=None, forzar=False, manuales=[],
-             col_esfera=None, col_frame=None)
+             col_esfera=None, col_frame=None, rotulo=None, rotulo_frame=None)
+ROTULO_CADA = 15            # v5: el rotulo se rehace cada 15 fotogramas (un cuarto de segundo)
 MODOS_LUZ = ['apagado', 'prueba']
 VISTAS = ['visitante', 'entrada', 'orbita', 'cenital']      # v2; hasta la v1, libre (= orbita) y cenital
 
@@ -623,7 +669,6 @@ def _menu(name, opciones, defecto):
 def cfg():
     return dict(activa=bool(_p('Activa', True)),
                 ancho=max(2.0, _p('Ancho', 8.0)), fondo=max(2.0, _p('Fondo', 6.0)), alto=max(2.0, _p('Alto', 4.0)),
-                zona_ancho=_p('Zonaancho', 5.4), zona_fondo=_p('Zonafondo', 4.5),
                 personas=max(0, int(_p('Personas', 6))), llegada=max(0.0, _p('Llegada', 8.0)),
                 ruido_publico=max(0.0, _p('Ruidopublico', 0.05)), reaccion=max(0.0, _p('Reaccion', 3.0)),
                 volumen_drone=max(0.0, _p('Volumendrone', 0.5)),
@@ -750,6 +795,25 @@ def vista_entrada(c, esf=None):
     return p, (0.3 * esf['x'], 0.25 * esf['y'], 0.2 * esf['z'])
 
 
+CENITAL_ASPECTO = 320.0 / 288.0     # render_cenital
+
+
+def fov_cenital(c=None, frame=None):
+    """v7: el angulo horizontal (grados) de la camara cenital para que vea
+    todo el suelo de la sala desde donde esta en la tabla, con 2 grados de
+    holgura. Ojo: una Femto Bolt en NFOV ve unos 75 x 65 grados; a 3,5 m
+    no cubre 8 x 6 m."""
+    c = c or cfg()
+    cam = next((e for e in equipos() if e['tipo'] == 'camara'), None)
+    x, y, z = cam['pos'] if cam is not None else (0.0, 3.5, 0.0)
+    y = max(0.5, y)
+    medio_x = 0.5 * c['ancho'] + abs(x)
+    medio_z = 0.5 * c['fondo'] + abs(z)
+    h = math.atan(medio_x / y)
+    v = math.atan(math.tan(math.atan(medio_z / y)) * CENITAL_ASPECTO)     # el fondo, en angulo horizontal
+    return min(170.0, 2.0 * math.degrees(max(h, v)) + 2.0)
+
+
 def vista(que, frame=None):
     """La camara principal (Vista): tx ty tz de su posicion, mx my mz de a
     donde mira (el Null 'mirada'), y fov."""
@@ -758,7 +822,7 @@ def vista(que, frame=None):
         p, m = ojos(c)
         if que == 'fov':
             modo = VISTAS[c['vista'] % len(VISTAS)]
-            return {'cenital': 75.0, 'entrada': 80.0}.get(modo, 62.0)
+            return fov_cenital(c) if modo == 'cenital' else {'entrada': 80.0}.get(modo, 62.0)
         if que in ('mx', 'my', 'mz'):
             return m[('mx', 'my', 'mz').index(que)]
         return p[('tx', 'ty', 'tz').index(que)]
@@ -783,20 +847,30 @@ def haz(e):
     return largo, 2.0 * largo * math.tan(math.radians(min(170.0, e['tam']) / 2.0))
 
 
+def _media(ch):
+    try:
+        v = list(ch.vals)
+    except Exception:
+        v = [float(ch.eval())]
+    return sum(v) / float(len(v)) if v else 0.0
+
+
 def color_esfera(frame=None):
-    """(r, g, b) medio de la imagen de la esfera (el TOP 'esfera_media', la
-    imagen de FASE1 reducida), una vez por fotograma; si no se puede medir,
-    COL_ESFERA_DEF."""
+    """(r, g, b) medio de la imagen de la esfera, una vez por fotograma; si
+    no se puede medir (o Luzesfera = 0), COL_ESFERA_DEF. v5: lo lee del TOP
+    to CHOP 'esfera_color' (descarga diferida); antes, numpyArray() sobre
+    'esfera_media' bajaba la textura de la GPU en el momento y paraba el
+    fotograma (15 ms en luz_esfera, segun el inspector de rendimiento)."""
     if _SALA['col_esfera'] is not None and _SALA['col_frame'] == absTime.frame:
         return _SALA['col_esfera']
     col = COL_ESFERA_DEF
-    try:
-        a = parent().op('esfera_media').numpyArray()
-        if a is not None and a.size:
-            m = a.reshape(-1, a.shape[-1]).mean(axis=0)
-            col = tuple(max(0.0, min(1.0, float(v))) for v in m[:3])
-    except Exception:
-        pass
+    if cfg()['luz_esfera'] > 0:
+        try:
+            ch = parent().op('esfera_color')
+            if ch is not None and ch.numChans >= 3:
+                col = tuple(max(0.0, min(1.0, _media(ch[k]))) for k in range(3))
+        except Exception:
+            pass
     _SALA['col_esfera'], _SALA['col_frame'] = col, absTime.frame
     return col
 
@@ -818,13 +892,11 @@ def luz_esfera(que, frame=None):
 def _filas_sala(c):
     W, F, H = c['ancho'], c['fondo'], c['alto']
     hx, hz = W / 2.0, F / 2.0
-    zx, zz = zona(c)
     return [[0, -0.02, 0, 0, 0, 0, W, 0.02, F] + list(COL_SUELO),
             [0, 0, -hz, 0, 0, 0, W, H, 0.05] + list(COL_PARED),
             [-hx, 0, 0, 0, 0, 0, 0.05, H, F] + list(COL_PARED),
             [hx, 0, 0, 0, 0, 0, 0.05, H, F] + list(COL_PARED),
-            [0, 0, hz, 0, 0, 0, PUERTA_ANCHO, 0.01, 0.12] + list(COL_PUERTA),
-            [0, 0, 0, 0, 0, 0, 2 * zx, 0.006, 2 * zz] + list(COL_TARIMA)]     # v3: el suelo del publico
+            [0, 0, hz, 0, 0, 0, PUERTA_ANCHO, 0.01, 0.12] + list(COL_PUERTA)]
 
 
 def _marcas(a, b, paso):
@@ -844,12 +916,11 @@ def _filas_lineas(c):
     """v3: el dibujo de la sala, para leerla en perspectiva aunque este a
     oscuras: las doce aristas, el umbral de la puerta, una reticula de
     GRID_ZONA m en todo el suelo (v4; antes solo en el del publico), una de
-    GRID_SALA m en las tres paredes, y el borde del suelo del publico
-    (Zonaancho x Zonafondo), donde se pararia la gente."""
+    GRID_SALA m en las tres paredes. v7: sin la zona de la camara (la
+    camara cenital ve todo el suelo)."""
     W, F, H = c['ancho'], c['fondo'], c['alto']
     hx, hz = W / 2.0, F / 2.0
-    zx, zz = zona(c)
-    y0, yz = 0.008, 0.012           # la reticula (sobre la tarima) y, encima, el borde del publico
+    y0, yz = 0.008, 0.012           # la reticula y, encima, el umbral de la puerta
     f = []
     # v4: la reticula de GRID_ZONA m cubre todo el suelo de la sala
     for x in _marcas(-hx, hx, GRID_ZONA)[1:-1]:
@@ -866,10 +937,6 @@ def _filas_lineas(c):
         f.append(_linea((-hx, y, -hz + 0.03), (hx, y, -hz + 0.03), LIN_PARED, 0.012))
         for x in (-hx + 0.03, hx - 0.03):
             f.append(_linea((x, y, -hz), (x, y, hz), LIN_PARED, 0.012))
-    # el suelo del publico: su borde (la reticula ya pasa por encima)
-    for p, q in (((-zx, yz, -zz), (zx, yz, -zz)), ((-zx, yz, zz), (zx, yz, zz)),
-                 ((-zx, yz, -zz), (-zx, yz, zz)), ((zx, yz, -zz), (zx, yz, zz))):
-        f.append(_linea(p, q, LIN_ZONA, 0.04))
     # las doce aristas
     for y in (0.0, H - GROSOR):
         f.append(_linea((-hx, y, -hz), (hx, y, -hz), LIN_ARISTA))
@@ -891,6 +958,8 @@ def _filas_lineas(c):
 def _filas_equipos(c, eq, t):
     out = []
     for e in eq:
+        if e['tipo'] == 'sub':              # v6: va dentro de la peana; dibujado, sus caras y las de la
+            continue                        # peana coincidian y salian rayas bajo la esfera
         if e['tipo'] == 'esfera':           # la peana; la esfera tiene su geometria
             alto = max(0.05, e['y'] - 0.5 * e['tam'])
             out.append([e['x'], 0.0, e['z'], 0, 0, 0, 0.6 * e['tam'], alto, 0.6 * e['tam']]
@@ -1066,7 +1135,30 @@ def on_pulse(nombre):
 
 
 def texto_monitor(frame=None):
-    """El rotulo del monitor (v2): la sala, la luz y lo que oye FASE1."""
+    """El rotulo del monitor (v2): la sala, la luz y lo que oye FASE1. v5:
+    se rehace cada ROTULO_CADA fotogramas; entre medias, el mismo texto (el
+    Text TOP no se vuelve a dibujar)."""
+    f = absTime.frame
+    if _SALA['rotulo'] is not None and _SALA['rotulo_frame'] is not None \
+            and 0 <= f - _SALA['rotulo_frame'] < ROTULO_CADA:
+        return _SALA['rotulo']
+    _SALA['rotulo'], _SALA['rotulo_frame'] = _texto_monitor(), f
+    return _SALA['rotulo']
+
+
+def luces_render(extra=''):
+    """v5: la lista de luces de los render de la sala; luz_esfera solo con
+    Luzesfera > 0 (una luz a 0 se sigue calculando en cada pixel)."""
+    try:
+        nombres = [o.name for o in parent().children if o.name.startswith('luz_')]
+    except Exception:
+        nombres = []
+    if cfg()['luz_esfera'] <= 0:
+        nombres = [n for n in nombres if n != 'luz_esfera']
+    return ' '.join(sorted(nombres) + ([extra] if extra else []))
+
+
+def _texto_monitor():
     lineas = [legend()]
     try:
         c = cfg()

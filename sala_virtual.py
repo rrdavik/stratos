@@ -12,13 +12,12 @@ encienden por su cuenta hasta que la fase 23 los mande por DMX.
 QUE MONTA
 ---------
   SALA         8 x 6 m y 4 de alto (Ancho, Fondo, Alto): suelo, tres paredes
-               (la de la entrada, abierta para mirar), la puerta en el centro
-               de la de delante y, en el suelo, el suelo del publico, que es
-               la zona que ve la camara (Zonaancho x Zonafondo, 5,4 x 4,5 m).
+               (la de la entrada, abierta para mirar) y la puerta en el centro
+               de la de delante. v8: la camara cenital ve todo el suelo (hasta
+               la v7 solo una zona, Zonaancho x Zonafondo, con tarima y borde).
                v4: dibujada con lineas (geometria 'lineas', Constant MAT, se
                ve a oscuras): las doce aristas, el umbral de la puerta, una
-               reticula de 1 m en las paredes, una de 0,5 m en todo el suelo
-               (v5) y, en el suelo del publico, una tarima y un borde claro.
+               reticula de 1 m en las paredes y una de 0,5 m en todo el suelo.
   EQUIPOS      la tabla 'equipos' (editable; relanzar no la pisa): la esfera
                de LEDs de 1 m en la esquina del fondo a la izquierda (v5: a
                1 m de cada pared; si no lo esta, se rehace la tabla), sobre su
@@ -71,8 +70,7 @@ QUE MONTA
                  orbita     desde fuera (Orbita, Distancia, Alturavista)
                  cenital    lo que ve la camara del techo
                Encima: el plano de la sala desde arriba, con el publico y los
-               focos (abajo a la derecha), lo que muestra la esfera (arriba a
-               la derecha) y el rotulo con la luz, el publico y los onsets
+               focos (abajo a la derecha; v7: sobre negro) y el rotulo con la luz, el publico y los onsets
                (arriba a la izquierda). render_cenital (320 x 288) y
                'profundidad' siguen ahi para la fase 22: no hace falta
                mirarlos.
@@ -91,7 +89,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v5  (demos de publico, la esfera a 1 m de la esquina, reticula en todo el suelo, sin cabezas)'
+VERSION = 'sala_virtual v8  (sin zona de la camara: la cenital ve todo el suelo de la sala)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -126,8 +124,14 @@ add_par(sala, page, 'toggle', 'Activa', 'Sala activa (personas, sonido y luz)', 
 add_par(sala, page, 'float', 'Ancho', 'Ancho de la sala (m)', 8.0, 2.0, 30.0)
 add_par(sala, page, 'float', 'Fondo', 'Fondo de la sala (m)', 6.0, 2.0, 30.0)
 add_par(sala, page, 'float', 'Alto', 'Alto de la sala (m)', 4.0, 2.0, 12.0)
-add_par(sala, page, 'float', 'Zonaancho', 'Zona de la camara: ancho (m)', 5.4, 1.0, 30.0)
-add_par(sala, page, 'float', 'Zonafondo', 'Zona de la camara: fondo (m)', 4.5, 1.0, 30.0)
+for viejo in ('Zonaancho', 'Zonafondo'):           # v8: sin zona; la camara ve todo el suelo
+    try:
+        p_ = getattr(sala.par, viejo, None)
+        if p_ is not None:
+            p_.destroy()
+            ok('%s: quitado (la camara cenital ve todo el suelo de la sala)' % viejo)
+    except Exception as e:
+        info('%s: no pude quitarlo (%s); ya no se usa' % (viejo, e))
 add_par(sala, page, 'pulse', 'Recolocar', 'Recolocar los equipos con estas medidas (rehace la tabla)')
 add_par(sala, page, 'int', 'Personas', 'Personas', 6, 0, 30, clamp=True)
 add_par(sala, page, 'menu', 'Demo', 'Demo de visita del publico', 'paseo', menu=sm.DEMOS,
@@ -178,7 +182,7 @@ except Exception as e:
 add_par(sala, page, 'float', 'Orbita', 'Vista libre: giro (grados)', 30.0, -180.0, 180.0)
 add_par(sala, page, 'float', 'Distancia', 'Vista libre: distancia (m)', 11.0, 3.0, 40.0)
 add_par(sala, page, 'float', 'Alturavista', 'Vista libre: altura (m)', 5.0, 0.5, 20.0)
-ok('pagina Sala: Activa, Ancho 8, Fondo 6, Alto 4, Zonaancho 5,4, Zonafondo 4,5, Recolocar, Personas 6, '
+ok('pagina Sala: Activa, Ancho 8, Fondo 6, Alto 4, Recolocar, Personas 6, '
    'Llegada 8, Ruidopublico 0,05, Reaccion 3, Volumendrone 0,5, Palmada, Reiniciarsala, Usarmic, '
    'Modoluz (prueba), Hzprueba 2,5, Luzcasa 0,06, Bruma 0,5, Vista (visitante), Orbita, Distancia, '
    'Alturavista (las tres, solo con Vista = orbita)')
@@ -387,13 +391,23 @@ if sale_render and out_render.inputs:
 else:
     info('out_render / imagen_fase1: revisa que %s este cableado a %s/render y que imagen_fase1 '
          'apunte a el' % (out_render.path, fase1.path))
+# v7: sobre la esfera, solo el centro del render (el planeta, un cuadrado): el
+# render entero, casi todo fondo oscuro, la dejaba gris
+recorte = get_or_make(sala, 'cropTOP', 'esfera_imagen', 880, -120)
+connect(recorte, sel_fase1, 0)
+lado = 0.5 * (1.0 - 720.0 / 1280.0)
+recortada = all([setp_any(recorte, ['cropleft'], lado), setp_any(recorte, ['cropright'], 1.0 - lado)])
+if not recortada:
+    info('esfera_imagen: no pude recortar el centro del render (Crop TOP: Left %.3f, Right %.3f)'
+         % (lado, 1.0 - lado))
 mat_esfera = make_constant(sala, 'mat_esfera', 660, -40, (1.0, 1.0, 1.0))
-imagen = setp_any(mat_esfera, ['colormap', 'map'], 'imagen_fase1')
+imagen = setp_any(mat_esfera, ['colormap', 'map'], 'esfera_imagen')
 setp(esfera, 'material', 'mat_esfera')
 if imagen:
-    ok('esfera: 1 m con la imagen de FASE1 (imagen_fase1; la real pide un mapa equirectangular 2:1)')
+    ok('esfera: 1 m con el centro de la imagen de FASE1 (esfera_imagen; la real pide un mapa '
+       'equirectangular 2:1)')
 else:
-    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = imagen_fase1')
+    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = esfera_imagen')
 # v2: la imagen de la esfera, pequena, para el monitor y para medir su color medio
 mini = get_or_make(sala, 'resolutionTOP', 'esfera_mini', 880, -40)
 connect(mini, sel_fase1, 0)
@@ -405,6 +419,14 @@ connect(media, mini, 0)
 setmenu(media, ['outputresolution', 'resolution'], ['custom'], None)
 setp_any(media, ['resolutionw'], 8)
 setp_any(media, ['resolutionh'], 8)
+# v6: el color medio, por un TOP to CHOP con descarga diferida (no para el fotograma)
+col_chop = get_or_make(sala, 'toptoCHOP', 'esfera_color', 1320, -40)
+setp_any(col_chop, ['top'], 'esfera_media')
+diferida = setmenu(col_chop, ['downloadtype'], ['delayed', 'nextframe', 'fast'], None)
+if diferida:
+    ok('esfera_color: el color medio de la esfera, con descarga diferida (antes, 15 ms por fotograma)')
+else:
+    info('esfera_color: pon Download Type = Delayed a mano, o el color de la esfera parara el fotograma')
 
 # las luces: una por foco y por estrobo de la tabla, la de la esfera y la de casa
 for o in [o for o in sala.children if o.name.startswith('luz_')]:
@@ -463,7 +485,8 @@ cenital = get_or_make(sala, 'cameraCOMP', 'vista_cenital', 440, 200)
 for ax in ('tx', 'ty', 'tz'):
     setexpr(cenital, ax, "%s.valor('camara', '%s', absTime.frame)" % (SM, ax))
 setp(cenital, 'rx', -90.0)
-setp(cenital, 'fov', 75.0)                  # Femto Bolt, NFOV: unos 75 x 65 grados
+setmenu(cenital, ['viewanglemethod'], ['horizontal', 'horzfov'], None)
+setexpr(cenital, 'fov', "%s.fov_cenital()" % SM)   # v8: todo el suelo de la sala (antes, 75: Femto Bolt NFOV)
 plano = get_or_make(sala, 'cameraCOMP', 'vista_plano', 440, 120)
 setp(plano, 'rx', -90.0)
 setexpr(plano, 'ty', "%s.plano('ty', absTime.frame)" % SM)
@@ -473,12 +496,13 @@ geos = 'sala_caja lineas equipos_geo personas esfera haces'
 r1 = get_or_make(sala, 'renderTOP', 'render_sala', 660, 360)
 setexpr(r1, 'camera', "'vista_cenital' if str(parent().par.Vista) == 'cenital' else 'vista'")
 setp(r1, 'geometry', geos)
-setp(r1, 'lights', ' '.join(luces))
+setexpr(r1, 'lights', "%s.luces_render()" % SM)        # v6: sin luz_esfera con Luzesfera 0
 setp_any(r1, ['resolutionw'], 1280)
 setp_any(r1, ['resolutionh'], 720)
 setp_any(r1, ['bgcolorr'], 0.0)
 setp_any(r1, ['bgcolorg'], 0.0)
 setp_any(r1, ['bgcolorb'], 0.0)
+setp_any(r1, ['bgcolora', 'bgalpha'], 1.0)      # v7: fondo negro, no transparente (el visor lo pintaba a cuadros)
 setp_any(r1, ['antialias'], 'aa4x')
 luz_plano = get_or_make(sala, 'lightCOMP', 'plano_luz', 220, 440)      # solo para el plano: que se lea
 setmenu(luz_plano, ['lighttype'], ['distant'], 2)
@@ -487,9 +511,10 @@ setp(luz_plano, 'dimmer', 0.5)
 rp = get_or_make(sala, 'renderTOP', 'render_plano', 660, 120)
 setp(rp, 'camera', 'vista_plano')
 setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas esfera')
-setp(rp, 'lights', ' '.join(luces + ['plano_luz']))
+setexpr(rp, 'lights', "%s.luces_render('plano_luz')" % SM)
 setp_any(rp, ['resolutionw'], 320)
 setp_any(rp, ['resolutionh'], 240)
+setp_any(rp, ['bgcolora', 'bgalpha'], 1.0)      # v7: el plano, un recuadro negro que se lee
 r2 = get_or_make(sala, 'renderTOP', 'render_cenital', 660, 280)
 setp(r2, 'camera', 'vista_cenital')
 setp(r2, 'geometry', 'sala_caja personas')
@@ -502,8 +527,8 @@ if not orto:
     info('vista_plano: no encontre Projection = Orthographic; el plano saldra en perspectiva')
 
 # v2: el monitor, una sola imagen con todo: la sala en grande (Vista) y, encima,
-# el plano (abajo a la derecha), lo que muestra la esfera (arriba a la derecha) y
-# el rotulo (arriba a la izquierda). Es lo que hay que mirar: salida_sala.
+# el plano (abajo a la derecha) y el rotulo (arriba a la izquierda). v7: ya no
+# lleva lo que muestra la esfera arriba a la derecha. Es lo que hay que mirar: salida_sala.
 MONITOR_TXT = "parent().op('sala_motor').module.texto_monitor(absTime.frame)"
 rot = get_or_make(sala, 'textTOP', 'rotulo_sala', 880, 520)
 setp_any(rot, ['resolutionw'], 1280)
@@ -535,15 +560,18 @@ def encima(nombre, arriba, abajo, horiz, vert, x, y):
     return all(bien)
 
 
-colocados = [encima('con_plano', rp, r1, 'right', 'bottom', 880, 360),
-             encima('con_esfera', mini, sala.op('con_plano'), 'right', 'top', 1100, 360)]
+# v7: sin el recuadro de lo que muestra la esfera arriba a la derecha: parecia la
+# esfera metida en la esquina de la sala. La esfera 3D ya lo ensena.
+if sala.op('con_esfera') is not None:
+    sala.op('con_esfera').destroy()
+colocados = [encima('con_plano', rp, r1, 'right', 'bottom', 880, 360)]
 if transparente:
     con_rotulo = get_or_make(sala, 'overTOP', 'con_rotulo', 1320, 360)
     connect(con_rotulo, rot, 0)
-    connect(con_rotulo, sala.op('con_esfera'), 1)
+    connect(con_rotulo, sala.op('con_plano'), 1)
     ultimo = con_rotulo
 else:
-    ultimo = sala.op('con_esfera')
+    ultimo = sala.op('con_plano')
     info('rotulo_sala: no pude hacer transparente su fondo; el rotulo se ve en su nodo')
 monitor = get_or_make(sala, 'nullTOP', 'monitor_sala', 1540, 360)
 connect(monitor, ultimo, 0)
@@ -555,11 +583,11 @@ for o in (monitor, salida):
     except Exception:
         pass
 if all(colocados):
-    ok('monitor_sala (y salida_sala): la sala en grande desde la Vista, con el plano, la esfera y el '
-       'rotulo encima. Es lo unico que hay que mirar')
+    ok('monitor_sala (y salida_sala): la sala en grande desde la Vista, con el plano y el rotulo encima. '
+       'Es lo unico que hay que mirar')
 else:
-    info('monitor_sala: no pude colocar el plano o la esfera en su esquina (Over TOP: Size = Input 2, '
-         'Prefit = Native Resolution, Justify); revisalo en con_plano y con_esfera')
+    info('monitor_sala: no pude colocar el plano en su esquina (Over TOP: Size = Input 2, '
+         'Prefit = Native Resolution, Justify); revisalo en con_plano')
 ok('render_cenital (320 x 288) y profundidad: la camara del techo, para la fase 22 (no hace falta mirarlos)')
 
 # el microfono virtual
@@ -676,7 +704,7 @@ def _prueba(t, m):
     zx, zz = sm.zona(c)
     paradas = [q for i in range(8) for s in sm.plan(c, i, 600.0, ev) if s[4] and not s[5]
                for q in (s[2],)]
-    t.check('v4: el publico se para dentro de su suelo (Zonaancho x Zonafondo)',
+    t.check('el publico se para en el suelo de la sala, lejos de las paredes (v8: en toda la sala)',
             paradas and all(abs(x) <= zx + 1e-9 and abs(z) <= zz + 1e-9 for x, z in paradas),
             '%d paradas' % len(paradas))
     p0 = sm.posicion(c, 0, 0.0, ev)
@@ -745,10 +773,15 @@ def _prueba(t, m):
             and sala.op('esfera_mini').inputs[0] == sala.op('imagen_fase1'))
 
     # 5b. v2: estar en la sala
-    t.check('un monitor con todo: salida_sala <- monitor_sala, con el plano, la esfera y el rotulo encima',
+    t.check('un monitor con todo: salida_sala <- monitor_sala, con el plano y el rotulo encima (v7: sin el '
+            'recuadro de la esfera)',
             sala.op('salida_sala') is not None and sala.op('monitor_sala') is not None
-            and all(sala.op(nm) is not None for nm in ('con_plano', 'con_esfera', 'render_plano',
-                                                       'esfera_mini', 'rotulo_sala')))
+            and sala.op('con_esfera') is None
+            and all(sala.op(nm) is not None for nm in ('con_plano', 'render_plano', 'esfera_mini',
+                                                       'esfera_imagen', 'rotulo_sala')))
+    t.check('v7: sin rayas bajo la esfera: el sub, dentro de la peana, no se dibuja',
+            not any(abs(r[0] - por['sub'][0]['x']) < 1e-9 and abs(r[2] - por['sub'][0]['z']) < 1e-9
+                    and abs(r[7] - sm.TAM_EQUIPO['sub'][1]) < 1e-9 for r in sm._filas_equipos(c, eq, 5.0)))
     sala.par.Vista = 'visitante'
     c = sm.cfg()
     ev = sm.evitar_de(eq)
@@ -775,12 +808,17 @@ def _prueba(t, m):
     t.check('v5: la esfera en una esquina del fondo, a 1 m de cada pared', sm.esfera_en_esquina(c, eq),
             '%.2f m al fondo, %.2f m al lado' % mg if mg else 'sin esfera')
     lin = sm._filas_lineas(c)
-    zx, zz = sm.zona(c)
-    t.check('v4: la sala dibujada: aristas, reticula y el borde del suelo del publico',
+    t.check('la sala dibujada: aristas y reticula (v8: sin el borde de la zona de la camara)',
             sala.op('lineas') is not None and len(lin) > 30
             and 'lineas' in str(sala.op('render_sala').par.geometry.val).split()
-            and any(abs(r[6] - 2 * zx) < 1e-6 and abs(r[8] - 0.04) < 1e-6 for r in lin),
+            and getattr(sala.par, 'Zonaancho', None) is None,
             '%d lineas' % len(lin))
+    cam = por['camara'][0]
+    fv = math.radians(sm.fov_cenital(c))
+    t.check('v8: la camara cenital ve todo el suelo de la sala',
+            math.tan(fv / 2) * cam['y'] >= hx + abs(cam['x']) - 1e-6
+            and math.tan(fv / 2) / sm.CENITAL_ASPECTO * cam['y'] >= hz + abs(cam['z']) - 1e-6,
+            '%.0f grados en horizontal desde %.1f m' % (sm.fov_cenital(c), cam['y']))
     sala.par.Vista = 'visitante'
     sala.par.Personas = 4
     c = sm.cfg()
@@ -842,6 +880,23 @@ def _prueba(t, m):
     t.check('la esfera es una luz: luz_esfera, en su sitio y con el color medio de su imagen (Luzesfera)',
             sala.op('luz_esfera') is not None and abs(sm.luz_esfera('ty') - esf['y']) < 1e-9
             and all(0.0 <= sm.luz_esfera(ch) <= 1.0 for ch in 'rgb'))
+    # v6: rendimiento
+    lz = sala.par.Luzesfera.eval()
+    try:
+        sala.par.Luzesfera = 0.0
+        sin = sm.luces_render().split()
+        sala.par.Luzesfera = 0.5
+        con = sm.luces_render().split()
+    finally:
+        sala.par.Luzesfera = lz
+    t.check('v6: con Luzesfera 0, luz_esfera fuera de los render; con luz, dentro',
+            'luz_esfera' not in sin and 'luz_esfera' in con and 'luz_foco1' in sin)
+    t.check('v6: el color de la esfera por esfera_color (TOP to CHOP), sin numpyArray',
+            sala.op('esfera_color') is not None)
+    sm._SALA['rotulo'] = None
+    r0 = sm.texto_monitor()
+    t.check('v6: el rotulo se rehace cada %d fotogramas' % sm.ROTULO_CADA,
+            r0 == sm.texto_monitor() and sm._SALA['rotulo_frame'] is not None)
     t.check('el rotulo del monitor: la sala, la luz y la vista',
             'SALA' in sm.texto_monitor() and 'LUZ' in sm.texto_monitor() and 'visitante' in sm.texto_monitor())
 
