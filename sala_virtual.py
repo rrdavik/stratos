@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v19  (la imagen de FASE1, de frente sobre la esfera: como se ve en FASE1)'
+VERSION = 'sala_virtual v20  (Girosfera e Inclinasfera a 0: el giro automatico ya pone el planeta de frente)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -180,6 +180,17 @@ try:                    # v19: la imagen va de frente y derecha: sin volteos (un
             getattr(sala.par, nm).default = False
 except Exception as e:
     info('Espejosfera / Volteosfera: no pude apagarlos (%s); apagalos a mano' % e)
+try:                    # v20: los retoques a mano de antes de la v19 (imagen envuelta) sobran
+    if not sala.fetch('giro_v20', False, search=False):
+        sala.store('giro_v20', True)
+        antes = (float(sala.par.Girosfera), float(sala.par.Inclinasfera))
+        sala.par.Girosfera = 0.0
+        sala.par.Inclinasfera = 0.0
+        if any(abs(v) > 1e-6 for v in antes):
+            ok('Girosfera %g -> 0 e Inclinasfera %g -> 0: con la imagen de frente, el giro y la inclinacion '
+               'automaticos ya ponen el planeta mirando a la entrada' % antes)
+except Exception as e:
+    info('Girosfera / Inclinasfera: no pude ponerlos a 0 (%s); ponlos a mano' % e)
 add_par(sala, page, 'float', 'Inclinasfera', 'Inclinacion de la esfera (grados hacia arriba; 0 = mira '
         'a la camara de la entrada)', 0.0, -90.0, 90.0)
 add_par(sala, page, 'float', 'Girosfera', 'Giro de la esfera (grados; 0 = el planeta mira a la sala)', 0.0,
