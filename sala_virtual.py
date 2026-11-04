@@ -12,13 +12,12 @@ encienden por su cuenta hasta que la fase 23 los mande por DMX.
 QUE MONTA
 ---------
   SALA         8 x 6 m y 4 de alto (Ancho, Fondo, Alto): suelo, tres paredes
-               (la de la entrada, abierta para mirar), la puerta en el centro
-               de la de delante y, en el suelo, el suelo del publico, que es
-               la zona que ve la camara (Zonaancho x Zonafondo, 5,4 x 4,5 m).
+               (la de la entrada, abierta para mirar) y la puerta en el centro
+               de la de delante. v8: la camara cenital ve todo el suelo (hasta
+               la v7 solo una zona, Zonaancho x Zonafondo, con tarima y borde).
                v4: dibujada con lineas (geometria 'lineas', Constant MAT, se
                ve a oscuras): las doce aristas, el umbral de la puerta, una
-               reticula de 1 m en las paredes, una de 0,5 m en todo el suelo
-               (v5) y, en el suelo del publico, una tarima y un borde claro.
+               reticula de 1 m en las paredes y una de 0,5 m en todo el suelo.
   EQUIPOS      la tabla 'equipos' (editable; relanzar no la pisa): la esfera
                de LEDs de 1 m en la esquina del fondo a la izquierda (v5: a
                1 m de cada pared; si no lo esta, se rehace la tabla), sobre su
@@ -90,7 +89,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v7  (la esfera 3D con el planeta, sin el recuadro de la esquina, sin rayas bajo la esfera)'
+VERSION = 'sala_virtual v8  (sin zona de la camara: la cenital ve todo el suelo de la sala)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -125,8 +124,14 @@ add_par(sala, page, 'toggle', 'Activa', 'Sala activa (personas, sonido y luz)', 
 add_par(sala, page, 'float', 'Ancho', 'Ancho de la sala (m)', 8.0, 2.0, 30.0)
 add_par(sala, page, 'float', 'Fondo', 'Fondo de la sala (m)', 6.0, 2.0, 30.0)
 add_par(sala, page, 'float', 'Alto', 'Alto de la sala (m)', 4.0, 2.0, 12.0)
-add_par(sala, page, 'float', 'Zonaancho', 'Zona de la camara: ancho (m)', 5.4, 1.0, 30.0)
-add_par(sala, page, 'float', 'Zonafondo', 'Zona de la camara: fondo (m)', 4.5, 1.0, 30.0)
+for viejo in ('Zonaancho', 'Zonafondo'):           # v8: sin zona; la camara ve todo el suelo
+    try:
+        p_ = getattr(sala.par, viejo, None)
+        if p_ is not None:
+            p_.destroy()
+            ok('%s: quitado (la camara cenital ve todo el suelo de la sala)' % viejo)
+    except Exception as e:
+        info('%s: no pude quitarlo (%s); ya no se usa' % (viejo, e))
 add_par(sala, page, 'pulse', 'Recolocar', 'Recolocar los equipos con estas medidas (rehace la tabla)')
 add_par(sala, page, 'int', 'Personas', 'Personas', 6, 0, 30, clamp=True)
 add_par(sala, page, 'menu', 'Demo', 'Demo de visita del publico', 'paseo', menu=sm.DEMOS,
@@ -177,7 +182,7 @@ except Exception as e:
 add_par(sala, page, 'float', 'Orbita', 'Vista libre: giro (grados)', 30.0, -180.0, 180.0)
 add_par(sala, page, 'float', 'Distancia', 'Vista libre: distancia (m)', 11.0, 3.0, 40.0)
 add_par(sala, page, 'float', 'Alturavista', 'Vista libre: altura (m)', 5.0, 0.5, 20.0)
-ok('pagina Sala: Activa, Ancho 8, Fondo 6, Alto 4, Zonaancho 5,4, Zonafondo 4,5, Recolocar, Personas 6, '
+ok('pagina Sala: Activa, Ancho 8, Fondo 6, Alto 4, Recolocar, Personas 6, '
    'Llegada 8, Ruidopublico 0,05, Reaccion 3, Volumendrone 0,5, Palmada, Reiniciarsala, Usarmic, '
    'Modoluz (prueba), Hzprueba 2,5, Luzcasa 0,06, Bruma 0,5, Vista (visitante), Orbita, Distancia, '
    'Alturavista (las tres, solo con Vista = orbita)')
@@ -480,7 +485,8 @@ cenital = get_or_make(sala, 'cameraCOMP', 'vista_cenital', 440, 200)
 for ax in ('tx', 'ty', 'tz'):
     setexpr(cenital, ax, "%s.valor('camara', '%s', absTime.frame)" % (SM, ax))
 setp(cenital, 'rx', -90.0)
-setp(cenital, 'fov', 75.0)                  # Femto Bolt, NFOV: unos 75 x 65 grados
+setmenu(cenital, ['viewanglemethod'], ['horizontal', 'horzfov'], None)
+setexpr(cenital, 'fov', "%s.fov_cenital()" % SM)   # v8: todo el suelo de la sala (antes, 75: Femto Bolt NFOV)
 plano = get_or_make(sala, 'cameraCOMP', 'vista_plano', 440, 120)
 setp(plano, 'rx', -90.0)
 setexpr(plano, 'ty', "%s.plano('ty', absTime.frame)" % SM)
@@ -698,7 +704,7 @@ def _prueba(t, m):
     zx, zz = sm.zona(c)
     paradas = [q for i in range(8) for s in sm.plan(c, i, 600.0, ev) if s[4] and not s[5]
                for q in (s[2],)]
-    t.check('v4: el publico se para dentro de su suelo (Zonaancho x Zonafondo)',
+    t.check('el publico se para en el suelo de la sala, lejos de las paredes (v8: en toda la sala)',
             paradas and all(abs(x) <= zx + 1e-9 and abs(z) <= zz + 1e-9 for x, z in paradas),
             '%d paradas' % len(paradas))
     p0 = sm.posicion(c, 0, 0.0, ev)
@@ -802,12 +808,17 @@ def _prueba(t, m):
     t.check('v5: la esfera en una esquina del fondo, a 1 m de cada pared', sm.esfera_en_esquina(c, eq),
             '%.2f m al fondo, %.2f m al lado' % mg if mg else 'sin esfera')
     lin = sm._filas_lineas(c)
-    zx, zz = sm.zona(c)
-    t.check('v4: la sala dibujada: aristas, reticula y el borde del suelo del publico',
+    t.check('la sala dibujada: aristas y reticula (v8: sin el borde de la zona de la camara)',
             sala.op('lineas') is not None and len(lin) > 30
             and 'lineas' in str(sala.op('render_sala').par.geometry.val).split()
-            and any(abs(r[6] - 2 * zx) < 1e-6 and abs(r[8] - 0.025) < 1e-6 for r in lin),
+            and getattr(sala.par, 'Zonaancho', None) is None,
             '%d lineas' % len(lin))
+    cam = por['camara'][0]
+    fv = math.radians(sm.fov_cenital(c))
+    t.check('v8: la camara cenital ve todo el suelo de la sala',
+            math.tan(fv / 2) * cam['y'] >= hx + abs(cam['x']) - 1e-6
+            and math.tan(fv / 2) / sm.CENITAL_ASPECTO * cam['y'] >= hz + abs(cam['z']) - 1e-6,
+            '%.0f grados en horizontal desde %.1f m' % (sm.fov_cenital(c), cam['y']))
     sala.par.Vista = 'visitante'
     sala.par.Personas = 4
     c = sm.cfg()
