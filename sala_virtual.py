@@ -13,8 +13,12 @@ QUE MONTA
 ---------
   SALA         8 x 6 m y 4 de alto (Ancho, Fondo, Alto): suelo, tres paredes
                (la de la entrada, abierta para mirar), la puerta en el centro
-               de la de delante y, en el suelo, la zona que ve la camara
-               (Zonaancho x Zonafondo, 5,4 x 4,5 m).
+               de la de delante y, en el suelo, el suelo del publico, que es
+               la zona que ve la camara (Zonaancho x Zonafondo, 5,4 x 4,5 m).
+               v4: dibujada con lineas (geometria 'lineas', Constant MAT, se
+               ve a oscuras): las doce aristas, el umbral de la puerta, una
+               reticula de 1 m en suelo y paredes y, sobre el suelo del
+               publico, una tarima, un borde claro y una reticula de 0,5 m.
   EQUIPOS      la tabla 'equipos' (editable; relanzar no la pisa): la esfera
                de LEDs de 1 m en la esquina del fondo a la izquierda, sobre su
                peana con el subwoofer dentro; cuatro altavoces colgados en las
@@ -24,7 +28,8 @@ QUE MONTA
                estroboscopio en el suelo junto a la esfera. Recolocar la
                rehace con las medidas de ahora.
   PERSONAS     Personas (6) que entran por la puerta cada Llegada s (8),
-               pasean, se paran y se van, sin azar. Hacen ruido: pasos al
+               pasean, se paran (v4: dentro del suelo del publico) y se van,
+               sin azar. Hacen ruido: pasos al
                andar y palmadas o toses (Ruidopublico por segundo y persona;
                Reaccion veces mas con el estrobo encendido).
   MICROFONO    el Script CHOP audio_mic: lo que oye el microfono virtual
@@ -49,9 +54,12 @@ QUE MONTA
                planeta envolviendo la esfera.
   MONITOR (v2) una sola imagen para mirarlo todo: salida_sala (o el Null
                monitor_sala, 1280 x 720). En grande, la sala desde la Vista:
+                 entrada    (v4, por defecto) desde detras de la puerta, a
+                            2,8 m, mirando al fondo: el suelo del publico
+                            entero, la esfera en su esquina y las paredes
+                            en perspectiva
                  visitante  los ojos de un visitante (1,65 m) que pasea
                             despacio entre el publico mirando la esfera
-                 entrada    de pie junto a la puerta
                  orbita     desde fuera (Orbita, Distancia, Alturavista)
                  cenital    lo que ve la camara del techo
                Encima: el plano de la sala desde arriba, con el publico y los
@@ -75,7 +83,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v3  (el render de FASE1 sale por un Out TOP: out_render -> imagen_fase1)'
+VERSION = 'sala_virtual v4  (la sala dibujada: suelo del publico con reticula, aristas, vista desde la entrada)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -128,9 +136,9 @@ add_par(sala, page, 'float', 'Luzcasa', 'Luz de casa (para ver la sala a oscuras
 renew_default(sala, 'Luzcasa', 0.25, 0.06)          # v2: la sala, a oscuras como la de verdad
 add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 = aire limpio)', 0.5, 0.0, 1.0,
         clamp=True)
-VISTAS_ETIQUETAS = ['Visitante (pasea entre el publico)', 'De pie en la entrada', 'Orbita (desde fuera)',
+VISTAS_ETIQUETAS = ['Visitante (pasea entre el publico)', 'Entrada (la sala desde la puerta)', 'Orbita (desde fuera)',
                     'Camara cenital']
-add_par(sala, page, 'menu', 'Vista', 'Vista del monitor', 'visitante', menu=sm.VISTAS,
+add_par(sala, page, 'menu', 'Vista', 'Vista del monitor', 'entrada', menu=sm.VISTAS,
         menu_labels=VISTAS_ETIQUETAS)
 try:                                    # v2: libre pasa a llamarse orbita y el defecto es visitante
     vp = sala.par.Vista
@@ -144,6 +152,17 @@ try:                                    # v2: libre pasa a llamarse orbita y el 
         ok('Vista: visitante (pasea entre el publico), entrada, orbita (la libre de antes) y cenital')
 except Exception as e:
     info('Vista: no pude poner las vistas nuevas (%s)' % e)
+try:                                    # v4: el defecto pasa a ser entrada (una vez por proyecto)
+    vp = sala.par.Vista
+    vp.default = 'entrada'
+    vp.menuLabels = VISTAS_ETIQUETAS
+    if not sala.fetch('vista_v4', False, search=False):
+        sala.store('vista_v4', True)
+        if str(vp.eval()) == 'visitante':
+            vp.val = 'entrada'
+            ok('Vista: entrada (desde la puerta, con el suelo del publico y la esfera en su esquina)')
+except Exception as e:
+    info('Vista: no pude poner entrada por defecto (%s)' % e)
 add_par(sala, page, 'float', 'Orbita', 'Vista libre: giro (grados)', 30.0, -180.0, 180.0)
 add_par(sala, page, 'float', 'Distancia', 'Vista libre: distancia (m)', 11.0, 3.0, 40.0)
 add_par(sala, page, 'float', 'Alturavista', 'Vista libre: altura (m)', 5.0, 0.5, 20.0)
@@ -165,6 +184,10 @@ if tabla is None:
        '4 focos y estrobo. Editala a mano: un foco mas es una fila mas')
 else:
     ok('equipos: se conserva como esta (%d filas)' % max(0, tabla.numRows - 1))
+if not sm.esfera_en_esquina():          # v4: la esfera, siempre en una esquina del fondo
+    sm.recolocar()
+    ok('equipos: la esfera no estaba en una esquina del fondo; tabla rehecha (esfera al fondo a la '
+       'izquierda, con su sub, su estrobo y los focos que la acompanan)')
 
 # -----------------------------------------------------------------------------
 # OPERADORES
@@ -298,6 +321,7 @@ make_phong(sala, 'mat_sala', 660, 200, spec=0.18, shin=12, diff=0.9, amb=0.03)
 make_phong(sala, 'mat_equipos', 660, 120, spec=0.5, shin=20, diff=1.0, amb=0.03, emit=0.15)
 make_phong(sala, 'mat_personas', 660, 40, spec=0.05, shin=2, diff=0.9, amb=0.02)
 mat_haz = make_constant(sala, 'mat_haz', 660, 440, (1.0, 1.0, 1.0))
+make_constant(sala, 'mat_lineas', 660, 520, (1.0, 1.0, 1.0))      # v4: el dibujo de la sala, sin luz
 set_additive(mat_haz)
 setmenu(mat_haz, ['cullface', 'cull'], ['neither', 'none', 'off'], None)
 instanciado('sala_caja', 0, 200, 'mat_sala')
@@ -305,8 +329,10 @@ instanciado('equipos_geo', 0, 120, 'mat_equipos')
 instanciado('personas', 0, 40, 'mat_personas')
 instanciado('cabezas', 0, -120, 'mat_personas', sop='sphere')
 instanciado('haces', 0, 440, 'mat_haz', sop='haz')
-ok('sala_caja, equipos_geo, personas y cabezas: suelo, paredes, zona de la camara, puerta, aparatos y '
-   'publico; haces: la luz de cada foco y del estrobo en la bruma (Bruma)')
+instanciado('lineas', 0, 520, 'mat_lineas')
+ok('sala_caja, equipos_geo, personas y cabezas: suelo, paredes, el suelo del publico, puerta, aparatos y '
+   'publico; haces: la luz de cada foco y del estrobo en la bruma (Bruma); lineas: aristas, umbral de la '
+   'puerta, reticula de 1 m y la del suelo del publico (0,5 m)')
 
 # la esfera de LEDs, con la imagen de FASE1
 esfera = fresh(sala, 'geometryCOMP', 'esfera', 0, -40)
@@ -429,7 +455,7 @@ setp(plano, 'rx', -90.0)
 setexpr(plano, 'ty', "%s.plano('ty', absTime.frame)" % SM)
 orto = setmenu(plano, ['projection'], ['ortho', 'orthographic'], None)
 setexpr(plano, 'orthowidth', "%s.plano('ancho', absTime.frame)" % SM)
-geos = 'sala_caja equipos_geo personas cabezas esfera haces'
+geos = 'sala_caja lineas equipos_geo personas cabezas esfera haces'
 r1 = get_or_make(sala, 'renderTOP', 'render_sala', 660, 360)
 setexpr(r1, 'camera', "'vista_cenital' if str(parent().par.Vista) == 'cenital' else 'vista'")
 setp(r1, 'geometry', geos)
@@ -446,7 +472,7 @@ setp(luz_plano, 'rx', -60.0)
 setp(luz_plano, 'dimmer', 0.5)
 rp = get_or_make(sala, 'renderTOP', 'render_plano', 660, 120)
 setp(rp, 'camera', 'vista_plano')
-setp(rp, 'geometry', 'sala_caja equipos_geo personas cabezas esfera')
+setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas cabezas esfera')
 setp(rp, 'lights', ' '.join(luces + ['plano_luz']))
 setp_any(rp, ['resolutionw'], 320)
 setp_any(rp, ['resolutionh'], 240)
@@ -632,6 +658,12 @@ def _prueba(t, m):
             dentro and lejos and quietos > 0 and mueven > 0 and 0 < len(n1) <= 8,
             '%d dentro a los 90 s' % len(n1))
     t.check('sin azar: la misma sala da la misma historia', n1 == n2)
+    zx, zz = sm.zona(c)
+    paradas = [q for i in range(8) for s in sm.plan(c, i, 600.0, ev) if s[4] and not s[5]
+               for q in (s[2],)]
+    t.check('v4: el publico se para dentro de su suelo (Zonaancho x Zonafondo)',
+            paradas and all(abs(x) <= zx + 1e-9 and abs(z) <= zz + 1e-9 for x, z in paradas),
+            '%d paradas' % len(paradas))
     p0 = sm.posicion(c, 0, 0.0, ev)
     entradas = [s for k, s in enumerate(sm.plan(c, 3, 300.0, ev)) if s[4] and not sm.plan(c, 3, 300.0, ev)[k - 1][4]]
     t.check('nadie esta dentro antes de llegar; se entra por la puerta',
@@ -719,6 +751,19 @@ def _prueba(t, m):
             and abs(sm.vista('mx') - esf['pos'][0]) < 1e-9)
     sala.par.Vista = 'orbita'
     t.check('orbita: desde fuera, como la vista libre de antes', sm.vista('ty') == float(sala.par.Alturavista))
+    sala.par.Vista = 'entrada'
+    c = sm.cfg()
+    t.check('v4: entrada, desde detras de la puerta y por encima de la gente, mirando hacia abajo y al fondo',
+            sm.vista('tz') > hz and sm.vista('ty') > sm.OJOS and sm.vista('my') < sm.vista('ty')
+            and sm.vista('mz') < 0.0)
+    t.check('v4: la esfera en una esquina del fondo', sm.esfera_en_esquina(c, eq))
+    lin = sm._filas_lineas(c)
+    zx, zz = sm.zona(c)
+    t.check('v4: la sala dibujada: aristas, reticula y el borde del suelo del publico',
+            sala.op('lineas') is not None and len(lin) > 30
+            and 'lineas' in str(sala.op('render_sala').par.geometry.val).split()
+            and any(abs(r[6] - 2 * zx) < 1e-6 and abs(r[8] - 0.04) < 1e-6 for r in lin),
+            '%d lineas' % len(lin))
     sala.par.Vista = 'visitante'
     sala.par.Personas = 4
     c = sm.cfg()
@@ -772,7 +817,7 @@ def distancia_xz(a, b):
 
 
 run_test(fase1, prueba)
-print('  Ahora: mira salida_sala (todo en una imagen; Vista = visitante, entrada, orbita o')
+print('  Ahora: mira salida_sala (todo en una imagen; Vista = entrada, visitante, orbita o')
 print('  cenital). Modoluz = prueba recorre la luz en un minuto; Bruma, los haces en el aire.')
 print('  Palmada: la oye FASE1. Personas y Ruidopublico para mas o menos publico.')
 print('  ' + sm.legend())
