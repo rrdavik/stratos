@@ -69,8 +69,9 @@ QUE MONTA
                             despacio entre el publico mirando la esfera
                  orbita     desde fuera (Orbita, Distancia, Alturavista)
                  cenital    lo que ve la camara del techo
-               Encima: el plano de la sala desde arriba, con el publico y los
-               focos (abajo a la derecha; v7: sobre negro) y el rotulo con la luz, el publico y los onsets
+               Encima: lo que ve la camara cenital, toda la planta de la sala
+               con el publico (abajo a la derecha, 200 x 180; v10, antes un
+               plano ortografico aparte de 320 x 240) y el rotulo con la luz, el publico y los onsets
                (arriba a la izquierda). render_cenital (320 x 288) y
                'profundidad' siguen ahi para la fase 22: no hace falta
                mirarlos.
@@ -89,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v9  (la esfera gira para que el planeta mire a la sala)'
+VERSION = 'sala_virtual v10  (la esfera con coordenadas de textura; la miniatura es la camara cenital)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -368,11 +369,46 @@ for ax in ('radx', 'rady', 'radz'):
 setp_any(bola, ['type', 'primtype'], 'polymesh')
 setp_any(bola, ['rows'], 40)
 setp_any(bola, ['cols'], 40)
-for attr in ('render', 'display'):
-    try:
-        setattr(bola, attr, True)
-    except Exception:
-        pass
+
+
+def menu_por_texto(o, nombres, textos):
+    """Pone el menu en la primera opcion cuyo nombre o etiqueta contenga uno de
+    los textos. Devuelve la opcion elegida o None."""
+    for n in nombres:
+        p = getattr(o.par, n, None) if o is not None else None
+        if p is None:
+            continue
+        try:
+            opciones = list(zip(p.menuNames, p.menuLabels))
+        except Exception:
+            continue
+        for tx in textos:
+            for nm, et in opciones:
+                if tx in str(nm).lower() or tx in str(et).lower():
+                    p.val = nm
+                    return nm
+    return None
+
+
+# v10: la Sphere SOP no da coordenadas de textura: sin ellas el Constant MAT lee un
+# solo punto de la imagen y la esfera salia gris lisa. Un Texture SOP polar (eje Y)
+# se las pone; el planeta queda en el centro de la imagen, de cara a giro_esfera.
+uvs = mk(esfera, 'textureSOP', 'uvs', 0, -120)
+connect(uvs, bola, 0)
+proyeccion = menu_por_texto(uvs, ['type', 'texturetype'], ['polar', 'spher'])
+setmenu(uvs, ['axis'], ['y'], 1)
+for o_, si in ((bola, False), (uvs, True)):
+    for attr in ('render', 'display'):
+        try:
+            setattr(o_, attr, si)
+        except Exception:
+            pass
+if proyeccion:
+    ok('esfera: coordenadas de textura con un Texture SOP (%s, eje Y): el render de FASE1 se ve en la bola'
+       % proyeccion)
+else:
+    info('esfera/uvs: no encontre la proyeccion polar del Texture SOP; ponla a mano (Texture Type = Polar, '
+         'Axis = Y) o la esfera saldra gris')
 for ax in ('tx', 'ty', 'tz'):
     setexpr(esfera, ax, "%s.valor('esfera', '%s', absTime.frame)" % (SM, ax))
 setexpr(esfera, 'ry', "%s.giro_esfera(absTime.frame)" % SM)     # v9: el planeta mira a la sala
@@ -490,11 +526,9 @@ for ax in ('tx', 'ty', 'tz'):
 setp(cenital, 'rx', -90.0)
 setmenu(cenital, ['viewanglemethod'], ['horizontal', 'horzfov'], None)
 setexpr(cenital, 'fov', "%s.fov_cenital()" % SM)   # v8: todo el suelo de la sala (antes, 75: Femto Bolt NFOV)
-plano = get_or_make(sala, 'cameraCOMP', 'vista_plano', 440, 120)
-setp(plano, 'rx', -90.0)
-setexpr(plano, 'ty', "%s.plano('ty', absTime.frame)" % SM)
-orto = setmenu(plano, ['projection'], ['ortho', 'orthographic'], None)
-setexpr(plano, 'orthowidth', "%s.plano('ancho', absTime.frame)" % SM)
+if sala.op('vista_plano') is not None:         # v10: la miniatura es la camara cenital
+    sala.op('vista_plano').destroy()
+MINI_W, MINI_H = 200, 180         # v10: la miniatura de la camara cenital
 geos = 'sala_caja lineas equipos_geo personas esfera haces'
 r1 = get_or_make(sala, 'renderTOP', 'render_sala', 660, 360)
 setexpr(r1, 'camera', "'vista_cenital' if str(parent().par.Vista) == 'cenital' else 'vista'")
@@ -511,12 +545,14 @@ luz_plano = get_or_make(sala, 'lightCOMP', 'plano_luz', 220, 440)      # solo pa
 setmenu(luz_plano, ['lighttype'], ['distant'], 2)
 setp(luz_plano, 'rx', -60.0)
 setp(luz_plano, 'dimmer', 0.5)
+# v10: la miniatura (abajo a la derecha) es lo que ve la camara cenital: toda la
+# planta de la sala (fov_cenital). Mas pequena: 200 x 180, la proporcion de render_cenital.
 rp = get_or_make(sala, 'renderTOP', 'render_plano', 660, 120)
-setp(rp, 'camera', 'vista_plano')
+setp(rp, 'camera', 'vista_cenital')
 setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas esfera')
 setexpr(rp, 'lights', "%s.luces_render('plano_luz')" % SM)
-setp_any(rp, ['resolutionw'], 320)
-setp_any(rp, ['resolutionh'], 240)
+setp_any(rp, ['resolutionw'], MINI_W)
+setp_any(rp, ['resolutionh'], MINI_H)
 setp_any(rp, ['bgcolora', 'bgalpha'], 1.0)      # v7: el plano, un recuadro negro que se lee
 r2 = get_or_make(sala, 'renderTOP', 'render_cenital', 660, 280)
 setp(r2, 'camera', 'vista_cenital')
@@ -526,8 +562,6 @@ setp_any(r2, ['resolutionw'], 320)
 setp_any(r2, ['resolutionh'], 288)
 prof = get_or_make(sala, 'depthTOP', 'profundidad', 880, 280)
 connect(prof, r2, 0)
-if not orto:
-    info('vista_plano: no encontre Projection = Orthographic; el plano saldra en perspectiva')
 
 # v2: el monitor, una sola imagen con todo: la sala en grande (Vista) y, encima,
 # el plano (abajo a la derecha) y el rotulo (arriba a la izquierda). v7: ya no
@@ -780,6 +814,8 @@ def _prueba(t, m):
             'recuadro de la esfera)',
             sala.op('salida_sala') is not None and sala.op('monitor_sala') is not None
             and sala.op('con_esfera') is None
+            and sala.op('vista_plano') is None and str(sala.op('render_plano').par.camera.eval()) == 'vista_cenital'
+            and sala.op('esfera').op('uvs') is not None
             and all(sala.op(nm) is not None for nm in ('con_plano', 'render_plano', 'esfera_mini',
                                                        'esfera_imagen', 'rotulo_sala')))
     t.check('v7: sin rayas bajo la esfera: el sub, dentro de la peana, no se dibuja',
