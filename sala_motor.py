@@ -56,9 +56,11 @@
 #   v7          sin la zona de la camara: la camara cenital ve todo el suelo
 #               (fov_cenital) y el publico se para en cualquier sitio de la
 #               sala, lejos de las paredes, la esfera y el estrobo.
+#   v8          la esfera gira para que el planeta mire al centro de la sala
+#               (giro_esfera; Girosfera lo ajusta a mano).
 # =============================================================================
 
-SALA_VERSION = 'sala v7'
+SALA_VERSION = 'sala v8'
 
 import math
 
@@ -675,7 +677,7 @@ def cfg():
                 modo_luz=_menu('Modoluz', MODOS_LUZ, 1), hz_prueba=_p('Hzprueba', 2.5),
                 luz_casa=max(0.0, _p('Luzcasa', 0.06)), vista=_menu('Vista', VISTAS, 0),
                 bruma=max(0.0, min(1.0, _p('Bruma', 0.5))), demo=_menu('Demo', DEMOS, 0),
-                luz_esfera=max(0.0, _p('Luzesfera', 0.0)))
+                luz_esfera=max(0.0, _p('Luzesfera', 0.0)), giro_esfera=_p('Girosfera', 0.0))
 
 
 def ahora():
@@ -873,6 +875,21 @@ def color_esfera(frame=None):
             pass
     _SALA['col_esfera'], _SALA['col_frame'] = col, absTime.frame
     return col
+
+
+def giro_esfera(frame=None):
+    """v8: el giro (ry, grados) de la esfera para que el centro de su imagen
+    (el planeta) mire al centro de la sala, mas Girosfera para ajustarlo a
+    mano. Se toma que el centro de la imagen cae en el +Z de la esfera, como
+    en una Sphere SOP sin girar vista desde delante."""
+    try:
+        e = equipo('esfera')
+        if e is None:
+            return 0.0
+        base = math.degrees(math.atan2(0.0 - e['x'], 0.0 - e['z']))
+        return base + float(cfg()['giro_esfera'])
+    except Exception:
+        return 0.0
 
 
 def luz_esfera(que, frame=None):

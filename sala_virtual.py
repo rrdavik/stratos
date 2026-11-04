@@ -89,7 +89,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v8  (sin zona de la camara: la cenital ve todo el suelo de la sala)'
+VERSION = 'sala_virtual v9  (la esfera gira para que el planeta mire a la sala)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -150,6 +150,8 @@ add_par(sala, page, 'float', 'Luzcasa', 'Luz de casa (para ver la sala a oscuras
 renew_default(sala, 'Luzcasa', 0.25, 0.06)          # v2: la sala, a oscuras como la de verdad
 add_par(sala, page, 'float', 'Luzesfera', 'Luz de la esfera sobre la sala (0 = apagada)', 0.0, 0.0, 1.0,
         clamp=True)
+add_par(sala, page, 'float', 'Girosfera', 'Giro de la esfera (grados; 0 = el planeta mira a la sala)', 0.0,
+        -180.0, 180.0)
 add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 = aire limpio)', 0.5, 0.0, 1.0,
         clamp=True)
 VISTAS_ETIQUETAS = ['Visitante (pasea entre el publico)', 'Entrada (la sala desde la puerta)', 'Orbita (desde fuera)',
@@ -373,6 +375,7 @@ for attr in ('render', 'display'):
         pass
 for ax in ('tx', 'ty', 'tz'):
     setexpr(esfera, ax, "%s.valor('esfera', '%s', absTime.frame)" % (SM, ax))
+setexpr(esfera, 'ry', "%s.giro_esfera(absTime.frame)" % SM)     # v9: el planeta mira a la sala
 # v3: el render de FASE1 sale por un Out TOP ('out_render', sin el rotulo) y
 # SALA lo recoge con un Select TOP ('imagen_fase1'). Antes se cableaba
 # FASE1/render directo a esfera_mini, pero TouchDesigner no deja cablear entre
@@ -805,6 +808,13 @@ def _prueba(t, m):
             sm.vista('tz') > hz and sm.vista('ty') > sm.OJOS and sm.vista('my') < sm.vista('ty')
             and sm.vista('mz') < 0.0)
     mg = sm.margen_esfera(c, eq)
+    g0 = math.radians(sm.giro_esfera())
+    hacia = (math.sin(g0), math.cos(g0))           # el +Z de la esfera, girado
+    al_centro = (-esf['x'], -esf['z'])
+    t.check('v9: la esfera mira al centro de la sala (Girosfera 0)',
+            float(sala.par.Girosfera) != 0.0
+            or hacia[0] * al_centro[0] + hacia[1] * al_centro[1] > 0.99 * math.hypot(*al_centro),
+            '%.0f grados' % sm.giro_esfera())
     t.check('v5: la esfera en una esquina del fondo, a 1 m de cada pared', sm.esfera_en_esquina(c, eq),
             '%.2f m al fondo, %.2f m al lado' % mg if mg else 'sin esfera')
     lin = sm._filas_lineas(c)
