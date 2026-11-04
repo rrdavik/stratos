@@ -91,7 +91,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v5  (demos de publico, la esfera a 1 m de la esquina, reticula en todo el suelo, sin cabezas)'
+VERSION = 'sala_virtual v6  (rendimiento: el color de la esfera sin parar la GPU, luz_esfera fuera con Luzesfera 0)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -405,6 +405,14 @@ connect(media, mini, 0)
 setmenu(media, ['outputresolution', 'resolution'], ['custom'], None)
 setp_any(media, ['resolutionw'], 8)
 setp_any(media, ['resolutionh'], 8)
+# v6: el color medio, por un TOP to CHOP con descarga diferida (no para el fotograma)
+col_chop = get_or_make(sala, 'toptoCHOP', 'esfera_color', 1320, -40)
+setp_any(col_chop, ['top'], 'esfera_media')
+diferida = setmenu(col_chop, ['downloadtype'], ['delayed', 'nextframe', 'fast'], None)
+if diferida:
+    ok('esfera_color: el color medio de la esfera, con descarga diferida (antes, 15 ms por fotograma)')
+else:
+    info('esfera_color: pon Download Type = Delayed a mano, o el color de la esfera parara el fotograma')
 
 # las luces: una por foco y por estrobo de la tabla, la de la esfera y la de casa
 for o in [o for o in sala.children if o.name.startswith('luz_')]:
@@ -473,7 +481,7 @@ geos = 'sala_caja lineas equipos_geo personas esfera haces'
 r1 = get_or_make(sala, 'renderTOP', 'render_sala', 660, 360)
 setexpr(r1, 'camera', "'vista_cenital' if str(parent().par.Vista) == 'cenital' else 'vista'")
 setp(r1, 'geometry', geos)
-setp(r1, 'lights', ' '.join(luces))
+setexpr(r1, 'lights', "%s.luces_render()" % SM)        # v6: sin luz_esfera con Luzesfera 0
 setp_any(r1, ['resolutionw'], 1280)
 setp_any(r1, ['resolutionh'], 720)
 setp_any(r1, ['bgcolorr'], 0.0)
@@ -487,7 +495,7 @@ setp(luz_plano, 'dimmer', 0.5)
 rp = get_or_make(sala, 'renderTOP', 'render_plano', 660, 120)
 setp(rp, 'camera', 'vista_plano')
 setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas esfera')
-setp(rp, 'lights', ' '.join(luces + ['plano_luz']))
+setexpr(rp, 'lights', "%s.luces_render('plano_luz')" % SM)
 setp_any(rp, ['resolutionw'], 320)
 setp_any(rp, ['resolutionh'], 240)
 r2 = get_or_make(sala, 'renderTOP', 'render_cenital', 660, 280)
@@ -842,6 +850,23 @@ def _prueba(t, m):
     t.check('la esfera es una luz: luz_esfera, en su sitio y con el color medio de su imagen (Luzesfera)',
             sala.op('luz_esfera') is not None and abs(sm.luz_esfera('ty') - esf['y']) < 1e-9
             and all(0.0 <= sm.luz_esfera(ch) <= 1.0 for ch in 'rgb'))
+    # v6: rendimiento
+    lz = sala.par.Luzesfera.eval()
+    try:
+        sala.par.Luzesfera = 0.0
+        sin = sm.luces_render().split()
+        sala.par.Luzesfera = 0.5
+        con = sm.luces_render().split()
+    finally:
+        sala.par.Luzesfera = lz
+    t.check('v6: con Luzesfera 0, luz_esfera fuera de los render; con luz, dentro',
+            'luz_esfera' not in sin and 'luz_esfera' in con and 'luz_foco1' in sin)
+    t.check('v6: el color de la esfera por esfera_color (TOP to CHOP), sin numpyArray',
+            sala.op('esfera_color') is not None)
+    sm._SALA['rotulo'] = None
+    r0 = sm.texto_monitor()
+    t.check('v6: el rotulo se rehace cada %d fotogramas' % sm.ROTULO_CADA,
+            r0 == sm.texto_monitor() and sm._SALA['rotulo_frame'] is not None)
     t.check('el rotulo del monitor: la sala, la luz y la vista',
             'SALA' in sm.texto_monitor() and 'LUZ' in sm.texto_monitor() and 'visitante' in sm.texto_monitor())
 

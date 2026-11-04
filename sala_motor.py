@@ -55,7 +55,7 @@
 #               Luzesfera la luz de la esfera sobre la sala (0: apagada).
 # =============================================================================
 
-SALA_VERSION = 'sala v4'
+SALA_VERSION = 'sala v5'
 
 import math
 
@@ -588,7 +588,8 @@ def bloque_audio(cfg, equipos, ta, n, rate, evs, mic=None):
 # TouchDesigner (o del simulado de pruebas/).
 
 _SALA = dict(t0=None, frame=None, equipos=None, audio=None, t_audio=None, forzar=False, manuales=[],
-             col_esfera=None, col_frame=None)
+             col_esfera=None, col_frame=None, rotulo=None, rotulo_frame=None)
+ROTULO_CADA = 15            # v5: el rotulo se rehace cada 15 fotogramas (un cuarto de segundo)
 MODOS_LUZ = ['apagado', 'prueba']
 VISTAS = ['visitante', 'entrada', 'orbita', 'cenital']      # v2; hasta la v1, libre (= orbita) y cenital
 
@@ -783,20 +784,30 @@ def haz(e):
     return largo, 2.0 * largo * math.tan(math.radians(min(170.0, e['tam']) / 2.0))
 
 
+def _media(ch):
+    try:
+        v = list(ch.vals)
+    except Exception:
+        v = [float(ch.eval())]
+    return sum(v) / float(len(v)) if v else 0.0
+
+
 def color_esfera(frame=None):
-    """(r, g, b) medio de la imagen de la esfera (el TOP 'esfera_media', la
-    imagen de FASE1 reducida), una vez por fotograma; si no se puede medir,
-    COL_ESFERA_DEF."""
+    """(r, g, b) medio de la imagen de la esfera, una vez por fotograma; si
+    no se puede medir (o Luzesfera = 0), COL_ESFERA_DEF. v5: lo lee del TOP
+    to CHOP 'esfera_color' (descarga diferida); antes, numpyArray() sobre
+    'esfera_media' bajaba la textura de la GPU en el momento y paraba el
+    fotograma (15 ms en luz_esfera, segun el inspector de rendimiento)."""
     if _SALA['col_esfera'] is not None and _SALA['col_frame'] == absTime.frame:
         return _SALA['col_esfera']
     col = COL_ESFERA_DEF
-    try:
-        a = parent().op('esfera_media').numpyArray()
-        if a is not None and a.size:
-            m = a.reshape(-1, a.shape[-1]).mean(axis=0)
-            col = tuple(max(0.0, min(1.0, float(v))) for v in m[:3])
-    except Exception:
-        pass
+    if cfg()['luz_esfera'] > 0:
+        try:
+            ch = parent().op('esfera_color')
+            if ch is not None and ch.numChans >= 3:
+                col = tuple(max(0.0, min(1.0, _media(ch[k]))) for k in range(3))
+        except Exception:
+            pass
     _SALA['col_esfera'], _SALA['col_frame'] = col, absTime.frame
     return col
 
@@ -1066,7 +1077,30 @@ def on_pulse(nombre):
 
 
 def texto_monitor(frame=None):
-    """El rotulo del monitor (v2): la sala, la luz y lo que oye FASE1."""
+    """El rotulo del monitor (v2): la sala, la luz y lo que oye FASE1. v5:
+    se rehace cada ROTULO_CADA fotogramas; entre medias, el mismo texto (el
+    Text TOP no se vuelve a dibujar)."""
+    f = absTime.frame
+    if _SALA['rotulo'] is not None and _SALA['rotulo_frame'] is not None \
+            and 0 <= f - _SALA['rotulo_frame'] < ROTULO_CADA:
+        return _SALA['rotulo']
+    _SALA['rotulo'], _SALA['rotulo_frame'] = _texto_monitor(), f
+    return _SALA['rotulo']
+
+
+def luces_render(extra=''):
+    """v5: la lista de luces de los render de la sala; luz_esfera solo con
+    Luzesfera > 0 (una luz a 0 se sigue calculando en cada pixel)."""
+    try:
+        nombres = [o.name for o in parent().children if o.name.startswith('luz_')]
+    except Exception:
+        nombres = []
+    if cfg()['luz_esfera'] <= 0:
+        nombres = [n for n in nombres if n != 'luz_esfera']
+    return ' '.join(sorted(nombres) + ([extra] if extra else []))
+
+
+def _texto_monitor():
     lineas = [legend()]
     try:
         c = cfg()
