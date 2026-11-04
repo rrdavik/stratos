@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v16  (el planeta derecho: volteo vertical; los volteos, en la pagina Sala)'
+VERSION = 'sala_virtual v18  (el planeta se inclina hacia la camara de la entrada: Inclinasfera)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -105,6 +105,25 @@ if sala is None:
     ok('SALA: componente nuevo en /project1, al lado de FASE1')
 else:
     ok('SALA: ya existia; se conserva la tabla de equipos')
+
+# v17: otras salas (copias de SALA con otro nombre, como 'salap'). Este script solo usa
+# /project1/SALA; una copia sigue moviendo su publico y dibujando su render cada
+# fotograma. Se paran su latido y sus botones (no se borran) y se avisa.
+copias = []
+for o_ in op('/project1').children:
+    try:
+        es_copia = o_.isCOMP and o_.path != sala.path and o_.op('sala_motor') is not None
+    except Exception:
+        es_copia = False
+    if es_copia:
+        copias.append(o_.path)
+        for nm in ('latido_sala', 'pulsos_sala'):
+            d = o_.op(nm)
+            if d is not None:
+                setp(d, 'active', False)
+if copias:
+    info('OTRA SALA: %s es una copia de SALA (no la crea este script). Su latido y sus botones quedan '
+         'parados; si no tiene nada tuyo, borrala' % ', '.join(copias))
 
 sm_dat = get_or_make(sala, 'textDAT', 'sala_motor', -660, -340)
 src = read_text(CARPETA, 'sala_motor.py')
@@ -162,6 +181,8 @@ try:                    # v16: el planeta estaba boca abajo, no en espejo (una v
 except Exception as e:
     info('Espejosfera / Volteosfera: no pude ponerlos (%s); deja Espejosfera apagado y Volteosfera '
          'encendido' % e)
+add_par(sala, page, 'float', 'Inclinasfera', 'Inclinacion de la esfera (grados hacia arriba; 0 = mira '
+        'a la camara de la entrada)', 0.0, -90.0, 90.0)
 add_par(sala, page, 'float', 'Girosfera', 'Giro de la esfera (grados; 0 = el planeta mira a la sala)', 0.0,
         -180.0, 180.0)
 add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 = aire limpio)', 0.5, 0.0, 1.0,
@@ -423,7 +444,16 @@ uvs = mk(esfera, 'textureSOP', 'uvs', 0, -120)
 connect(uvs, bola, 0)
 proyeccion = menu_por_texto(uvs, ['type', 'texturetype'], ['polar', 'spher'])
 setmenu(uvs, ['axis'], ['y'], 1)
-for o_, si in ((bola, False), (uvs, True)):
+# v18: dos Transform SOP tras las coordenadas de textura: 'centrar' lleva el centro de
+# la imagen al +Z de la bola y 'inclinar' lo levanta hacia la camara de la entrada
+# (antes el planeta parecia mirar al suelo). El giro hacia la entrada, en la esfera (ry).
+centrar = mk(esfera, 'transformSOP', 'centrar', 0, -240)
+connect(centrar, uvs, 0)
+setexpr(centrar, 'ry', "parent(2).op('sala_motor').module.centro_esfera(absTime.frame)")
+inclinar = mk(esfera, 'transformSOP', 'inclinar', 0, -360)
+connect(inclinar, centrar, 0)
+setexpr(inclinar, 'rx', "parent(2).op('sala_motor').module.inclina_esfera(absTime.frame)")
+for o_, si in ((bola, False), (uvs, False), (centrar, False), (inclinar, True)):
     for attr in ('render', 'display'):
         try:
             setattr(o_, attr, si)
@@ -804,7 +834,7 @@ def diagnostico_esfera():
               '%r -> %s' % (mat, mo.path if mo is not None else 'NO ENCONTRADO'))
         if g is not None:
             dibuja = [k.name for k in g.children if getattr(k, 'render', False)]
-            linea(dibuja == ['uvs'], 'esfera dibuja', ' '.join(dibuja) or 'nada')
+            linea(dibuja == ['inclinar'], 'esfera dibuja', ' '.join(dibuja) or 'nada')
             u = g.op('uvs')
             if u is not None:
                 try:
@@ -1036,7 +1066,7 @@ def _prueba(t, m):
             and sm.vista('mz') < 0.0)
     mg = sm.margen_esfera(c, eq)
     centro_uv = float(sala.fetch('uv_centro', 0.0, search=False))
-    g0 = math.radians(sm.giro_esfera() + centro_uv)  # donde queda el centro de la imagen, girado
+    g0 = math.radians(sm.giro_esfera())             # 'centrar' deja el centro de la imagen en +Z
     hacia = (math.sin(g0), math.cos(g0))
     he = sm.hacia_esfera(c)
     a_entrada = (he[0] - esf['x'], he[1] - esf['z'])
@@ -1044,6 +1074,9 @@ def _prueba(t, m):
             float(sala.par.Girosfera) != 0.0
             or hacia[0] * a_entrada[0] + hacia[1] * a_entrada[1] > 0.99 * math.hypot(*a_entrada),
             'giro %.0f grados; centro de la imagen medido a %.0f' % (sm.giro_esfera(), centro_uv))
+    t.check('v18: el planeta se inclina hacia arriba, a la altura de la camara de la entrada (Inclinasfera 0)',
+            float(sala.par.Inclinasfera) != 0.0 or sm.inclina_esfera() < 0.0,
+            'rx %.1f grados' % sm.inclina_esfera())
     t.check('v5: la esfera en una esquina del fondo, a 1 m de cada pared', sm.esfera_en_esquina(c, eq),
             '%.2f m al fondo, %.2f m al lado' % mg if mg else 'sin esfera')
     lin = sm._filas_lineas(c)
