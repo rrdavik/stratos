@@ -60,9 +60,11 @@
 #               (giro_esfera; Girosfera lo ajusta a mano).
 #   v10         ...y desde la v10 mira a la camara de la entrada, con el centro
 #               de la imagen medido en la malla (uv_centro), no supuesto.
+#   v11         ...y se inclina hacia la altura de esa camara (inclina_esfera;
+#               Inclinasfera lo retoca): antes parecia mirar al suelo.
 # =============================================================================
 
-SALA_VERSION = 'sala v10'
+SALA_VERSION = 'sala v11'
 
 import math
 
@@ -679,7 +681,8 @@ def cfg():
                 modo_luz=_menu('Modoluz', MODOS_LUZ, 1), hz_prueba=_p('Hzprueba', 2.5),
                 luz_casa=max(0.0, _p('Luzcasa', 0.06)), vista=_menu('Vista', VISTAS, 0),
                 bruma=max(0.0, min(1.0, _p('Bruma', 0.5))), demo=_menu('Demo', DEMOS, 0),
-                luz_esfera=max(0.0, _p('Luzesfera', 0.0)), giro_esfera=_p('Girosfera', 0.0))
+                luz_esfera=max(0.0, _p('Luzesfera', 0.0)), giro_esfera=_p('Girosfera', 0.0),
+                inclina_esfera=_p('Inclinasfera', 0.0))
 
 
 def ahora():
@@ -879,23 +882,47 @@ def hacia_esfera(c=None):
     return (0.0, 0.5 * c['fondo'] + ENTRADA_ATRAS)
 
 
-def giro_esfera(frame=None):
-    """El giro (ry, grados) de la esfera para que el centro de su imagen (el
-    planeta) mire a hacia_esfera(), mas Girosfera para ajustarlo a mano. v10:
-    donde cae el centro de la imagen en la esfera sin girar lo mide
+def centro_esfera(frame=None):
+    """v11: el giro (ry, grados) del Transform SOP 'centrar' de la esfera, que
+    lleva el centro de la imagen al +Z de la bola. Donde cae lo mide
     sala_virtual en el Texture SOP y lo guarda en 'uv_centro' (grados; 0 = +Z)."""
+    try:
+        return -float(parent().fetch('uv_centro', 0.0, search=False))
+    except Exception:
+        return 0.0
+
+
+def giro_esfera(frame=None):
+    """El giro (ry, grados) de la esfera para que su +Z, donde 'centrar' deja
+    el centro de la imagen (el planeta), mire a hacia_esfera(), mas Girosfera
+    para ajustarlo a mano."""
     try:
         e = equipo('esfera')
         if e is None:
             return 0.0
         c = cfg()
         hx, hz = hacia_esfera(c)
-        objetivo = math.degrees(math.atan2(hx - e['x'], hz - e['z']))
-        try:
-            centro = float(parent().fetch('uv_centro', 0.0, search=False))
-        except Exception:
-            centro = 0.0
-        return objetivo - centro + float(c['giro_esfera'])
+        return math.degrees(math.atan2(hx - e['x'], hz - e['z'])) + float(c['giro_esfera'])
+    except Exception:
+        return 0.0
+
+
+def inclina_esfera(frame=None):
+    """v11: la inclinacion (rx, grados) del Transform SOP 'inclinar' de la
+    esfera, para que el planeta mire hacia arriba, a la altura de la camara de
+    la entrada (a 2,8 m; la esfera, a 1,3): sin ella, el centro de la imagen
+    queda en el ecuador de la bola y desde la entrada parece mirar al suelo.
+    Inclinasfera suma grados hacia arriba. Negativo: girar sobre X hacia
+    atras levanta el +Z."""
+    try:
+        e = equipo('esfera')
+        if e is None:
+            return 0.0
+        c = cfg()
+        hx, hz = hacia_esfera(c)
+        alto = min(ENTRADA_ALTO, c['alto'] - 0.3)
+        elev = math.degrees(math.atan2(alto - e['y'], math.hypot(hx - e['x'], hz - e['z'])))
+        return -(elev + float(c['inclina_esfera']))
     except Exception:
         return 0.0
 
