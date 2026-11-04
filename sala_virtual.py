@@ -71,8 +71,7 @@ QUE MONTA
                  orbita     desde fuera (Orbita, Distancia, Alturavista)
                  cenital    lo que ve la camara del techo
                Encima: el plano de la sala desde arriba, con el publico y los
-               focos (abajo a la derecha), lo que muestra la esfera (arriba a
-               la derecha) y el rotulo con la luz, el publico y los onsets
+               focos (abajo a la derecha; v7: sobre negro) y el rotulo con la luz, el publico y los onsets
                (arriba a la izquierda). render_cenital (320 x 288) y
                'profundidad' siguen ahi para la fase 22: no hace falta
                mirarlos.
@@ -91,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v6  (rendimiento: el color de la esfera sin parar la GPU, luz_esfera fuera con Luzesfera 0)'
+VERSION = 'sala_virtual v7  (la esfera 3D con el planeta, sin el recuadro de la esquina, sin rayas bajo la esfera)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -387,13 +386,23 @@ if sale_render and out_render.inputs:
 else:
     info('out_render / imagen_fase1: revisa que %s este cableado a %s/render y que imagen_fase1 '
          'apunte a el' % (out_render.path, fase1.path))
+# v7: sobre la esfera, solo el centro del render (el planeta, un cuadrado): el
+# render entero, casi todo fondo oscuro, la dejaba gris
+recorte = get_or_make(sala, 'cropTOP', 'esfera_imagen', 880, -120)
+connect(recorte, sel_fase1, 0)
+lado = 0.5 * (1.0 - 720.0 / 1280.0)
+recortada = all([setp_any(recorte, ['cropleft'], lado), setp_any(recorte, ['cropright'], 1.0 - lado)])
+if not recortada:
+    info('esfera_imagen: no pude recortar el centro del render (Crop TOP: Left %.3f, Right %.3f)'
+         % (lado, 1.0 - lado))
 mat_esfera = make_constant(sala, 'mat_esfera', 660, -40, (1.0, 1.0, 1.0))
-imagen = setp_any(mat_esfera, ['colormap', 'map'], 'imagen_fase1')
+imagen = setp_any(mat_esfera, ['colormap', 'map'], 'esfera_imagen')
 setp(esfera, 'material', 'mat_esfera')
 if imagen:
-    ok('esfera: 1 m con la imagen de FASE1 (imagen_fase1; la real pide un mapa equirectangular 2:1)')
+    ok('esfera: 1 m con el centro de la imagen de FASE1 (esfera_imagen; la real pide un mapa '
+       'equirectangular 2:1)')
 else:
-    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = imagen_fase1')
+    info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = esfera_imagen')
 # v2: la imagen de la esfera, pequena, para el monitor y para medir su color medio
 mini = get_or_make(sala, 'resolutionTOP', 'esfera_mini', 880, -40)
 connect(mini, sel_fase1, 0)
@@ -487,6 +496,7 @@ setp_any(r1, ['resolutionh'], 720)
 setp_any(r1, ['bgcolorr'], 0.0)
 setp_any(r1, ['bgcolorg'], 0.0)
 setp_any(r1, ['bgcolorb'], 0.0)
+setp_any(r1, ['bgcolora', 'bgalpha'], 1.0)      # v7: fondo negro, no transparente (el visor lo pintaba a cuadros)
 setp_any(r1, ['antialias'], 'aa4x')
 luz_plano = get_or_make(sala, 'lightCOMP', 'plano_luz', 220, 440)      # solo para el plano: que se lea
 setmenu(luz_plano, ['lighttype'], ['distant'], 2)
@@ -498,6 +508,7 @@ setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas esfera')
 setexpr(rp, 'lights', "%s.luces_render('plano_luz')" % SM)
 setp_any(rp, ['resolutionw'], 320)
 setp_any(rp, ['resolutionh'], 240)
+setp_any(rp, ['bgcolora', 'bgalpha'], 1.0)      # v7: el plano, un recuadro negro que se lee
 r2 = get_or_make(sala, 'renderTOP', 'render_cenital', 660, 280)
 setp(r2, 'camera', 'vista_cenital')
 setp(r2, 'geometry', 'sala_caja personas')
@@ -510,8 +521,8 @@ if not orto:
     info('vista_plano: no encontre Projection = Orthographic; el plano saldra en perspectiva')
 
 # v2: el monitor, una sola imagen con todo: la sala en grande (Vista) y, encima,
-# el plano (abajo a la derecha), lo que muestra la esfera (arriba a la derecha) y
-# el rotulo (arriba a la izquierda). Es lo que hay que mirar: salida_sala.
+# el plano (abajo a la derecha) y el rotulo (arriba a la izquierda). v7: ya no
+# lleva lo que muestra la esfera arriba a la derecha. Es lo que hay que mirar: salida_sala.
 MONITOR_TXT = "parent().op('sala_motor').module.texto_monitor(absTime.frame)"
 rot = get_or_make(sala, 'textTOP', 'rotulo_sala', 880, 520)
 setp_any(rot, ['resolutionw'], 1280)
@@ -543,15 +554,18 @@ def encima(nombre, arriba, abajo, horiz, vert, x, y):
     return all(bien)
 
 
-colocados = [encima('con_plano', rp, r1, 'right', 'bottom', 880, 360),
-             encima('con_esfera', mini, sala.op('con_plano'), 'right', 'top', 1100, 360)]
+# v7: sin el recuadro de lo que muestra la esfera arriba a la derecha: parecia la
+# esfera metida en la esquina de la sala. La esfera 3D ya lo ensena.
+if sala.op('con_esfera') is not None:
+    sala.op('con_esfera').destroy()
+colocados = [encima('con_plano', rp, r1, 'right', 'bottom', 880, 360)]
 if transparente:
     con_rotulo = get_or_make(sala, 'overTOP', 'con_rotulo', 1320, 360)
     connect(con_rotulo, rot, 0)
-    connect(con_rotulo, sala.op('con_esfera'), 1)
+    connect(con_rotulo, sala.op('con_plano'), 1)
     ultimo = con_rotulo
 else:
-    ultimo = sala.op('con_esfera')
+    ultimo = sala.op('con_plano')
     info('rotulo_sala: no pude hacer transparente su fondo; el rotulo se ve en su nodo')
 monitor = get_or_make(sala, 'nullTOP', 'monitor_sala', 1540, 360)
 connect(monitor, ultimo, 0)
@@ -563,11 +577,11 @@ for o in (monitor, salida):
     except Exception:
         pass
 if all(colocados):
-    ok('monitor_sala (y salida_sala): la sala en grande desde la Vista, con el plano, la esfera y el '
-       'rotulo encima. Es lo unico que hay que mirar')
+    ok('monitor_sala (y salida_sala): la sala en grande desde la Vista, con el plano y el rotulo encima. '
+       'Es lo unico que hay que mirar')
 else:
-    info('monitor_sala: no pude colocar el plano o la esfera en su esquina (Over TOP: Size = Input 2, '
-         'Prefit = Native Resolution, Justify); revisalo en con_plano y con_esfera')
+    info('monitor_sala: no pude colocar el plano en su esquina (Over TOP: Size = Input 2, '
+         'Prefit = Native Resolution, Justify); revisalo en con_plano')
 ok('render_cenital (320 x 288) y profundidad: la camara del techo, para la fase 22 (no hace falta mirarlos)')
 
 # el microfono virtual
@@ -753,10 +767,15 @@ def _prueba(t, m):
             and sala.op('esfera_mini').inputs[0] == sala.op('imagen_fase1'))
 
     # 5b. v2: estar en la sala
-    t.check('un monitor con todo: salida_sala <- monitor_sala, con el plano, la esfera y el rotulo encima',
+    t.check('un monitor con todo: salida_sala <- monitor_sala, con el plano y el rotulo encima (v7: sin el '
+            'recuadro de la esfera)',
             sala.op('salida_sala') is not None and sala.op('monitor_sala') is not None
-            and all(sala.op(nm) is not None for nm in ('con_plano', 'con_esfera', 'render_plano',
-                                                       'esfera_mini', 'rotulo_sala')))
+            and sala.op('con_esfera') is None
+            and all(sala.op(nm) is not None for nm in ('con_plano', 'render_plano', 'esfera_mini',
+                                                       'esfera_imagen', 'rotulo_sala')))
+    t.check('v7: sin rayas bajo la esfera: el sub, dentro de la peana, no se dibuja',
+            not any(abs(r[0] - por['sub'][0]['x']) < 1e-9 and abs(r[2] - por['sub'][0]['z']) < 1e-9
+                    and abs(r[7] - sm.TAM_EQUIPO['sub'][1]) < 1e-9 for r in sm._filas_equipos(c, eq, 5.0)))
     sala.par.Vista = 'visitante'
     c = sm.cfg()
     ev = sm.evitar_de(eq)
@@ -787,7 +806,7 @@ def _prueba(t, m):
     t.check('v4: la sala dibujada: aristas, reticula y el borde del suelo del publico',
             sala.op('lineas') is not None and len(lin) > 30
             and 'lineas' in str(sala.op('render_sala').par.geometry.val).split()
-            and any(abs(r[6] - 2 * zx) < 1e-6 and abs(r[8] - 0.04) < 1e-6 for r in lin),
+            and any(abs(r[6] - 2 * zx) < 1e-6 and abs(r[8] - 0.025) < 1e-6 for r in lin),
             '%d lineas' % len(lin))
     sala.par.Vista = 'visitante'
     sala.par.Personas = 4

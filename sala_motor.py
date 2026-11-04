@@ -55,7 +55,7 @@
 #               Luzesfera la luz de la esfera sobre la sala (0: apagada).
 # =============================================================================
 
-SALA_VERSION = 'sala v5'
+SALA_VERSION = 'sala v6'
 
 import math
 
@@ -95,7 +95,7 @@ COL_TARIMA = (0.07, 0.17, 0.19)         # v3: el suelo del publico, algo mas cla
 # v3: las lineas (Constant MAT: se ven aunque la sala este a oscuras)
 LIN_ARISTA = (0.55, 0.55, 0.58)         # las aristas de la sala
 LIN_PARED = (0.16, 0.16, 0.18)          # la reticula de 1 m en paredes y suelo
-LIN_ZONA = (0.15, 0.75, 0.80)           # el borde del suelo del publico
+LIN_ZONA = (0.10, 0.50, 0.55)           # el borde de la zona de la camara cenital (v6: mas tenue)
 LIN_GRID = (0.06, 0.32, 0.35)           # su reticula
 GRID_ZONA = 0.5                         # m entre dos lineas de la reticula del publico
 GRID_SALA = 1.0                         # m entre dos lineas de la reticula de la sala
@@ -880,7 +880,7 @@ def _filas_lineas(c):
     # el suelo del publico: su borde (la reticula ya pasa por encima)
     for p, q in (((-zx, yz, -zz), (zx, yz, -zz)), ((-zx, yz, zz), (zx, yz, zz)),
                  ((-zx, yz, -zz), (-zx, yz, zz)), ((zx, yz, -zz), (zx, yz, zz))):
-        f.append(_linea(p, q, LIN_ZONA, 0.04))
+        f.append(_linea(p, q, LIN_ZONA, 0.025))
     # las doce aristas
     for y in (0.0, H - GROSOR):
         f.append(_linea((-hx, y, -hz), (hx, y, -hz), LIN_ARISTA))
@@ -902,6 +902,8 @@ def _filas_lineas(c):
 def _filas_equipos(c, eq, t):
     out = []
     for e in eq:
+        if e['tipo'] == 'sub':              # v6: va dentro de la peana; dibujado, sus caras y las de la
+            continue                        # peana coincidian y salian rayas bajo la esfera
         if e['tipo'] == 'esfera':           # la peana; la esfera tiene su geometria
             alto = max(0.05, e['y'] - 0.5 * e['tam'])
             out.append([e['x'], 0.0, e['z'], 0, 0, 0, 0.6 * e['tam'], alto, 0.6 * e['tam']]
