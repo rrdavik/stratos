@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v21  (la esfera de frente sin error: el uv de la malla va por vertice)'
+VERSION = 'sala_virtual v22  (la autoprueba de la Palmada dice donde se pierde)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -1191,11 +1191,28 @@ def _prueba(t, m):
                 sm._SALA['forzar'] = True
                 m.mic_tick(W, m.cfg(), absTime.seconds + 500.0)
             antes = W['mic']['n']
+            pico_antes = float(np.max(np.abs(sm._SALA['audio']))) if sm._SALA['audio'] is not None else -1.0
             sm.palmada((mic[0] + 0.5, sm.BOCA, mic[2]))
             m.mic_tick(W, m.cfg(), absTime.seconds + 500.5)
+            # v22: si falla, de donde se pierde la palmada: el bloque de la sala (sm._SALA['audio']),
+            # lo que saca el CHOP audio_mic y lo que FASE1 lee de el (Fuentemic, Chopmic)
+            xa = sm._SALA['audio']
+            try:
+                xc = audio.numpyArray()
+                chop_txt = '%d canal(es) x %d muestras, pico %.3f, time slice %s' % (
+                    xc.shape[0], xc.shape[-1], float(np.max(np.abs(xc))) if xc.size else 0.0,
+                    getattr(audio, 'isTimeSlice', '?'))
+            except Exception as e:
+                chop_txt = 'no pude leerlo (%s)' % e
+            cm = m.cfg()
             t.check('Palmada: FASE1 la oye por audio_mic y cuenta un onset', W['mic']['n'] == antes + 1,
-                    'onsets %d -> %d, flujo %.2f (umbral %.2f)'
-                    % (antes, W['mic']['n'], W['mic'].get('flujo', 0.0), m.cfg()['umbral_onset']))
+                    'onsets %d -> %d, flujo %.2f (umbral %.2f) | bloque de la sala: %s muestras, pico %.3f '
+                    '(antes %.3f), palmadas pendientes %d | audio_mic: %s | FASE1: Fuentemic %s, Chopmic %s, '
+                    'Canalmic %s'
+                    % (antes, W['mic']['n'], W['mic'].get('flujo', 0.0), cm['umbral_onset'],
+                       len(xa) if xa is not None else 0, float(np.max(np.abs(xa))) if xa is not None else -1.0,
+                       pico_antes, sum(1 for q in sm._SALA['manuales'] if q[0] is None), chop_txt,
+                       cm.get('fuente_mic'), cm.get('chop_mic'), cm.get('canal_mic')))
         finally:
             W['mic']['t'] = t_onset
     t.check('leyenda SALA', sm.legend().startswith('SALA') and 'personas' in sm.legend())
