@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v79'
+MOTOR_VERSION = 'motor v80'
 
 import math
 
@@ -7249,10 +7249,13 @@ def terreno(W, cfg, cl=None):
         _TERRENO['sello_t'] = sello
         return t
     np = _np()
-    E = Sa = El = None
+    E = Sa = El = R = None
     centro = [0.0] * N
     if np is not None:
         rej = _rejilla(np)
+        # motor v80: de quien es el relieve (los bocetos): 1 el del SEQ2 (conos y crestas),
+        # 0 los montes boscosos del SEQ1 (domos)
+        R = np.ones((TERRENO_H, TERRENO_W), dtype=np.float32)
         Erel = np.zeros((TERRENO_H, TERRENO_W))
         Hrel = np.zeros_like(Erel)
         Edom = np.zeros_like(Erel)
@@ -7280,7 +7283,10 @@ def terreno(W, cfg, cl=None):
             Ez = np.maximum(er, ed)
             for _ in range(2):              # suavizado 3x3: la malla (un vertice por texel) sin dientes
                 Ez = (Ez + np.roll(Ez, 1, 0) + np.roll(Ez, -1, 0) + np.roll(Ez, 1, 1) + np.roll(Ez, -1, 1)) / 5.0
+                er = (er + np.roll(er, 1, 0) + np.roll(er, -1, 0) + np.roll(er, 1, 1) + np.roll(er, -1, 1)) / 5.0
+                ed = (ed + np.roll(ed, 1, 0) + np.roll(ed, -1, 0) + np.roll(ed, 1, 1) + np.roll(ed, -1, 1)) / 5.0
             E[r0:r1] = Ez
+            R[r0:r1] = np.where(ed > er, 0.0, 1.0)      # motor v80: lo que gana tras suavizar
         if hib[0] or hib[1]:                # fase 11 v8: bancales y mesetas, en el mismo mapa
             hib_t = _hibridos_terreno(np, rej, E, cfg, hib)
             filas = [k for k in range(TERRENO_H) if hib_t['filas'][k]]
@@ -7289,7 +7295,7 @@ def terreno(W, cfg, cl=None):
         El = [cero] * r0 + E[r0:r1].tolist() + [cero] * (TERRENO_H - max(r0, r1)) if r1 > r0 \
             else [cero] * TERRENO_H
         Sa = _suelo_mapa(np, rej, S)
-    t = dict(E=E, S=Sa, El=El, centro=centro, hmax=alto_hipso(cfg),
+    t = dict(E=E, S=Sa, El=El, R=R, centro=centro, hmax=alto_hipso(cfg),
              version=_TERRENO.get('version', 0) + 1, rasgos=len(rasgos), **res)
     t['hib'] = hib_t if np is not None else None
     t['hibridos'] = dict(arrozales=dict((i, nb) for i, nb in hib[0]), mesetas=dict(hib[1]))
@@ -7518,7 +7524,8 @@ def alto_en(t, d):
 
 def alturas_array():
     """El mapa para el Script TOP 'alturas' (TERRENO_H x TERRENO_W x 4, float32):
-    r el relieve, g el radio del suelo (erosionado), b 0, a 1. None sin numpy."""
+    r el relieve, g el radio del suelo (erosionado), b de quien es el relieve (motor
+    v80: 1 el SEQ2, 0 los montes boscosos del SEQ1; para los bocetos), a 1. None sin numpy."""
     t = _TERRENO.get('t')
     np = _np()
     if t is None or np is None or t['E'] is None:
@@ -7533,6 +7540,7 @@ def alturas_array():
         a = np.zeros((TERRENO_H, TERRENO_W, 4), dtype=np.float32)
         a[..., 0] = t['E']
         a[..., 1] = t['S']
+        a[..., 2] = t['R'] if t.get('R') is not None else 1.0
         a[..., 3] = 1.0
         _TERRENO['array'] = a
     return a
