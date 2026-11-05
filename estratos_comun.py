@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v56'
+VERSION_COMUN = 'comun v57'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2227,6 +2227,8 @@ def nucleo_al_dia(base):
 
 BOCETO_CONCHAS = 'Bocetoconchas'
 BOCETO_CONSTRUCCIONES = 'Bocetoconstrucciones'
+BOCETO_ESPECIES = 'Bocetoespecies'          # comun v57: la vegetacion (mod_veg_...), aparte
+PREFIJO_ESPECIES = PIEL_PREFIJO + 'veg_'
 BOCETO_CONSTRUIDAS = ('formas_pulidas', 'formas_porosas', 'coronas', 'vagones')
 MAT_BOCETO = 'mat_boceto'
 
@@ -2235,6 +2237,8 @@ def grupo_boceto(nombre):
     """El interruptor de Bocetos que manda en la geometria 'nombre', o None."""
     if nombre == 'estratos':
         return BOCETO_CONCHAS
+    if nombre.startswith(PREFIJO_ESPECIES):
+        return BOCETO_ESPECIES
     if nombre in BOCETO_CONSTRUIDAS or nombre.startswith(PIEL_PREFIJO):
         return BOCETO_CONSTRUCCIONES
     return None
@@ -2245,8 +2249,24 @@ def boceto_pars(base):
     page = get_page(base, 'Bocetos')
     add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas en alambre (boceto)', False)
     add_par(base, page, 'toggle', BOCETO_CONSTRUCCIONES,
-            'Construcciones en alambre (formas, coronas, vagones y modelos)', False)
+            'Construcciones en alambre (formas, coronas, vagones y modelos, sin la vegetacion)', False)
+    add_par(base, page, 'toggle', BOCETO_ESPECIES, 'Especies (la vegetacion) en alambre', False)
+    try:                                # v57: la etiqueta de antes incluia la vegetacion
+        base.par.Bocetoconstrucciones.label = ('Construcciones en alambre (formas, coronas, vagones y '
+                                               'modelos, sin la vegetacion)')
+    except Exception:
+        pass
     add_par(base, page, 'rgb', 'Colorboceto', 'Color del alambre', (0.85, 0.85, 0.80))
+
+
+BOCETO_RE = re.compile(r"^'%s' if parent\(\)\.par\.(\w+) else \((.*)\)$" % MAT_BOCETO, re.S)
+
+
+def sin_boceto(expr):
+    """(interruptor, la expresion de debajo) de una expresion ya envuelta, o
+    (None, expr) si no lo esta."""
+    m = BOCETO_RE.match(expr or '')
+    return (m.group(1), m.group(2)) if m else (None, expr)
 
 
 def con_boceto(base, nombre, expr_base):
@@ -2287,8 +2307,10 @@ def bocetos_al_dia(base):
         if p is None:
             continue
         expr = getattr(p, 'expr', '') or ''
-        if MAT_BOCETO in expr:
+        par, debajo = sin_boceto(expr)
+        if par == grupo_boceto(g.name):
             continue
+        expr = debajo                   # v57: envuelta con otro interruptor (la vegetacion)
         if not expr:
             actual = nombre_op(p.eval()) if p.eval() else ''
             if not actual:
@@ -2298,7 +2320,7 @@ def bocetos_al_dia(base):
         cambiadas += 1
     if cambiadas:
         ok('bocetos: %d geometrias con su interruptor (pagina Bocetos: Bocetoconchas, '
-           'Bocetoconstrucciones)' % cambiadas)
+           'Bocetoconstrucciones, Bocetoespecies)' % cambiadas)
     return cambiadas
 
 
