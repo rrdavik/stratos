@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v78'
+MOTOR_VERSION = 'motor v79'
 
 import math
 
@@ -11828,6 +11828,61 @@ def temas_de_modelo(mo):
     if mo.startswith('ciu_'):
         return ('ciudad', 'industria')
     return tuple(TEMAS)
+
+
+# --- motor v79: de que secuenciador sale cada geometria (los bocetos de FASE1) ------
+# El SEQ1 es la especie GEO de cada tema (vegetacion, informal, mina) y el SEQ2 la ARQ
+# (relieve, planificada, energia). Un modelo es del secuenciador cuya especie lo pide
+# en el catalogo; un ejemplar de la vegetacion, por su planta; un edificio, por su
+# diseno. Lo que no es de ningun modelo, o lo piden las dos, es de los dos.
+GEO_SEQ = {GEO: 1, ARQ: 2}
+BOCETO_SEQ2 = ('coronas',)                  # las coronas son del SEQ2 (fase 4)
+BOCETO_SEQ1 = ('vagones',)                  # los vagones salen de las minas (SEQ1)
+
+
+def seqs_de_modelo(mo, cfg=None):
+    """{1}, {2} o {1, 2}: de que secuenciador sale el modelo mo."""
+    cfg = cfg or DEFAULT_CFG
+    clave = ('seqs', mo, id(_cat(cfg)))
+    v = _CACHE.get(clave)
+    if v is not None:
+        return v
+    propia = dict((esp, GEO_SEQ[own]) for (tema, own), esp in ESPECIES.items())
+    buscar = {mo}
+    if es_ejemplar(mo):
+        buscar.add(parte_ejemplar(mo)[0])
+    if es_edificio(mo):
+        d = parte_edificio(mo)[0]
+        buscar.add(d)
+    out = set()
+    for (tema, esp, estado), lista in _cat(cfg).items():
+        if esp in propia and buscar & set(x for x in lista if isinstance(x, str)):
+            out.add(propia[esp])
+    if es_edificio(mo):
+        d = parte_edificio(mo)[0]
+        for esp, tipos in TIPOS.items():
+            if esp in propia and any(d in DISENOS_TIPO.get(tp, ()) for tp in tipos):
+                out.add(propia[esp])
+    if not out:
+        out = {1} if mo.startswith('veg_') else {2} if mo.startswith('rel_') else {1, 2}
+    _CACHE[clave] = frozenset(out)
+    return _CACHE[clave]
+
+
+def seqs_de_geometria(nombre, cfg=None):
+    """{1}, {2} o {1, 2}: de que secuenciador sale lo que dibuja la geometria
+    nombre de FASE1 (para los bocetos); None si es de las conchas o la esfera, o
+    del armazon (nucleo, reticula, luces de las conchas), que no van por secuenciador."""
+    if nombre in ('estratos', 'terreno', 'nucleo', 'reticula', 'luz_conchas', 'diagnostico'):
+        return None
+    if nombre in BOCETO_SEQ1:
+        return frozenset({1})
+    if nombre in BOCETO_SEQ2:
+        return frozenset({2})
+    for g, mo, _ in geometrias_piel(cfg):
+        if g == nombre:
+            return seqs_de_modelo(mo, cfg)
+    return frozenset({1, 2})
 
 
 def geometrias_activas(cfg):

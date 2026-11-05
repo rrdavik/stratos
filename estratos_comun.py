@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v60'
+VERSION_COMUN = 'comun v61'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2222,74 +2222,86 @@ def nucleo_al_dia(base):
 
 
 # -----------------------------------------------------------------------------
-# BOCETOS (comun v56): las conchas y las construcciones, por separado, en alambre
+# BOCETOS (comun v61): el SEQ1, el SEQ2 y las conchas con la esfera, en alambre
 # -----------------------------------------------------------------------------
-# Dos interruptores en la pagina Bocetos de FASE1. Cada geometria del grupo cambia
-# su material por mat_boceto (un Wireframe MAT, o un Constant en alambre) con una
-# expresion que envuelve la que ya tenia: "'mat_boceto' if parent().par.Bocetoconchas
-# else (<la de antes>)". Las funciones que ponen materiales (piel_al_dia,
-# conchas_al_dia, las geometrias de los modelos) la envuelven igual con con_boceto,
-# y bocetos_al_dia envuelve al final de cada fase las que no pasan por ellas.
+# Tres interruptores en la pagina Bocetos de FASE1 (hasta la v60: conchas,
+# construcciones y especies). Cada geometria cambia su material por mat_boceto (un
+# Wireframe MAT, o un Constant en alambre) con una expresion que envuelve la que ya
+# tenia: "'mat_boceto' if <condicion> else (<la de antes>)". La condicion sale de
+# grupo_boceto: las conchas, el terreno y el nucleo, Bocetoconchas; lo demas, segun el
+# secuenciador del que sale (motor v79, seqs_de_geometria): Bocetoseq1, Bocetoseq2 o,
+# si es de los dos, cualquiera de ellos. piel_al_dia, conchas_al_dia y las geometrias
+# de los modelos la ponen con con_boceto; bocetos_al_dia, al final de cada fase, las demas.
 
 BOCETO_CONCHAS = 'Bocetoconchas'
-BOCETO_CONSTRUCCIONES = 'Bocetoconstrucciones'
-BOCETO_ESPECIES = 'Bocetoespecies'          # comun v57: la vegetacion (mod_veg_...), aparte
-PREFIJO_ESPECIES = PIEL_PREFIJO + 'veg_'
-# comun v58: con las especies, todo lo que las rodea menos el nucleo y la reticula
-BOCETO_ENTORNO = ('tejido', 'rios', 'particulas', 'humo')    # comun v60: el terreno, con las conchas
-BOCETO_CONSTRUIDAS = ('formas_pulidas', 'formas_porosas', 'coronas', 'vagones',
-                      'luz_celda', 'luz_local')     # comun v59: la loseta de luz y los focos de obra
+BOCETO_SEQ1 = 'Bocetoseq1'
+BOCETO_SEQ2 = 'Bocetoseq2'
+BOCETO_PARS = (BOCETO_SEQ1, BOCETO_SEQ2, BOCETO_CONCHAS)
+BOCETO_ESFERA = ('estratos', 'terreno', 'nucleo')     # las conchas y la esfera
+BOCETO_VIEJOS = ('Bocetoconstrucciones', 'Bocetoespecies')   # hasta la comun v60
 MAT_BOCETO = 'mat_boceto'
 
 
-def grupo_boceto(nombre):
-    """El interruptor de Bocetos que manda en la geometria 'nombre', o None."""
-    if nombre in ('estratos', 'terreno'):
-        return BOCETO_CONCHAS
-    if nombre.startswith(PREFIJO_ESPECIES) or nombre in BOCETO_ENTORNO:
-        return BOCETO_ESPECIES
-    if nombre in BOCETO_CONSTRUIDAS or nombre.startswith(PIEL_PREFIJO):
-        return BOCETO_CONSTRUCCIONES
-    return None
+def _seqs(base, nombre):
+    """{1}, {2}, {1, 2} o None (motor v79); sin motor, {1, 2}."""
+    try:
+        mo = base.op('motor').module
+        return mo.seqs_de_geometria(nombre, mo.cfg())
+    except Exception:
+        return None if nombre in ('reticula', 'luz_conchas', 'diagnostico') else frozenset({1, 2})
+
+
+def grupo_boceto(base, nombre):
+    """La condicion (texto de una expresion) que pone en alambre la geometria
+    'nombre', o None si nunca va en alambre (la reticula, las luces de las conchas)."""
+    if nombre in BOCETO_ESFERA:
+        return 'parent().par.%s' % BOCETO_CONCHAS
+    seqs = _seqs(base, nombre)
+    if not seqs:
+        return None
+    if seqs == {1}:
+        return 'parent().par.%s' % BOCETO_SEQ1
+    if seqs == {2}:
+        return 'parent().par.%s' % BOCETO_SEQ2
+    return '(parent().par.%s or parent().par.%s)' % (BOCETO_SEQ1, BOCETO_SEQ2)
 
 
 def boceto_pars(base):
-    """La pagina Bocetos de FASE1 con sus dos interruptores (apagados)."""
+    """La pagina Bocetos de FASE1: SEQ1, SEQ2 y conchas con la esfera (apagados), y el
+    color del alambre. Quita los interruptores de antes de la v61."""
     page = get_page(base, 'Bocetos')
-    add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas y terreno en alambre (boceto)', False)
-    add_par(base, page, 'toggle', BOCETO_CONSTRUCCIONES,
-            'Construcciones en alambre (formas, coronas, vagones, luces de obra y de celda y modelos, '
-            'sin la vegetacion)', False)
-    add_par(base, page, 'toggle', BOCETO_ESPECIES,
-            'Especies en alambre (vegetacion, tejido, rios, particulas y humo)', False)
-    try:                                # v57: la etiqueta de antes incluia la vegetacion
-        base.par.Bocetoconstrucciones.label = ('Construcciones en alambre (formas, coronas, vagones, luces '
-                                               'de obra y de celda y modelos, sin la vegetacion)')
-        base.par.Bocetoespecies.label = 'Especies en alambre (vegetacion, tejido, rios, particulas y humo)'
-        base.par.Bocetoconchas.label = 'Conchas y terreno en alambre (boceto)'
+    for nm in BOCETO_VIEJOS:
+        if has_par(base, nm):
+            remove_par(base, nm)
+    add_par(base, page, 'toggle', BOCETO_SEQ1, 'SEQ1 en alambre (vegetacion, informal, mina)', False)
+    add_par(base, page, 'toggle', BOCETO_SEQ2, 'SEQ2 en alambre (relieve, planificada, energia)', False)
+    add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas y esfera en alambre (conchas, terreno, nucleo)',
+            False)
+    try:
+        base.par.Bocetoconchas.label = 'Conchas y esfera en alambre (conchas, terreno, nucleo)'
     except Exception:
         pass
     add_par(base, page, 'rgb', 'Colorboceto', 'Color del alambre', (0.85, 0.85, 0.80))
 
 
-BOCETO_RE = re.compile(r"^'%s' if parent\(\)\.par\.(\w+) else \((.*)\)$" % MAT_BOCETO, re.S)
+BOCETO_RE = re.compile(r"^'%s' if (.+?) else \((.*)\)$" % MAT_BOCETO, re.S)
 
 
 def sin_boceto(expr):
-    """(interruptor, la expresion de debajo) de una expresion ya envuelta, o
+    """(condicion, la expresion de debajo) de una expresion ya envuelta, o
     (None, expr) si no lo esta."""
     m = BOCETO_RE.match(expr or '')
     return (m.group(1), m.group(2)) if m else (None, expr)
 
 
 def con_boceto(base, nombre, expr_base):
-    """La expresion del material de 'nombre' con su interruptor de Bocetos
-    delante; si no es de ningun grupo, expr_base tal cual."""
-    par = grupo_boceto(nombre)
-    if par is None:
+    """La expresion del material de 'nombre' con su condicion de Bocetos delante;
+    si nunca va en alambre, expr_base tal cual."""
+    cond = grupo_boceto(base, nombre)
+    if cond is None:
         return expr_base
     boceto_pars(base)
-    return "'%s' if parent().par.%s else (%s)" % (MAT_BOCETO, par, expr_base)
+    return "'%s' if %s else (%s)" % (MAT_BOCETO, cond, expr_base)
 
 
 def mat_boceto(base):
@@ -2308,39 +2320,48 @@ def mat_boceto(base):
 
 
 def bocetos_al_dia(base):
-    """Los interruptores, el material y la expresion de cada geometria de los
-    dos grupos (sin tocar las que ya la llevan). Devuelve cuantas cambio."""
+    """Los interruptores, el material y la expresion de cada geometria (sin tocar
+    las que ya llevan la condicion que les toca). Devuelve cuantas cambio."""
     boceto_pars(base)
     mat_boceto(base)
     cambiadas = 0
     for g in base.children:
-        if not getattr(g, 'isCOMP', False) or grupo_boceto(g.name) is None:
+        if not getattr(g, 'isCOMP', False):
             continue
         p = getattr(g.par, 'material', None)
         if p is None:
             continue
+        cond = grupo_boceto(base, g.name)
         expr = getattr(p, 'expr', '') or ''
-        par, debajo = sin_boceto(expr)
-        if par == grupo_boceto(g.name):
+        hoy, debajo = sin_boceto(expr)
+        if hoy == cond:
             continue
-        expr = debajo                   # v57: envuelta con otro interruptor (la vegetacion)
+        if cond is None:                # ya no va en alambre: se le quita la envoltura
+            if hoy is not None:
+                setexpr(g, 'material', debajo)
+                cambiadas += 1
+            continue
+        expr = debajo
         if not expr:
-            actual = nombre_op(p.eval()) if p.eval() else ''
+            try:
+                actual = nombre_op(p.eval()) if p.eval() else ''
+            except Exception:
+                actual = ''
             if not actual:
                 continue
             expr = repr(actual)
         setexpr(g, 'material', con_boceto(base, g.name, expr))
         cambiadas += 1
     if cambiadas:
-        ok('bocetos: %d geometrias con su interruptor (pagina Bocetos: Bocetoconchas, '
-           'Bocetoconstrucciones, Bocetoespecies)' % cambiadas)
+        ok('bocetos: %d geometrias con su interruptor (pagina Bocetos: Bocetoseq1, Bocetoseq2, '
+           'Bocetoconchas)' % cambiadas)
     return cambiadas
 
 
 def diagnostico_bocetos(base):
-    """comun v60: cada geometria del render, su interruptor de Bocetos y el
-    material que lleva ahora. Si un interruptor esta encendido y una de sus
-    geometrias no lleva mat_boceto, FALLO; las que no son de ningun grupo, aparte."""
+    """Cada geometria del render, su condicion de Bocetos y el material que lleva
+    ahora. FALLO si su condicion se cumple y no va en mat_boceto, o si le falta la
+    envoltura; las que nunca van en alambre, aparte."""
     print('DIAGNOSTICO DE LOS BOCETOS')
     print('-' * 66)
     try:
@@ -2350,36 +2371,46 @@ def diagnostico_bocetos(base):
         print('  FALLO  no pude leer el render: %s' % e)
         return
     estado = {}
-    for par in (BOCETO_CONCHAS, BOCETO_CONSTRUCCIONES, BOCETO_ESPECIES):
+    for par in BOCETO_PARS:
         try:
             estado[par] = bool(getattr(base.par, par).eval())
         except Exception:
             estado[par] = None
     print('  interruptores: %s' % '   '.join('%s %s' % (k, {True: 'si', False: 'no', None: '?'}[v])
                                          for k, v in estado.items()))
+    nombre_grupo = {'parent().par.%s' % BOCETO_SEQ1: 'SEQ1', 'parent().par.%s' % BOCETO_SEQ2: 'SEQ2',
+                    'parent().par.%s' % BOCETO_CONCHAS: 'conchas y esfera'}
     sin_grupo, malas, por_grupo = [], [], {}
     for nm in nombres:
         g = base.op(nm)
         if g is None:
             continue
-        par = grupo_boceto(nm)
+        cond = grupo_boceto(base, nm)
         try:
             mat = nombre_op(g.par.material.eval())
             expr = getattr(g.par.material, 'expr', '') or ''
         except Exception:
             mat, expr = '?', ''
-        if par is None:
+        if cond is None:
             sin_grupo.append('%s (%s)' % (nm, mat))
             continue
-        por_grupo.setdefault(par, []).append(nm)
-        envuelta = sin_boceto(expr)[0] == par
-        if not envuelta or (estado.get(par) and mat != MAT_BOCETO):
-            malas.append('%s: %s, material %s%s' % (nm, par, mat, '' if envuelta else ', SIN la expresion del boceto'))
-    for par, gs in por_grupo.items():
-        print('  %-21s %d geometrias: %s%s' % (par, len(gs), ' '.join(gs[:8]), ' ...' if len(gs) > 8 else ''))
+        grupo = nombre_grupo.get(cond, 'SEQ1 o SEQ2')
+        por_grupo.setdefault(grupo, []).append(nm)
+        envuelta = sin_boceto(expr)[0] == cond
+        try:
+            encendido = bool(eval(cond, {'parent': lambda: base}))
+        except Exception:
+            encendido = False
+        if not envuelta or (encendido and mat != MAT_BOCETO):
+            malas.append('%s (%s): material %s%s' % (nm, grupo, mat,
+                                                     '' if envuelta else ', SIN la expresion del boceto'))
+    for grupo, gs in por_grupo.items():
+        print('  %-17s %3d geometrias: %s%s' % (grupo, len(gs), ' '.join(gs[:6]), ' ...' if len(gs) > 6 else ''))
     for x in malas[:20]:
         print('  FALLO  %s' % x)
-    print('  sin grupo (nunca en alambre): %s' % (', '.join(sin_grupo) or 'ninguna'))
+    if len(malas) > 20:
+        print('  FALLO  ... y %d mas' % (len(malas) - 20))
+    print('  nunca en alambre: %s' % (', '.join(sin_grupo) or 'ninguna'))
     print()
 
 
