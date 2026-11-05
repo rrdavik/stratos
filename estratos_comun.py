@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v57'
+VERSION_COMUN = 'comun v58'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2081,7 +2081,8 @@ def humo_al_dia(base, crear=False):
         geo = base.op('humo')
     if not setp_any(geo, ['instancea'], 'a'):
         info('humo: pon a mano Instance 2 -> Color A = a (el desfase de cada bocanada)')
-    setexpr(geo, 'material', "'mat_particulas' if parent().par.Materialrespaldo else 'mat_humo'")
+    setexpr(geo, 'material', con_boceto(base, 'humo', "'mat_particulas' if parent().par.Materialrespaldo "
+                                                    "else 'mat_humo'"))
     if bien:
         ok('humo: en la GPU (mat_humo, GLSL): bocanadas suaves que suben y se funden, a saltos')
     else:
@@ -2189,7 +2190,8 @@ def particulas_al_dia(base, crear=False):
     if crear or geo is None or geo.op('lamina') is None:
         make_instanced(base, 'particulas', 520, 860, 'mat_motas', sop='rect', quiet=True)
         geo = base.op('particulas')
-    setexpr(geo, 'material', "'mat_particulas' if parent().par.Materialrespaldo else 'mat_motas'")
+    setexpr(geo, 'material', con_boceto(base, 'particulas', "'mat_particulas' if parent().par.Materialrespaldo "
+                                                          "else 'mat_motas'"))
     if crear or base.op('vagones') is None:
         make_instanced(base, 'vagones', 520, 1020, 'mat_particulas', quiet=True)
     if bien:
@@ -2229,6 +2231,8 @@ BOCETO_CONCHAS = 'Bocetoconchas'
 BOCETO_CONSTRUCCIONES = 'Bocetoconstrucciones'
 BOCETO_ESPECIES = 'Bocetoespecies'          # comun v57: la vegetacion (mod_veg_...), aparte
 PREFIJO_ESPECIES = PIEL_PREFIJO + 'veg_'
+# comun v58: con las especies, todo lo que las rodea menos el nucleo y la reticula
+BOCETO_ENTORNO = ('terreno', 'tejido', 'rios', 'particulas', 'humo')
 BOCETO_CONSTRUIDAS = ('formas_pulidas', 'formas_porosas', 'coronas', 'vagones')
 MAT_BOCETO = 'mat_boceto'
 
@@ -2237,7 +2241,7 @@ def grupo_boceto(nombre):
     """El interruptor de Bocetos que manda en la geometria 'nombre', o None."""
     if nombre == 'estratos':
         return BOCETO_CONCHAS
-    if nombre.startswith(PREFIJO_ESPECIES):
+    if nombre.startswith(PREFIJO_ESPECIES) or nombre in BOCETO_ENTORNO:
         return BOCETO_ESPECIES
     if nombre in BOCETO_CONSTRUIDAS or nombre.startswith(PIEL_PREFIJO):
         return BOCETO_CONSTRUCCIONES
@@ -2250,10 +2254,13 @@ def boceto_pars(base):
     add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas en alambre (boceto)', False)
     add_par(base, page, 'toggle', BOCETO_CONSTRUCCIONES,
             'Construcciones en alambre (formas, coronas, vagones y modelos, sin la vegetacion)', False)
-    add_par(base, page, 'toggle', BOCETO_ESPECIES, 'Especies (la vegetacion) en alambre', False)
+    add_par(base, page, 'toggle', BOCETO_ESPECIES,
+            'Especies en alambre (vegetacion, terreno, tejido, rios, particulas y humo)', False)
     try:                                # v57: la etiqueta de antes incluia la vegetacion
         base.par.Bocetoconstrucciones.label = ('Construcciones en alambre (formas, coronas, vagones y '
                                                'modelos, sin la vegetacion)')
+        base.par.Bocetoespecies.label = ('Especies en alambre (vegetacion, terreno, tejido, rios, particulas '
+                                         'y humo)')
     except Exception:
         pass
     add_par(base, page, 'rgb', 'Colorboceto', 'Color del alambre', (0.85, 0.85, 0.80))
@@ -2348,7 +2355,7 @@ def piel_al_dia(base, m):
             ok('piel: %d geometrias con el material de su familia (la vegetacion, mat_piel_dosel)'
                % cambiadas)
         if base.op('terreno') is not None:      # fase 11 v5: la malla del relieve, al dia
-            setp(base.op('terreno'), 'material', 'mat_piel_tierra')
+            setexpr(base.op('terreno'), 'material', con_boceto(base, 'terreno', "'mat_piel_tierra'"))
     except Exception as e:
         info('piel: no pude poner al dia los materiales (%s); relanza fase12_moduladores.py' % e)
     conchas_al_dia(base, m)
@@ -3588,7 +3595,7 @@ def terreno_al_dia(base, m=None):
         except Exception:
             pass
     set_spin(geo)
-    setp(geo, 'material', 'mat_piel_tierra')
+    setexpr(geo, 'material', con_boceto(base, 'terreno', "'mat_piel_tierra'"))
     if not bien:
         info('terreno: pon a mano Rows %d y Columns %d en terreno/esfera (Sphere SOP, Polygon Mesh)'
              % (TERRENO_FILAS, TERRENO_COLS))
