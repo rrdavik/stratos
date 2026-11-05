@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v61'
+VERSION_COMUN = 'comun v62'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -874,6 +874,8 @@ uniform sampler2D sCultivo; // r relieve sin aterrazar, g tope de los bancales, 
 uniform vec4 uCiudad;       // fase 11 v10: x alto de planta, y ancho de vano (en el mundo), z 1 con Tema ciudad
 uniform vec4 uSeq1;         // el color del SEQ1 (el tinte de las ventanas)
 uniform vec4 uSeq2;         // el del SEQ2
+uniform vec4 uBoceto;       // comun v62: x Bocetoseq1, y Bocetoseq2, z Bocetoconchas (solo mat_piel_tierra)
+uniform vec4 uBocetoCol;    // rgb Colorboceto
 
 in Vertex {
     vec4 color;
@@ -997,6 +999,33 @@ void main()
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
     vec3 emis = vec3(0.0);
     float sombra = uPisos.z;
+    if (tierra && (uBoceto.x > 0.5 || uBoceto.y > 0.5 || uBoceto.z > 0.5)) {
+        // comun v62: el boceto del terreno, en alambre aqui mismo (con un Wireframe MAT
+        // la esfera saldria lisa, sin las montanas): una reticula de meridianos y
+        // paralelos (uno de cada 4 de la malla, o menos) sobre la superficie ya desplazada.
+        // Bocetoconchas: todo el terreno; Bocetoseq2: el relieve (las montanas son el
+        // SEQ2); cualquiera de los dos secuenciadores: los hibridos (bancales y mesetas)
+        vec2 buv = uvMapa(normalize(iVert.oPos));
+        // de lejos o junto a los polos las lineas se juntan: se salta de 2 en 2
+        // (4, 8...) hasta que queden a 6 pixeles o mas, para que no se empaste
+        vec2 gc = buv * vec2(128.0, 64.0);
+        vec2 fw = max(fwidth(gc), vec2(1e-5));
+        vec2 paso = exp2(max(vec2(0.0), ceil(log2(fw * 6.0))));
+        vec2 dl = abs(fract(gc / paso - 0.5) - 0.5) / (fw / paso);
+        float linea = 1.0 - clamp(min(dl.x, dl.y) - 0.5, 0.0, 1.0);
+        vec4 cub = texture(sCultivo, buv);
+        bool hibrido = (cub.g > 1e-4 && cub.r < cub.g) || cub.a > 0.5;
+        bool alambre = uBoceto.z > 0.5 || (uBoceto.y > 0.5 && iVert.hrel > 0.002)
+                       || ((uBoceto.x > 0.5 || uBoceto.y > 0.5) && hibrido);
+        if (alambre) {
+            if (linea < 0.5)
+                discard;
+            oFragColor[0] = TDOutputSwizzle(vec4(uBocetoCol.rgb, 1.0));
+            for (int i = 1; i < TD_NUM_COLOR_BUFFERS; i++)
+                oFragColor[i] = vec4(0.0);
+            return;
+        }
+    }
     if (tierra) {
         // los pisos por la altura sobre el suelo local: verde mate y granulado
         // abajo, roca facetada en medio, nieve brillante arriba
@@ -2232,12 +2261,17 @@ def nucleo_al_dia(base):
 # secuenciador del que sale (motor v79, seqs_de_geometria): Bocetoseq1, Bocetoseq2 o,
 # si es de los dos, cualquiera de ellos. piel_al_dia, conchas_al_dia y las geometrias
 # de los modelos la ponen con con_boceto; bocetos_al_dia, al final de cada fase, las demas.
+# comun v62: el terreno no cambia de material: lo pone en alambre su shader
+# (mat_piel_tierra, uniforme uBoceto), que conserva las montanas. Con Bocetoconchas,
+# todo el terreno; con Bocetoseq2, el relieve (las montanas son del SEQ2); con
+# cualquiera de los dos, los hibridos.
 
 BOCETO_CONCHAS = 'Bocetoconchas'
 BOCETO_SEQ1 = 'Bocetoseq1'
 BOCETO_SEQ2 = 'Bocetoseq2'
 BOCETO_PARS = (BOCETO_SEQ1, BOCETO_SEQ2, BOCETO_CONCHAS)
 BOCETO_ESFERA = ('estratos', 'terreno', 'nucleo')     # las conchas y la esfera
+BOCETO_SHADER = ('terreno',)        # comun v62: en alambre desde su shader (uBoceto), sin mat_boceto
 BOCETO_VIEJOS = ('Bocetoconstrucciones', 'Bocetoespecies')   # hasta la comun v60
 MAT_BOCETO = 'mat_boceto'
 
@@ -2253,7 +2287,10 @@ def _seqs(base, nombre):
 
 def grupo_boceto(base, nombre):
     """La condicion (texto de una expresion) que pone en alambre la geometria
-    'nombre', o None si nunca va en alambre (la reticula, las luces de las conchas)."""
+    'nombre', o None si nunca cambia a mat_boceto (la reticula, las luces de las
+    conchas y, desde la v62, el terreno, que lo pone en alambre su shader)."""
+    if nombre in BOCETO_SHADER:
+        return None
     if nombre in BOCETO_ESFERA:
         return 'parent().par.%s' % BOCETO_CONCHAS
     seqs = _seqs(base, nombre)
@@ -2358,6 +2395,30 @@ def bocetos_al_dia(base):
     return cambiadas
 
 
+def _boceto_en_shader(base, mat):
+    """comun v62: 'uBoceto ...' con lo que lee el GLSL MAT mat (el del terreno), o
+    por que no lo pondra en alambre."""
+    m = base.op(mat) if mat else None
+    if m is None or 'glsl' not in str(getattr(m, 'OPType', '')).lower():
+        return 'no es el shader de la piel (con Materialrespaldo el terreno no va en alambre)'
+    for k in range(64):
+        try:
+            nm = getattr(m.par, 'vec%dname' % k)
+        except Exception:
+            break
+        if nm is None:
+            break
+        if str(nm.eval()) == 'uBoceto':
+            vals = []
+            for c in 'xyz':
+                try:
+                    vals.append('%g' % float(getattr(m.par, 'vec%dvalue%s' % (k, c)).eval()))
+                except Exception:
+                    vals.append('?')
+            return 'uBoceto seq1 %s, seq2 %s (el relieve), conchas %s (todo)' % tuple(vals)
+    return 'FALTA el uniforme uBoceto en %s (relanza la fase para rehacer los materiales)' % mat
+
+
 def diagnostico_bocetos(base):
     """Cada geometria del render, su condicion de Bocetos y el material que lleva
     ahora. FALLO si su condicion se cumple y no va en mat_boceto, o si le falta la
@@ -2391,6 +2452,14 @@ def diagnostico_bocetos(base):
             expr = getattr(g.par.material, 'expr', '') or ''
         except Exception:
             mat, expr = '?', ''
+        if nm in BOCETO_SHADER:         # comun v62: el terreno, en alambre desde su shader
+            uni = _boceto_en_shader(base, mat)
+            print('  %-17s %s, material %s: %s' % ('terreno (shader)', nm, mat, uni))
+            if sin_boceto(expr)[0] is not None:
+                malas.append('%s: aun lleva la envoltura de mat_boceto (relanza la fase)' % nm)
+            elif not uni.startswith('uBoceto'):
+                malas.append('%s: %s' % (nm, uni))
+            continue
         if cond is None:
             sin_grupo.append('%s (%s)' % (nm, mat))
             continue
@@ -3133,6 +3202,10 @@ PIEL_UNIFORMES = [
     ('uCiudad', tuple(PIEL_U % ('uCiudad', q) for q in range(3)) + ('0',)),
     ('uSeq1', tuple(PIEL_U % ('uSeq1', q) for q in range(3)) + ('0',)),
     ('uSeq2', tuple(PIEL_U % ('uSeq2', q) for q in range(3)) + ('0',)),
+    # comun v62: los bocetos del terreno los dibuja el shader (materiales_piel los deja
+    # a 0 en las demas familias)
+    ('uBoceto', ('parent().par.Bocetoseq1', 'parent().par.Bocetoseq2', 'parent().par.Bocetoconchas', '0')),
+    ('uBocetoCol', ('parent().par.Colorbocetor', 'parent().par.Colorbocetog', 'parent().par.Colorbocetob', '0')),
 ]
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua']
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
@@ -3286,6 +3359,7 @@ def materiales_piel(base):
     mat_piel_tierra para el relieve y mat_piel_agua para los rios) que lee la
     rugosidad del alfa de cada instancia, y mat_respaldo (Phong) para
     Materialrespaldo. Tambien las texturas del terreno (mapas_terreno)."""
+    boceto_pars(base)                # comun v62: uBoceto lee los interruptores
     vdat = get_or_make(base, 'textDAT', 'piel_vertex', 1180, 1020)
     vdat.text = PIEL_VERTEX
     pdat = get_or_make(base, 'textDAT', 'piel_pixel', 1180, 940)
@@ -3312,6 +3386,8 @@ def materiales_piel(base):
             if nombre == 'uTerreno':
                 vals = ('1' if fam == 'tierra' else '0',) + vals[1:3] + ('1' if rampa else '0',)
             elif fam in SIN_TINTE and (nombre.startswith('uTinte') or nombre in ('uPisos', 'uBorde')):
+                vals = ('0', '0', '0', '0')
+            elif nombre.startswith('uBoceto') and fam != 'tierra':     # comun v62
                 vals = ('0', '0', '0', '0')
             bien = _uniforme(mat, q, nombre, vals) and bien
         if not bien:
