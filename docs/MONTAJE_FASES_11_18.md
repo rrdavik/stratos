@@ -1591,3 +1591,18 @@ El vaivén del dosel (`Swaymax`, en fase con el beat, con una onda suave por lon
 
 - **Qué pasaba:** TouchDesigner avisaba «Cook dependency loop detected» en `FASE1/frame_u`. El canal del color de `luz_destello` para la piel (`uLuz2Col`) se leía de la propia Light COMP, cuyo color y dimmer son expresiones sobre `frame_u` (comun v52): `frame_u` dependía de sí mismo. Se veía sobre todo con la sala virtual, que tira del render de FASE1.
 - **Ahora:** `canales_frame` calcula ese color con los valores del destello que ya saca en el mismo fotograma (`fl_r`, `fl_g`, `fl_b` por `fl_dim`). El resultado es el mismo y no hay bucle. Las otras luces (`luz_principal`, `luz_relleno`) se siguen leyendo de su Light COMP.
+
+## Bocetos: conchas y construcciones en alambre (comun v56)
+
+Página **Bocetos** de FASE1, dos interruptores apagados por defecto y un color:
+
+| Parámetro | Qué pone en alambre |
+|---|---|
+| `Bocetoconchas` | las conchas (`estratos`) |
+| `Bocetoconstrucciones` | las construcciones: `formas_pulidas`, `formas_porosas`, `coronas`, `vagones` y todos los modelos `mod_…` |
+| `Colorboceto` | el color del alambre (0,85 · 0,85 · 0,80) |
+
+- **Cómo:** cada geometría del grupo cambia su material por `mat_boceto` (un Wireframe MAT o, si no lo hay, un Constant MAT en alambre). La expresión del material envuelve la que ya tenía: `'mat_boceto' if parent().par.Bocetoconchas else (<la de antes>)`. `Materialrespaldo` sigue funcionando con el boceto apagado.
+- **Se cambia en directo**, sin relanzar nada. `piel_al_dia`, `conchas_al_dia` y las geometrías de los modelos ponen la expresión ya envuelta; `bocetos_al_dia` envuelve al final de cada fase (en `print_report`) las demás.
+- **En alambre no hay shader de la piel:** el vaivén del dosel y la rugosidad no se ven mientras el boceto está encendido.
+- **Las autopruebas** que miran el material (fases 12 y 13) cuentan con los bocetos apagados.

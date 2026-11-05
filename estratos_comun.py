@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v55'
+VERSION_COMUN = 'comun v56'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -53,6 +53,12 @@ def banner(version):
 
 
 def print_report():
+    try:                                # comun v56: los bocetos, al final de cada fase
+        b = op(COMP_PATH)
+        if b is not None:
+            bocetos_al_dia(b)
+    except Exception as e:
+        info('bocetos: no pude ponerlos al dia (%s)' % e)
     print('CAMBIOS')
     print('-' * 66)
     for line in report:
@@ -2209,6 +2215,93 @@ def nucleo_al_dia(base):
             setexpr(esfera, ax, NUCLEO_R)
 
 
+# -----------------------------------------------------------------------------
+# BOCETOS (comun v56): las conchas y las construcciones, por separado, en alambre
+# -----------------------------------------------------------------------------
+# Dos interruptores en la pagina Bocetos de FASE1. Cada geometria del grupo cambia
+# su material por mat_boceto (un Wireframe MAT, o un Constant en alambre) con una
+# expresion que envuelve la que ya tenia: "'mat_boceto' if parent().par.Bocetoconchas
+# else (<la de antes>)". Las funciones que ponen materiales (piel_al_dia,
+# conchas_al_dia, las geometrias de los modelos) la envuelven igual con con_boceto,
+# y bocetos_al_dia envuelve al final de cada fase las que no pasan por ellas.
+
+BOCETO_CONCHAS = 'Bocetoconchas'
+BOCETO_CONSTRUCCIONES = 'Bocetoconstrucciones'
+BOCETO_CONSTRUIDAS = ('formas_pulidas', 'formas_porosas', 'coronas', 'vagones')
+MAT_BOCETO = 'mat_boceto'
+
+
+def grupo_boceto(nombre):
+    """El interruptor de Bocetos que manda en la geometria 'nombre', o None."""
+    if nombre == 'estratos':
+        return BOCETO_CONCHAS
+    if nombre in BOCETO_CONSTRUIDAS or nombre.startswith(PIEL_PREFIJO):
+        return BOCETO_CONSTRUCCIONES
+    return None
+
+
+def boceto_pars(base):
+    """La pagina Bocetos de FASE1 con sus dos interruptores (apagados)."""
+    page = get_page(base, 'Bocetos')
+    add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas en alambre (boceto)', False)
+    add_par(base, page, 'toggle', BOCETO_CONSTRUCCIONES,
+            'Construcciones en alambre (formas, coronas, vagones y modelos)', False)
+    add_par(base, page, 'rgb', 'Colorboceto', 'Color del alambre', (0.85, 0.85, 0.80))
+
+
+def con_boceto(base, nombre, expr_base):
+    """La expresion del material de 'nombre' con su interruptor de Bocetos
+    delante; si no es de ningun grupo, expr_base tal cual."""
+    par = grupo_boceto(nombre)
+    if par is None:
+        return expr_base
+    boceto_pars(base)
+    return "'%s' if parent().par.%s else (%s)" % (MAT_BOCETO, par, expr_base)
+
+
+def mat_boceto(base):
+    """El material de los bocetos: un Wireframe MAT; si no existe, un Constant
+    MAT en alambre. Del color de Colorboceto."""
+    m = base.op(MAT_BOCETO)
+    if m is None:
+        try:
+            m = mk(base, 'wireframeMAT', MAT_BOCETO, 780, 940)
+        except Exception:
+            m = mk(base, 'constantMAT', MAT_BOCETO, 780, 940)
+            setmenu(m, ['wireframe'], ['openglwire', 'on', 'wire', 'topology'], 1)
+    for ch in 'rgb':
+        setexpr(m, 'color' + ch, "parent().par.Colorboceto%s" % ch)
+    return m
+
+
+def bocetos_al_dia(base):
+    """Los interruptores, el material y la expresion de cada geometria de los
+    dos grupos (sin tocar las que ya la llevan). Devuelve cuantas cambio."""
+    boceto_pars(base)
+    mat_boceto(base)
+    cambiadas = 0
+    for g in base.children:
+        if not getattr(g, 'isCOMP', False) or grupo_boceto(g.name) is None:
+            continue
+        p = getattr(g.par, 'material', None)
+        if p is None:
+            continue
+        expr = getattr(p, 'expr', '') or ''
+        if MAT_BOCETO in expr:
+            continue
+        if not expr:
+            actual = nombre_op(p.eval()) if p.eval() else ''
+            if not actual:
+                continue
+            expr = repr(actual)
+        setexpr(g, 'material', con_boceto(base, g.name, expr))
+        cambiadas += 1
+    if cambiadas:
+        ok('bocetos: %d geometrias con su interruptor (pagina Bocetos: Bocetoconchas, '
+           'Bocetoconstrucciones)' % cambiadas)
+    return cambiadas
+
+
 def piel_al_dia(base, m):
     """Con la piel ya montada (nivel 12 o mas): el shader de la piel al dia y
     cada geometria de modelo con el material de su familia (motor v32: los
@@ -2224,7 +2317,7 @@ def piel_al_dia(base, m):
             geo = base.op(g)
             if geo is None or mo.startswith('ciu_'):
                 continue
-            expr = "'mat_respaldo' if parent().par.Materialrespaldo else '%s'" % mat
+            expr = con_boceto(base, g, "'mat_respaldo' if parent().par.Materialrespaldo else '%s'" % mat)
             p = getattr(geo.par, 'material', None)
             if p is not None and getattr(p, 'expr', '') != expr:
                 setexpr(geo, 'material', expr)
@@ -2250,7 +2343,8 @@ def conchas_al_dia(base, m):
         if geo is None or base.op('mat_piel_mineral') is None:
             return False
         bien = bool(setp_any(geo, ['instancea'], 'a'))
-        setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else 'mat_piel_mineral'")
+        setexpr(geo, 'material', con_boceto(base, 'estratos',
+                                            "'mat_respaldo' if parent().par.Materialrespaldo else 'mat_piel_mineral'"))
         if bien:
             ok('conchas: shader de la piel (carbon brillante, basalto, hormigon mate; rugosidad en a)')
         else:
@@ -3428,7 +3522,8 @@ def instanciar_modelos(base, m):
         if doce and not mo.startswith('ciu_'):
             if not setp_any(geo, ['instancea'], 'a'):
                 sin_alfa.append(g)
-            setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else '%s'" % mat)
+            setexpr(geo, 'material', con_boceto(base, g, "'mat_respaldo' if parent().par.Materialrespaldo else '%s'"
+                                                % mat))
     if doce:
         ok('%d geometrias de modelos (mod_...): una por modelo, con el shader de su familia '
            '(Materialrespaldo: Phong); giran con el planeta' % len(geos))
