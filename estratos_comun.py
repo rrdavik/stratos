@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v59'
+VERSION_COMUN = 'comun v60'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -68,6 +68,10 @@ def print_report():
         diagnostico_render(op(COMP_PATH))
     except Exception as e:
         print('  (no pude hacer el diagnostico del render: %s)' % e)
+    try:
+        diagnostico_bocetos(op(COMP_PATH))
+    except Exception as e:
+        print('  (no pude hacer el diagnostico de los bocetos: %s)' % e)
 
 
 def _errs(o):
@@ -2232,7 +2236,7 @@ BOCETO_CONSTRUCCIONES = 'Bocetoconstrucciones'
 BOCETO_ESPECIES = 'Bocetoespecies'          # comun v57: la vegetacion (mod_veg_...), aparte
 PREFIJO_ESPECIES = PIEL_PREFIJO + 'veg_'
 # comun v58: con las especies, todo lo que las rodea menos el nucleo y la reticula
-BOCETO_ENTORNO = ('terreno', 'tejido', 'rios', 'particulas', 'humo')
+BOCETO_ENTORNO = ('tejido', 'rios', 'particulas', 'humo')    # comun v60: el terreno, con las conchas
 BOCETO_CONSTRUIDAS = ('formas_pulidas', 'formas_porosas', 'coronas', 'vagones',
                       'luz_celda', 'luz_local')     # comun v59: la loseta de luz y los focos de obra
 MAT_BOCETO = 'mat_boceto'
@@ -2240,7 +2244,7 @@ MAT_BOCETO = 'mat_boceto'
 
 def grupo_boceto(nombre):
     """El interruptor de Bocetos que manda en la geometria 'nombre', o None."""
-    if nombre == 'estratos':
+    if nombre in ('estratos', 'terreno'):
         return BOCETO_CONCHAS
     if nombre.startswith(PREFIJO_ESPECIES) or nombre in BOCETO_ENTORNO:
         return BOCETO_ESPECIES
@@ -2252,17 +2256,17 @@ def grupo_boceto(nombre):
 def boceto_pars(base):
     """La pagina Bocetos de FASE1 con sus dos interruptores (apagados)."""
     page = get_page(base, 'Bocetos')
-    add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas en alambre (boceto)', False)
+    add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas y terreno en alambre (boceto)', False)
     add_par(base, page, 'toggle', BOCETO_CONSTRUCCIONES,
             'Construcciones en alambre (formas, coronas, vagones, luces de obra y de celda y modelos, '
             'sin la vegetacion)', False)
     add_par(base, page, 'toggle', BOCETO_ESPECIES,
-            'Especies en alambre (vegetacion, terreno, tejido, rios, particulas y humo)', False)
+            'Especies en alambre (vegetacion, tejido, rios, particulas y humo)', False)
     try:                                # v57: la etiqueta de antes incluia la vegetacion
         base.par.Bocetoconstrucciones.label = ('Construcciones en alambre (formas, coronas, vagones, luces '
                                                'de obra y de celda y modelos, sin la vegetacion)')
-        base.par.Bocetoespecies.label = ('Especies en alambre (vegetacion, terreno, tejido, rios, particulas '
-                                         'y humo)')
+        base.par.Bocetoespecies.label = 'Especies en alambre (vegetacion, tejido, rios, particulas y humo)'
+        base.par.Bocetoconchas.label = 'Conchas y terreno en alambre (boceto)'
     except Exception:
         pass
     add_par(base, page, 'rgb', 'Colorboceto', 'Color del alambre', (0.85, 0.85, 0.80))
@@ -2331,6 +2335,52 @@ def bocetos_al_dia(base):
         ok('bocetos: %d geometrias con su interruptor (pagina Bocetos: Bocetoconchas, '
            'Bocetoconstrucciones, Bocetoespecies)' % cambiadas)
     return cambiadas
+
+
+def diagnostico_bocetos(base):
+    """comun v60: cada geometria del render, su interruptor de Bocetos y el
+    material que lleva ahora. Si un interruptor esta encendido y una de sus
+    geometrias no lleva mat_boceto, FALLO; las que no son de ningun grupo, aparte."""
+    print('DIAGNOSTICO DE LOS BOCETOS')
+    print('-' * 66)
+    try:
+        r = base.op('render')
+        nombres = str(r.par.geometry.val).split() if r is not None else []
+    except Exception as e:
+        print('  FALLO  no pude leer el render: %s' % e)
+        return
+    estado = {}
+    for par in (BOCETO_CONCHAS, BOCETO_CONSTRUCCIONES, BOCETO_ESPECIES):
+        try:
+            estado[par] = bool(getattr(base.par, par).eval())
+        except Exception:
+            estado[par] = None
+    print('  interruptores: %s' % '   '.join('%s %s' % (k, {True: 'si', False: 'no', None: '?'}[v])
+                                         for k, v in estado.items()))
+    sin_grupo, malas, por_grupo = [], [], {}
+    for nm in nombres:
+        g = base.op(nm)
+        if g is None:
+            continue
+        par = grupo_boceto(nm)
+        try:
+            mat = nombre_op(g.par.material.eval())
+            expr = getattr(g.par.material, 'expr', '') or ''
+        except Exception:
+            mat, expr = '?', ''
+        if par is None:
+            sin_grupo.append('%s (%s)' % (nm, mat))
+            continue
+        por_grupo.setdefault(par, []).append(nm)
+        envuelta = sin_boceto(expr)[0] == par
+        if not envuelta or (estado.get(par) and mat != MAT_BOCETO):
+            malas.append('%s: %s, material %s%s' % (nm, par, mat, '' if envuelta else ', SIN la expresion del boceto'))
+    for par, gs in por_grupo.items():
+        print('  %-21s %d geometrias: %s%s' % (par, len(gs), ' '.join(gs[:8]), ' ...' if len(gs) > 8 else ''))
+    for x in malas[:20]:
+        print('  FALLO  %s' % x)
+    print('  sin grupo (nunca en alambre): %s' % (', '.join(sin_grupo) or 'ninguna'))
+    print()
 
 
 def piel_al_dia(base, m):
