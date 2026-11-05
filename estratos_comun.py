@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v62'
+VERSION_COMUN = 'comun v63'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -876,6 +876,7 @@ uniform vec4 uSeq1;         // el color del SEQ1 (el tinte de las ventanas)
 uniform vec4 uSeq2;         // el del SEQ2
 uniform vec4 uBoceto;       // comun v62: x Bocetoseq1, y Bocetoseq2, z Bocetoconchas (solo mat_piel_tierra)
 uniform vec4 uBocetoCol;    // rgb Colorboceto
+uniform sampler2D sAlturas; // comun v63: b de quien es el relieve (1 SEQ2, 0 los montes del SEQ1)
 
 in Vertex {
     vec4 color;
@@ -1004,7 +1005,8 @@ void main()
         // la esfera saldria lisa, sin las montanas): una reticula de meridianos y
         // paralelos (uno de cada 4 de la malla, o menos) sobre la superficie ya desplazada.
         // Bocetoconchas: todo el terreno; Bocetoseq2: el relieve (las montanas son el
-        // SEQ2); cualquiera de los dos secuenciadores: los hibridos (bancales y mesetas)
+        // SEQ2); Bocetoseq1 (comun v63): los montes boscosos (el relieve que levanta la
+        // vegetacion, sAlturas.b < 0,5); cualquiera de los dos: los hibridos (bancales y mesetas)
         vec2 buv = uvMapa(normalize(iVert.oPos));
         // de lejos o junto a los polos las lineas se juntan: se salta de 2 en 2
         // (4, 8...) hasta que queden a 6 pixeles o mas, para que no se empaste
@@ -1015,7 +1017,9 @@ void main()
         float linea = 1.0 - clamp(min(dl.x, dl.y) - 0.5, 0.0, 1.0);
         vec4 cub = texture(sCultivo, buv);
         bool hibrido = (cub.g > 1e-4 && cub.r < cub.g) || cub.a > 0.5;
-        bool alambre = uBoceto.z > 0.5 || (uBoceto.y > 0.5 && iVert.hrel > 0.002)
+        bool seq2 = texture(sAlturas, buv).b > 0.5;
+        bool relieve = iVert.hrel > 0.002;
+        bool alambre = uBoceto.z > 0.5 || (relieve && (seq2 ? uBoceto.y > 0.5 : uBoceto.x > 0.5))
                        || ((uBoceto.x > 0.5 || uBoceto.y > 0.5) && hibrido);
         if (alambre) {
             if (linea < 0.5)
@@ -2415,7 +2419,8 @@ def _boceto_en_shader(base, mat):
                     vals.append('%g' % float(getattr(m.par, 'vec%dvalue%s' % (k, c)).eval()))
                 except Exception:
                     vals.append('?')
-            return 'uBoceto seq1 %s, seq2 %s (el relieve), conchas %s (todo)' % tuple(vals)
+            return ('uBoceto seq1 %s (los montes boscosos), seq2 %s (el relieve), conchas %s (todo)'
+                    % tuple(vals))
     return 'FALTA el uniforme uBoceto en %s (relanza la fase para rehacer los materiales)' % mat
 
 
@@ -3251,7 +3256,8 @@ def _uniforme(mat, k, nombre, valores):
 
 ALTURAS_CB = r'''# Script TOP 'alturas' (fase 11 v5): el mapa de alturas del relieve que pide
 # al motor (lat/lon, 512 x 256, float32): r el relieve sobre el suelo local,
-# g el radio del suelo. El motor lo recuece solo cuando el mapa cambia.
+# g el radio del suelo y, desde el motor v80, b de quien es el relieve (1 el SEQ2,
+# 0 los montes boscosos del SEQ1). El motor lo recuece solo cuando el mapa cambia.
 
 def onSetupParameters(scriptOp):
     return
