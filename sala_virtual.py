@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v22  (la autoprueba de la Palmada dice donde se pierde)'
+VERSION = 'sala_virtual v23  (la Palmada de la autoprueba, con la cola de palmadas vacia)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -1185,6 +1185,11 @@ def _prueba(t, m):
         # se devuelve (si no, FASE1 se quedaba sorda hasta que el reloj real llegaba).
         t_onset = W['mic'].get('t', 0.0)
         W['mic']['t'] = -1e9
+        # v23: palmadas que seguian en la cola (Palmada pulsado, o de otra prueba) entraban
+        # todas en el primer bloque de calentamiento: el bloque de antes ya llevaba golpes
+        # (pico 1,33) y la palmada de la prueba casi no subia el flujo (0,10). Cola vacia.
+        cola = len(sm._SALA['manuales'])
+        sm._SALA['manuales'] = []
         try:
             sm._SALA['forzar'] = True
             for _ in range(3):
@@ -1207,11 +1212,11 @@ def _prueba(t, m):
             cm = m.cfg()
             t.check('Palmada: FASE1 la oye por audio_mic y cuenta un onset', W['mic']['n'] == antes + 1,
                     'onsets %d -> %d, flujo %.2f (umbral %.2f) | bloque de la sala: %s muestras, pico %.3f '
-                    '(antes %.3f), palmadas pendientes %d | audio_mic: %s | FASE1: Fuentemic %s, Chopmic %s, '
+                    '(antes %.3f), palmadas pendientes %d, en la cola al empezar %d | audio_mic: %s | FASE1: Fuentemic %s, Chopmic %s, '
                     'Canalmic %s'
                     % (antes, W['mic']['n'], W['mic'].get('flujo', 0.0), cm['umbral_onset'],
                        len(xa) if xa is not None else 0, float(np.max(np.abs(xa))) if xa is not None else -1.0,
-                       pico_antes, sum(1 for q in sm._SALA['manuales'] if q[0] is None), chop_txt,
+                       pico_antes, sum(1 for q in sm._SALA['manuales'] if q[0] is None), cola, chop_txt,
                        cm.get('fuente_mic'), cm.get('chop_mic'), cm.get('canal_mic')))
         finally:
             W['mic']['t'] = t_onset
