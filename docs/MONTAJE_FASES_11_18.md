@@ -1586,3 +1586,8 @@ El vaivén del dosel (`Swaymax`, en fase con el beat, con una onda suave por lon
 - **`Refresconat`**: ya no hace falta que sea bajo para que el dosel se mueva suave; el vaivén va a saltos de stop-motion, como el resto. Lo que sigue yendo a saltos de `Refresconat` es el latido, el rebote del nacimiento y el pumping de la naturaleza.
 - **Con `Materialrespaldo`** (un Phong, sin shader) el vaivén vuelve a las filas, como antes.
 - **Comprobado fuera de TouchDesigner** con `pruebas/glsl_humo.py`: el shader de la piel compila con el vaivén y la naturaleza se mueve entre dos pulsos (con `Swaymax` 0, quieta). `pruebas/glsl_piel.py` declara ahora `uTDMats[].world`, que el vaivén usa.
+
+## La luz de destello sin bucle en frame_u (motor v78)
+
+- **Qué pasaba:** TouchDesigner avisaba «Cook dependency loop detected» en `FASE1/frame_u`. El canal del color de `luz_destello` para la piel (`uLuz2Col`) se leía de la propia Light COMP, cuyo color y dimmer son expresiones sobre `frame_u` (comun v52): `frame_u` dependía de sí mismo. Se veía sobre todo con la sala virtual, que tira del render de FASE1.
+- **Ahora:** `canales_frame` calcula ese color con los valores del destello que ya saca en el mismo fotograma (`fl_r`, `fl_g`, `fl_b` por `fl_dim`). El resultado es el mismo y no hay bucle. Las otras luces (`luz_principal`, `luz_relleno`) se siguen leyendo de su Light COMP.
