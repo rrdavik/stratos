@@ -1592,19 +1592,20 @@ El vaivén del dosel (`Swaymax`, en fase con el beat, con una onda suave por lon
 - **Qué pasaba:** TouchDesigner avisaba «Cook dependency loop detected» en `FASE1/frame_u`. El canal del color de `luz_destello` para la piel (`uLuz2Col`) se leía de la propia Light COMP, cuyo color y dimmer son expresiones sobre `frame_u` (comun v52): `frame_u` dependía de sí mismo. Se veía sobre todo con la sala virtual, que tira del render de FASE1.
 - **Ahora:** `canales_frame` calcula ese color con los valores del destello que ya saca en el mismo fotograma (`fl_r`, `fl_g`, `fl_b` por `fl_dim`). El resultado es el mismo y no hay bucle. Las otras luces (`luz_principal`, `luz_relleno`) se siguen leyendo de su Light COMP.
 
-## Bocetos: conchas y construcciones en alambre (comun v56)
+## Bocetos: el SEQ1, el SEQ2 y las conchas con la esfera, en alambre (comun v61, motor v79)
 
-Página **Bocetos** de FASE1, tres interruptores apagados por defecto y un color:
+Página **Bocetos** de FASE1, tres interruptores apagados por defecto y un color (de la comun v56 a la v60 eran conchas, construcciones y especies; se quitan):
 
 | Parámetro | Qué pone en alambre |
 |---|---|
-| `Bocetoconchas` | las conchas (`estratos`) y, desde la comun v60, el `terreno` |
-| `Bocetoconstrucciones` | las construcciones: `formas_pulidas`, `formas_porosas`, `coronas`, `vagones`, la loseta de luz de la celda (`luz_celda`) y los focos de obra (`luz_local`, comun v59) y los modelos `mod_…`, sin la vegetación |
-| `Bocetoespecies` | las especies y lo que las rodea: la vegetación (`mod_veg_…`, comun v57), el `tejido`, los `rios`, las `particulas` y el `humo` (comun v58). El `nucleo` y la `reticula` nunca van en alambre |
+| `Bocetoseq1` | lo que sale del SEQ1: la vegetación (naturaleza), la informal (ciudad), la mina (industria) y los vagones |
+| `Bocetoseq2` | lo que sale del SEQ2: el relieve (naturaleza), la planificada (ciudad), la energía (industria) y las coronas |
+| `Bocetoconchas` | las conchas y la esfera: `estratos`, `terreno` y `nucleo` |
 | `Colorboceto` | el color del alambre (0,85 · 0,85 · 0,80) |
 
-- **Cómo:** cada geometría del grupo cambia su material por `mat_boceto` (un Wireframe MAT o, si no lo hay, un Constant MAT en alambre). La expresión del material envuelve la que ya tenía: `'mat_boceto' if parent().par.Bocetoconchas else (<la de antes>)`. `Materialrespaldo` sigue funcionando con el boceto apagado.
-- **Se cambia en directo**, sin relanzar nada. `piel_al_dia`, `conchas_al_dia` y las geometrías de los modelos ponen la expresión ya envuelta; `bocetos_al_dia` envuelve al final de cada fase (en `print_report`) las demás.
-- **En alambre no hay shader de la piel:** mientras el boceto está encendido no se ven el vaivén del dosel ni la rugosidad; el `terreno` sale como una esfera sin relieve (lo levanta el shader) y el humo y las motas se quedan quietos.
+- **De qué secuenciador es cada geometría** lo dice el motor (`seqs_de_geometria`, motor v79): un modelo es del secuenciador cuya especie lo pide en el catálogo; un ejemplar de la vegetación, por su planta; un edificio, por su diseño (`TIPOS`, `DISENOS_TIPO`). Lo que piden las dos especies (remates de la ciudad, formas, híbridos, tejido, ríos, losetas y focos de luz, humo y motas) va en alambre con cualquiera de los dos interruptores.
+- **Nunca en alambre:** la `reticula`, las luces de las conchas (`luz_conchas`) y el `diagnostico`.
+- **Cómo:** cada geometría cambia su material por `mat_boceto` (un Wireframe MAT o, si no lo hay, un Constant MAT en alambre) con una expresión que envuelve la que ya tenía: `'mat_boceto' if parent().par.Bocetoseq1 else (<la de antes>)`. Se cambia en directo y `Materialrespaldo` sigue funcionando con el boceto apagado. `bocetos_al_dia`, al final de cada fase, rehace las envueltas con los interruptores de antes.
+- **En alambre no hay shader de la piel:** no se ven el vaivén del dosel ni la rugosidad; el terreno sale sin relieve, y el humo y las motas, quietos.
+- **DIAGNOSTICO DE LOS BOCETOS**, al final del informe de cada fase: cada geometría del render con su grupo y el material que lleva ahora; FALLO si su interruptor está encendido y no va en `mat_boceto`, o si le falta la expresión.
 - **Las autopruebas** que miran el material (fases 12 y 13) cuentan con los bocetos apagados.
-- **DIAGNOSTICO DE LOS BOCETOS** (comun v60), al final del informe de cada fase: cada geometría del render con su interruptor y el material que lleva ahora; FALLO si un interruptor está encendido y una de sus geometrías no va en `mat_boceto`, y la lista de las que no son de ningún grupo.
