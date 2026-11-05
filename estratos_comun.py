@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v58'
+VERSION_COMUN = 'comun v59'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2233,7 +2233,8 @@ BOCETO_ESPECIES = 'Bocetoespecies'          # comun v57: la vegetacion (mod_veg_
 PREFIJO_ESPECIES = PIEL_PREFIJO + 'veg_'
 # comun v58: con las especies, todo lo que las rodea menos el nucleo y la reticula
 BOCETO_ENTORNO = ('terreno', 'tejido', 'rios', 'particulas', 'humo')
-BOCETO_CONSTRUIDAS = ('formas_pulidas', 'formas_porosas', 'coronas', 'vagones')
+BOCETO_CONSTRUIDAS = ('formas_pulidas', 'formas_porosas', 'coronas', 'vagones',
+                      'luz_celda', 'luz_local')     # comun v59: la loseta de luz y los focos de obra
 MAT_BOCETO = 'mat_boceto'
 
 
@@ -2253,12 +2254,13 @@ def boceto_pars(base):
     page = get_page(base, 'Bocetos')
     add_par(base, page, 'toggle', BOCETO_CONCHAS, 'Conchas en alambre (boceto)', False)
     add_par(base, page, 'toggle', BOCETO_CONSTRUCCIONES,
-            'Construcciones en alambre (formas, coronas, vagones y modelos, sin la vegetacion)', False)
+            'Construcciones en alambre (formas, coronas, vagones, luces de obra y de celda y modelos, '
+            'sin la vegetacion)', False)
     add_par(base, page, 'toggle', BOCETO_ESPECIES,
             'Especies en alambre (vegetacion, terreno, tejido, rios, particulas y humo)', False)
     try:                                # v57: la etiqueta de antes incluia la vegetacion
-        base.par.Bocetoconstrucciones.label = ('Construcciones en alambre (formas, coronas, vagones y '
-                                               'modelos, sin la vegetacion)')
+        base.par.Bocetoconstrucciones.label = ('Construcciones en alambre (formas, coronas, vagones, luces '
+                                               'de obra y de celda y modelos, sin la vegetacion)')
         base.par.Bocetoespecies.label = ('Especies en alambre (vegetacion, terreno, tejido, rios, particulas '
                                          'y humo)')
     except Exception:

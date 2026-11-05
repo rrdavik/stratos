@@ -1599,7 +1599,7 @@ Página **Bocetos** de FASE1, tres interruptores apagados por defecto y un color
 | Parámetro | Qué pone en alambre |
 |---|---|
 | `Bocetoconchas` | las conchas (`estratos`) |
-| `Bocetoconstrucciones` | las construcciones: `formas_pulidas`, `formas_porosas`, `coronas`, `vagones` y los modelos `mod_…`, sin la vegetación |
+| `Bocetoconstrucciones` | las construcciones: `formas_pulidas`, `formas_porosas`, `coronas`, `vagones`, la loseta de luz de la celda (`luz_celda`) y los focos de obra (`luz_local`, comun v59) y los modelos `mod_…`, sin la vegetación |
 | `Bocetoespecies` | las especies y lo que las rodea: la vegetación (`mod_veg_…`, comun v57), el `terreno`, el `tejido`, los `rios`, las `particulas` y el `humo` (comun v58). El `nucleo` y la `reticula` nunca van en alambre |
 | `Colorboceto` | el color del alambre (0,85 · 0,85 · 0,80) |
 
