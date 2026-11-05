@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v63'
+VERSION_COMUN = 'comun v64'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -874,7 +874,7 @@ uniform sampler2D sCultivo; // r relieve sin aterrazar, g tope de los bancales, 
 uniform vec4 uCiudad;       // fase 11 v10: x alto de planta, y ancho de vano (en el mundo), z 1 con Tema ciudad
 uniform vec4 uSeq1;         // el color del SEQ1 (el tinte de las ventanas)
 uniform vec4 uSeq2;         // el del SEQ2
-uniform vec4 uBoceto;       // comun v62: x Bocetoseq1, y Bocetoseq2, z Bocetoconchas (solo mat_piel_tierra)
+uniform vec4 uBoceto;       // comun v62: x Bocetoseq1, y Bocetoseq2, z Bocetoconchas (solo mat_piel_tierra), w Bocetoreticula
 uniform vec4 uBocetoCol;    // rgb Colorboceto
 uniform sampler2D sAlturas; // comun v63: b de quien es el relieve (1 SEQ2, 0 los montes del SEQ1)
 
@@ -1009,12 +1009,12 @@ void main()
         // vegetacion, sAlturas.b < 0,5); cualquiera de los dos: los hibridos (bancales y mesetas)
         vec2 buv = uvMapa(normalize(iVert.oPos));
         // de lejos o junto a los polos las lineas se juntan: se salta de 2 en 2
-        // (4, 8...) hasta que queden a 6 pixeles o mas, para que no se empaste
+        // (4, 8...) hasta que queden a Bocetoreticula pixeles o mas (uBoceto.w; comun
+        // v64: lineas de un pixel, antes de dos, y a 14 pixeles, antes a 6)
         vec2 gc = buv * vec2(128.0, 64.0);
         vec2 fw = max(fwidth(gc), vec2(1e-5));
-        vec2 paso = exp2(max(vec2(0.0), ceil(log2(fw * 6.0))));
+        vec2 paso = exp2(max(vec2(0.0), ceil(log2(fw * max(uBoceto.w, 2.0)))));
         vec2 dl = abs(fract(gc / paso - 0.5) - 0.5) / (fw / paso);
-        float linea = 1.0 - clamp(min(dl.x, dl.y) - 0.5, 0.0, 1.0);
         vec4 cub = texture(sCultivo, buv);
         bool hibrido = (cub.g > 1e-4 && cub.r < cub.g) || cub.a > 0.5;
         bool seq2 = texture(sAlturas, buv).b > 0.5;
@@ -1022,7 +1022,9 @@ void main()
         bool alambre = uBoceto.z > 0.5 || (relieve && (seq2 ? uBoceto.y > 0.5 : uBoceto.x > 0.5))
                        || ((uBoceto.x > 0.5 || uBoceto.y > 0.5) && hibrido);
         if (alambre) {
-            if (linea < 0.5)
+            // comun v64: solo la cara que mira a la camara (sin la reticula del otro
+            // lado del planeta cruzada con esta) y lineas de un pixel
+            if (dot(iVert.wNorm, v) < 0.0 || min(dl.x, dl.y) > 0.5)
                 discard;
             oFragColor[0] = TDOutputSwizzle(vec4(uBocetoCol.rgb, 1.0));
             for (int i = 1; i < TD_NUM_COLOR_BUFFERS; i++)
@@ -2323,6 +2325,10 @@ def boceto_pars(base):
     except Exception:
         pass
     add_par(base, page, 'rgb', 'Colorboceto', 'Color del alambre', (0.85, 0.85, 0.80))
+    # comun v64: lo fino que sale el alambre
+    add_par(base, page, 'float', 'Bocetoreticula', 'Pixeles entre las lineas del terreno', 14.0, 4.0, 60.0)
+    add_par(base, page, 'float', 'Bocetohojas', 'Parte de las hojas que se dibujan en alambre (0-1)', 0.2,
+            0.0, 1.0)
 
 
 BOCETO_RE = re.compile(r"^'%s' if (.+?) else \((.*)\)$" % MAT_BOCETO, re.S)
@@ -2345,18 +2351,124 @@ def con_boceto(base, nombre, expr_base):
     return "'%s' if %s else (%s)" % (MAT_BOCETO, cond, expr_base)
 
 
-def mat_boceto(base):
-    """El material de los bocetos: un Wireframe MAT; si no existe, un Constant
-    MAT en alambre. Del color de Colorboceto."""
-    m = base.op(MAT_BOCETO)
-    if m is None:
-        try:
-            m = mk(base, 'wireframeMAT', MAT_BOCETO, 780, 940)
-        except Exception:
-            m = mk(base, 'constantMAT', MAT_BOCETO, 780, 940)
-            setmenu(m, ['wireframe'], ['openglwire', 'on', 'wire', 'topology'], 1)
+# comun v64: el alambre, mas fino. mat_boceto es un GLSL MAT con el vertex shader de
+# la piel (el vaiven del dosel se conserva) y la pagina Common en Wireframe; su pixel
+# shader pinta las lineas del color de Colorboceto (el Wireframe MAT las multiplicaba
+# por el color de cada instancia: la vegetacion salia en manchas verde oscuro), quita
+# las caras de atras y, en la vegetacion, deja solo una parte de las hojas y de las
+# tarjetas de racimo (Bocetohojas: cada hoja trae su variacion en uv.x). Si el GLSL
+# MAT no tiene Wireframe en Common, o aun no hay piel (antes del nivel 12), vuelve al
+# Wireframe MAT de antes.
+BOCETO_PIXEL = r"""// Estratos - boceto (comun v64): las lineas del alambre
+uniform vec4 uBocetoCol;    // rgb Colorboceto
+uniform vec4 uBocetoHojas;  // x la parte de las hojas y tarjetas de racimo que se dibuja (0-1)
+
+in Vertex {
+    vec4 color;
+    vec3 wPos;
+    vec3 wNorm;
+    vec3 oPos;
+    vec3 pPos;
+    float hrel;
+    vec3 hoja;
+    vec3 bPos;
+    vec3 bNorm;
+    flat int inst;
+    flat int camIndex;
+} iVert;
+
+layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
+
+void main()
+{
+    TDCheckDiscard();
+    float tipo = iVert.hoja.x;
+    if (tipo > 1.5 && tipo < 4.0) {
+        // una hoja (2 + v) o una tarjeta de racimo (3 + v), v en 0-0,9 por hoja
+        if (fract(tipo) >= clamp(uBocetoHojas.x, 0.0, 1.0) * 0.9 + 1e-4)
+            discard;
+    } else {
+        // lo demas, sin las caras de atras (sin normal, se dibuja)
+        vec3 cam = uTDMats[iVert.camIndex].camInverse[3].xyz;
+        if (dot(iVert.wNorm, cam - iVert.wPos) < -0.02 * length(iVert.wNorm) * length(cam - iVert.wPos))
+            discard;
+    }
+    oFragColor[0] = TDOutputSwizzle(vec4(uBocetoCol.rgb, 1.0));
+    for (int i = 1; i < TD_NUM_COLOR_BUFFERS; i++)
+        oFragColor[i] = vec4(0.0);
+}
+"""
+BOCETO_UNIFORMES = [
+    ('uFamilia', ('1', '0', '0', '0')),          # el vaiven del dosel (solo mueve los ejemplares)
+    ('uTerreno', ('0', '1', '0', '0')),
+    ('uViento', ("parent().op('frame_u')['viento_amp']", "parent().op('frame_u')['viento_lfo']",
+                 "parent().op('frame_u')['humo_t']", '2')),
+    ('uBocetoCol', ('parent().par.Colorbocetor', 'parent().par.Colorbocetog', 'parent().par.Colorbocetob', '0')),
+    ('uBocetoHojas', ('parent().par.Bocetohojas', '0', '0', '0')),
+]
+
+
+def _boceto_wire(base):
+    """El Wireframe MAT de antes (o un Constant MAT en alambre)."""
+    try:
+        m = mk(base, 'wireframeMAT', MAT_BOCETO, 780, 940)
+    except Exception:
+        m = mk(base, 'constantMAT', MAT_BOCETO, 780, 940)
+        setmenu(m, ['wireframe'], ['openglwire', 'on', 'wire', 'topology'], 1)
     for ch in 'rgb':
         setexpr(m, 'color' + ch, "parent().par.Colorboceto%s" % ch)
+    return m
+
+
+def _boceto_glsl(base):
+    """comun v64: el GLSL MAT del alambre, o None si no puede ir en Wireframe."""
+    m = mk(base, 'glslMAT', MAT_BOCETO, 780, 940)
+    dat = get_or_make(base, 'textDAT', 'boceto_pixel', 560, 940)
+    dat.text = BOCETO_PIXEL
+    if not setmenu(m, ['wireframe'], ['openglwire', 'opengl', 'on', 'wire'], 1):
+        m.destroy()
+        return None
+    setp_any(m, ['wirewidth', 'linewidth'], 1)
+    setp_any(m, ['vdat', 'vertexdat'], 'piel_vertex')
+    setp_any(m, ['pdat', 'pixeldat'], 'boceto_pixel')
+    try:
+        sec = m.seq.vec
+        if sec.numBlocks < len(BOCETO_UNIFORMES):
+            sec.numBlocks = len(BOCETO_UNIFORMES)
+    except Exception:
+        pass
+    _samplers(m)                        # sAlturas, que declara el vertex shader
+    for q, (nombre, valores) in enumerate(BOCETO_UNIFORMES):
+        _uniforme(m, q, nombre, valores)
+    return m
+
+
+def mat_boceto(base):
+    """El material de los bocetos (comun v64): el GLSL MAT del alambre fino si ya hay
+    piel (piel_vertex) y el GLSL MAT puede ir en Wireframe; si no, el Wireframe MAT."""
+    m = base.op(MAT_BOCETO)
+    glsl = m is not None and 'glsl' in str(getattr(m, 'OPType', '')).lower()
+    quiero = base.op('piel_vertex') is not None and not base.fetch('boceto_sin_glsl', False, search=False)
+    if quiero and not glsl:
+        if m is not None:
+            m.destroy()
+        m = _boceto_glsl(base)
+        if m is None:
+            base.store('boceto_sin_glsl', True)
+            info('mat_boceto: el GLSL MAT no tiene Wire Frame en la pagina Common; sigue el Wireframe MAT')
+            m = _boceto_wire(base)
+        else:
+            ok('mat_boceto: alambre fino (GLSL MAT en Wireframe, sin el color de la instancia, sin las caras '
+               'de atras; Bocetohojas)')
+    elif glsl:
+        get_or_make(base, 'textDAT', 'boceto_pixel', 560, 940).text = BOCETO_PIXEL
+        for q, (nombre, valores) in enumerate(BOCETO_UNIFORMES):
+            _uniforme(m, q, nombre, valores)
+    elif m is None:
+        m = _boceto_wire(base)
+    else:
+        for ch in 'rgb':
+            setexpr(m, 'color' + ch, "parent().par.Colorboceto%s" % ch)
     return m
 
 
@@ -2444,6 +2556,18 @@ def diagnostico_bocetos(base):
             estado[par] = None
     print('  interruptores: %s' % '   '.join('%s %s' % (k, {True: 'si', False: 'no', None: '?'}[v])
                                          for k, v in estado.items()))
+    mb = base.op(MAT_BOCETO)            # comun v64: que alambre se usa
+    if mb is None:
+        print('  mat_boceto: no existe')
+    elif 'glsl' in str(getattr(mb, 'OPType', '')).lower():
+        try:
+            hj, rt = float(base.par.Bocetohojas.eval()), float(base.par.Bocetoreticula.eval())
+        except Exception:
+            hj, rt = -1.0, -1.0
+        print('  mat_boceto: GLSL en Wireframe (alambre fino), hojas %d %%, reticula del terreno %g px'
+              % (round(100 * hj), rt))
+    else:
+        print('  mat_boceto: %s (el de antes: lleva el color de cada instancia)' % getattr(mb, 'OPType', '?'))
     nombre_grupo = {'parent().par.%s' % BOCETO_SEQ1: 'SEQ1', 'parent().par.%s' % BOCETO_SEQ2: 'SEQ2',
                     'parent().par.%s' % BOCETO_CONCHAS: 'conchas y esfera'}
     sin_grupo, malas, por_grupo = [], [], {}
@@ -3209,7 +3333,8 @@ PIEL_UNIFORMES = [
     ('uSeq2', tuple(PIEL_U % ('uSeq2', q) for q in range(3)) + ('0',)),
     # comun v62: los bocetos del terreno los dibuja el shader (materiales_piel los deja
     # a 0 en las demas familias)
-    ('uBoceto', ('parent().par.Bocetoseq1', 'parent().par.Bocetoseq2', 'parent().par.Bocetoconchas', '0')),
+    ('uBoceto', ('parent().par.Bocetoseq1', 'parent().par.Bocetoseq2', 'parent().par.Bocetoconchas',
+                 'parent().par.Bocetoreticula')),
     ('uBocetoCol', ('parent().par.Colorbocetor', 'parent().par.Colorbocetog', 'parent().par.Colorbocetob', '0')),
 ]
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua']
