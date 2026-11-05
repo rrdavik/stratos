@@ -1600,10 +1600,10 @@ Página **Bocetos** de FASE1, tres interruptores apagados por defecto y un color
 |---|---|
 | `Bocetoconchas` | las conchas (`estratos`) |
 | `Bocetoconstrucciones` | las construcciones: `formas_pulidas`, `formas_porosas`, `coronas`, `vagones` y los modelos `mod_…`, sin la vegetación |
-| `Bocetoespecies` | las especies, la vegetación: los modelos `mod_veg_…` (comun v57; hasta la v56 iban con las construcciones) |
+| `Bocetoespecies` | las especies y lo que las rodea: la vegetación (`mod_veg_…`, comun v57), el `terreno`, el `tejido`, los `rios`, las `particulas` y el `humo` (comun v58). El `nucleo` y la `reticula` nunca van en alambre |
 | `Colorboceto` | el color del alambre (0,85 · 0,85 · 0,80) |
 
 - **Cómo:** cada geometría del grupo cambia su material por `mat_boceto` (un Wireframe MAT o, si no lo hay, un Constant MAT en alambre). La expresión del material envuelve la que ya tenía: `'mat_boceto' if parent().par.Bocetoconchas else (<la de antes>)`. `Materialrespaldo` sigue funcionando con el boceto apagado.
 - **Se cambia en directo**, sin relanzar nada. `piel_al_dia`, `conchas_al_dia` y las geometrías de los modelos ponen la expresión ya envuelta; `bocetos_al_dia` envuelve al final de cada fase (en `print_report`) las demás.
-- **En alambre no hay shader de la piel:** el vaivén del dosel y la rugosidad no se ven mientras el boceto está encendido.
+- **En alambre no hay shader de la piel:** mientras el boceto está encendido no se ven el vaivén del dosel ni la rugosidad; el `terreno` sale como una esfera sin relieve (lo levanta el shader) y el humo y las motas se quedan quietos.
 - **Las autopruebas** que miran el material (fases 12 y 13) cuentan con los bocetos apagados.

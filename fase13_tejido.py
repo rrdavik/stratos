@@ -141,12 +141,14 @@ materiales_piel(base)
 geo = make_instanced(base, 'tejido', 520, 940, 'mat_piel_mineral')
 if not setp_any(geo, ['instancea'], 'a'):
     fail('tejido no lee la rugosidad: Instance 2 -> Color A = a')
-setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else 'mat_piel_mineral'")
+setexpr(geo, 'material', con_boceto(base, 'tejido', "'mat_respaldo' if parent().par.Materialrespaldo "
+                                                    "else 'mat_piel_mineral'"))
 # v2: los rios, en su geometria, con el material del agua (azul reservado, emisivo bajo)
 geo = make_instanced(base, 'rios', 520, 860, 'mat_piel_agua')
 if not setp_any(geo, ['instancea'], 'a'):
     fail('rios no lee la rugosidad: Instance 2 -> Color A = a')
-setexpr(geo, 'material', "'mat_respaldo' if parent().par.Materialrespaldo else 'mat_piel_agua'")
+setexpr(geo, 'material', con_boceto(base, 'rios', "'mat_respaldo' if parent().par.Materialrespaldo "
+                                                  "else 'mat_piel_agua'"))
 set_render(base)
 
 leeme(base, 13, """FASE 13 - TEJIDO CONECTIVO
