@@ -72,7 +72,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v77'
+MOTOR_VERSION = 'motor v78'
 
 import math
 
@@ -11794,6 +11794,11 @@ def canales_frame(spec, frame=None):
         try:
             if tipo == 'piel':
                 v = piel_uniforme(nombre, k, frame)
+            elif tipo == 'luz' and nombre == 'luz_destello':
+                # motor v78: el color de luz_destello sale de frame_u (fl_r, fl_g, fl_b y
+                # fl_dim, arriba); leerlo de la Light COMP hacia que frame_u dependiera de
+                # si mismo ('Cook dependency loop detected' en frame_u)
+                v = float(fl[4 + int(k)]) * float(fl[3])
             elif tipo == 'luz':
                 v = luz_color(nombre, k, frame)
             elif tipo == 'mod':

@@ -90,7 +90,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v20  (Girosfera e Inclinasfera a 0: el giro automatico ya pone el planeta de frente)'
+VERSION = 'sala_virtual v21  (la esfera de frente sin error: el uv de la malla va por vertice)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -472,17 +472,18 @@ def onCook(scriptOp):
     scriptOp.copy(scriptOp.inputs[0])
     pts = scriptOp.points
     r = max([max(abs(q.x), abs(q.y)) for q in pts] or [0.5]) or 0.5
-    if 'uv' not in [a.name for a in scriptOp.pointAttribs]:
-        scriptOp.pointAttribs.create('uv', (0.0, 0.0, 0.0))
-    for q in pts:
-        q.uv = _uv(q, r)
-    try:                                # si la malla trae uv por vertice, tambien
-        if 'uv' in [a.name for a in scriptOp.vertexAttribs]:
-            for pr in scriptOp.prims:
-                for v in pr:
-                    v.uv = _uv(v.point, r)
-    except Exception:
-        pass
+    # v21: la malla de la Sphere SOP ya trae uv por vertice, y un uv por punto con el
+    # mismo nombre no se puede crear ('Vertex Attribute with that name already
+    # exists'). Si hay uv por vertice, se reescribe ese; si no, se crea por punto.
+    if 'uv' in [a.name for a in scriptOp.vertexAttribs]:
+        for pr in scriptOp.prims:
+            for v in pr:
+                v.uv = _uv(v.point, r)
+    else:
+        if 'uv' not in [a.name for a in scriptOp.pointAttribs]:
+            scriptOp.pointAttribs.create('uv', (0.0, 0.0, 0.0))
+        for q in pts:
+            q.uv = _uv(q, r)
     return
 """
 cb_frente = mk(esfera, 'textDAT', 'frente_callbacks', 200, -120)
@@ -501,7 +502,8 @@ for o_, si in ((bola, False), (frente, False), (inclinar, True)):
             pass
 try:
     frente.cook(force=True)
-    con_uv = 'uv' in [a.name for a in frente.pointAttribs]
+    con_uv = ('uv' in [a.name for a in frente.pointAttribs] + [a.name for a in frente.vertexAttribs]
+              and not frente.errors())
 except Exception:
     con_uv = False
 if con_uv:
@@ -1020,7 +1022,8 @@ def _prueba(t, m):
             sala.op('vista_plano') is None and cam_n == 'vista_cenital', 'camara %s' % cam_n)
     fr = sala.op('esfera').op('frente')
     try:
-        fr_uv = 'uv' in [a.name for a in fr.pointAttribs]
+        fr_uv = ('uv' in [a.name for a in fr.pointAttribs] + [a.name for a in fr.vertexAttribs]
+                 and not fr.errors() and not sala.op('esfera').op('frente_callbacks').errors())
     except Exception:
         fr_uv = False
     t.check('v19: la imagen de frente: el Script SOP frente pone las coordenadas de textura', fr_uv)
