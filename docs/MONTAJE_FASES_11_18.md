@@ -1594,12 +1594,13 @@ El vaivén del dosel (`Swaymax`, en fase con el beat, con una onda suave por lon
 
 ## Bocetos: conchas y construcciones en alambre (comun v56)
 
-Página **Bocetos** de FASE1, dos interruptores apagados por defecto y un color:
+Página **Bocetos** de FASE1, tres interruptores apagados por defecto y un color:
 
 | Parámetro | Qué pone en alambre |
 |---|---|
 | `Bocetoconchas` | las conchas (`estratos`) |
-| `Bocetoconstrucciones` | las construcciones: `formas_pulidas`, `formas_porosas`, `coronas`, `vagones` y todos los modelos `mod_…` |
+| `Bocetoconstrucciones` | las construcciones: `formas_pulidas`, `formas_porosas`, `coronas`, `vagones` y los modelos `mod_…`, sin la vegetación |
+| `Bocetoespecies` | las especies, la vegetación: los modelos `mod_veg_…` (comun v57; hasta la v56 iban con las construcciones) |
 | `Colorboceto` | el color del alambre (0,85 · 0,85 · 0,80) |
 
 - **Cómo:** cada geometría del grupo cambia su material por `mat_boceto` (un Wireframe MAT o, si no lo hay, un Constant MAT en alambre). La expresión del material envuelve la que ya tenía: `'mat_boceto' if parent().par.Bocetoconchas else (<la de antes>)`. `Materialrespaldo` sigue funcionando con el boceto apagado.
