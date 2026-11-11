@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v67'
+VERSION_COMUN = 'comun v68'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -4084,6 +4084,24 @@ class Prueba(object):
         print('  AUTOPRUEBA %s' % ('OK' if good else 'FALLIDA: pegame este bloque'))
         print('-' * 66)
         return good
+
+
+def pagina_version(base, fase, etiqueta, version):
+    """Una fase sin parametros nuevos lleva su pagina con un solo parametro de
+    solo lectura, VersionNN (P10 del plan v5): la version de su script."""
+    nombre = 'Version%d' % fase
+    page = get_page(base, 'Fase%d' % fase)
+    add_par(base, page, 'str', nombre, etiqueta, version)
+    try:
+        p = getattr(base.par, nombre)
+        p.readOnly = False
+        p.val = version
+        p.default = version
+        p.readOnly = True
+    except Exception as e:
+        info('%s: no pude fijarlo (%s)' % (nombre, e))
+    ok('pagina Fase%d: %s (solo lectura), %s' % (fase, nombre, version))
+    return nombre
 
 
 # --- las autopruebas de la sala (fases 24 a 31) --------------------------------

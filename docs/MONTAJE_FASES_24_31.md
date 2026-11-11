@@ -9,6 +9,7 @@
 |---|---|---|---|
 | 24 | `fase24_personas.py` | Personas: cabezas, seguimiento, casillas ocupadas y la celda que miran | v83 |
 | 25 | `fase25_huella.py` | Huella mínima: inclusiones por llegada y por parada, con su escalón | v84 |
+| 26 | `fase26_borrado.py` | Borrado: la erosión borra las inclusiones que quedan sobre su escalón | v85 |
 
 ---
 
@@ -142,6 +143,61 @@ Además, `xvfb-run -a python3 pruebas/glsl_piel.py` compila el shader de la piel
 ### Pruebas pendientes en sala
 
 `Tparada`, y si `Probllegada` se queda en 0,6 o pasa a 1. Que las inclusiones se lean desde la cámara de globo (son pequeñas a propósito: la noche de la fase 28 las enseña).
+
+---
+
+## FASE 26 · Borrado por erosión
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/fase26_borrado.py').read())
+```
+
+### Qué hace
+
+Una inclusión desaparece cuando la erosión baja su celda por debajo de su escalón (`occ < escalón`). Bajar la carga sin bajar el escalón no la borra. En una celda sin construir (escalón 0), **cualquier golpe de erosión que la alcance la borra: cualquier anillo con peso mayor que 0, aunque ese golpe no quite una nota entera** (P6).
+
+Valen todas las fuentes: la caja y los arañazos (pads 2 y 4–8), el micrófono (fase 21: el pad 9 y su corte por ruido), los cortes (vacían la celda y se llevan todas sus inclusiones, también las de escalón 0), los accidentes y las catástrofes de la fase 14 (bajan la ocupación) y, desde la fase 29, la escisión (es un corte, P7). El bombo y el tom no borran: son impulso y suben la ocupación. Un golpe que no prende (el sorteo de la fase 22) tampoco.
+
+**Cómo** (sin tocar las reglas de la erosión):
+
+- un único punto de purga, `purgar_inclusiones(W, celda, causa)`, que llaman `_undo_note` y `bajar_escalon` cuando baja la ocupación de una celda (por ahí pasan los arañazos, el micrófono, los accidentes y las catástrofes);
+- `erosion()` llama además a `golpe_inclusiones(W, celda)` en cada celda de sus anillos, para el caso de la celda vacía;
+- `cut()` llama a `borrar_inclusiones(W, celda, 'corte')` en cada celda que vacía;
+- una pasada de seguridad por fotograma (`purga_segura`), solo en las celdas con inclusiones.
+
+Ningún operador nuevo: la geometría de la fase 25 deja de dibujarlas. Los contadores por causa viven en `W['incl_borradas']` y no se ponen a cero al enterrar (sí con `Resetmundo`).
+
+### Parámetros
+
+Ninguno nuevo. La página Fase26 lleva solo `Version26`, de solo lectura (P10), para mantener una página por fase.
+
+### Leyenda
+
+```
+BORRADO  vivas 12   borradas 5 (erosion 2, micro 1, corte 1, catastrofe 1)
+```
+
+Las causas: `erosion` (un arañazo), `micro` (un onset), `corte` (la caja o cualquier pad que corte, y el corte por ruido de sala), `catastrofe` (el accidente o la catástrofe de la fase 14) y, desde la fase 29, `escision`.
+
+### Probar
+
+`Sembrar` cuatro veces en una celda (escalón 4), `Probllegada` 1 y `Simponer` en la casilla que la mira (la tabla `casillas_ocupadas` dice qué celda mira cada casilla): la inclusión guarda el 4. `Padprueba` 7 y `Erosionar` hasta que la leyenda `ULTIMA` diga ocupación 3 o menos: la inclusión desaparece. En una celda vacía: un solo `Erosionar`, o una `Palmada` de la sala virtual, la borra. Recuerda apagar `Activo` (fase 22) para que todos los golpes prendan.
+
+### Autoprueba
+
+- escalón 4: bajar la carga no la borra; bajar a 3, sí; con los arañazos de un pad, en cuanto la celda baja de 4; en el nivel 25, nada se borra;
+- celda vacía: un arañazo flojo la borra aunque no quite nada, también en el segundo anillo (y no más allá del radio); un onset del micrófono la borra (causa `micro`); un bombo no;
+- un corte con la caja la borra en su celda y en las de su anfiteatro (causa `corte`); lo que hace un incendio en cada paso (`bajar_ocupacion`) la borra (causa `catastrofe`);
+- escalones 2 y 5 en la misma celda: bajar a 4 borra solo la de 5;
+- la pasada de seguridad; cada borrado en su causa; la línea `BORRADO`; `Version26` de solo lectura.
+
+### Decisiones tomadas en la fase 26
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Una inclusión de escalón 0 en una celda que luego se construyó? | La sigue borrando cualquier golpe de erosión que alcance la celda: no tiene escalón que la proteja |
+| ¿La causa de un golpe de la caja? | `corte`, también por lo que bajan sus anillos antes de cortar |
+| ¿La causa del accidente que provoca un onset? | `catastrofe`; el escalón que baja el propio onset, `micro` |
 
 ---
 

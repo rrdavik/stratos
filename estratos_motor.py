@@ -72,6 +72,9 @@
 #                 Motor v84, fase 25: la huella minima: inclusiones por llegada
 #                 (Probllegada, mapa logistico) y por parada (Tparada), con el
 #                 escalon de su celda; la paleta humana y sus instancias.
+#                 Motor v85, fase 26: el borrado: una inclusion desaparece
+#                 cuando la erosion baja su celda de su escalon (y, en una
+#                 celda sin construir, con cualquier golpe que la alcance).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -84,7 +87,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v84'
+MOTOR_VERSION = 'motor v85'
 
 import math
 
@@ -1344,6 +1347,15 @@ def pick_target(W, cfg, pad, vel):
 
 
 def _undo_note(W, cfg, i):
+    """_undo_note_base y, desde la fase 26, la purga de las inclusiones que
+    quedan por encima de la ocupacion de la celda."""
+    hecho = _undo_note_base(W, cfg, i)
+    if hecho and cfg['nivel'] >= 26:
+        purgar_inclusiones(W, i)
+    return hecho
+
+
+def _undo_note_base(W, cfg, i):
     """Deshace una nota de construccion en la celda i: la misma moneda que
     _charge, al reves. Baja la carga y la altura lo que subio esa nota
     (Growstep / coste del escalon); al agotarse la carga baja un escalon y
@@ -1392,6 +1404,8 @@ def bajar_escalon(W, cfg, i):
     W['occ'][i] = o
     W['carga'][i] = 0
     W['h'][i] = min(W['h'][i], height_for(cfg, o))
+    if cfg['nivel'] >= 26:              # fase 26: las inclusiones de un escalon mas alto se borran
+        purgar_inclusiones(W, i)
     return True
 
 
@@ -1473,13 +1487,19 @@ def erosion(W, cfg, pad, vel, now, target=None):
     notas = erosion_notes(cfg, red, vel) if not mic else float(red)
     tematico = cfg['nivel'] >= 14 and es_aranazo(cfg, pad)
     antes = antes_del_golpe(W, cfg, target, now) if tematico else None
+    borra = cfg['nivel'] >= 26          # fase 26: el golpe borra inclusiones
+    # la causa de lo que borre este golpe: el microfono, un pad que corta (la caja) o un aranazo
+    _CAUSA[0] = 'micro' if mic else ('corte' if depth > 0 and cfg['nivel'] >= 9 else 'erosion')
     for c, d in rings(target, rad_eff):
         w = ATENUACION ** d             # 1 en la celda, 1/2 el primer anillo, 1/4...
         x = notas * w + resto[c]
         k = int(math.floor(x + 1e-9))
         resto[c] = x - k
         removed += bajar_escalones(W, cfg, c, k) if mic else degrade(W, cfg, c, k)
+        if borra and w > 0.0:           # en una celda sin construir, cualquier anillo que la alcance (P6)
+            golpe_inclusiones(W, c)
         light_cell(W, cfg, c, pad, w, now)
+    _CAUSA[0] = 'erosion'
     W['hits'][3] = W['hits'].get(3, 0) + 1
     W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
     tipos = cfg.get('tipos') or []
@@ -1692,6 +1712,8 @@ def cut(W, cfg, target, depth, rad, now):
             W['nucleo_av'][c] = 1
             nucleo = c if nucleo is None or c == target else nucleo
         _clear_cell(W, c)
+        if cfg['nivel'] >= 26:          # fase 26: el corte se lleva las inclusiones de la celda
+            borrar_inclusiones(W, c, 'corte')
         W['huella'][c] = 0.0
         W['ruina'][c] = 0
         for j in NEIGH[c]:
@@ -2086,6 +2108,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         if dt > 0:
             W['foto_dt'] = dt
         impulso_tick(W, cfg, now)
+    if cfg['nivel'] >= 26:              # fase 26: la pasada de seguridad del borrado
+        purga_segura(W)
     if cfg['nivel'] >= 23:              # fase 23: la luz de la sala y el colapso
         if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo']:
             out['ciclo'] = close_cycle(W, cfg, now, 'colapso')
@@ -9084,10 +9108,12 @@ def bajar_ocupacion(W, cfg, i):
     falta). Devuelve las notas quitadas."""
     o = W['occ'][i]
     k = 0
+    antes, _CAUSA[0] = _CAUSA[0], 'catastrofe'     # fase 26: lo que borre, por catastrofe
     while o > 0 and W['occ'][i] >= o and k < 64:
         if not _undo_note(W, cfg, i):
             break
         k += 1
+    _CAUSA[0] = antes
     return k
 
 
@@ -11260,6 +11286,78 @@ def vaciar_inclusiones(W):
     W['dirty'] = True
 
 
+# --- el borrado (fase 26) --------------------------------------------------------
+# Una inclusion desaparece cuando la erosion baja su celda por debajo de su
+# escalon (occ < escalon). En una celda sin construir (escalon 0), cualquier
+# golpe de erosion que la alcance la borra: cualquier anillo con peso mayor que
+# 0, aunque ese golpe no quite una nota entera (P6). Valen todas las fuentes: la
+# caja y los aranazos, el microfono (y su corte por ruido), los cortes (vacian
+# la celda y se llevan todas sus inclusiones), los accidentes y catastrofes de
+# la fase 14 y la escision de la fase 29 (es un corte). El bombo y el tom no
+# borran: son impulso y suben la ocupacion. Un unico punto de purga
+# (purgar_inclusiones), que llaman _undo_note y bajar_escalon; erosion() llama
+# ademas a golpe_inclusiones en cada celda de sus anillos; cut(), a
+# borrar_inclusiones; y una pasada de seguridad por fotograma mira solo las
+# celdas con inclusiones. La causa de cada borrado se cuenta en
+# W['incl_borradas'].
+
+_CAUSA = ['erosion']            # quien esta bajando la ocupacion ahora (erosion, micro, catastrofe)
+
+
+def _borradas(W, causa, n):
+    if n:
+        b = W['incl_borradas']
+        causa = causa or _CAUSA[0]
+        b[causa] = b.get(causa, 0) + n
+        W['dirty'] = True
+    return n
+
+
+def purgar_inclusiones(W, celda, causa=None):
+    """Borra las inclusiones de la celda cuyo escalon queda por encima de su
+    ocupacion (occ < escalon). Devuelve cuantas."""
+    lst = incl_de(W)[celda]
+    if not lst:
+        return 0
+    o = W['occ'][celda]
+    quedan = [x for x in lst if x[0] <= o]
+    n = len(lst) - len(quedan)
+    if n:
+        W['incl'][celda] = quedan
+    return _borradas(W, causa, n)
+
+
+def golpe_inclusiones(W, celda, causa=None):
+    """Un golpe de erosion alcanza la celda: borra sus inclusiones de escalon 0
+    (las que cayeron sobre la celda sin construir), aunque no baje nada."""
+    lst = incl_de(W)[celda]
+    if not lst:
+        return 0
+    quedan = [x for x in lst if x[0] > 0]
+    n = len(lst) - len(quedan)
+    if n:
+        W['incl'][celda] = quedan
+    return _borradas(W, causa, n)
+
+
+def borrar_inclusiones(W, celda, causa):
+    """Un corte (o una escision) se lleva todas las inclusiones de la celda."""
+    n = len(incl_de(W)[celda])
+    if n:
+        W['incl'][celda] = []
+    return _borradas(W, causa, n)
+
+
+def purga_segura(W):
+    """La pasada de seguridad de cada fotograma, solo en las celdas con
+    inclusiones: lo que haya bajado la ocupacion por otro camino."""
+    n = 0
+    for i, lst in enumerate(incl_de(W)):
+        if lst:
+            n += purgar_inclusiones(W, i, 'catastrofe' if W.get('cats') else 'erosion')
+    return n
+
+
 def fila_inclusion(W, cfg, i, inc, r0=None):
     """La instancia de una inclusion de la celda i: una pieza pequena, medio
     enterrada en el suelo de la celda, alrededor de la formacion. Posicion, forma
@@ -13133,6 +13231,13 @@ def _legend_huella(W, c):
         n_inclusiones(W), cu['llegadas'], cu['paradas'], ult, c['prob_llegada'], c['t_parada'])
 
 
+def _legend_borrado(W, c):
+    """BORRADO (fase 26): las inclusiones vivas y las borradas, por causa."""
+    b = W['incl_borradas']
+    partes = ['%s %d' % (k, b.get(k, 0)) for k in CAUSAS_BORRADO if k != 'escision' or b.get(k, 0)]
+    return '  BORRADO  vivas %d   borradas %d (%s)' % (n_inclusiones(W), sum(b.values()), ', '.join(partes))
+
+
 def on_value(name, val):
     if name == 'Modoactuacion':
         try:
@@ -14048,6 +14153,8 @@ def _legend():
         lines.append(_legend_personas(W, c))
     if lvl >= 25:
         lines.append(_legend_huella(W, c))
+    if lvl >= 26:
+        lines.append(_legend_borrado(W, c))
     return '\n'.join(lines)
 
 
