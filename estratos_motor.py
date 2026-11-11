@@ -84,6 +84,8 @@
 #                 Motor v88, fase 29: la fila (Minfila personas contiguas
 #                 durante Tfila) y la escision colectiva: un hueco permanente
 #                 en la columna de la celda de origen, con su fulgurita.
+#                 Motor v89, fase 30: el relampago: un destello blanco con
+#                 prioridad al abrirse cada escision.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -96,7 +98,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v88'
+MOTOR_VERSION = 'motor v89'
 
 import math
 
@@ -11713,6 +11715,8 @@ def abrir_escision(W, cfg, fila, casilla, now):
     W['escisiones'].append(e)
     del W['escisiones'][:-ESCISIONES_MAX]
     W['ev']['escision'] = dict(id=e['id'], celda=origen, conchas=len(e['cortadas']), personas=personas, t=now)
+    if cfg['nivel'] >= 30:              # fase 30: un relampago por escision
+        e['relampago'] = relampago(W, cfg, now)
     W['aviso'] = 'escision %d: %d personas abren %d conchas en la celda %d' % (
         e['id'], personas, len(e['cortadas']), origen)
     W['dirty'] = True
@@ -11744,6 +11748,37 @@ def cerrar_escision(W, cfg, e, now, estado='cerrada'):
             e['t1'] = now
         return True
     return False
+
+
+# --- el relampago (fase 30) --------------------------------------------------------
+# Al abrirse una escision, un unico destello blanco por DMX. Pasa por el
+# limitador comun de la fase 23 (como mucho 3 destellos en cualquier ventana de
+# 1 s, junto con el estroboscopio): si esta lleno, el relampago espera al primer
+# hueco y el estroboscopio cede ese destello (P12). Solo blanco. Profundizar la
+# escision no da otro. En pantalla, la fulgurita recien abierta sube su emisivo
+# un instante. Sin interfaz DMX, el evento queda en el motor y en la leyenda.
+
+RELAMPAGO_BRILLO = 2.5          # lo que sube el emisivo de la fulgurita recien abierta
+RELAMPAGO_CAIDA = 0.35          # s con los que vuelve
+
+
+def relampago(W, cfg, now):
+    """Pide el destello del relampago al limitador, con prioridad. Devuelve si
+    ha salido ahora (si no, queda pendiente y sale en el primer hueco)."""
+    s = sala_de(W)
+    s['relampagos'] = s.get('relampagos', 0) + 1
+    s['t_pedido'] = now
+    return limitador_destellos(W, cfg, now, 'relampago', prioridad=True)
+
+
+def brillo_fulgurita(cfg, e, now):
+    """El emisivo de la fulgurita de la escision e: sube al abrirse (fase 30) y vuelve a 1."""
+    if cfg['nivel'] < 30:
+        return 1.0
+    dt = now - e['t0']
+    if dt < 0.0 or dt > 10.0 * RELAMPAGO_CAIDA:
+        return 1.0
+    return 1.0 + RELAMPAGO_BRILLO * math.exp(-dt / RELAMPAGO_CAIDA)
 
 
 def escision_de(W, ide):
@@ -11829,7 +11864,7 @@ def filas_fulgurita(W, cfg, e, now=0.0):
     nrm = normal_i(i)
     X, Y, Z, _ = marco = _marco(i, 0)
     col_n = paleta_humana(cfg, e['ramas'])
-    brillo = float(e.get('brillo', 1.0))
+    brillo = brillo_fulgurita(cfg, e, now)
     col_n = (col_n[0] * brillo, col_n[1] * brillo, col_n[2] * brillo)
     col_v = _mix(col_n, (0.05, 0.05, 0.06), 0.45)
     rows = []
@@ -11917,7 +11952,10 @@ INTERFACES_DMX = ['artnet', 'usbpro']
 DMX_COLS = ['canal', 'funcion', 'foco']
 # funciones de un canal: el bano con dimmer aparte (bano_dimmer + bano_rojo...), o
 # con la intensidad en el color (bano_r, bano_g, bano_b), y el estroboscopio
-FUNCIONES_DMX = ['bano_dimmer', 'bano_rojo', 'bano_verde', 'bano_azul', 'bano_r', 'bano_g', 'bano_b', 'estrobo']
+# (cualquier destello de la sala: el suyo, el del fin de ciclo y el relampago); 'relampago'
+# (fase 30) es solo para un foco propio del relampago
+FUNCIONES_DMX = ['bano_dimmer', 'bano_rojo', 'bano_verde', 'bano_azul', 'bano_r', 'bano_g', 'bano_b', 'estrobo',
+                 'relampago']
 DMX_DEFECTO = ([[4 * k + j + 1, f, 'bano%d' % (k + 1)] for k in range(4)
                 for j, f in enumerate(FUNCIONES_DMX[:4])] + [[17, 'estrobo', 'estrobo']])
 SALA_BASE = dict(bal=[], estado=DEPOSITO, balance=0.0, hz=0.0, estrobo_t=-99.0, ultimo=None, pend=None,
@@ -12119,8 +12157,9 @@ def valores_dmx(W, cfg, now, filas):
     """El valor 0-255 de cada fila [canal, funcion, foco] de dmx_canales."""
     r, g, b_, dim = bano_valor(W, cfg, now)
     fl = destello_valor(W, now)
+    u = W['sala'].get('ultimo')
     v = dict(bano_dimmer=dim, bano_rojo=r, bano_verde=g, bano_azul=b_, bano_r=r * dim, bano_g=g * dim,
-             bano_b=b_ * dim, estrobo=fl)
+             bano_b=b_ * dim, estrobo=fl, relampago=fl if u and u.get('quien') == 'relampago' else 0.0)
     return [int(round(255.0 * max(0.0, min(1.0, v.get(str(f[1]).strip(), 0.0))))) for f in filas]
 
 
@@ -13799,6 +13838,22 @@ def _legend_fila(W, c):
     return l1 + '\n' + l2
 
 
+def _legend_relampago(W, c):
+    """RELAMPAGO (fase 30): cuanto hace del ultimo, los destellos del ultimo segundo y el DMX."""
+    s = sala_de(W)
+    now = absTime.seconds
+    tr = s.get('t_relampago')
+    if s.get('pend') and s['pend'].get('quien') == 'relampago':
+        cuando = 'pendiente (espera un hueco)'
+    elif tr is not None:
+        cuando = 'hace %.1f s' % max(0.0, now - tr)
+    else:
+        cuando = '-'
+    hay, texto = dmx_encontrado()
+    return '  RELAMPAGO %s   destellos %d/%d en el ultimo segundo   %s' % (
+        cuando, destellos_ventana(W, now), DESTELLOS_MAX, 'dmx %s' % texto if hay else 'sin dmx')
+
+
 def dia(frame=None):
     """1 - noche (fase 28): lo que multiplica el color de las luces. 1 antes de la
     fase 28. Una vez por fotograma (frame_tick); fuera de el, del mundo."""
@@ -14766,6 +14821,8 @@ def _legend():
         lines.append(_legend_noche(W, c))
     if lvl >= 29:
         lines.append(_legend_fila(W, c))
+    if lvl >= 30:
+        lines.append(_legend_relampago(W, c))
     return '\n'.join(lines)
 
 

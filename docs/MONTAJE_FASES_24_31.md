@@ -13,6 +13,7 @@
 | 27 | `fase27_clasificacion.py` | Clasificación al enterrar: estrato humano o concha limpia, y el colapso | v86 |
 | 28 | `fase28_noche.py` | Noche de enterramiento: la esfera se apaga y emiten las inclusiones horneadas | v87 |
 | 29 | `fase29_fila.py` | Fila y escisión colectiva: un hueco permanente con su fulgurita | v88 |
+| 30 | `fase30_relampago.py` | Relámpago: un destello blanco con prioridad al abrirse cada escisión | v89 |
 
 ---
 
@@ -391,6 +392,50 @@ Con varias conchas (`Forzarciclo` unas cuantas veces): `Fuente` = simulada, `Sim
 ### Pruebas pendientes
 
 Que la escisión se lea desde la cámara de globo (un pozo de una celda de ancho: la noche y el núcleo emisivo ayudan); `Tfila` y `Minfila` en sala; un río que acabe en una escisión (no debe llenarla).
+
+---
+
+## FASE 30 · Relámpago
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/fase30_relampago.py').read())
+```
+
+### Qué hace
+
+Al abrirse una escisión, un único destello blanco por DMX. Profundizarla no da otro. Pasa por el limitador común de la fase 23 (como mucho 3 destellos en cualquier ventana de 1 s, junto con el estroboscopio). **Si el limitador está lleno, el relámpago espera al primer hueco y el estroboscopio cede ese destello** (P12). Solo blanco. El micrófono descarta su clic, como el de cualquier destello. En pantalla, la fulgurita recién abierta sube su emisivo un instante (× 3,5, y vuelve en 0,35 s).
+
+**DMX.** El relámpago enciende el canal `estrobo` de `dmx_canales`, como todos los destellos de la sala. Si va a un foco propio, añade una fila con la función `relampago`: solo se enciende con él. Sin interfaz DMX, el evento queda en el motor y en la leyenda.
+
+### Parámetros
+
+Ninguno nuevo. La página Fase30 lleva solo `Version30` (P10).
+
+### Leyenda
+
+```
+RELAMPAGO hace 3.2 s   destellos 2/3 en el ultimo segundo   dmx artnet
+RELAMPAGO pendiente (espera un hueco)   destellos 3/3 en el ultimo segundo   sin dmx
+```
+
+### Probar
+
+Formar una fila (`Simfila` 3, `Simformarfila`): a los 5 s la leyenda dice `RELAMPAGO hace 0.0 s`. Con `Simbalance` 10 (el estroboscopio a tope) abrir una escisión: el contador nunca pasa de 3 y el relámpago sale.
+
+### Autoprueba
+
+- una escisión, un destello, en el fotograma en que se abre; profundizarla no da otro; otra escisión, otro relámpago; el destello es blanco;
+- con 3 destellos del estroboscopio en el último segundo, el relámpago queda pendiente y nunca hay 4 en una ventana de 1 s; en el hueco siguiente sale el relámpago, uno solo, y el estroboscopio cede el suyo; mientras espera, la leyenda dice `pendiente`;
+- la fulgurita recién abierta sube su emisivo y vuelve (antes de la fase 30, no);
+- por DMX: el canal `estrobo` y la fila `relampago` (que el estroboscopio no enciende); el micrófono descarta su clic;
+- `Simformarfila` por la sala simulada, la línea `RELAMPAGO` y `Version30`.
+
+### Decisiones tomadas en la fase 30
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Dos escisiones a la vez con el limitador lleno? | Un solo relámpago pendiente: los dos comparten el destello |
+| ¿El emisivo de la fulgurita espera al destello? | No: sube al abrirse la escisión, aunque el destello de sala espere su hueco |
 
 ---
 
