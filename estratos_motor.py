@@ -75,6 +75,9 @@
 #                 Motor v85, fase 26: el borrado: una inclusion desaparece
 #                 cuando la erosion baja su celda de su escalon (y, en una
 #                 celda sin construir, con cualquier golpe que la alcance).
+#                 Motor v86, fase 27: la clasificacion al enterrar: estrato
+#                 humano o concha limpia, el recuento horneado en el material
+#                 de cada loseta y el colapso como marca de cierre.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -87,7 +90,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v85'
+MOTOR_VERSION = 'motor v86'
 
 import math
 
@@ -306,6 +309,8 @@ DEFAULT_CFG = dict(
     sep_cabezas=0.35, confirma_persona=2, sim_fila=3,
     # fase 25: la huella minima
     prob_llegada=0.6, t_parada=3.0,
+    # fase 27: la clasificacion al enterrar
+    min_huellas=1, inclusiones_max=0.8,
 )
 
 
@@ -1277,9 +1282,13 @@ def close_cycle(W, cfg, now, motivo):
     if cfg['nivel'] >= 23:              # fase 23: el balance al cerrar
         ev['balance'] = balance(W, cfg, now)
     apagar_destructores(W)              # fase 14: el fin de ciclo lo cierra de golpe
-    if end_cycle(W, cfg, now, bars):
+    if end_cycle(W, cfg, now, bars, motivo):
         ev['grosor'] = shell_th(W['shells'][-1], cfg)
         W['foto_anterior'] = snapshot(W, cfg)
+        if cfg['nivel'] >= 27:          # fase 27: la banda de la concha nueva
+            ev['huellas'] = W['shells'][-1].get('huellas', 0)
+            ev['banda'] = W['shells'][-1].get('banda', 'limpia')
+            ev['colapso'] = bool(W['shells'][-1].get('colapso'))
     if cfg['nivel'] >= 23:              # fase 23: un destello y la sala a oscuras
         sala_fin_ciclo(W, cfg, now)
     W['aviso'] = 'fin de ciclo %d: %s a los %d compases' % (ev['ciclo'], motivo, bars)
@@ -1980,9 +1989,10 @@ def compactar(W, cfg, g):
     return k
 
 
-def end_cycle(W, cfg, now, bars=None):
+def end_cycle(W, cfg, now, bars=None, motivo=None):
     """Entierra el mundo (desde el nivel 8). bars: compases que duro; sin
-    ellos, la concha tiene Shellthick."""
+    ellos, la concha tiene Shellthick. motivo: el del fin de ciclo (fase 27: la
+    concha lo guarda como marca de cierre)."""
     W['ev']['ciclo'] = dict(t=now, n=W.get('ciclo_n', 1))
     W['bomba'] = {}                     # fase 7: sin pumping pendiente
     W['imp_t'] = {}
@@ -1990,6 +2000,7 @@ def end_cycle(W, cfg, now, bars=None):
         return False
     cerrar_obras(W, cfg)                # los transitos se cierran antes de hornear
     reg = registro_concha(W, cfg) if cfg['nivel'] >= 15 else None
+    clas = clasificar_concha(W, cfg, dict(motivo=motivo, t=now)) if cfg['nivel'] >= 27 else None
     g = shell_grosor(cfg, bars)
     W['compacta'] = compactar(W, cfg, g)
     r_in = top_radius(W, cfg)
@@ -2006,6 +2017,9 @@ def end_cycle(W, cfg, now, bars=None):
                             grosor=g, r_in=r_in, r_out=r_in + g))
     if reg:                             # fase 15: el registro de la concha
         W['shells'][-1].update(reg)
+    if clas:                            # fase 27: humana o limpia, con sus inclusiones horneadas
+        W['shells'][-1].update(clas)
+        W['ev']['banda'] = dict(clas, concha=len(W['shells']) - 1, t=now)
     W['quitadas'] = [0] * N
     W['gen'] += 1
     if cfg['nivel'] >= 25:              # fase 25: lo heredado empieza sin inclusiones
@@ -2459,6 +2473,8 @@ def build_tiles(W, cfg, now):
     core = cfg['core_radius']
     era = cfg['nivel'] >= 15                # fase 15: la rugosidad de cada loseta (canal a)
     respaldo = era and cfg.get('respaldo', 0)
+    humano = cfg['nivel'] >= 27             # fase 27: las inclusiones horneadas
+    q_tapa = 0
     for c in range(N):
         col = column_radii(W, cfg, c)
         if not col:
@@ -2475,6 +2491,7 @@ def build_tiles(W, cfg, now):
             if era:
                 rows[-1].append(1.0 if respaldo else RUG_ZOCALO)
         tapa = None
+        q_tapa = 0
         for s, r_in, r_out in col[first:]:
             sh = W['shells'][s]
             colr, rug = tile_material(cfg, sh, s, c)
@@ -2486,14 +2503,19 @@ def build_tiles(W, cfg, now):
                 if ctapa is not None:
                     ctapa = _mix(COL_SCAR, ctapa, f)
             rows.append(_tile_row(c, n, r_in, r_out, colr))
-            if era:
-                rows[-1].append(1.0 if respaldo else rug)
+            q = cobertura_q(cfg, sh, c) if humano and not respaldo else 0
+            if era:                         # fase 27: alfa = rugosidad + 2 x cobertura de inclusiones (en veinteavos)
+                rows[-1].append(1.0 if respaldo else rug + 2.0 * q)
             if ctapa is not None:
                 tapa = _tapa_row(rows[-1][:12], ctapa)
+                q_tapa = q
         if tapa is not None:                # solo la loseta de arriba ensena su tapa
             if era:                         # fase 25: con inclusiones, la matriz del plastiglomerado
                 con_incl = cfg['nivel'] >= 25 and bool(W['incl'][c]) if len(W.get('incl', ())) == N else False
-                tapa.append(1.0 if respaldo else (RUG_TAPA_INCL if con_incl else RUG_TAPA))
+                if q_tapa:                  # fase 27: la cara de la loseta de un estrato humano, con sus motas
+                    tapa.append(RUG_TAPA_INCL + 2.0 * q_tapa)
+                else:
+                    tapa.append(1.0 if respaldo else (RUG_TAPA_INCL if con_incl else RUG_TAPA))
             rows.append(tapa)
     return rows
 
@@ -11286,6 +11308,70 @@ def vaciar_inclusiones(W):
     W['dirty'] = True
 
 
+# --- la clasificacion al enterrar (fase 27) ----------------------------------------
+# En end_cycle, antes de hornear: se cuentan las inclusiones supervivientes del
+# mundo que se entierra (las escisiones no cuentan). Con al menos Minhuellas, la
+# concha es ESTRATO HUMANO; si no, CONCHA LIMPIA, aunque haya habido gente todo
+# el dia (todas sus huellas se borraron). El recuento se hornea en el material:
+# cada loseta nueva guarda cuantas inclusiones sobrevivieron en su celda y sus
+# semillas (sus colores), y el shader de las conchas las dibuja como motas de la
+# paleta humana en la cara y los flancos de esa loseta, con una cobertura que
+# crece con su numero y nunca pasa de Inclusionesmax. El grosor de la concha no
+# cambia. La concha guarda tambien el motivo del cierre y la marca de COLAPSO
+# (el motivo 'colapso' de la fase 23), que se combina con humana o limpia. Una
+# concha de antes de la fase 27 se lee como limpia, sin colapso.
+
+COB_PASOS = 20                  # la cobertura viaja en el alfa de la loseta en veinteavos
+COB_K = 3.0                     # inclusiones con las que una loseta llega a 1 - 1/e de Inclusionesmax
+PALETA_HUMANA_8 = [(0.642, 0.635, 0.993), (0.746, 0.587, 0.994), (0.874, 0.509, 0.982), (0.959, 0.475, 0.863), (0.991, 0.484, 0.721), (0.991, 0.510, 0.598), (0.992, 0.546, 0.279), (0.699, 0.716, 0.098)]          # la tabla del shader (comun): paleta_humana en (j + 0,5) / 8
+
+
+def contar_huellas(W):
+    """Las inclusiones supervivientes del mundo (las escisiones no son inclusiones)."""
+    return n_inclusiones(W)
+
+
+def clasificar_concha(W, cfg, ev=None):
+    """La marca de la concha que se entierra: {huellas, banda ('humana' o
+    'limpia'), colapso, cierre, incl ({celda: [semillas]}), escisiones (ids)}."""
+    n = contar_huellas(W)
+    motivo = (ev or {}).get('motivo')
+    incl = dict((i, [x[3] for x in lst]) for i, lst in enumerate(incl_de(W)) if lst)
+    abiertas = [e['id'] for e in W.get('escisiones', ()) if e.get('estado') in ('abierta', 'cerrada')]
+    return dict(huellas=n, banda='humana' if n >= max(1, int(cfg['min_huellas'])) else 'limpia',
+                colapso=motivo == 'colapso', cierre=motivo or '', incl=incl, escisiones=abiertas)
+
+
+def banda_de(sh):
+    """(banda, huellas, colapso) de una concha; sin marca (antes de la fase 27), limpia."""
+    return sh.get('banda', 'limpia'), int(sh.get('huellas', 0)), bool(sh.get('colapso', False))
+
+
+def cobertura(cfg, n):
+    """Cobertura (0-1) de las motas de una loseta con n inclusiones: crece con n y
+    nunca pasa de Inclusionesmax."""
+    if n <= 0:
+        return 0.0
+    return max(0.0, min(1.0, cfg['inclusiones_max'])) * (1.0 - math.exp(-n / COB_K))
+
+
+def cobertura_q(cfg, sh, c):
+    """La cobertura de la loseta de la celda c en la concha sh, en veinteavos
+    (lo que lleva la parte entera de su alfa, / 2). Solo en un estrato humano."""
+    if sh.get('banda') != 'humana':
+        return 0
+    ks = sh.get('incl', {}).get(c) or sh.get('incl', {}).get(str(c))
+    if not ks:
+        return 0
+    tope = int(math.floor(max(0.0, min(1.0, cfg['inclusiones_max'])) * COB_PASOS + 1e-9))
+    return max(1 if tope else 0, min(tope, int(round(cobertura(cfg, len(ks)) * COB_PASOS))))
+
+
+def cobertura_concha(cfg, sh):
+    """La cobertura de la loseta mas cubierta de la concha (0-1)."""
+    return max([cobertura_q(cfg, sh, c) for c in sh.get('incl', {})] or [0]) / float(COB_PASOS)
+
+
 # --- el borrado (fase 26) --------------------------------------------------------
 # Una inclusion desaparece cuando la erosion baja su celda por debajo de su
 # escalon (occ < escalon). En una celda sin construir (escalon 0), cualquier
@@ -12035,6 +12121,9 @@ def cfg():
     if c['nivel'] >= 25:
         c.update(prob_llegada=max(0.0, min(1.0, _p('Probllegada', c['prob_llegada']))),
                  t_parada=max(0.1, _p('Tparada', c['t_parada'])))
+    if c['nivel'] >= 27:
+        c.update(min_huellas=max(1, int(_p('Minhuellas', c['min_huellas']))),
+                 inclusiones_max=max(0.0, min(1.0, _p('Inclusionesmax', c['inclusiones_max']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -12294,7 +12383,7 @@ def midi_sysex(b):
 # --- fin de ciclo ------------------------------------------------------------
 
 CICLOS_COLS = ['ciclo', 'compases', 'segundos', 'motivo', 'madurez', 'novedad', 'grosor',
-               'territorio', 'balance']
+               'territorio', 'balance', 'huellas', 'banda']
 CICLOS_MAX = 200
 
 
@@ -12312,7 +12401,9 @@ def registrar_ciclo(W, c, ev):
                     novedad='%.2f' % ev['novedad'],
                     grosor='%.3f' % ev['grosor'] if 'grosor' in ev else '',
                     territorio='%.2f' % ev.get('territorio', 0.0),
-                    balance='%.2f' % ev['balance'] if 'balance' in ev else '')
+                    balance='%.2f' % ev['balance'] if 'balance' in ev else '',
+                    huellas=ev.get('huellas', ''),
+                    banda=('%s%s' % (ev['banda'], ' + colapso' if ev.get('colapso') else '')) if 'banda' in ev else '')
         cab = [t[0, k].val for k in range(t.numCols)]     # por nombre de columna
         t.appendRow([vals.get(k, '') for k in cab])
         while t.numRows > CICLOS_MAX + 1:
@@ -13229,6 +13320,20 @@ def _legend_huella(W, c):
         else 'ultima -'
     return '  HUELLA   inclusiones %d (llegadas %d, paradas %d)   %s   llegada %g   parada %g s' % (
         n_inclusiones(W), cu['llegadas'], cu['paradas'], ult, c['prob_llegada'], c['t_parada'])
+
+
+def _legend_banda(W, c):
+    """BANDA (fase 27): la ultima concha (humana o limpia, sus huellas y su
+    cobertura), el colapso y cuantas conchas son estratos humanos."""
+    shells = W['shells']
+    humanas = sum(1 for sh in shells if sh.get('banda') == 'humana')
+    if not shells:
+        return '  BANDA    ultima: -   (min %d)   humanas 0 de 0' % int(c['min_huellas'])
+    banda, n, col = banda_de(shells[-1])
+    return '  BANDA    ultima: %s %d huellas (min %d)   cobertura %d%% (max %d%%)   colapso %s   humanas %d de %d' % (
+        'estrato humano' if banda == 'humana' else 'concha limpia', n, int(c['min_huellas']),
+        int(round(100.0 * cobertura_concha(c, shells[-1]))), int(round(100.0 * c['inclusiones_max'])),
+        'si' if col else 'no', humanas, len(shells))
 
 
 def _legend_borrado(W, c):
@@ -14155,6 +14260,8 @@ def _legend():
         lines.append(_legend_huella(W, c))
     if lvl >= 26:
         lines.append(_legend_borrado(W, c))
+    if lvl >= 27:
+        lines.append(_legend_banda(W, c))
     return '\n'.join(lines)
 
 

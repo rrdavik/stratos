@@ -10,6 +10,7 @@
 | 24 | `fase24_personas.py` | Personas: cabezas, seguimiento, casillas ocupadas y la celda que miran | v83 |
 | 25 | `fase25_huella.py` | Huella mínima: inclusiones por llegada y por parada, con su escalón | v84 |
 | 26 | `fase26_borrado.py` | Borrado: la erosión borra las inclusiones que quedan sobre su escalón | v85 |
+| 27 | `fase27_clasificacion.py` | Clasificación al enterrar: estrato humano o concha limpia, y el colapso | v86 |
 
 ---
 
@@ -198,6 +199,67 @@ Las causas: `erosion` (un arañazo), `micro` (un onset), `corte` (la caja o cual
 | ¿Una inclusión de escalón 0 en una celda que luego se construyó? | La sigue borrando cualquier golpe de erosión que alcance la celda: no tiene escalón que la proteja |
 | ¿La causa de un golpe de la caja? | `corte`, también por lo que bajan sus anillos antes de cortar |
 | ¿La causa del accidente que provoca un onset? | `catastrofe`; el escalón que baja el propio onset, `micro` |
+
+---
+
+## FASE 27 · Clasificación al enterrar
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/fase27_clasificacion.py').read())
+```
+
+### Qué hace
+
+En `end_cycle`, antes de hornear:
+
+1. **Recuento.** Se cuentan las inclusiones supervivientes del mundo que se entierra (las escisiones de la fase 29 no cuentan).
+2. **Banda.** Con al menos `Minhuellas` (1), la concha es **estrato humano**; si no, **concha limpia**, aunque haya habido gente todo el día (todas sus huellas se borraron, o no llegan al mínimo).
+3. **El recuento se hornea en el material.** Cada loseta nueva guarda cuántas inclusiones sobrevivieron en su celda y sus semillas (sus colores). El shader de las conchas (familia mineral) las dibuja como motas de la paleta humana en la cara y los flancos de esa loseta, con una cobertura que crece con el número de inclusiones, `Inclusionesmax × (1 − e^(−n/3))`: 23 % con una, 51 % con tres, 79 % con doce, y nunca más de `Inclusionesmax` (0,8). El grosor de la concha no cambia (sigue siendo el de su ciclo, fase 8). En una concha limpia no se dibuja ninguna.
+4. **Colapso como marca de cierre.** La concha guarda `cierre` (el motivo del fin de ciclo) y `colapso`, que es «sí» cuando la fase 23 cerró el ciclo con el motivo `colapso` (P8). Se combina con humana o limpia. `estancado` no es colapso.
+5. **`Umbralpresencia` desaparece:** no existe en el repositorio; si existe en el proyecto local, el script lo quita y lo dice en el informe.
+
+Las inclusiones del mundo enterrado se vacían; lo heredado (fase 8) empieza sin inclusiones.
+
+**Cómo viaja al shader.** El alfa de cada instancia de `estratos` ya llevaba la rugosidad (fase 15); ahora lleva `rugosidad + 2 × cobertura en veinteavos` (como las ventanas de la fase 17: «alfa = rugosidad + 2 × nivel»). Las motas van fijas al planeta (una rejilla en su espacio, 36 por unidad), cada una con un color de la tabla `HUMANA` del shader, que son ocho muestras de `paleta_humana` del motor (la autoprueba comprueba que coinciden). La tapa de la loseta de arriba lleva las mismas motas. Con `Materialrespaldo` (Phong) no hay motas.
+
+Campos nuevos de cada entrada de `W['shells']`: `huellas`, `banda` (`humana` o `limpia`), `colapso`, `cierre`, `incl` (`{celda: [semillas]}`) y `escisiones` (los ids de las que cruzaban ese mundo). Una concha sin estos campos (de antes de la fase 27) se lee como limpia, sin colapso. La tabla `ciclos` gana `huellas` y `banda` (`humana`, `limpia`, `humana + colapso`…).
+
+### Parámetros (página Fase27)
+
+`Minhuellas` 1 · `Inclusionesmax` 0,8 (80 %)
+
+### Leyenda
+
+```
+BANDA    ultima: estrato humano 12 huellas (min 1)   cobertura 51% (max 80%)   colapso no   humanas 3 de 11
+BANDA    ultima: concha limpia 0 huellas (min 1)   cobertura 0% (max 80%)   colapso si   humanas 3 de 12
+```
+
+La cobertura es la de la loseta más cubierta de la última concha.
+
+### Probar
+
+Deja tres inclusiones (`Probllegada` 1 y `Simponer` en tres casillas) y `Forzarciclo`: la concha nueva sale con motas de color en esas tres celdas; un corte con la caja las enseña en la pared. Borra todas antes de `Forzarciclo` (o no dejes ninguna): concha limpia. Con `Colapsoon` y `Simbalance` (fase 23) por encima de 1 durante `Maxerosion`: la concha sale con la marca de colapso.
+
+### Autoprueba
+
+- 3 supervivientes y `Minhuellas` 1: humana con 3, y cada loseta guarda las de su celda; el mundo enterrado queda sin inclusiones; 0 supervivientes con 40 llegadas borradas: limpia; `Minhuellas` 5 con 3: limpia y sin motas;
+- la cobertura crece con el número y no pasa de `Inclusionesmax` (1000 en una celda: 80 %; con 0,3: 30 %); el grosor es el mismo con 0 y con 1000;
+- el alfa de la loseta y de su tapa lleva la cobertura (más con 3 que con 1; nada sin inclusiones), y la conserva bajo la concha siguiente; la tabla del shader es la del motor;
+- una escisión abierta no cuenta en el recuento;
+- un cierre por `colapso` marca la concha y se combina con humana y con limpia; por `estancado`, no; con `Colapsoon`, la erosión dominante sostenida entierra una concha con la marca;
+- `Umbralpresencia`, ni en la página ni en el motor; un mundo de antes de la fase 27 carga y sus conchas se leen como limpias;
+- la tabla `ciclos` y la línea `BANDA`.
+
+`xvfb-run -a python3 pruebas/glsl_piel.py` compila el shader con las motas.
+
+### Decisiones tomadas en la fase 27
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Qué curva sigue la cobertura? | `Inclusionesmax × (1 − e^(−n/3))`, en veinteavos (lo que cabe en el alfa); con al menos una inclusión, al menos un veinteavo |
+| ¿Motas en una concha limpia que tenía supervivientes bajo el mínimo? | No se dibujan (es limpia), pero la concha las guarda |
+| ¿Los colores de cada inclusión? | La concha guarda la semilla de cada una; el shader reparte los ocho colores de la paleta entre las motas de la loseta (no una mota por inclusión) |
 
 ---
 

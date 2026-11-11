@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v68'
+VERSION_COMUN = 'comun v69'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -973,6 +973,17 @@ vec3 paleta(int leng, int slot)
     return PALETA[clamp(leng, 0, 5) * 8 + clamp(slot, 0, 7)];
 }
 
+// fase 27: la paleta humana (la del motor, paleta_humana, en (j + 0,5) / 8)
+const vec3 HUMANA[8] = vec3[8](
+    vec3(0.642, 0.635, 0.993),
+    vec3(0.746, 0.587, 0.994),
+    vec3(0.874, 0.509, 0.982),
+    vec3(0.959, 0.475, 0.863),
+    vec3(0.991, 0.484, 0.721),
+    vec3(0.991, 0.510, 0.598),
+    vec3(0.992, 0.546, 0.279),
+    vec3(0.699, 0.716, 0.098));
+
 void main()
 {
     TDCheckDiscard();
@@ -1001,6 +1012,7 @@ void main()
     // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
     vec3 emis = vec3(0.0);
+    float humano = 0.0;         // fase 27: cuanto de este pixel es una inclusion horneada
     float sombra = uPisos.z;
     if (tierra && (uBoceto.x > 0.5 || uBoceto.y > 0.5 || uBoceto.z > 0.5)) {
         // comun v62: el boceto del terreno, en alambre aqui mismo (con un Wireframe MAT
@@ -1301,6 +1313,24 @@ void main()
     } else {
         // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
         base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
+        if (fam < 0.5 && nivelv > 0.5) {
+            // fase 27: estrato humano. Las inclusiones que sobrevivieron al mundo, horneadas
+            // en su loseta: motas de la paleta humana en la cara y los flancos. El alfa trae
+            // rugosidad + 2 x cobertura (en veinteavos); las motas van fijas al planeta
+            vec3 g = iVert.pPos * 36.0;
+            vec3 gid = floor(g);
+            float h1 = hash13(gid + vec3(0.37, 1.91, 2.53));
+            float h2 = hash13(gid.zxy + vec3(3.7, 1.3, 9.1));
+            vec3 des = 0.18 * (vec3(h2, fract(h2 * 7.3), fract(h2 * 13.1)) - 0.5);
+            float mota = step(h1, nivelv / 20.0) * (1.0 - smoothstep(0.30, 0.42, length(fract(g) - 0.5 + des)));
+            if (mota > 0.0) {
+                base = mix(base, HUMANA[int(floor(fract(h2 * 5.7) * 8.0))], mota);
+                rug = mix(rug, 0.15, mota);
+                expo = mix(120.0, 6.0, rug);
+                ks = mix(1.2, 0.03, rug);
+                humano = mota;
+            }
+        }
     }
     vec3 spec = vec3(0.0);
     vec3 dif = base * uAmbiente.rgb * amb;
@@ -4084,6 +4114,17 @@ class Prueba(object):
         print('  AUTOPRUEBA %s' % ('OK' if good else 'FALLIDA: pegame este bloque'))
         print('-' * 66)
         return good
+
+
+def columna_tabla(t, nombre):
+    """Anade la columna a una Table DAT (ciclos...), si no la tiene. Devuelve si
+    la ha anadido."""
+    if t is None or t.numRows == 0:
+        return False
+    if nombre in [t[0, k].val for k in range(t.numCols)]:
+        return False
+    t.appendCol([nombre])
+    return True
 
 
 def pagina_version(base, fase, etiqueta, version):
