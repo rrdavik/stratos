@@ -26,11 +26,12 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v66'
+VERSION_COMUN = 'comun v67'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'vagones', 'diagnostico', 'particulas', 'humo', 'luz_celda', 'luz_conchas',
+                'coronas', 'inclusiones', 'fulguritas', 'vagones', 'diagnostico', 'particulas', 'humo',
+                'luz_celda', 'luz_conchas',
                 'luz_local']                    # lo transparente (motas, humo) y las capas aditivas, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
@@ -740,7 +741,7 @@ def onCook(scriptOp):
 PIEL_VERTEX = r"""// Estratos - piel (fase 12; terreno, fase 11 v5): vertex shader
 uniform vec4 uTerreno;      // x: 1 la malla del terreno, y: altura de los pisos, z: lo que se hunde sin relieve
 uniform sampler2D sAlturas; // r: relieve sobre el suelo local, g: radio del suelo (lat/lon, fila 0 = polo sur)
-uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
 uniform vec4 uViento;       // motor v77: x Swaymax, y el viento del LFO (grados), z el pulso a saltos, w beats por vaiven
 
 out Vertex {
@@ -843,7 +844,7 @@ void main()
 """
 
 PIEL_PIXEL = r"""// Estratos - piel (fase 12; tierra, agua y borde, fase 11 v5): pixel shader
-uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
 uniform vec4 uLuz0;         // posicion de luz_principal
 uniform vec4 uLuz0Col;      // su color x dimmer
 uniform vec4 uLuz1;         // luz_relleno
@@ -995,7 +996,8 @@ void main()
     float amb = 1.0;
     bool vegetal = fam > 0.5 && fam < 1.5;
     bool tierra = fam > 2.5 && fam < 3.5;
-    bool agua = fam > 3.5;
+    bool agua = fam > 3.5 && fam < 4.5;
+    bool plastico = fam > 4.5 && fam < 5.5;     // fase 25: las inclusiones de las personas
     // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
     vec3 emis = vec3(0.0);
@@ -1287,6 +1289,15 @@ void main()
         emis *= 1.0 - 0.3 * sombraE;
         expo = mix(90.0, 6.0, rug);
         ks = mix(0.9, 0.03, rug);
+    } else if (plastico) {
+        // fase 25: plastico (las inclusiones del plastiglomerado): color saturado y
+        // liso, sin poros; la luz lo envuelve (dispersion subsuperficial leve)
+        rug = clamp(rug, 0.10, 0.20);
+        expo = mix(120.0, 6.0, rug);
+        ks = mix(1.2, 0.03, rug);
+        wrap = 0.35;
+        amb = 1.3;
+        sombra = 0.0;
     } else {
         // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
         base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
@@ -1333,6 +1344,12 @@ void main()
         float cual = hash13(vec3(floor(wv), float(iVert.inst) * 0.731));
         float lado = 1.0 - abs(dot(n, normalize(iVert.wPos)));
         col += ventana * step(0.5, lado) * uVentanas.x * step(cual, luces - 0.001) * vec3(1.0, 0.62, 0.25);
+    } else if (plastico) {
+        // fase 25: a contraluz el plastico se aclara (como la traslucidez de las hojas)
+        // y el borde brilla con su propio color
+        vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
+        float tras = pow(max(dot(-l0, v), 0.0), 2.0);
+        col += 0.30 * tras * base * uLuz0Col.rgb + fres * 0.25 * (base + vec3(0.2));
     } else if (!tierra) {
         // mineral: la obsidiana pulida tiene un reflejo de borde frio
         col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
@@ -3337,9 +3354,10 @@ PIEL_UNIFORMES = [
                  'parent().par.Bocetoreticula')),
     ('uBocetoCol', ('parent().par.Colorbocetor', 'parent().par.Colorbocetog', 'parent().par.Colorbocetob', '0')),
 ]
-FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua']
+# comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
+FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio']
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
-SIN_TINTE = ('ciudad', 'agua')
+SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio')
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
 
 
@@ -3535,8 +3553,8 @@ def materiales_piel(base):
              'piel_pixel; Vectors: uFamilia, uLuz0...); si la piel no se ve, Materialrespaldo'
              % ', '.join(malos))
     else:
-        ok('shader de la piel: mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad, mat_piel_tierra y '
-           'mat_piel_agua (GLSL), mat_respaldo (Phong)')
+        ok('shader de la piel: mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad, mat_piel_tierra, '
+           'mat_piel_agua, mat_piel_plastico y mat_piel_vidrio (GLSL), mat_respaldo (Phong)')
     if sin_rampa:
         info('%s: no pude enlazar los samplers sAlturas (TOP alturas) y sRampa (TOP rampa_hipso) en la '
              'pagina Samplers; sin ellos no se levanta el relieve' % ', '.join(sin_rampa[:2]))
@@ -4066,6 +4084,37 @@ class Prueba(object):
         print('  AUTOPRUEBA %s' % ('OK' if good else 'FALLIDA: pegame este bloque'))
         print('-' * 66)
         return good
+
+
+# --- las autopruebas de la sala (fases 24 a 31) --------------------------------
+
+def guardar_sala(base, nombres):
+    """Lo que una autoprueba de sala cambia: parametros y la tabla sala_personas."""
+    guarda = {}
+    for nm in nombres:
+        try:
+            guarda[nm] = getattr(base.par, nm).eval()
+        except Exception:
+            pass
+    tb = base.op('sala_personas')
+    filas = [[c.val for c in tb.row(r)] for r in range(tb.numRows)] if tb is not None else []
+    return guarda, filas
+
+
+def devolver_sala(base, m, guarda, filas):
+    for nm, v in guarda.items():
+        try:
+            getattr(base.par, nm).val = v
+        except Exception:
+            pass
+    tb = base.op('sala_personas')
+    if tb is not None:
+        tb.clear()
+        for f in filas:
+            tb.appendRow(f)
+    m.sala_reset()
+    m.mic_reset()
+    m._SALA['t_img'] = -99.0
 
 
 def run_test(base, fn):

@@ -127,35 +127,6 @@ PARS24 = ('Fuente', 'Alturamin', 'Alturamax', 'Anchosala', 'Fondosala', 'Tamcasi
           'Confirmapersona', 'Simfila', 'Simcasilla', 'Espejo', 'Anchoangular', 'Latnorte', 'Latsur')
 
 
-def guardar_sala(base, nombres):
-    """Lo que una autoprueba de sala cambia: parametros y la tabla sala_personas."""
-    guarda = {}
-    for nm in nombres:
-        try:
-            guarda[nm] = getattr(base.par, nm).eval()
-        except Exception:
-            pass
-    tb = base.op('sala_personas')
-    filas = [[c.val for c in tb.row(r)] for r in range(tb.numRows)] if tb is not None else []
-    return guarda, filas
-
-
-def devolver_sala(base, m, guarda, filas):
-    for nm, v in guarda.items():
-        try:
-            getattr(base.par, nm).val = v
-        except Exception:
-            pass
-    tb = base.op('sala_personas')
-    if tb is not None:
-        tb.clear()
-        for f in filas:
-            tb.appendRow(f)
-    m.sala_reset()
-    m.mic_reset()
-    m._SALA['t_img'] = -99.0
-
-
 def prueba(t):
     m = t.m
     guarda, filas = guardar_sala(base, PARS24)

@@ -69,6 +69,9 @@
 #                 Motor v83, fase 24 (plan v5): personas: cabezas (maximos de
 #                 altura), seguimiento, ocupacion binaria por casilla y la celda
 #                 que mira a cada casilla.
+#                 Motor v84, fase 25: la huella minima: inclusiones por llegada
+#                 (Probllegada, mapa logistico) y por parada (Tparada), con el
+#                 escalon de su celda; la paleta humana y sus instancias.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -81,7 +84,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v83'
+MOTOR_VERSION = 'motor v84'
 
 import math
 
@@ -298,6 +301,8 @@ DEFAULT_CFG = dict(
     max_erosion=15.0, sim_balance=-1.0, interfaz_dmx=0, universo_dmx=0,
     # fase 24: personas
     sep_cabezas=0.35, confirma_persona=2, sim_fila=3,
+    # fase 25: la huella minima
+    prob_llegada=0.6, t_parada=3.0,
 )
 
 
@@ -665,6 +670,11 @@ def new_world():
         mic=dict(t=-99.0, n=0, descartados=0, flujo=0.0, ultimo=None),
         ruido=dict(onsets=[], cortes=0, ultimo=None),   # onsets de la ventana: [t, flujo, celda]
         sala=dict(destellos=[]),            # instantes de los destellos propios (fase 23)
+        # la huella minima (fase 25): inclusiones de cada celda, [escalon, tipo, t, k]
+        incl=[[] for _ in range(N)],
+        incl_n=dict(llegadas=0, paradas=0),     # las que ha dejado este mundo
+        incl_ultima=None,
+        incl_borradas=dict(erosion=0, micro=0, corte=0, catastrofe=0, escision=0),     # fase 26
         aviso='',
         ev={},
         t=None,
@@ -1976,6 +1986,9 @@ def end_cycle(W, cfg, now, bars=None):
         W['shells'][-1].update(reg)
     W['quitadas'] = [0] * N
     W['gen'] += 1
+    if cfg['nivel'] >= 25:              # fase 25: lo heredado empieza sin inclusiones
+        vaciar_inclusiones(W)
+        W['incl_n'] = dict(llegadas=0, paradas=0)
     her = cfg['herencia']
     for i in range(N):
         W['carga'][i] = 0
@@ -2401,6 +2414,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False)
     if lvl >= 18:                   # fase 18: luz local y, fuera de la actuacion, el diagnostico
         out['luz_local'] = build_luz_local(W, cfg, now)
         out['diagnostico'] = [] if hide_beacons or not cfg.get('diagnostico', 0) else build_diagnostico(W, cfg)
+    if lvl >= 25:                   # fase 25: las inclusiones de las personas
+        build_inclusiones(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -2452,8 +2467,9 @@ def build_tiles(W, cfg, now):
             if ctapa is not None:
                 tapa = _tapa_row(rows[-1][:12], ctapa)
         if tapa is not None:                # solo la loseta de arriba ensena su tapa
-            if era:
-                tapa.append(1.0 if respaldo else RUG_TAPA)
+            if era:                         # fase 25: con inclusiones, la matriz del plastiglomerado
+                con_incl = cfg['nivel'] >= 25 and bool(W['incl'][c]) if len(W.get('incl', ())) == N else False
+                tapa.append(1.0 if respaldo else (RUG_TAPA_INCL if con_incl else RUG_TAPA))
             rows.append(tapa)
     return rows
 
@@ -11100,7 +11116,186 @@ def casillas_fila_sim(cfg, k0, n):
 
 def sala_mundo(W, cfg, now, res):
     """Lo que las personas hacen en el mundo, por nivel (fases 25 y 29)."""
+    if cfg['nivel'] >= 25:              # fase 25: la huella minima
+        res['llegadas'] = llegadas(W, cfg, res['nuevas'], now)
+        res['paradas'] = paradas(W, cfg, res['casillas'], now)
     return res
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la huella minima (fase 25)
+# -----------------------------------------------------------------------------
+# Las personas dejan INCLUSIONES en la celda que mira a su casilla:
+#   LLEGADA   al detectarse una persona nueva, con probabilidad Probllegada. Sin
+#             azar de software: lo decide el mapa logistico sembrado con el id de
+#             la persona, la celda y el ciclo (la misma sala da el mismo resultado).
+#   PARADA    Tparada segundos seguidos con la casilla ocupada (ocupacion binaria)
+#             dejan una inclusion segura. Una por parada: la casilla se rearma al
+#             quedar libre.
+# Cada inclusion guarda el ESCALON (la ocupacion) de su celda en el instante en
+# que cae: [escalon, tipo, t, k]; k es su semilla (color de la paleta humana,
+# posicion y tamano). Varias por celda, de la mas antigua a la mas nueva, con
+# tope INCL_CELDA (el exceso quita la mas antigua de las de escalon mas alto).
+# Es mundo: vive en W['incl'] (el nombre 'huella' ya es de la fase 7).
+# ASPECTO (plastiglomerado): piezas pequenas medio enterradas en el suelo de la
+# celda, alrededor de la formacion, de color saturado de la paleta humana (nunca
+# cian ni ambar), rugosidad 0,1-0,2 (familia plastico del shader de la piel). La
+# matriz es la loseta: en las celdas con inclusiones su tapa baja de rugosidad 1
+# a RUG_TAPA_INCL.
+
+INCL_CELDA = 12                 # inclusiones por celda, como mucho
+LLEGADA, PARADA = 1, 2
+TIPO_INCL = {LLEGADA: 'llegada', PARADA: 'parada'}
+RUG_TAPA_INCL = 0.85            # la tapa de una celda con inclusiones (v5: 0,8-0,9)
+# la paleta humana (P5): lo que queda del tono OKLCH fuera del cian de las
+# cicatrices (165-235), el ambar del SEQ2 (55-100), los verdes de los pisos
+# (120-165) y el azul de los rios (235-275), y sin el rojo saturado puro (18-40)
+BANDAS_HUMANAS = ((275.0, 360.0), (0.0, 18.0), (40.0, 55.0), (100.0, 120.0))
+L_HUMANA = 0.75                 # luminosidad: ni la de los pads oscuros (0,53-0,69) ni la de los claros (0,81-0,85)
+C_HUMANA = 0.19                 # croma alto (baja lo justo para caber en sRGB)
+CAUSAS_BORRADO = ('erosion', 'micro', 'corte', 'catastrofe', 'escision')
+
+
+def _uniforme_caos(x0):
+    """Un valor uniforme en (0, 1) del mapa logistico a r = 4 sembrado con x0."""
+    return 2.0 / math.pi * math.asin(math.sqrt(logistica(x0, 4.0, 1)[0]))
+
+
+def _frac(x):
+    return x - math.floor(x)
+
+
+def tono_humano(k):
+    """El tono OKLCH (grados) de la semilla k (0-1), repartido por BANDAS_HUMANAS."""
+    total = sum(b - a for a, b in BANDAS_HUMANAS)
+    x = _frac(float(k)) * total
+    for a, b in BANDAS_HUMANAS:
+        if x <= b - a:
+            return a + x
+        x -= b - a
+    return BANDAS_HUMANAS[-1][1]
+
+
+_PAL_HUMANA = {}
+
+
+def paleta_humana(cfg, k):
+    """El color sRGB (0-1) de la semilla k: croma alto, luminosidad L_HUMANA."""
+    q = int(_frac(float(k)) * 256.0)
+    col = _PAL_HUMANA.get(q)
+    if col is None:
+        h = tono_humano(q / 256.0)
+        C = C_HUMANA
+        col, dentro = oklch_to_srgb(L_HUMANA, C, h)
+        while not dentro and C > 0.05:
+            C -= 0.01
+            col, dentro = oklch_to_srgb(L_HUMANA, C, h)
+        _PAL_HUMANA[q] = col
+    return col
+
+
+def incl_de(W):
+    """W['incl'], con una lista por celda."""
+    inc = W.get('incl')
+    if not isinstance(inc, list) or len(inc) != N:
+        inc = W['incl'] = [[] for _ in range(N)]
+    return inc
+
+
+def n_inclusiones(W):
+    return sum(len(x) for x in incl_de(W))
+
+
+def depositar_inclusion(W, cfg, celda, tipo, now):
+    """Una inclusion en la celda, con el escalon (ocupacion) que tiene ahora.
+    Devuelve la inclusion [escalon, tipo, t, k]."""
+    lst = incl_de(W)[celda]
+    cu = W['incl_n']
+    n = cu['llegadas'] + cu['paradas']
+    k = _uniforme_caos(0.05 + 0.9 * _frac(n * AUREO + int(celda) * 0.3819660113 + 0.11 * int(tipo)))
+    inc = [int(W['occ'][celda]), int(tipo), float(now), k]
+    lst.append(inc)
+    while len(lst) > INCL_CELDA:        # el exceso: la mas antigua de las de escalon mas alto
+        alto = max(x[0] for x in lst[:-1])
+        lst.remove(next(x for x in lst[:-1] if x[0] == alto))
+    cu['llegadas' if tipo == LLEGADA else 'paradas'] += 1
+    W['incl_ultima'] = dict(celda=int(celda), escalon=inc[0], tipo=int(tipo), t=float(now))
+    W['dirty'] = True
+    return inc
+
+
+def llegada_prende(W, cfg, persona, celda):
+    """El si o el no de una llegada: el mapa logistico sembrado con el id de la
+    persona, la celda y el ciclo, contra Probllegada."""
+    x0 = 0.05 + 0.9 * _frac(int(persona) * AUREO + int(celda) * 0.3819660113 + int(W.get('ciclo_n', 1)) * 0.137)
+    return _uniforme_caos(x0) < cfg['prob_llegada']
+
+
+def llegadas(W, cfg, nuevas, now):
+    """Las personas nuevas [{id, casilla, celda, t}]: cada una deja una inclusion
+    en la celda que miraba su casilla al confirmarse, con probabilidad Probllegada.
+    Devuelve las inclusiones dejadas."""
+    out = []
+    for ev in nuevas or ():
+        if ev.get('celda') is not None and llegada_prende(W, cfg, ev['id'], ev['celda']):
+            out.append(depositar_inclusion(W, cfg, ev['celda'], LLEGADA, now))
+    return out
+
+
+def paradas(W, cfg, casillas, now):
+    """Tparada segundos seguidos con la casilla ocupada: una inclusion segura en
+    la celda que mira a la casilla en ese instante. Una por parada (la casilla
+    se rearma al quedar libre, cuando pierde su t_ocupada)."""
+    out = []
+    for k, v in (casillas or {}).items():
+        if not v.get('parada') and now - v['t_ocupada'] >= cfg['t_parada'] - 1e-9:
+            v['parada'] = True
+            out.append(depositar_inclusion(W, cfg, celda_de_casilla(W, cfg, k), PARADA, now))
+    return out
+
+
+def vaciar_inclusiones(W):
+    """El mundo se entierra: lo heredado empieza sin inclusiones."""
+    W['incl'] = [[] for _ in range(N)]
+    W['dirty'] = True
+
+
+def fila_inclusion(W, cfg, i, inc, r0=None):
+    """La instancia de una inclusion de la celda i: una pieza pequena, medio
+    enterrada en el suelo de la celda, alrededor de la formacion. Posicion, forma
+    y color salen de su semilla k."""
+    k = inc[3]
+    n = normal_i(i)
+    r0 = base_radius(W, cfg, i) if r0 is None else r0
+    cw, cl = _cell_sizes(r0, i)
+    ex, ez = tangents(n)
+    ang = 2.0 * math.pi * _frac(k * 7.31)
+    rad = 0.26 + 0.16 * _frac(k * 13.7)            # un anillo alrededor de la formacion
+    d = _norm(_add(_add(n, ex, rad * cw * math.cos(ang) / r0), ez, rad * cl * math.sin(ang) / r0))
+    t = _TERRENO.get('t') if cfg['nivel'] >= 11 else None
+    try:
+        r = r0 + (alto_en(t, d) if t is not None else 0.0)
+    except Exception:
+        r = r0
+    s = (0.035 + 0.035 * _frac(k * 29.3)) * min(cw, cl)
+    fila = _row(_mul(d, r), d, s * (0.7 + 0.6 * _frac(k * 3.7)), s * (0.45 + 0.35 * _frac(k * 5.3)),
+                s * (0.7 + 0.6 * _frac(k * 11.1)), paleta_humana(cfg, k))
+    fila[5] = 360.0 * _frac(k * 17.9)               # girada sobre la normal
+    fila.append(0.10 + 0.10 * _frac(k * 19.7))      # rugosidad 0,1-0,2 (canal a)
+    return fila
+
+
+def build_inclusiones(W, cfg, now, out):
+    """Las inclusiones vivas del mundo, una instancia cada una (out['inclusiones'])."""
+    rows = []
+    for i, lst in enumerate(incl_de(W)):
+        if not lst:
+            continue
+        r0 = base_radius(W, cfg, i)
+        for inc in lst:
+            rows.append(fila_inclusion(W, cfg, i, inc, r0))
+    out['inclusiones'] = rows
+    return rows
 
 
 # -----------------------------------------------------------------------------
@@ -11367,6 +11562,7 @@ def chop_names(c=None):
         return list(CHOP_NAMES)
     extra = ['i_tejido', 'i_rios'] if c['nivel'] >= 13 else []
     extra += ['i_luz_local', 'i_diagnostico'] if c['nivel'] >= 18 else []
+    extra += ['i_inclusiones'] if c['nivel'] >= 25 else []
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -11738,6 +11934,9 @@ def cfg():
         c.update(sep_cabezas=max(0.05, _p('Separacioncabezas', c['sep_cabezas'])),
                  confirma_persona=max(1, int(_p('Confirmapersona', c['confirma_persona']))),
                  sim_fila=max(1, int(_p('Simfila', c['sim_fila']))))
+    if c['nivel'] >= 25:
+        c.update(prob_llegada=max(0.0, min(1.0, _p('Probllegada', c['prob_llegada']))),
+                 t_parada=max(0.1, _p('Tparada', c['t_parada'])))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -12921,6 +13120,19 @@ def _legend_personas(W, c):
         len(personas_en_sala()), len(_SALA.get('casillas', {})), cols * filas, _SALA.get('nuevas', 0), fuente)
 
 
+# --- la huella minima (fase 25) -----------------------------------------------------
+
+def _legend_huella(W, c):
+    """HUELLA (fase 25): las inclusiones vivas, las llegadas y las paradas que
+    las dejaron en este mundo, la ultima y Probllegada."""
+    cu = W['incl_n']
+    u = W.get('incl_ultima')
+    ult = 'ultima celda %d escalon %d (%s)' % (u['celda'], u['escalon'], TIPO_INCL.get(u['tipo'], '?')) if u \
+        else 'ultima -'
+    return '  HUELLA   inclusiones %d (llegadas %d, paradas %d)   %s   llegada %g   parada %g s' % (
+        n_inclusiones(W), cu['llegadas'], cu['paradas'], ult, c['prob_llegada'], c['t_parada'])
+
+
 def on_value(name, val):
     if name == 'Modoactuacion':
         try:
@@ -13156,7 +13368,8 @@ def seqs_de_geometria(nombre, cfg=None):
     """{1}, {2} o {1, 2}: de que secuenciador sale lo que dibuja la geometria
     nombre de FASE1 (para los bocetos); None si es de las conchas o la esfera, o
     del armazon (nucleo, reticula, luces de las conchas), que no van por secuenciador."""
-    if nombre in ('estratos', 'terreno', 'nucleo', 'reticula', 'luz_conchas', 'diagnostico'):
+    if nombre in ('estratos', 'terreno', 'nucleo', 'reticula', 'luz_conchas', 'diagnostico',
+                  'inclusiones', 'fulguritas'):     # fases 25 y 29: las huellas de las personas
         return None
     if nombre in BOCETO_SEQ1:
         return frozenset({1})
@@ -13833,6 +14046,8 @@ def _legend():
         lines.append(_legend_sala(W, c))
     if lvl >= 24:
         lines.append(_legend_personas(W, c))
+    if lvl >= 25:
+        lines.append(_legend_huella(W, c))
     return '\n'.join(lines)
 
 
