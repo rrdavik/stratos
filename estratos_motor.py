@@ -81,6 +81,9 @@
 #                 Motor v87, fase 28: la noche de enterramiento: durante Noche
 #                 segundos la esfera se apaga y solo emiten las inclusiones
 #                 recien horneadas (y las escisiones).
+#                 Motor v88, fase 29: la fila (Minfila personas contiguas
+#                 durante Tfila) y la escision colectiva: un hueco permanente
+#                 en la columna de la celda de origen, con su fulgurita.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -93,7 +96,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v87'
+MOTOR_VERSION = 'motor v88'
 
 import math
 
@@ -314,6 +317,8 @@ DEFAULT_CFG = dict(
     prob_llegada=0.6, t_parada=3.0,
     # fase 27: la clasificacion al enterrar
     min_huellas=1, inclusiones_max=0.8,
+    # fase 29: la fila y la escision colectiva
+    min_fila=3, t_fila=5.0, modo_fila=0, conchas_persona=1,
 )
 
 
@@ -687,6 +692,10 @@ def new_world():
         incl_ultima=None,
         incl_borradas=dict(erosion=0, micro=0, corte=0, catastrofe=0, escision=0),     # fase 26
         noche=None,             # la noche de enterramiento en curso (fase 28): [inicio, fin]
+        # las escisiones (fase 29): los huecos que abren las filas
+        escisiones=[],
+        escision_n=0,           # correlativo de la exposicion
+        esc_celdas={},          # celda -> escisiones abiertas en ella (el hueco es permanente)
         aviso='',
         ev={},
         t=None,
@@ -2013,9 +2022,11 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
     # Colmatacion. El radio nominal solo crece g (la colmatacion no es tiempo).
     colm = cfg.get('colmatacion', 0.0)
     s_new = len(W['shells'])
+    huecos = W.get('esc_celdas', {}) if cfg['nivel'] >= 29 else {}
     for c in range(N):
         lg = max(0.0, r_in - suelo(W, cfg, c))
-        W['cols'][c].append([s_new, g + colm * lg])
+        # fase 29: en la celda de una escision la concha tapiza el hueco sin cerrarlo (sin Colmatacion)
+        W['cols'][c].append([s_new, g + (0.0 if c in huecos else colm * lg)])
     W['shells'].append(dict(gen=W['gen'], col=list(shell_color(W['gen'])),
                             occ=list(W['occ']), sp=list(W['sp']), rm=[0] * N,
                             grosor=g, r_in=r_in, r_out=r_in + g))
@@ -2026,6 +2037,8 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
         W['ev']['banda'] = dict(clas, concha=len(W['shells']) - 1, t=now)
     if cfg['nivel'] >= 28:              # fase 28: la noche empieza en el fotograma del recuento
         W['noche'] = [now, now + cfg['noche']] if cfg['noche'] > 0.0 else None
+    if cfg['nivel'] >= 29:              # fase 29: las escisiones de este mundo quedan enterradas
+        enterrar_escisiones(W, cfg, now)
     W['quitadas'] = [0] * N
     W['gen'] += 1
     if cfg['nivel'] >= 25:              # fase 25: lo heredado empieza sin inclusiones
@@ -2462,6 +2475,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False)
         out['diagnostico'] = [] if hide_beacons or not cfg.get('diagnostico', 0) else build_diagnostico(W, cfg)
     if lvl >= 25:                   # fase 25: las inclusiones de las personas
         build_inclusiones(W, cfg, now, out)
+    if lvl >= 29:                   # fase 29: las fulguritas de las escisiones
+        build_fulguritas(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -8505,7 +8520,8 @@ def cauces(W, cfg, cl=None, ter=None):
                     q = _recodo(c, d_in, _norm(_add(_mul(NORMALS[c], 2.0), d_in, -1.0)),
                                 1.0 if k % 2 else -1.0)
                     recodos[c] = q
-                    if cfg.get('lagos', 1) and laguna(W, cfg, c) > 0.02:
+                    if cfg.get('lagos', 1) and laguna(W, cfg, c) > 0.02 \
+                            and not (cfg['nivel'] >= 29 and es_escision(W, c)):    # fase 29: un rio no la llena
                         lagos.append(c)
                 arista.append((c_ant, c))
             P.append(q)
@@ -9623,6 +9639,8 @@ def contenido(sh, c):
 
 def en_corte(W, cfg, c, R=None):
     """La celda c esta dentro de un corte: su suelo, por debajo del radio nominal."""
+    if cfg['nivel'] >= 29 and es_escision(W, c):    # fase 29: una escision no es un corte (sin fosiles)
+        return False
     R = top_radius(W, cfg) if R is None else R
     return R - suelo(W, cfg, c) > 1e-6
 
@@ -10725,7 +10743,8 @@ SALA_COLS = ['x', 'y', 'altura']        # tabla sala_personas (m; x desde la izq
 def _sala_nueva():
     return dict(dens=None, t=None, t_img=-99.0, alt=None, hay=False, fps=0.0, senales=0,
                 cuentas=dict(crear=[0, 0], erosionar=[0, 0]), ultima=None,
-                pistas=[], casillas={}, nuevas=0, id=0, ultimas=[], t_personas=None)    # fase 24
+                pistas=[], casillas={}, nuevas=0, id=0, ultimas=[], t_personas=None,    # fase 24
+                filas=[], fila_id=0, fila_sim=[])       # fase 29
 
 
 _SALA = _sala_nueva()
@@ -11181,6 +11200,8 @@ def sala_mundo(W, cfg, now, res):
     if cfg['nivel'] >= 25:              # fase 25: la huella minima
         res['llegadas'] = llegadas(W, cfg, res['nuevas'], now)
         res['paradas'] = paradas(W, cfg, res['casillas'], now)
+    if cfg['nivel'] >= 29:              # fase 29: las filas y sus escisiones
+        res['filas'] = tick_filas(W, cfg, now)
     return res
 
 
@@ -11564,6 +11585,297 @@ def build_inclusiones(W, cfg, now, out):
 
 
 # -----------------------------------------------------------------------------
+# 1. NUCLEO - la fila y la escision colectiva (fase 29)
+# -----------------------------------------------------------------------------
+# FILA: Minfila personas o mas en casillas contiguas (diagonales incluidas),
+# sostenida Tfila segundos sobre la ocupacion binaria. Modofila = cadena
+# (cualquier forma contigua) o recta (todas las casillas en una misma fila,
+# columna o diagonal de la rejilla, seguidas). Una fila es una componente conexa
+# de casillas ocupadas; se reconoce de una imagen a la siguiente si comparte
+# alguna casilla con la de antes. Cuenta personas, no casillas. Puede haber
+# varias filas a la vez, cada una con su escision (P14).
+# ESCISION: se abre en la celda que mira a la casilla de la fila con el t_ocupada
+# mas antiguo, en el instante en que la fila cumple Tfila; esa celda queda fija.
+# Profundidad: personas x Conchasporpersona losetas de la columna de origen, con
+# el nucleo como tope; si se suman personas mientras la fila aguanta, la misma
+# escision baja mas (sigue al maximo visto). La fila solo abre otra cuando se
+# deshace. Es un HUECO permanente: quita losetas de la columna (como cut, con
+# radio 0), vacia la celda y borra sus inclusiones (es un corte, P7). No cuenta
+# en el tope por mundo de los cortes (quitadas), no enciende cicatriz cian,
+# ignora Colmatacion en su celda (la concha siguiente la tapiza sin cerrarla) y
+# las fases 13 (lagos) y 16 (fosiles) la excluyen. No pasa por erosion() ni por
+# pulso(): no es erosion ni creacion para el balance de la fase 23.
+# FULGURITA: una pieza por concha atravesada, de la superficie al fondo, en su
+# propia geometria: pared exterior de arena fundida, interior vitreo y nucleo
+# emisivo de la paleta humana (nunca cian), con dos o tres ramas finas por concha
+# hacia las paredes vecinas, decididas por el mapa logistico (la escision y la
+# concha como semilla). Las ramas son solo visuales: no quitan material (P11).
+# Las filas son del sensor (_SALA['filas']); las escisiones, mundo (W['escisiones']).
+
+ESCISIONES_MAX = 200            # las mas viejas se quedan solo en el registro
+MODOS_FILA = ['cadena', 'recta']
+COL_ARENA = (0.66, 0.58, 0.46)  # la pared de la fulgurita: arena fundida
+PARED, VIDRIO, NUCLEO = 0, 1, 2  # las partes de la fulgurita (en el alfa: rugosidad + 2 x parte)
+FULG_RAMAS = (2, 3)             # ramas por concha
+
+
+def _vecinas_casilla(k, cols, filas):
+    f, c = k // cols, k % cols
+    for df in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if (df or dc) and 0 <= f + df < filas and 0 <= c + dc < cols:
+                yield (f + df) * cols + c + dc
+
+
+def es_recta(casillas, cols):
+    """Las casillas estan todas en una misma fila, columna o diagonal de la
+    rejilla, seguidas."""
+    ks = sorted(int(k) for k in casillas)
+    if len(ks) <= 1:
+        return True
+    pts = [(k // cols, k % cols) for k in ks]
+    df, dc = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
+    if (df, dc) not in ((0, 1), (1, 0), (1, 1), (1, -1)):
+        return False
+    return all((pts[j + 1][0] - pts[j][0], pts[j + 1][1] - pts[j][1]) == (df, dc) for j in range(len(pts) - 1))
+
+
+def buscar_filas(casillas, cfg):
+    """Las componentes conexas (diagonales incluidas) de las casillas ocupadas
+    {casilla: {personas, t_ocupada}}: [{casillas, personas, origen}], donde origen
+    es la casilla ocupada desde hace mas tiempo. Sin filtrar por Minfila."""
+    cols, filas = rejilla_sala(cfg)
+    quedan = set(casillas)
+    out = []
+    while quedan:
+        k0 = min(quedan)
+        quedan.discard(k0)
+        comp, pila = [k0], [k0]
+        while pila:
+            k = pila.pop()
+            for v in _vecinas_casilla(k, cols, filas):
+                if v in quedan:
+                    quedan.discard(v)
+                    comp.append(v)
+                    pila.append(v)
+        comp.sort()
+        out.append(dict(casillas=comp, personas=sum(int(casillas[k].get('personas', 1)) for k in comp),
+                        origen=min(comp, key=lambda k: (casillas[k]['t_ocupada'], k))))
+    return out
+
+
+def es_escision(W, c):
+    """La celda c tiene una escision (un hueco permanente)."""
+    return int(c) in W.get('esc_celdas', {})
+
+
+def _fecha():
+    import time
+    return time.strftime('%Y-%m-%d'), time.strftime('%H:%M:%S')
+
+
+def _quitar_losetas(W, celda, k):
+    """Quita hasta k losetas de arriba de la columna de la celda (el nucleo es el
+    tope). Devuelve las conchas quitadas, de arriba abajo."""
+    col = W['cols'][celda]
+    fuera = []
+    while len(fuera) < k and col:
+        s, _ = col.pop()
+        if 0 <= s < len(W['shells']):
+            W['shells'][s]['rm'][celda] = 1
+        fuera.append(s)
+    return fuera
+
+
+def abrir_escision(W, cfg, fila, casilla, now):
+    """La fila ha cumplido Tfila: abre una escision en la celda que mira a su
+    casilla de origen en este instante. Devuelve la escision."""
+    origen = celda_de_casilla(W, cfg, casilla)
+    W['escision_n'] = W.get('escision_n', 0) + 1
+    personas = int(fila.get('max', fila['personas']))
+    jornada, hora = _fecha()
+    e = dict(id=W['escision_n'], origen=origen, casilla=int(casilla), personas=personas,
+             profundidad=personas * max(1, int(cfg['conchas_persona'])), cortadas=[],
+             suelo0=suelo(W, cfg, origen), estado='abierta', t0=now, t1=None,
+             ciclo=W.get('ciclo_n', 1), jornada=jornada, hora=hora, testigo=None,
+             ramas=_uniforme_caos(0.05 + 0.9 * _frac(W['escision_n'] * AUREO + origen * 0.3819660113)))
+    e['cortadas'] = _quitar_losetas(W, origen, e['profundidad'])
+    f0, b0 = hueco_escision(W, cfg, origen)
+    e['hondo0'] = max(0.0, b0 - f0)       # lo hondo del hueco al abrirse (para la fulgurita)
+    _clear_cell(W, origen)              # un hueco: la celda queda vacia
+    W['huella'][origen] = 0.0
+    W['ruina'][origen] = 0
+    for j in NEIGH[origen]:
+        if W['par'][j] == origen:
+            W['par'][j] = -1
+    borrar_inclusiones(W, origen, 'escision')       # es un corte (P7)
+    W.setdefault('esc_celdas', {})[origen] = W.get('esc_celdas', {}).get(origen, 0) + 1
+    W['escisiones'].append(e)
+    del W['escisiones'][:-ESCISIONES_MAX]
+    W['ev']['escision'] = dict(id=e['id'], celda=origen, conchas=len(e['cortadas']), personas=personas, t=now)
+    W['aviso'] = 'escision %d: %d personas abren %d conchas en la celda %d' % (
+        e['id'], personas, len(e['cortadas']), origen)
+    W['dirty'] = True
+    return e
+
+
+def profundizar_escision(W, cfg, e, personas, now):
+    """Mas personas en la fila: la misma escision baja mas (hasta el nucleo).
+    Devuelve las losetas quitadas ahora."""
+    if e['estado'] != 'abierta' or personas <= e['personas']:
+        return 0
+    e['personas'] = int(personas)
+    e['profundidad'] = e['personas'] * max(1, int(cfg['conchas_persona']))
+    mas = _quitar_losetas(W, e['origen'], e['profundidad'] - len(e['cortadas']))
+    e['cortadas'] += mas
+    if mas:
+        f0, b0 = hueco_escision(W, cfg, e['origen'])
+        e['hondo0'] = max(0.0, b0 - f0)
+        W['dirty'] = True
+    return len(mas)
+
+
+def cerrar_escision(W, cfg, e, now, estado='cerrada'):
+    """La fila se deshace (cerrada) o su mundo se entierra (enterrada): la
+    escision ya no baja mas. El hueco se queda."""
+    if e['estado'] == 'abierta' or (estado == 'enterrada' and e['estado'] == 'cerrada'):
+        e['estado'] = estado
+        if e['t1'] is None:
+            e['t1'] = now
+        return True
+    return False
+
+
+def escision_de(W, ide):
+    return next((e for e in reversed(W['escisiones']) if e['id'] == ide), None)
+
+
+def filas_reset():
+    _SALA['filas'] = []
+    _SALA['fila_id'] = 0
+
+
+def tick_filas(W, cfg, now):
+    """Cada imagen de la camara: las filas de la sala (componentes de Minfila
+    personas o mas, con la forma de Modofila), lo que llevan sostenidas y sus
+    escisiones. Devuelve las filas en curso."""
+    cas = _SALA.get('casillas', {})
+    cols, _ = rejilla_sala(cfg)
+    recta = int(cfg['modo_fila']) == 1
+    comps = [f for f in buscar_filas(cas, cfg) if f['personas'] >= cfg['min_fila']
+             and (not recta or es_recta(f['casillas'], cols))]
+    prev = _SALA.get('filas') or []
+    usadas, filas = set(), []
+    for f in comps:
+        cs = set(f['casillas'])
+        ant = next((p for p in prev if id(p) not in usadas and p['casillas'] & cs), None)
+        if ant is None:
+            _SALA['fila_id'] = _SALA.get('fila_id', 0) + 1
+            ant = dict(id=_SALA['fila_id'], t0=now, max=0, escision=None)
+        else:
+            usadas.add(id(ant))
+        ant.update(casillas=cs, personas=f['personas'], origen=f['origen'], max=max(ant['max'], f['personas']))
+        filas.append(ant)
+        if ant['escision'] is None:
+            if now - ant['t0'] >= cfg['t_fila'] - 1e-9:
+                ant['escision'] = abrir_escision(W, cfg, ant, f['origen'], now)['id']
+        else:
+            e = escision_de(W, ant['escision'])
+            if e is not None:
+                profundizar_escision(W, cfg, e, ant['max'], now)
+    for p in prev:                      # la fila se deshace: su escision se cierra
+        if id(p) not in usadas and p.get('escision') is not None:
+            e = escision_de(W, p['escision'])
+            if e is not None:
+                cerrar_escision(W, cfg, e, now)
+    _SALA['filas'] = filas
+    return filas
+
+
+def enterrar_escisiones(W, cfg, now):
+    """El mundo se entierra: sus escisiones quedan enterradas (el hueco sigue)."""
+    n = 0
+    for e in W['escisiones']:
+        if e['estado'] in ('abierta', 'cerrada'):
+            e['estado'] = 'enterrada'
+            if e['t1'] is None:
+                e['t1'] = now
+            e['t_noche'] = now          # sus paredes brillan en la noche de este entierro
+            n += 1
+        elif e.get('t_noche') is not None and e['t_noche'] != now:
+            e['t_noche'] = None
+    return n
+
+
+def hueco_escision(W, cfg, i):
+    """(fondo, borde) del hueco de la celda i: su suelo y el suelo mas alto de sus vecinas."""
+    return suelo(W, cfg, i), max([suelo(W, cfg, j) for j in NEIGH[i]] or [suelo(W, cfg, i)])
+
+
+def filas_fulgurita(W, cfg, e, now=0.0):
+    """Las instancias de la fulgurita de la escision e: por cada concha atravesada
+    que sigue a la vista (lo que queda bajo el tapiz de una concha posterior no se
+    dibuja), cuatro paredes de arena fundida, cuatro laminas de vidrio por dentro,
+    un nucleo emisivo y dos o tres ramas finas. El alfa lleva rugosidad + 2 x parte."""
+    i = e['origen']
+    fondo, borde = hueco_escision(W, cfg, i)
+    alto = borde - fondo
+    if alto < 1e-4:
+        return []
+    hondo0 = max(1e-6, e.get('hondo0') or alto)
+    n = max(1, len(e['cortadas']))
+    vistas = max(1, min(n, int(math.ceil(n * min(1.0, alto / hondo0) - 1e-6))))
+    h = alto / vistas
+    nrm = normal_i(i)
+    X, Y, Z, _ = marco = _marco(i, 0)
+    col_n = paleta_humana(cfg, e['ramas'])
+    brillo = float(e.get('brillo', 1.0))
+    col_n = (col_n[0] * brillo, col_n[1] * brillo, col_n[2] * brillo)
+    col_v = _mix(col_n, (0.05, 0.05, 0.06), 0.45)
+    rows = []
+    for k in range(vistas):
+        r0 = fondo + k * h
+        cw, cl = _cell_sizes(r0 + 0.5 * h, i)
+        base = _mul(nrm, r0)
+        concha = e['cortadas'][min(len(e['cortadas']) - 1, n - 1 - k)] if e['cortadas'] else 0
+        gris = 0.85 + 0.3 * _hash01(e['id'], concha, 7)
+        arena = (COL_ARENA[0] * gris, COL_ARENA[1] * gris, COL_ARENA[2] * gris)
+        for sgn in (-1.0, 1.0):         # las paredes y, por dentro, el vidrio
+            # al este y al oeste: finas en X, largas en Z
+            rows.append(_fila_m(_add(base, X, sgn * 0.46 * cw), marco, 0.06 * cw, h, 0.98 * cl, arena)
+                        + [0.9 + 2 * PARED])
+            rows.append(_fila_m(_add(base, X, sgn * 0.40 * cw), marco, 0.05 * cw, h, 0.84 * cl, col_v)
+                        + [0.07 + 2 * VIDRIO])
+            # al norte y al sur: largas en X, finas en Z
+            rows.append(_fila_m(_add(base, Z, sgn * 0.46 * cl), marco, 0.98 * cw, h, 0.06 * cl, arena)
+                        + [0.9 + 2 * PARED])
+            rows.append(_fila_m(_add(base, Z, sgn * 0.40 * cl), marco, 0.84 * cw, h, 0.05 * cl, col_v)
+                        + [0.07 + 2 * VIDRIO])
+        g = 0.07 * min(cw, cl)
+        rows.append(_fila_m(base, marco, g, h, g, col_n) + [0.10 + 2 * NUCLEO])
+        # las ramas de esta concha: solo visuales
+        x0 = 0.05 + 0.9 * _frac(e['ramas'] + concha * AUREO + e['id'] * 0.137)
+        us = logistica(x0, 4.0, 4)
+        nr = FULG_RAMAS[0] + (1 if us[0] > 0.5 else 0)
+        for j in range(nr):
+            ang = int(360.0 * _frac(us[j + 1] + j / float(nr))) // 15 * 15
+            mr = _marco(i, ang)
+            L = 0.36 * min(cw, cl)
+            p = _add(_add(base, mr[0], 0.5 * L), nrm, h * (0.25 + 0.5 * _frac(us[j + 1] * 7.3)))
+            rows.append(_fila_m(p, mr, L, 0.10 * h, 0.03 * min(cw, cl), col_n) + [0.10 + 2 * NUCLEO])
+    return rows
+
+
+def build_fulguritas(W, cfg, now, out):
+    """Las fulguritas de todas las escisiones con el hueco a la vista."""
+    rows = []
+    for e in W['escisiones']:
+        rows += filas_fulgurita(W, cfg, e, now)
+    out['fulguritas'] = rows
+    return rows
+
+
+# -----------------------------------------------------------------------------
 # 1. NUCLEO - la luz de la sala (fase 23): balance, bano, estroboscopio y colapso
 # -----------------------------------------------------------------------------
 # La sala se ilumina con el estado del planeta. En una ventana de Ventanabalance
@@ -11828,6 +12140,7 @@ def chop_names(c=None):
     extra = ['i_tejido', 'i_rios'] if c['nivel'] >= 13 else []
     extra += ['i_luz_local', 'i_diagnostico'] if c['nivel'] >= 18 else []
     extra += ['i_inclusiones'] if c['nivel'] >= 25 else []
+    extra += ['i_fulguritas'] if c['nivel'] >= 29 else []
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -12205,6 +12518,11 @@ def cfg():
     if c['nivel'] >= 27:
         c.update(min_huellas=max(1, int(_p('Minhuellas', c['min_huellas']))),
                  inclusiones_max=max(0.0, min(1.0, _p('Inclusionesmax', c['inclusiones_max']))))
+    if c['nivel'] >= 29:
+        c.update(min_fila=max(2, int(_p('Minfila', c['min_fila']))),
+                 t_fila=max(0.1, _p('Tfila', c['t_fila'])),
+                 modo_fila=_menu('Modofila', MODOS_FILA, c['modo_fila']),
+                 conchas_persona=max(1, int(_p('Conchasporpersona', c['conchas_persona']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -12558,6 +12876,8 @@ def frame_tick():
         o = parent().op('reticula_chop')
         if o is not None:
             o.cook(force=True)
+    if c['nivel'] >= 29:                # fase 29: la tabla de las escisiones
+        escisiones_tabla(W)
     terreno_al_dia_td(W, c)
     render_tema_al_dia(c)               # motor v69: el render, solo con el tema actual
     fu = parent().op('frame_u')         # motor v69: giro y uniformes, una vez por fotograma
@@ -12843,6 +13163,8 @@ def on_pulse(name):
         print(sala_sim_pulso(W, c, name))
     elif name == 'Simformarfila':       # fase 24: una fila de prueba en la sala simulada
         print(sala_fila_pulso(W, c, name))
+    elif name == 'Simsumar':            # fase 29: una persona mas, contigua a la fila de prueba
+        print(sala_sumar_pulso(W, c))
     elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
         print(capturar_fondo(c))
     elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
@@ -13403,6 +13725,78 @@ def _legend_huella(W, c):
         else 'ultima -'
     return '  HUELLA   inclusiones %d (llegadas %d, paradas %d)   %s   llegada %g   parada %g s' % (
         n_inclusiones(W), cu['llegadas'], cu['paradas'], ult, c['prob_llegada'], c['t_parada'])
+
+
+# --- la fila y la escision (fase 29) ---------------------------------------------------
+
+ESCISIONES_COLS = ['id', 'jornada', 'ciclo', 'hora', 'personas', 'conchas', 'celda', 'estado', 'testigo']
+
+
+def fila_escision(e):
+    """La fila de la tabla escisiones (y del registro del historico) de una escision."""
+    return [e['id'], e.get('jornada', ''), e.get('ciclo', ''), e.get('hora', ''), e['personas'],
+            len(e['cortadas']), e['origen'], e['estado'], e.get('testigo') or '']
+
+
+def escisiones_tabla(W):
+    """Escribe la tabla escisiones (las ultimas ESCISIONES_MAX), solo si ha cambiado."""
+    t = parent().op('escisiones')
+    if t is None:
+        return
+    filas = [[str(x) for x in fila_escision(e)] for e in W['escisiones']]
+    if _CACHE.get('tabla_escisiones') == filas and t.numRows == len(filas) + 1:
+        return
+    _CACHE['tabla_escisiones'] = filas
+    t.clear()
+    t.appendRow(ESCISIONES_COLS)
+    for f in filas:
+        t.appendRow(f)
+
+
+def sala_sumar_pulso(W, c):
+    """Simsumar: una persona mas en la casilla contigua a la fila de prueba."""
+    t = parent().op('sala_personas')
+    if t is None:
+        return 'SALA  no esta la tabla sala_personas: relanza fase22_camara.py'
+    fila = list(_SALA.get('fila_sim') or [])
+    if not fila:
+        return 'SALA  no hay fila de prueba: pulsa antes Simformarfila'
+    sig = casillas_fila_sim(c, fila[0], len(fila) + 1)
+    if len(sig) <= len(fila):
+        return 'SALA  la fila de prueba no cabe mas en la sala'
+    x, y = casilla_xy(c, sig[-1])
+    t.appendRow(['%.3f' % x, '%.3f' % y, '%.2f' % ALTURA_SIM])
+    _SALA['fila_sim'] = sig
+    _SALA['t_img'] = -99.0
+    return 'SALA  una persona mas en la casilla %d: fila de %d   personas simuladas: %d' % (
+        sig[-1], len(sig), t.numRows - 1)
+
+
+def _legend_fila(W, c):
+    """FILA y ESCISION (fase 29): la fila mas larga de la sala y la ultima escision."""
+    now = _SALA.get('t_personas') or absTime.seconds
+    modo = MODOS_FILA[int(c['modo_fila']) % len(MODOS_FILA)]
+    filas = _SALA.get('filas') or []
+    if filas:
+        f = max(filas, key=lambda x: (x['personas'], -x['id']))
+        l1 = '  FILA     %d personas   %s   %.1f/%.1f s' % (
+            f['personas'], modo, min(c['t_fila'], max(0.0, now - f['t0'])), c['t_fila'])
+        if len(filas) > 1:
+            l1 += '   (%d filas)' % len(filas)
+    else:
+        l1 = '  FILA     -   %s   (desde %d personas, %g s)' % (modo, int(c['min_fila']), c['t_fila'])
+    esc = W['escisiones']
+    if esc:
+        e = esc[-1]
+        l2 = '  ESCISION #%d   celda %d   conchas %d/%d   %s' % (
+            e['id'], e['origen'], len(e['cortadas']), n_shells(W), e['estado'])
+    else:
+        l2 = '  ESCISION -'
+    pend = [f for f in filas if f['escision'] is None]
+    if pend:
+        f = max(pend, key=lambda x: now - x['t0'])
+        l2 += '   (sin abrir: fila %.1f/%.1f s)' % (max(0.0, now - f['t0']), c['t_fila'])
+    return l1 + '\n' + l2
 
 
 def dia(frame=None):
@@ -14370,6 +14764,8 @@ def _legend():
         lines.append(_legend_banda(W, c))
     if lvl >= 28:
         lines.append(_legend_noche(W, c))
+    if lvl >= 29:
+        lines.append(_legend_fila(W, c))
     return '\n'.join(lines)
 
 

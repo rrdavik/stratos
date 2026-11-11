@@ -12,6 +12,7 @@
 | 26 | `fase26_borrado.py` | Borrado: la erosión borra las inclusiones que quedan sobre su escalón | v85 |
 | 27 | `fase27_clasificacion.py` | Clasificación al enterrar: estrato humano o concha limpia, y el colapso | v86 |
 | 28 | `fase28_noche.py` | Noche de enterramiento: la esfera se apaga y emiten las inclusiones horneadas | v87 |
+| 29 | `fase29_fila.py` | Fila y escisión colectiva: un hueco permanente con su fulgurita | v88 |
 
 ---
 
@@ -317,6 +318,79 @@ Con inclusiones vivas (`Probllegada` 1 y `Simponer`), `Forzarciclo`: el planeta 
 ### Pruebas pendientes en TouchDesigner
 
 Que nada parpadee al entrar en la noche (no debe recompilarse ningún shader), y que el fondo del render sea negro. Si algún material Phong o constante sigue viéndose de noche, dímelo: es una geometría que no pasa por las luces ni por las capas de la lista.
+
+---
+
+## FASE 29 · Fila y escisión colectiva
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/fase29_fila.py').read())
+```
+
+### Qué hace
+
+Lo único que el público puede hacer a propósito, y solo entre varios: una fila sostenida abre una **escisión**, un pozo que atraviesa las conchas del planeta y que ya no se cierra.
+
+- **Fila:** `Minfila` personas o más (3) en casillas contiguas (diagonales incluidas), sostenida `Tfila` segundos (5) sobre la ocupación binaria de la fase 24. `Modofila` = `cadena` (cualquier forma contigua, por defecto) o `recta` (todas las casillas en una misma fila, columna o diagonal de la rejilla, seguidas). La fila es una componente conexa de casillas ocupadas; se reconoce de una imagen a la siguiente si comparte alguna casilla con la de antes. Cuenta personas, no casillas. **Puede haber varias filas a la vez en la sala, cada una con su escisión** (P14).
+- **Origen:** la casilla de la fila con el `t_ocupada` más antiguo. La escisión se abre en la celda que mira a esa casilla en el instante en que la fila cumple `Tfila`, y esa celda queda fija para esa escisión aunque el planeta gire.
+- **Profundidad:** personas × `Conchasporpersona` losetas de la columna de origen, con el núcleo como tope. Si se suman personas mientras la fila aguanta, la misma escisión baja más (la profundidad sigue al máximo de personas visto; si se van, no sube). Esa fila solo abre otra escisión cuando se deshace (menos de `Minfila` personas, o deja de ser recta con `Modofila` recta): entonces la escisión queda `cerrada`. Al enterrar su mundo queda `enterrada` y ya no baja más.
+- **Permanencia:** es un hueco. Quita losetas de la columna de origen (como `cut`, con radio 0), vacía la celda y **borra sus inclusiones** (es un corte, P7; causa `escision` en la leyenda `BORRADO`). No cuenta en el tope por mundo de los cortes (`quitadas`), no enciende cicatriz cian, ignora `Colmatacion` en su celda y la concha siguiente la tapiza sin cerrarla. La fase 13 no la llena (no es un lago) y la fase 16 no pone fósiles en ella (no cuenta como corte).
+- **Balance:** no pasa por `erosion()` ni por `pulso()`: no es erosión ni creación para la fase 23.
+- **Aspecto (fulgurita):** una pieza por concha atravesada, de la superficie al fondo de la escisión, en su propia geometría (`fulguritas`): cuatro paredes exteriores de arena fundida (granuladas y mates), cuatro láminas de vidrio por dentro (rugosidad 0,07; dejan pasar la luz del núcleo y brillan en el borde) y un núcleo emisivo de la paleta humana, sin el cian de los cortes. En cada concha que cruza se ramifica: dos o tres ramas finas del núcleo hacia las paredes, decididas por el mapa logístico (con la escisión y la concha como semilla). **Las ramas son solo visuales y no quitan material** (P11). Lo que queda bajo el tapiz de una concha posterior no se dibuja, pero se guarda. En la noche de enterramiento (fase 28) el vidrio y el núcleo brillan.
+
+Las filas son del sensor (`_SALA['filas']`, en el módulo); las escisiones son mundo (`W['escisiones']`, con `W['escision_n']`, el correlativo de la exposición, y `W['esc_celdas']`, las celdas con hueco).
+
+### Operadores (en `/project1/FASE1`)
+
+| Operador | Qué es |
+|---|---|
+| `escisiones` | Table DAT, como `ciclos`: `id`, `jornada`, `ciclo`, `hora`, `personas`, `conchas` (cruzadas), `celda`, `estado` (abierta, cerrada, enterrada), `testigo`. Las últimas 200 |
+| `i_fulguritas`, `fulguritas` | Script CHOP y Geometry COMP instanciado (cajas), con `mat_piel_vidrio` (familia `vidrio` del shader de la piel: el alfa lleva rugosidad + 2 × parte, 0 pared, 1 vidrio, 2 núcleo) |
+
+### Parámetros (página Fase29)
+
+`Minfila` 3 · `Tfila` 5 s · `Modofila` cadena · `Conchasporpersona` 1 · `Simsumar` (añade una persona contigua a la fila simulada)
+
+### Leyenda
+
+```
+FILA     4 personas   cadena   5.0/5.0 s
+ESCISION #3   celda 40   conchas 4/12   abierta   (sin abrir: fila 2.1/5.0 s)
+```
+
+`conchas 4/12`: las que cruza, de las que tiene el planeta. Entre paréntesis, la fila que todavía no ha cumplido `Tfila`.
+
+### Probar sin cámara
+
+Con varias conchas (`Forzarciclo` unas cuantas veces): `Fuente` = simulada, `Simfila` 3 y `Simformarfila` (fase 24). A los 5 s se abre un pozo de 3 conchas con su fulgurita en la celda que miraba la casilla más antigua. `Simsumar`: baja una más. `Simvaciar` y otra fila: otra escisión. `Forzarciclo`: el pozo queda tapizado y sigue abierto.
+
+### Autoprueba
+
+- `es_recta`; 3 personas en cadena en L durante `Tfila`: escisión; con `Modofila` recta, no; en línea, sí;
+- 2 personas: no hay fila; una fila que se rompe a `Tfila` − 0,1 s: nada, y al rehacerse empieza de cero;
+- el origen es la casilla ocupada desde hace más tiempo, y la celda no cambia al girar el planeta;
+- 3 personas quitan 3 losetas y vacían la celda; 2 más mientras aguanta: 5, la misma escisión; si se van, no sube; con 4 losetas y 6 personas, se para en el núcleo; `Conchasporpersona` 2;
+- el balance, `ero_resto`, `quitadas` y las cicatrices no cambian; las inclusiones de la celda se borran (causa `escision`);
+- la fila se deshace y se forma otra: escisión nueva; dos filas a la vez: dos escisiones;
+- la concha siguiente la tapiza sin cerrarla, también con `Colmatacion` 1 (un corte normal sí se rellena); no cuenta como corte ni como lago;
+- la fulgurita: por concha, 4 paredes, 4 vidrios, un núcleo y 2 o 3 ramas, entre el fondo y el borde del hueco; ninguna pieza cian; las ramas no quitan losetas; bajo el tapiz no se dibuja; `i_fulguritas` en el render;
+- `Simformarfila` y `Simsumar` por la sala simulada, la tabla `escisiones`, las líneas `FILA` y `ESCISION`, y la escisión enterrada con su mundo.
+
+`xvfb-run -a python3 pruebas/glsl_piel.py` compila el shader con la familia vidrio.
+
+### Decisiones tomadas en la fase 29
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Cuántas piezas de fulgurita se ven tras un entierro? | Las conchas atravesadas, en proporción a lo que queda del hueco a la vista (el tapiz tapa las de abajo) |
+| ¿Cuándo deja de bajar una escisión? | Al deshacerse la fila o al enterrar su mundo; una fila que sigue en pie tras el entierro no abre otra hasta deshacerse |
+| ¿Dos filas que se juntan? | La componente nueva hereda la primera fila que comparte casilla; la otra se da por deshecha y su escisión se cierra |
+| ¿La jornada y la hora? | La fecha y la hora del sistema al abrirse (P13), hasta que D5 defina la jornada |
+| ¿El lago? | Se comprueba la regla en el código; con un río de verdad acabando en la escisión, en TouchDesigner |
+
+### Pruebas pendientes
+
+Que la escisión se lea desde la cámara de globo (un pozo de una celda de ancho: la noche y el núcleo emisivo ayudan); `Tfila` y `Minfila` en sala; un río que acabe en una escisión (no debe llenarla).
 
 ---
 

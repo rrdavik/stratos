@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v70'
+VERSION_COMUN = 'comun v71'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1014,6 +1014,8 @@ void main()
     bool tierra = fam > 2.5 && fam < 3.5;
     bool agua = fam > 3.5 && fam < 4.5;
     bool plastico = fam > 4.5 && fam < 5.5;     // fase 25: las inclusiones de las personas
+    bool vidrio = fam > 5.5;                    // fase 29: la fulgurita de una escision
+    float parte = 0.0;                          // 0 pared de arena fundida, 1 vidrio, 2 nucleo
     // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
     vec3 emis = vec3(0.0);
@@ -1315,6 +1317,21 @@ void main()
         wrap = 0.35;
         amb = 1.3;
         sombra = 0.0;
+    } else if (vidrio) {
+        // fase 29: la fulgurita. El alfa trae rugosidad + 2 x parte
+        parte = nivelv;
+        if (parte < 0.5) {
+            // la pared exterior: arena fundida, granulada y mate
+            base *= 0.70 + 0.55 * ruido(iVert.pPos * 110.0);
+            rug = 0.9;
+        } else if (parte < 1.5) {
+            rug = clamp(rug, 0.05, 0.10);       // el interior vitreo
+        } else {
+            rug = 0.10;                         // el nucleo
+        }
+        expo = mix(120.0, 6.0, rug);
+        ks = mix(1.2, 0.03, rug);
+        sombra = 0.0;
     } else {
         // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
         base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
@@ -1385,6 +1402,13 @@ void main()
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
         float tras = pow(max(dot(-l0, v), 0.0), 2.0);
         col += 0.30 * tras * base * uLuz0Col.rgb + fres * 0.25 * (base + vec3(0.2));
+    } else if (vidrio) {
+        // fase 29: el nucleo emite el color de su escision (paleta humana, nunca cian);
+        // el vidrio deja pasar esa luz y brilla en el borde; la pared, mate
+        if (parte > 1.5)
+            col = base * 1.6 + fres * vec3(0.30);
+        else if (parte > 0.5)
+            col = col * 0.35 + base * 0.45 + fres * (base + vec3(0.35)) + spec * 0.8;
     } else if (!tierra) {
         // mineral: la obsidiana pulida tiene un reflejo de borde frio
         col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
@@ -1401,6 +1425,8 @@ void main()
         // supervivientes recien horneadas (las motas de la concha nueva)
         col *= 1.0 - uNoche.x;
         col += uNoche.x * reciente * humano * base * 1.3;
+        if (vidrio && parte > 0.5)      // fase 29: las paredes de las escisiones brillan en la noche
+            col += uNoche.x * base * (parte > 1.5 ? 1.6 : 0.7);
     }
     // fase 19: saturacion del modular -> fracturas y glitch en los materiales
     float gl = uGlitch.x;
