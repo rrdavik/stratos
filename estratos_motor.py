@@ -63,6 +63,9 @@
 #                 Motor v81, fase 22: la camara cenital (casilla probable):
 #                 la densidad de cada casilla del suelo, el mapeo sala ->
 #                 planeta y el sorteo (mapa logistico) de cada senal.
+#                 Motor v82, fase 23: la luz de la sala: el balance entre
+#                 erosion y creacion, el bano, el estroboscopio con su
+#                 limitador de destellos, la noche del fin de ciclo y el colapso.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -75,7 +78,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v81'
+MOTOR_VERSION = 'motor v82'
 
 import math
 
@@ -287,6 +290,9 @@ DEFAULT_CFG = dict(
     ancho_sala=5.4, fondo_sala=4.5, tam_casilla=0.5, desenfoque=1.0, ocupacion_llena=0.6,
     subida=2.0, bajada=5.0, lon_central=0.0, ancho_angular=180.0, lat_norte=90.0, lat_sur=-90.0,
     espejo=0, sim_casilla=0,
+    # fase 23: la luz de la sala
+    ventana_balance=30.0, umbral_estrobo=1.0, salida_estrobo=0.8, max_hz=3.0, noche=4.0, colapso_on=0,
+    max_erosion=15.0, sim_balance=-1.0, interfaz_dmx=0, universo_dmx=0,
 )
 
 
@@ -1049,7 +1055,10 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['rebrote'][i] = 0                 # fase 15: una nota completa el rebrote
     if cfg['nivel'] >= 12:              # fase 12: la velocidad da el material
         W['ev']['mod'] = dict(s=s, celda=i, vel=int(vel), rug=rugosidad(cfg, vel), gate=None, efecto='')
+    antes = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     res = grow(W, cfg, i, s, vel, now)
+    if cfg['nivel'] >= 23:              # fase 23: los escalones ganados, al balance
+        balance_suma(W, cfg, now, crea=sum(W['occ']) - antes)
     gate_piel(W, cfg, i, now)           # fase 11: el gate adelanta las obras
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
     W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now,
@@ -1247,10 +1256,14 @@ def close_cycle(W, cfg, now, motivo):
               segundos=max(0.0, now - t0) if t0 is not None else 0.0,
               motivo=motivo, madurez=W['madurez'], novedad=W['novedad'],
               territorio=W.get('territorio', 0.0), t=now)
+    if cfg['nivel'] >= 23:              # fase 23: el balance al cerrar
+        ev['balance'] = balance(W, cfg, now)
     apagar_destructores(W)              # fase 14: el fin de ciclo lo cierra de golpe
     if end_cycle(W, cfg, now, bars):
         ev['grosor'] = shell_th(W['shells'][-1], cfg)
         W['foto_anterior'] = snapshot(W, cfg)
+    if cfg['nivel'] >= 23:              # fase 23: un destello y la sala a oscuras
+        sala_fin_ciclo(W, cfg, now)
     W['aviso'] = 'fin de ciclo %d: %s a los %d compases' % (ev['ciclo'], motivo, bars)
     W['compases_ciclo'] = 0
     W['quietos'] = 0
@@ -1440,6 +1453,7 @@ def erosion(W, cfg, pad, vel, now, target=None):
     removed = 0
     W['t'] = W['t'] if W['t'] is not None else now
     resto = W['ero_resto']
+    antes23 = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     mic = pad == PAD_MIC                # fase 21: el microfono baja escalones enteros
     notas = erosion_notes(cfg, red, vel) if not mic else float(red)
     tematico = cfg['nivel'] >= 14 and es_aranazo(cfg, pad)
@@ -1466,6 +1480,8 @@ def erosion(W, cfg, pad, vel, now, target=None):
         elif depth > 0:
             ev['corte'] = cut(W, cfg, target, depth, rad, now)
         W['flash'] = dict(t=now, cell=target, k=1.0 if depth > 0 else 0.35, pad=pad)
+    if cfg['nivel'] >= 23:              # fase 23: los escalones perdidos (con su corte), al balance
+        balance_suma(W, cfg, now, eros=antes23 - sum(W['occ']))
     return ev
 
 
@@ -1574,10 +1590,13 @@ def impulso(W, cfg, pad, vel, now):
     occ0 = W['occ'][target]
     s = W['own'][target] if occ0 > 0 and W['own'][target] else seq_de_objetivo(W, cfg, pad)
     desbordes = []
+    antes = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     for _ in range(n):                  # uno detras de otro, con las reglas de siempre
         j = pulso(W, cfg, target, s, vel, now)
         if j is not None:
             desbordes.append(j)
+    if cfg['nivel'] >= 23:              # fase 23: el bombo y el tom son creacion
+        balance_suma(W, cfg, now, crea=sum(W['occ']) - antes)
     W['ruina'][target] = 0              # fase 14: construir sobre la huella la borra
     W['rebrote'][target] = 0            # fase 15: completa el rebrote
     # la altura nueva, de golpe: sin suavizado ni stop-motion (y sin el rebote
@@ -2049,6 +2068,9 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         if dt > 0:
             W['foto_dt'] = dt
         impulso_tick(W, cfg, now)
+    if cfg['nivel'] >= 23:              # fase 23: la luz de la sala y el colapso
+        if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo']:
+            out['ciclo'] = close_cycle(W, cfg, now, 'colapso')
     giro_step(W, cfg, dt, tempo)
     return out
 
@@ -10516,10 +10538,13 @@ def ruido_tick(W, cfg, now):
     celda = r['onsets'][-1][2]
     prof = max(1, int(cfg['prof_mic']))
     union = None
+    antes = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     if cfg['nivel'] >= 16:
         fuera, union = corte_tematico(W, cfg, celda, prof, 1, now)
     else:
         fuera = cut(W, cfg, celda, prof, 1, now)
+    if cfg['nivel'] >= 23:              # fase 23: el corte del ruido de sala es erosion
+        balance_suma(W, cfg, now, eros=antes - sum(W['occ']))
     r['onsets'] = []
     r['total'] = 0.0
     r['cortes'] += 1
@@ -10878,6 +10903,256 @@ def sala_sim_imagen(cfg, personas):
         cuerpo = np.where(d2 <= 1.0, alto - HOMBROS_SIM * d2, 0.0)
         a[f0:f1, c0:c1] = np.maximum(a[f0:f1, c0:c1], cuerpo)
     return a
+
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la luz de la sala (fase 23): balance, bano, estroboscopio y colapso
+# -----------------------------------------------------------------------------
+# La sala se ilumina con el estado del planeta. En una ventana de Ventanabalance
+# segundos se compara la ocupacion destruida con la depositada, en escalones de
+# ocupacion (D6): el BALANCE es erosion / creacion. La erosion suma los pads de
+# erosion (caja y aranazos), sus cortes y el microfono; la creacion, las notas
+# de los secuenciadores y los pulsos del bombo y el tom.
+#   deposito   (balance < 0,5)  casi a oscuras: ambar tenue que respira con
+#              cada nota depositada.
+#   tension    (0,5 a 1)        la intensidad sube y vira a blanco frio; cada
+#              onset del microfono anade un pulso breve.
+#   erosion dominante (> 1)     estroboscopio blanco; su frecuencia crece con el
+#              exceso, hasta Maxhz. Entra con Umbralestrobo y sale por debajo de
+#              Salidaestrobo (histeresis).
+#   fin de ciclo               un unico destello blanco y oscuridad durante
+#              Noche segundos (D7).
+# SEGURIDAD (no son parametros que se puedan saltar): como mucho DESTELLOS_MAX
+# (3) destellos en cualquier ventana de 1 s, contando TODOS los de la sala en un
+# solo limitador (el relampago de la fase 30 pasa por el con prioridad: espera
+# al primer hueco y el estroboscopio cede ese destello); el estroboscopio solo
+# destella en blanco; el fin de ciclo lo apaga. Cada destello queda en
+# W['sala']['destellos'] para que el microfono descarte su clic.
+# El colapso (D8), apagado por defecto: con Colapsoon, Maxerosion segundos
+# seguidos con el balance por encima de 1 cierran el ciclo con el motivo
+# 'colapso'. 'estancado' no es colapso.
+
+DESTELLOS_MAX = 3               # destellos por segundo de toda la sala (WCAG 2.3.1): tope duro
+VENTANA_DESTELLOS = 1.0
+DUR_DESTELLO = 0.05             # lo que dura encendido un destello (s)
+ESTADOS_SALA = ['deposito', 'tension', 'erosion dominante']
+DEPOSITO, TENSION, DOMINANTE = 0, 1, 2
+BALANCE_TENSION = 0.5
+BALANCE_COLAPSO = 1.0           # el colapso cuenta el tiempo con el balance por encima de 1
+BALANCE_SIN_CREACION = 99.0     # erosion sin creacion en la ventana
+COL_AMBAR = (1.0, 0.62, 0.22)
+COL_FRIO = (0.82, 0.90, 1.0)
+BANO_SUAVE = 0.4                # s con los que el bano persigue a su estado
+INTERFACES_DMX = ['artnet', 'usbpro']
+DMX_COLS = ['canal', 'funcion', 'foco']
+# funciones de un canal: el bano con dimmer aparte (bano_dimmer + bano_rojo...), o
+# con la intensidad en el color (bano_r, bano_g, bano_b), y el estroboscopio
+FUNCIONES_DMX = ['bano_dimmer', 'bano_rojo', 'bano_verde', 'bano_azul', 'bano_r', 'bano_g', 'bano_b', 'estrobo']
+DMX_DEFECTO = ([[4 * k + j + 1, f, 'bano%d' % (k + 1)] for k in range(4)
+                for j, f in enumerate(FUNCIONES_DMX[:4])] + [[17, 'estrobo', 'estrobo']])
+SALA_BASE = dict(bal=[], estado=DEPOSITO, balance=0.0, hz=0.0, estrobo_t=-99.0, ultimo=None, pend=None,
+                 noche=None, desde=None, t_nota=-99.0, bano=[0.0, 0.0, 0.0, 0.0], t_luz=None, n=0,
+                 cedidos=0)
+
+
+def sala_de(W):
+    """W['sala'], con las claves de la fase 23."""
+    s = W['sala']
+    for k, v in SALA_BASE.items():
+        if k not in s:
+            s[k] = list(v) if isinstance(v, list) else v
+    return s
+
+
+def balance_suma(W, cfg, now, crea=0, eros=0):
+    """Apunta escalones de ocupacion ganados (crea) o perdidos (eros)."""
+    if crea <= 0 and eros <= 0:
+        return
+    s = sala_de(W)
+    s['bal'].append([now, max(0, int(crea)), max(0, int(eros))])
+    if crea > 0:
+        s['t_nota'] = now
+
+
+def balance(W, cfg, now):
+    """Erosion entre creacion en la ventana de Ventanabalance s. Sin creacion y con
+    erosion, erosion dominante (BALANCE_SIN_CREACION); sin nada, 0. Simbalance >= 0
+    lo fuerza."""
+    s = sala_de(W)
+    v = max(0.0, cfg['ventana_balance'])
+    s['bal'] = [e for e in s['bal'] if 0.0 <= now - e[0] <= v]
+    if cfg['sim_balance'] >= 0.0:
+        b = float(cfg['sim_balance'])
+    else:
+        crea = sum(e[1] for e in s['bal'])
+        eros = sum(e[2] for e in s['bal'])
+        b = eros / float(crea) if crea > 0 else (BALANCE_SIN_CREACION if eros > 0 else 0.0)
+    s['balance'] = b
+    return b
+
+
+def estado_sala(W, cfg, now=None, b=None):
+    """El estado de la luz (DEPOSITO, TENSION o DOMINANTE) con histeresis: entra
+    en erosion dominante con Umbralestrobo y no sale hasta bajar de Salidaestrobo."""
+    s = sala_de(W)
+    if b is None:
+        b = balance(W, cfg, now if now is not None else (W.get('t') or 0.0))
+    entra = cfg['umbral_estrobo']
+    sale = min(cfg['salida_estrobo'], entra)
+    if s['estado'] == DOMINANTE:
+        dom = b >= sale
+    else:
+        dom = b >= entra
+    s['estado'] = DOMINANTE if dom else (TENSION if b >= BALANCE_TENSION else DEPOSITO)
+    return s['estado']
+
+
+def en_noche(W, now):
+    n = W['sala'].get('noche')
+    return bool(n) and n[0] <= now < n[1]
+
+
+def destellos_ventana(W, now):
+    """Destellos de toda la sala en la ultima ventana de 1 s."""
+    return sum(1 for t in W['sala']['destellos'] if 0.0 <= now - t <= VENTANA_DESTELLOS)
+
+
+def _hueco(W, cfg, now):
+    tope = min(DESTELLOS_MAX, int(math.floor(cfg['max_hz'] + 1e-9)))
+    return destellos_ventana(W, now) < tope
+
+
+def _destello(W, now, quien):
+    s = sala_de(W)
+    s['destellos'].append(now)
+    s['destellos'] = [t for t in s['destellos'] if now - t <= 5.0]
+    s['ultimo'] = dict(t=now, quien=quien)
+    s['n'] += 1
+    if quien == 'relampago':
+        s['t_relampago'] = now
+    return True
+
+
+def limitador_destellos(W, cfg, now, quien='estrobo', prioridad=False):
+    """El limitador comun de destellos: concede uno si en la ultima ventana de 1 s
+    hay menos de DESTELLOS_MAX (y de Maxhz). Con prioridad (el relampago y el fin de
+    ciclo), si no hay hueco el destello queda pendiente: sale en el primero, y el
+    estroboscopio cede. Devuelve si el destello ha salido ahora."""
+    s = sala_de(W)
+    if s['pend'] and not prioridad:
+        return False                    # el estroboscopio cede el hueco al pendiente
+    if _hueco(W, cfg, now):
+        if prioridad and s['pend']:
+            s['pend'] = None
+        return _destello(W, now, quien)
+    if prioridad and not s['pend']:
+        s['pend'] = dict(t=now, quien=quien)
+    return False
+
+
+def hz_estrobo(cfg, b):
+    """Destellos por segundo del estroboscopio: crece con el exceso del balance
+    sobre Salidaestrobo, hasta Maxhz (y nunca mas de DESTELLOS_MAX)."""
+    entra = cfg['umbral_estrobo']
+    sale = min(cfg['salida_estrobo'], entra)
+    x = (b - sale) / max(1e-6, 2.0 * (entra - sale)) if entra > sale else 1.0
+    return min(DESTELLOS_MAX, max(0.0, cfg['max_hz'])) * max(0.0, min(1.0, x))
+
+
+def sala_luz_tick(W, cfg, now):
+    """Cada fotograma: el balance y el estado, el destello pendiente, el
+    estroboscopio y el colapso. Devuelve 'colapso' si toca cerrar el ciclo."""
+    s = sala_de(W)
+    b = balance(W, cfg, now)
+    est = estado_sala(W, cfg, now, b)
+    noche = en_noche(W, now)
+    if s['noche'] and now >= s['noche'][1]:
+        s['noche'] = None
+    if s['pend'] and _hueco(W, cfg, now):           # el destello con prioridad, en el primer hueco
+        quien = s['pend']['quien']
+        s['pend'] = None
+        _destello(W, now, quien)
+        if s['hz'] > 0.0:               # era el hueco del estroboscopio: lo cede y espera su turno
+            s['cedidos'] += 1
+            s['estrobo_t'] = now
+    s['hz'] = hz_estrobo(cfg, b) if est == DOMINANTE and not noche else 0.0
+    if s['hz'] > 0.0 and now - s['estrobo_t'] >= 1.0 / s['hz'] - 1e-9:
+        if limitador_destellos(W, cfg, now, 'estrobo'):
+            s['estrobo_t'] = now
+    # el bano persigue a su estado
+    obj = _bano_objetivo(W, cfg, now, b, est, noche)
+    dt = 0.0 if s['t_luz'] is None else max(0.0, min(0.25, now - s['t_luz']))
+    s['t_luz'] = now
+    a = 1.0 if noche or s['bano'] == [0.0, 0.0, 0.0, 0.0] else 1.0 - math.exp(-dt / BANO_SUAVE)
+    s['bano'] = [x + (o - x) * a for x, o in zip(s['bano'], obj)]
+    # colapso (D8)
+    if cfg['colapso_on'] and b > BALANCE_COLAPSO and not noche:
+        if s['desde'] is None:
+            s['desde'] = now
+        if now - s['desde'] >= cfg['max_erosion']:
+            s['desde'] = None
+            return 'colapso'
+    else:
+        s['desde'] = None
+    return None
+
+
+def _bano_objetivo(W, cfg, now, b, est, noche):
+    if noche:
+        return [0.0, 0.0, 0.0, 0.0]
+    s = W['sala']
+    if est == DEPOSITO:
+        return list(COL_AMBAR) + [0.04 + 0.10 * math.exp(-max(0.0, now - s['t_nota']) / 0.8)]
+    x = 1.0 if est == DOMINANTE else max(0.0, min(1.0, (b - BALANCE_TENSION) / BALANCE_TENSION))
+    return [a + (f - a) * x for a, f in zip(COL_AMBAR, COL_FRIO)] + [0.15 + 0.55 * x]
+
+
+def bano_valor(W, cfg, now):
+    """(r, g, b, intensidad) del bano de luz, 0-1: el del estado mas, fuera del
+    deposito, un pulso breve por cada onset del microfono. A oscuras en la noche."""
+    s = sala_de(W)
+    if en_noche(W, now):
+        return (0.0, 0.0, 0.0, 0.0)
+    r, g, b_, dim = s['bano']
+    if s['estado'] != DEPOSITO:
+        dim += 0.25 * math.exp(-max(0.0, now - W['mic']['t']) / 0.15)
+    return (r, g, b_, max(0.0, min(1.0, dim)))
+
+
+def destello_valor(W, now):
+    """1 mientras dura un destello (blanco: r = g = b), 0 si no."""
+    u = W['sala'].get('ultimo')
+    return 1.0 if u and 0.0 <= now - u['t'] < DUR_DESTELLO else 0.0
+
+
+def color_destello(W, now):
+    v = destello_valor(W, now)
+    return (v, v, v)                    # solo blanco
+
+
+def sala_fin_ciclo(W, cfg, now):
+    """Al enterrar: un unico destello blanco (con prioridad), el estroboscopio
+    apagado y la sala a oscuras durante Noche s. El balance empieza de cero con
+    el mundo nuevo."""
+    s = sala_de(W)
+    s['bal'] = []
+    s['estado'] = DEPOSITO
+    s['hz'] = 0.0
+    s['desde'] = None
+    s['estrobo_t'] = now
+    s['bano'] = [0.0, 0.0, 0.0, 0.0]
+    limitador_destellos(W, cfg, now, 'fin de ciclo', prioridad=True)
+    s['noche'] = [now, now + max(0.0, cfg['noche'])]
+
+
+def valores_dmx(W, cfg, now, filas):
+    """El valor 0-255 de cada fila [canal, funcion, foco] de dmx_canales."""
+    r, g, b_, dim = bano_valor(W, cfg, now)
+    fl = destello_valor(W, now)
+    v = dict(bano_dimmer=dim, bano_rojo=r, bano_verde=g, bano_azul=b_, bano_r=r * dim, bano_g=g * dim,
+             bano_b=b_ * dim, estrobo=fl)
+    return [int(round(255.0 * max(0.0, min(1.0, v.get(str(f[1]).strip(), 0.0))))) for f in filas]
 
 
 
@@ -11252,6 +11527,16 @@ def cfg():
                  ancho_angular=max(0.0, min(360.0, _p('Anchoangular', c['ancho_angular']))),
                  lat_norte=_p('Latnorte', c['lat_norte']), lat_sur=_p('Latsur', c['lat_sur']),
                  espejo=int(_p('Espejo', False)), sim_casilla=max(0, int(_p('Simcasilla', 0))))
+    if c['nivel'] >= 23:
+        c.update(ventana_balance=max(1.0, _p('Ventanabalance', c['ventana_balance'])),
+                 umbral_estrobo=max(0.1, _p('Umbralestrobo', c['umbral_estrobo'])),
+                 salida_estrobo=max(0.0, _p('Salidaestrobo', c['salida_estrobo'])),
+                 max_hz=max(0.0, min(float(DESTELLOS_MAX), _p('Maxhz', c['max_hz']))),
+                 noche=max(0.0, _p('Noche', c['noche'])), colapso_on=int(_p('Colapsoon', False)),
+                 max_erosion=max(1.0, _p('Maxerosion', c['max_erosion'])),
+                 sim_balance=_p('Simbalance', c['sim_balance']),
+                 interfaz_dmx=_menu('Interfazdmx', INTERFACES_DMX, c['interfaz_dmx']),
+                 universo_dmx=max(0, int(_p('Universodmx', c['universo_dmx']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -11511,7 +11796,7 @@ def midi_sysex(b):
 # --- fin de ciclo ------------------------------------------------------------
 
 CICLOS_COLS = ['ciclo', 'compases', 'segundos', 'motivo', 'madurez', 'novedad', 'grosor',
-               'territorio']
+               'territorio', 'balance']
 CICLOS_MAX = 200
 
 
@@ -11528,7 +11813,8 @@ def registrar_ciclo(W, c, ev):
                     motivo=ev['motivo'], madurez='%.2f' % ev['madurez'],
                     novedad='%.2f' % ev['novedad'],
                     grosor='%.3f' % ev['grosor'] if 'grosor' in ev else '',
-                    territorio='%.2f' % ev.get('territorio', 0.0))
+                    territorio='%.2f' % ev.get('territorio', 0.0),
+                    balance='%.2f' % ev['balance'] if 'balance' in ev else '')
         cab = [t[0, k].val for k in range(t.numCols)]     # por nombre de columna
         t.appendRow([vals.get(k, '') for k in cab])
         while t.numRows > CICLOS_MAX + 1:
@@ -11554,6 +11840,13 @@ def frame_tick():
     if c['nivel'] >= 21:                # fase 21: el microfono, antes del mundo
         mic_tick(W, c, now)
     res = tick(W, c, now, tempo(), playing())
+    if c['nivel'] >= 23:                # fase 23: los valores DMX de este fotograma
+        o = parent().op('dmx_valores')
+        if o is not None:
+            try:
+                o.cook(force=True)
+            except Exception as e:
+                _say('dmx_valores', 'AVISO  dmx_valores: %s' % e)
     _CACHE['nivel'] = c['nivel']        # fase 17: para la luz y las ventanas del shader
     _CACHE['modular'] = dict(W['modular']) if c['nivel'] >= 19 else None
     _CACHE['ventanas'] = ventanas_luz_de(W, c)
@@ -12228,6 +12521,124 @@ def _legend_camara(W, c):
     return txt
 
 
+# --- la luz de la sala (fase 23) -------------------------------------------------
+
+def dmx_filas():
+    """Las filas [canal, funcion, foco] de la tabla dmx_canales."""
+    t = parent().op('dmx_canales')
+    out = []
+    if t is None:
+        return out
+    for r in range(1, t.numRows):
+        try:
+            out.append([int(float(t[r, 0].val)), t[r, 1].val, t[r, 2].val if t.numCols > 2 else ''])
+        except Exception:
+            pass
+    return out
+
+
+def dmx_cook(scriptOp):
+    """onCook del Script CHOP dmx_valores: un canal por canal DMX (c1, c2...),
+    hasta el mayor de dmx_canales, con su valor 0-255."""
+    W, c = world(), cfg_foto()
+    filas = dmx_filas()
+    vals = valores_dmx(W, c, absTime.seconds, filas) if c['nivel'] >= 23 else [0] * len(filas)
+    n = max([f[0] for f in filas] or [0])
+    canales = [0.0] * n
+    for f, v in zip(filas, vals):
+        if 1 <= f[0] <= n:
+            canales[f[0] - 1] = max(canales[f[0] - 1], float(v))
+    _sin_timeslice(scriptOp)
+    scriptOp.clear()
+    scriptOp.numSamples = 1
+    for k, v in enumerate(canales):
+        scriptOp.appendChan('c%d' % (k + 1))[0] = v
+
+
+def luz_sala(que, k=0, frame=None):
+    """Para quien quiera la luz de la sala sin DMX (la sala virtual): 'bano' (k =
+    0 r, 1 g, 2 b, 3 intensidad), 'destello' (0 o 1), 'balance', 'estado', 'noche'."""
+    W, c = world(), cfg_foto()
+    now = absTime.seconds
+    if c['nivel'] < 23:
+        return 0.0
+    if que == 'bano':
+        return float(bano_valor(W, c, now)[int(k)])
+    if que == 'destello':
+        return destello_valor(W, now)
+    if que == 'balance':
+        return float(sala_de(W)['balance'])
+    if que == 'estado':
+        return float(sala_de(W)['estado'])
+    if que == 'noche':
+        return 1.0 if en_noche(W, now) else 0.0
+    return 0.0
+
+
+def dmx_encontrado():
+    """(si, texto) del DMX Out CHOP dmx_out: activo y sin errores."""
+    o = parent().op('dmx_out')
+    if o is None:
+        return False, 'sin dmx_out'
+    try:
+        err = o.errors()
+    except Exception:
+        err = ''
+    if err:
+        return False, err.splitlines()[0]
+    try:
+        if not o.par.active.eval():
+            return False, 'apagado'
+    except Exception:
+        pass
+    return True, INTERFACES_DMX[int(cfg_foto().get('interfaz_dmx', 0)) % len(INTERFACES_DMX)]
+
+
+def interfaz_dmx_al_dia(nombre=None):
+    """Lleva Interfazdmx al menu Interface del DMX Out CHOP (sus nombres pueden
+    variar entre versiones de TouchDesigner). Devuelve si lo ha conseguido."""
+    o = parent().op('dmx_out')
+    nombre = str(nombre or _p('Interfazdmx', 'artnet'))
+    if o is None:
+        return False
+    p = getattr(o.par, 'interface', None)
+    if p is None:
+        return False
+    quiere = dict(artnet=['artnet', 'art-net'], usbpro=['usbpro', 'enttecusbpro', 'enttec', 'usbpromk2'])
+    try:
+        nombres = [str(x).lower() for x in p.menuNames]
+        for w in quiere.get(nombre, [nombre]):
+            if w in nombres:
+                p.val = p.menuNames[nombres.index(w)]
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _legend_sala(W, c):
+    """SALA (fase 23): el balance, el estado, el estroboscopio, los destellos del
+    ultimo segundo y la salida DMX."""
+    s = sala_de(W)
+    now = absTime.seconds
+    b = s['balance']
+    bal = 'sin creacion' if b >= BALANCE_SIN_CREACION else '%.2f' % b
+    txt = '  SALA     balance %s (%g s%s)   %s' % (bal, c['ventana_balance'],
+                                               ', forzado' if c['sim_balance'] >= 0.0 else '',
+                                               ESTADOS_SALA[s['estado']])
+    if s['hz'] > 0.0:
+        txt += '   estrobo %.1f Hz' % s['hz']
+    txt += '   destellos %d/%d' % (destellos_ventana(W, now), DESTELLOS_MAX)
+    if en_noche(W, now):
+        txt += '   noche %.1f s' % max(0.0, s['noche'][1] - now)
+    if c['colapso_on']:
+        txt += '   colapso %s' % ('en %.1f s' % max(0.0, c['max_erosion'] - (now - s['desde']))
+                                  if s['desde'] is not None else 'armado')
+    hay, texto = dmx_encontrado()
+    txt += '   dmx %s' % texto if hay else '   sin dmx (%s)' % texto
+    return txt
+
+
 def on_value(name, val):
     if name == 'Modoactuacion':
         try:
@@ -12265,6 +12676,9 @@ def on_value(name, val):
     elif name == 'Escena':              # fase 18: cargar la escena elegida
         n = cargar_escena(str(val))
         print('ESCENA  %s cargada (%d parametros)' % (val, n))
+    elif name == 'Interfazdmx':         # fase 23: la interfaz del DMX Out CHOP
+        if parent().op('dmx_out') is not None and not interfaz_dmx_al_dia(str(val)):
+            print('AVISO  dmx_out: no pude poner la interfaz %s; elige Interface a mano' % val)
 
 
 # --- escenas (fase 18) --------------------------------------------------------
@@ -13133,6 +13547,8 @@ def _legend():
         lines.append(_legend_micro(W, c))
     if lvl >= 22:
         lines.append(_legend_camara(W, c))
+    if lvl >= 23:
+        lines.append(_legend_sala(W, c))
     return '\n'.join(lines)
 
 

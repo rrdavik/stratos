@@ -1,7 +1,7 @@
 # Estratos · Montaje
 ## Fases 21 a 23: micrófono, cámara y luz de sala
 
-*Continúa `MONTAJE_FASES_11_18.md` (que llega a la fase 19). Referencias: los docs **Requerimiento v4 · micrófono, cámara y DMX** y **Tareas técnicas v4 · micrófono, cámara y DMX** (decisiones D1 a D10, cerradas el 28 de octubre de 2026). Las reglas de siempre siguen valiendo: un script por fase, encima de lo anterior, con su versión en la primera línea del informe y una AUTOPRUEBA al final. Las fases se hacen en línea: cada una se revisa antes de empezar la siguiente. Esta versión del montaje trae las **fases 21 y 22**; la 23 se añadirá aquí.*
+*Continúa `MONTAJE_FASES_11_18.md` (que llega a la fase 19). Referencias: los docs **Requerimiento v4 · micrófono, cámara y DMX** y **Tareas técnicas v4 · micrófono, cámara y DMX** (decisiones D1 a D10, cerradas el 28 de octubre de 2026). Las reglas de siempre siguen valiendo: un script por fase, encima de lo anterior, con su versión en la primera línea del informe y una AUTOPRUEBA al final. Las fases se hacen en línea: cada una se revisa antes de empezar la siguiente. Esta versión del montaje trae las **fases 21, 22 y 23**. Las fases 24 a 31 (el plan v5) están en `MONTAJE_FASES_24_31.md`.*
 
 ---
 
@@ -38,6 +38,7 @@ La sala entra en la pieza: desde la fase 21 el micrófono escucha al público, y
 | `fase7_erosion.py` | v15: relanzada sobre la fase 21, conserva la fila del micrófono (pad 9) de `perfiles_erosion`; v16: la página Fase7 con 12 parámetros en vez de 18 (ver «Página Fase7» en `MONTAJE_FASES_3_10.md`) | `fase7 v16` |
 | `fase14_destructores.py` | v3: solo la autoprueba (cuenta también el pad 9 al repartir los pads en arañazos, cortes e impulsos) | `fase14 v3` |
 | `fase22_camara.py` | La cámara cenital: página Fase22, `orbbec1`, `cornerpin1`, `fondo`, `altura_cam`, `sala_sim`, `fuente`, `alturas_sala` y `densidad`; el motor v81 trae la densidad por casilla, el mapeo sala → planeta y el sorteo de cada señal; comun v65, las autopruebas con `Activo` apagado | `fase22 v1` |
+| `fase23_sala.py` | La luz de sala: página Fase23, `dmx_canales`, `dmx_valores` y `dmx_out`; el motor v82 trae el balance, el baño, el estroboscopio con su limitador de destellos, la noche del fin de ciclo y el colapso; comun v66 | `fase23 v1` |
 | `docs/PLAN_V5.md` | El plan v5, renumerado a las fases 24–31, encima de la 23 | — |
 | `pruebas/` | El TouchDesigner simulado sabe Audio Device In CHOP (sin dispositivo) y Switch CHOP y TOP con sus parámetros reales, y `numpyArray()` en un CHOP; `correr_fases.py` corre las fases 21 a 23 que existan y mete onsets en la sesión | — |
 
@@ -261,6 +262,106 @@ Las casillas se numeran por filas desde la pantalla: la 0 es la de la izquierda 
 2. Que `alturas_sala` da la altura en metros (míralo con el visor: una persona, en torno a 1,7).
 3. Las pruebas «en sala» de la especificación: con el estroboscopio disparando y la sala vacía la densidad sigue a cero, y la cadena no baja los fotogramas del render.
 4. `Subida`, `Bajada` y `Cuanto`, para que la presencia se note sin parpadear.
+
+---
+
+## FASE 23 · Luz de sala por DMX
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/fase23_sala.py').read())
+```
+
+### Qué hace
+
+La sala se ilumina con el estado del planeta: cuanto más pesa la erosión, más luz, y cuando supera a la creación, estroboscopio. El motor calcula la luz y un solo CHOP la manda; la seguridad vive en el motor, no en el aparato. TouchDesigner sigue sin mandar nada al BeatStep.
+
+- **El balance.** En una ventana de `Ventanabalance` segundos (30), la ocupación destruida entre la depositada, **en escalones de ocupación** (D6). La erosión suma la caja, los arañazos (pads 4 a 8), sus cortes, los accidentes que provocan y el micrófono (con su corte por ruido); la creación, las notas de los secuenciadores (con sus desbordes) y los pulsos del bombo y el tom. Lo que no baja un escalón entero no cuenta. Erosión sin creación en la ventana es erosión dominante. Las catástrofes que siguen ardiendo solas (fase 14) no cuentan.
+
+| Estado | Balance | Luz de sala |
+|---|---|---|
+| Depósito | Menos de 0,5 | Casi a oscuras: ámbar tenue (4 %) que respira con cada nota depositada (hasta el 14 %) |
+| Tensión | 0,5 a 1 | La intensidad sube (del 15 al 70 %) y vira del ámbar a blanco frío; cada onset del micrófono añade un pulso breve |
+| Erosión dominante | Desde `Umbralestrobo` (1,0) hasta bajar de `Salidaestrobo` (0,8) | Estroboscopio blanco. Su frecuencia: `Maxhz` × (balance − `Salidaestrobo`) / (2 × (`Umbralestrobo` − `Salidaestrobo`)), con tope `Maxhz`: 1,5 Hz al entrar, 2,4 Hz con 1,12 y 3 Hz desde 1,2 |
+| Fin de ciclo | Al enterrar | Un único destello blanco y oscuridad durante `Noche` segundos (4). El balance empieza de cero con el mundo nuevo (D7) |
+
+- **Seguridad** (no son parámetros que se puedan saltar): como mucho **3 destellos en cualquier ventana de 1 s**, contando todos los de la sala en un solo limitador (`limitador_destellos`; `Maxhz` no pasa de 3 y con 0 no hay ninguno); el estroboscopio solo destella en blanco (r = g = b); el fin de ciclo lo apaga. Un destello **con prioridad** (el del fin de ciclo; el relámpago de la fase 30) que encuentra el limitador lleno espera al primer hueco, y el estroboscopio le cede ese destello. Cada destello queda apuntado para que el micrófono descarte su clic (0,15 s). Y un cartel a la entrada que avise de luces estroboscópicas (montaje, no código).
+- **Un bucle que solo se rompe en silencio.** El estroboscopio provoca ruido, el ruido es erosión y la erosión mantiene el estroboscopio. Es lo que pide el marco: no se compensa.
+- **Colapso (D8).** Con `Colapsoon` (apagado por defecto), `Maxerosion` segundos (15) seguidos con el balance por encima de 1 cierran el ciclo con el motivo `colapso`. `estancado` no es colapso. La fase 27 guarda el motivo como marca de la concha.
+- **La tabla `ciclos`** gana la columna `balance` (el valor al cerrar); relanzar la añade a una tabla anterior.
+
+### Operadores (en `/project1/FASE1`)
+
+```
+dmx_canales (Table DAT) ─► dmx_valores (Script CHOP) ─► dmx_out (DMX Out CHOP)
+```
+
+| Operador | Qué es |
+|---|---|
+| `dmx_canales` | Table DAT editable (`canal`, `funcion`, `foco`): qué canal DMX es cada cosa, porque los focos no están decididos. Relanzar no la pisa. Por defecto, 4 focos de baño de 4 canales (dimmer, rojo, verde, azul: 1 a 16) y el estroboscopio en el 17 |
+| `dmx_valores` | Script CHOP: un canal por canal DMX (`c1`, `c2`…), hasta el mayor de la tabla, con su valor 0–255. El motor lo recuece en cada fotograma |
+| `dmx_out` | DMX Out CHOP con `dmx_valores` de entrada (`Interfazdmx`: Art-Net o USB Pro; `Universodmx`) |
+
+Funciones de `dmx_canales`: `bano_dimmer`, `bano_rojo`, `bano_verde`, `bano_azul` (un foco con dimmer aparte); `bano_r`, `bano_g`, `bano_b` (un foco RGB sin dimmer: el color ya lleva la intensidad); `estrobo` (255 durante un destello, que dura 0,05 s). Una función que no existe vale 0. La columna `foco` es solo para ti. La IP del nodo Art-Net (o el puerto de la interfaz USB) se pone en `dmx_out`.
+
+`luz_sala(que, k)` del motor da lo mismo sin DMX (`'bano'`, `'destello'`, `'balance'`, `'estado'`, `'noche'`), para la sala virtual o un visor.
+
+### Parámetros (página Fase23)
+
+`Ventanabalance` 30 s · `Umbralestrobo` 1,0 · `Salidaestrobo` 0,8 (siempre por debajo de la entrada) · `Maxhz` 3 (tope duro) · `Noche` 4 s · `Colapsoon` (apagado) · `Maxerosion` 15 s · `Interfazdmx` (Art-Net / USB Pro) · `Universodmx` 0 · `Simbalance` −1 (−1: el balance real)
+
+### Leyenda
+
+```
+SALA     balance 1.12 (30 s)   erosion dominante   estrobo 2.4 Hz   destellos 2/3   dmx artnet
+SALA     balance 0.00 (30 s)   deposito   destellos 0/3   noche 2.3 s   sin dmx (sin dmx_out)
+SALA     balance 1.50 (30 s, forzado)   erosion dominante   estrobo 3.0 Hz   destellos 3/3   colapso en 4.2 s   dmx artnet
+```
+
+### Probar sin público ni DMX
+
+1. `Simbalance` 0,3: depósito. `Sembrar`: el ámbar respira (mira `dmx_valores`: `c1` sube y vuelve).
+2. `Simbalance` 0,7: tensión, más luz y más fría. Con la sala virtual, `Palmada`: un pulso breve.
+3. `Simbalance` 1,2 y luego 10: el estroboscopio; la leyenda nunca pasa de `destellos 3/3`. Baja a 0,9: sigue; a 0,79: se apaga (histéresis).
+4. `Forzarciclo`: un destello y 4 s a oscuras (`noche` en la leyenda).
+5. `Colapsoon` y `Simbalance` 1,2: a los 15 s, `fin de ciclo …: colapso` y una fila `colapso` en la tabla `ciclos`.
+6. `Simbalance` −1 para volver al balance real.
+
+### Montaje
+
+- **USB-DMX** (una interfaz tipo Enttec USB Pro: `Interfazdmx` = USB Pro) o un nodo **Art-Net** (`Interfazdmx` = Art-Net, `Universodmx`; la IP, en `dmx_out`).
+- Edita `dmx_canales` con el patch de tus aparatos. **El baño va al suelo y al público, nunca a la pantalla** (ni a la esfera); el estroboscopio sí puede alcanzarla.
+- **El cartel de aviso** de luces estroboscópicas, a la entrada.
+- El micrófono, lejos del estroboscopio (algunos hacen clic al disparar).
+
+### Autoprueba
+
+- `Simbalance` 0,3, 0,7 y 1,2: depósito, tensión y erosión dominante, con su luz; el ámbar respira con una nota y un onset da un pulso en tensión;
+- histéresis: entra con 1,0 y no sale hasta bajar de 0,8;
+- con el balance en 10 durante 10 s: nunca más de 3 destellos en 1 s y todos blancos; un destello con prioridad con el limitador lleno sale en el primer hueco, uno solo, y el estroboscopio cede el suyo; con `Maxhz` 0, ninguno;
+- al enterrar: un único destello, el estroboscopio apagado y la sala a oscuras `Noche` s; después sigue;
+- un onset justo después de un destello se descarta;
+- el balance, en escalones: notas y bombo, creación; caja, arañazos y micrófono, erosión; antes de la fase 23 nada cuenta; erosión sin creación, dominante; lo que sale de la ventana no cuenta;
+- colapso: con `Colapsoon`, a los 15 s de erosión dominante, y la noche empieza; apagado o en tensión, no; `estancado` no es colapso;
+- la tabla `ciclos` con `balance`; `dmx_canales` → `dmx_valores` (17 canales; el estroboscopio a 255 en el destello); la línea `SALA`.
+
+### Decisiones tomadas en la fase 23
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Cómo se cuenta el balance? (D6) | Por la ocupación total antes y después de cada evento: una nota o un pulso suman los escalones que gana el mundo; un golpe de erosión, los que pierde (con su corte y su accidente) |
+| ¿Frecuencia del estroboscopio? | La de la tabla de arriba: reproduce el ejemplo del requerimiento (balance 1,12 → 2,4 Hz) |
+| ¿Ventana de 1 s? | Cerrada: el cuarto destello sale más de 1 s después del primero. A `Maxhz` 3, el estroboscopio da 3 destellos cada 1,02 s |
+| ¿Qué hace la prioridad? (P12) | El destello queda pendiente y sale en el primer hueco; el estroboscopio no destella mientras tanto y, al salir el pendiente, espera su periodo entero |
+| ¿Y el balance al enterrar? | Se vacía: el estroboscopio no sigue con la erosión del mundo enterrado |
+| ¿Dónde se comprueba el colapso? | En cada fotograma (`tick`), no en el reloj de compases: una sala ruidosa colapsa el mundo aunque el secuenciador esté parado |
+| ¿La sala virtual? | Sus focos siguen con su `Modoluz`; `luz_sala()` queda listo para enlazarlos |
+
+### Pruebas pendientes con el aparato
+
+1. Los nombres del menú *Interface* del DMX Out CHOP (si `Interfazdmx` no entra, el informe lo dice con `..` y se elige a mano).
+2. Que la interfaz y los focos responden a `dmx_canales`, y que el baño no lava la proyección.
+3. **Medir en sala** que el estroboscopio nunca pasa de 3 destellos por segundo, y que su clic no da onsets (si los da, ensanchar `DESCARTE_DESTELLO` en el motor).
+4. El bucle: con público, el estroboscopio provoca ruido; la sala en silencio lo apaga.
 
 ---
 

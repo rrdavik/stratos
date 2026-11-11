@@ -625,6 +625,11 @@ class OP(object):
     def appendRow(self, vals=None):
         self._rows.append([str(v) for v in (vals or [])])
 
+    def appendCol(self, vals=None):
+        vals = [str(v) for v in (vals or [])]
+        for k, fila in enumerate(self._rows):
+            fila.append(vals[k] if k < len(vals) else '')
+
     def deleteRow(self, r):
         del self._rows[r]
 
