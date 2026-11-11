@@ -2,7 +2,8 @@
 Ejecuta los scripts de fase en un TouchDesigner simulado y resume lo que
 dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
-    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 23 (las que haya)
+    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 31 (las que haya)
+    python3 pruebas/correr_fases.py --hasta=fase24   # solo hasta esa fase
     python3 pruebas/correr_fases.py -v         # con todo el Textport
 
 Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
@@ -29,7 +30,9 @@ FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_espec
          'fase6_ciclo.py', 'fase7_erosion.py', 'fase8_conchas.py', 'fase9_arqueologia.py',
          'fase10_direccion.py', 'fase11_piel.py', 'fase12_moduladores.py',
          'fase13_tejido.py', 'fase14_destructores.py', 'fase15_era.py', 'fase16_cortes.py', 'fase17_tiempo.py', 'fase18_escenas.py', 'fase19_modular.py',
-         'fase21_microfono.py', 'fase22_camara.py', 'fase23_sala.py']
+         'fase21_microfono.py', 'fase22_camara.py', 'fase23_sala.py', 'fase24_personas.py',
+         'fase25_huella.py', 'fase26_borrado.py', 'fase27_clasificacion.py', 'fase28_noche.py',
+         'fase29_fila.py', 'fase30_relampago.py', 'fase31_historico.py']
 SALA = 'sala_virtual.py'           # no es una fase: la maqueta de la instalacion
 
 
@@ -101,6 +104,11 @@ def sesion(sim, compases=48, fps=30.0):
 
 
 def main():
+    # las rutas de Windows de los scripts (C:/...) no existen aqui: lo que alguno cree con
+    # una ruta asi (la carpeta historico de la fase 31) cae en una carpeta temporal, no en
+    # el repositorio
+    import tempfile
+    os.chdir(tempfile.mkdtemp(prefix='estratos_pruebas_'))
     verbose = '-v' in sys.argv
     hasta = None
     for a in sys.argv[1:]:

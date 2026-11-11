@@ -26,11 +26,12 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v64'
+VERSION_COMUN = 'comun v71'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'vagones', 'diagnostico', 'particulas', 'humo', 'luz_celda', 'luz_conchas',
+                'coronas', 'inclusiones', 'fulguritas', 'vagones', 'diagnostico', 'particulas', 'humo',
+                'luz_celda', 'luz_conchas',
                 'luz_local']                    # lo transparente (motas, humo) y las capas aditivas, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
@@ -631,7 +632,7 @@ def onPulse(par):
 
 def onValueChange(par, prev):
     if par.name in ('Modoactuacion', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
-                    'Torsionmax', 'Variantesind'):
+                    'Torsionmax', 'Variantesind', 'Interfazdmx'):
         op('motor').module.on_value(par.name, par.eval())
     return
 '''
@@ -740,7 +741,7 @@ def onCook(scriptOp):
 PIEL_VERTEX = r"""// Estratos - piel (fase 12; terreno, fase 11 v5): vertex shader
 uniform vec4 uTerreno;      // x: 1 la malla del terreno, y: altura de los pisos, z: lo que se hunde sin relieve
 uniform sampler2D sAlturas; // r: relieve sobre el suelo local, g: radio del suelo (lat/lon, fila 0 = polo sur)
-uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
 uniform vec4 uViento;       // motor v77: x Swaymax, y el viento del LFO (grados), z el pulso a saltos, w beats por vaiven
 
 out Vertex {
@@ -843,7 +844,7 @@ void main()
 """
 
 PIEL_PIXEL = r"""// Estratos - piel (fase 12; tierra, agua y borde, fase 11 v5): pixel shader
-uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
 uniform vec4 uLuz0;         // posicion de luz_principal
 uniform vec4 uLuz0Col;      // su color x dimmer
 uniform vec4 uLuz1;         // luz_relleno
@@ -877,6 +878,7 @@ uniform vec4 uSeq2;         // el del SEQ2
 uniform vec4 uBoceto;       // comun v62: x Bocetoseq1, y Bocetoseq2, z Bocetoconchas (solo mat_piel_tierra), w Bocetoreticula
 uniform vec4 uBocetoCol;    // rgb Colorboceto
 uniform sampler2D sAlturas; // comun v63: b de quien es el relieve (1 SEQ2, 0 los montes del SEQ1)
+uniform vec4 uNoche;        // fase 28: x la noche de enterramiento (0-1)
 
 in Vertex {
     vec4 color;
@@ -972,14 +974,29 @@ vec3 paleta(int leng, int slot)
     return PALETA[clamp(leng, 0, 5) * 8 + clamp(slot, 0, 7)];
 }
 
+// fase 27: la paleta humana (la del motor, paleta_humana, en (j + 0,5) / 8)
+const vec3 HUMANA[8] = vec3[8](
+    vec3(0.642, 0.635, 0.993),
+    vec3(0.746, 0.587, 0.994),
+    vec3(0.874, 0.509, 0.982),
+    vec3(0.959, 0.475, 0.863),
+    vec3(0.991, 0.484, 0.721),
+    vec3(0.991, 0.510, 0.598),
+    vec3(0.992, 0.546, 0.279),
+    vec3(0.699, 0.716, 0.098));
+
 void main()
 {
     TDCheckDiscard();
     float fam = uFamilia.x;
     // el alfa trae la rugosidad (0-1) y, desde la fase 17, las ventanas del
     // edificio: alfa = rugosidad + 2 x nivel (0-4)
-    float nivelv = floor(iVert.color.a * 0.5 + 0.0001);
-    float rug = clamp(iVert.color.a - 2.0 * nivelv, 0.02, 1.0);
+    // fase 28: una loseta recien horneada trae alfa + 100 (sus motas emiten en la noche)
+    float alfa = iVert.color.a;
+    float reciente = step(99.5, alfa);
+    alfa -= 100.0 * reciente;
+    float nivelv = floor(alfa * 0.5 + 0.0001);
+    float rug = clamp(alfa - 2.0 * nivelv, 0.02, 1.0);
     float luces = min(1.0, nivelv * 0.25);
     vec3 base = iVert.color.rgb;
     vec3 n = normalize(iVert.wNorm);
@@ -995,10 +1012,14 @@ void main()
     float amb = 1.0;
     bool vegetal = fam > 0.5 && fam < 1.5;
     bool tierra = fam > 2.5 && fam < 3.5;
-    bool agua = fam > 3.5;
+    bool agua = fam > 3.5 && fam < 4.5;
+    bool plastico = fam > 4.5 && fam < 5.5;     // fase 25: las inclusiones de las personas
+    bool vidrio = fam > 5.5;                    // fase 29: la fulgurita de una escision
+    float parte = 0.0;                          // 0 pared de arena fundida, 1 vidrio, 2 nucleo
     // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
     vec3 emis = vec3(0.0);
+    float humano = 0.0;         // fase 27: cuanto de este pixel es una inclusion horneada
     float sombra = uPisos.z;
     if (tierra && (uBoceto.x > 0.5 || uBoceto.y > 0.5 || uBoceto.z > 0.5)) {
         // comun v62: el boceto del terreno, en alambre aqui mismo (con un Wireframe MAT
@@ -1287,9 +1308,51 @@ void main()
         emis *= 1.0 - 0.3 * sombraE;
         expo = mix(90.0, 6.0, rug);
         ks = mix(0.9, 0.03, rug);
+    } else if (plastico) {
+        // fase 25: plastico (las inclusiones del plastiglomerado): color saturado y
+        // liso, sin poros; la luz lo envuelve (dispersion subsuperficial leve)
+        rug = clamp(rug, 0.10, 0.20);
+        expo = mix(120.0, 6.0, rug);
+        ks = mix(1.2, 0.03, rug);
+        wrap = 0.35;
+        amb = 1.3;
+        sombra = 0.0;
+    } else if (vidrio) {
+        // fase 29: la fulgurita. El alfa trae rugosidad + 2 x parte
+        parte = nivelv;
+        if (parte < 0.5) {
+            // la pared exterior: arena fundida, granulada y mate
+            base *= 0.70 + 0.55 * ruido(iVert.pPos * 110.0);
+            rug = 0.9;
+        } else if (parte < 1.5) {
+            rug = clamp(rug, 0.05, 0.10);       // el interior vitreo
+        } else {
+            rug = 0.10;                         // el nucleo
+        }
+        expo = mix(120.0, 6.0, rug);
+        ks = mix(1.2, 0.03, rug);
+        sombra = 0.0;
     } else {
         // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
         base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
+        if (fam < 0.5 && nivelv > 0.5) {
+            // fase 27: estrato humano. Las inclusiones que sobrevivieron al mundo, horneadas
+            // en su loseta: motas de la paleta humana en la cara y los flancos. El alfa trae
+            // rugosidad + 2 x cobertura (en veinteavos); las motas van fijas al planeta
+            vec3 g = iVert.pPos * 36.0;
+            vec3 gid = floor(g);
+            float h1 = hash13(gid + vec3(0.37, 1.91, 2.53));
+            float h2 = hash13(gid.zxy + vec3(3.7, 1.3, 9.1));
+            vec3 des = 0.18 * (vec3(h2, fract(h2 * 7.3), fract(h2 * 13.1)) - 0.5);
+            float mota = step(h1, nivelv / 20.0) * (1.0 - smoothstep(0.30, 0.42, length(fract(g) - 0.5 + des)));
+            if (mota > 0.0) {
+                base = mix(base, HUMANA[int(floor(fract(h2 * 5.7) * 8.0))], mota);
+                rug = mix(rug, 0.15, mota);
+                expo = mix(120.0, 6.0, rug);
+                ks = mix(1.2, 0.03, rug);
+                humano = mota;
+            }
+        }
     }
     vec3 spec = vec3(0.0);
     vec3 dif = base * uAmbiente.rgb * amb;
@@ -1333,6 +1396,19 @@ void main()
         float cual = hash13(vec3(floor(wv), float(iVert.inst) * 0.731));
         float lado = 1.0 - abs(dot(n, normalize(iVert.wPos)));
         col += ventana * step(0.5, lado) * uVentanas.x * step(cual, luces - 0.001) * vec3(1.0, 0.62, 0.25);
+    } else if (plastico) {
+        // fase 25: a contraluz el plastico se aclara (como la traslucidez de las hojas)
+        // y el borde brilla con su propio color
+        vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
+        float tras = pow(max(dot(-l0, v), 0.0), 2.0);
+        col += 0.30 * tras * base * uLuz0Col.rgb + fres * 0.25 * (base + vec3(0.2));
+    } else if (vidrio) {
+        // fase 29: el nucleo emite el color de su escision (paleta humana, nunca cian);
+        // el vidrio deja pasar esa luz y brilla en el borde; la pared, mate
+        if (parte > 1.5)
+            col = base * 1.6 + fres * vec3(0.30);
+        else if (parte > 0.5)
+            col = col * 0.35 + base * 0.45 + fres * (base + vec3(0.35)) + spec * 0.8;
     } else if (!tierra) {
         // mineral: la obsidiana pulida tiene un reflejo de borde frio
         col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
@@ -1343,6 +1419,14 @@ void main()
         vec3 tin = foco(uTinte0, uTinteCol0, d) + foco(uTinte1, uTinteCol1, d) + foco(uTinte2, uTinteCol2, d);
         float borde = 0.15 + 0.85 * pow(1.0 - max(dot(n, v), 0.0), 2.0);
         col += uBorde.x * borde * tin;
+    }
+    if (uNoche.x > 0.001) {
+        // fase 28: la noche de enterramiento apaga todo; solo emiten las inclusiones
+        // supervivientes recien horneadas (las motas de la concha nueva)
+        col *= 1.0 - uNoche.x;
+        col += uNoche.x * reciente * humano * base * 1.3;
+        if (vidrio && parte > 0.5)      // fase 29: las paredes de las escisiones brillan en la noche
+            col += uNoche.x * base * (parte > 1.5 ? 1.6 : 0.7);
     }
     // fase 19: saturacion del modular -> fracturas y glitch en los materiales
     float gl = uGlitch.x;
@@ -1358,7 +1442,7 @@ void main()
     if (uNiebla.x > 0.001) {
         float dist = length(cam - iVert.wPos);
         float f = uNiebla.x * smoothstep(uNiebla.y, max(uNiebla.y + 0.01, uNiebla.z), dist);
-        col = mix(col, uNieblaCol.rgb, f);
+        col = mix(col, uNieblaCol.rgb * (1.0 - uNoche.x), f);
     }
     oFragColor[0] = TDOutputSwizzle(vec4(col, 1.0));
     for (int i = 1; i < TD_NUM_COLOR_BUFFERS; i++)
@@ -1928,6 +2012,7 @@ def install_core(base, carpeta, fase):
     calibracion_al_dia(base)
     tiempo_al_dia(base)
     modular_al_dia(base)
+    noche_al_dia(base)               # comun v70 (fase 28): la luz de relleno, con la noche
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
@@ -3336,10 +3421,12 @@ PIEL_UNIFORMES = [
     ('uBoceto', ('parent().par.Bocetoseq1', 'parent().par.Bocetoseq2', 'parent().par.Bocetoconchas',
                  'parent().par.Bocetoreticula')),
     ('uBocetoCol', ('parent().par.Colorbocetor', 'parent().par.Colorbocetog', 'parent().par.Colorbocetob', '0')),
+    ('uNoche', (PIEL_U % ('uNoche', 0), '0', '0', '0')),      # fase 28: la noche de enterramiento
 ]
-FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua']
+# comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
+FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio']
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
-SIN_TINTE = ('ciudad', 'agua')
+SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio')
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
 
 
@@ -3535,8 +3622,8 @@ def materiales_piel(base):
              'piel_pixel; Vectors: uFamilia, uLuz0...); si la piel no se ve, Materialrespaldo'
              % ', '.join(malos))
     else:
-        ok('shader de la piel: mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad, mat_piel_tierra y '
-           'mat_piel_agua (GLSL), mat_respaldo (Phong)')
+        ok('shader de la piel: mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad, mat_piel_tierra, '
+           'mat_piel_agua, mat_piel_plastico y mat_piel_vidrio (GLSL), mat_respaldo (Phong)')
     if sin_rampa:
         info('%s: no pude enlazar los samplers sAlturas (TOP alturas) y sRampa (TOP rampa_hipso) en la '
              'pagina Samplers; sin ellos no se levanta el relieve' % ', '.join(sin_rampa[:2]))
@@ -3984,6 +4071,26 @@ class Prueba(object):
                     self.pars.append((p, v))
             except Exception:
                 pass
+        # comun v65: las autopruebas corren sin el sorteo de la presencia (fase 22):
+        # prueban lo suyo con todas las senales. La de la fase 22 lo enciende ella.
+        try:
+            p = getattr(self.base.par, 'Activo', None)
+            if p is not None and bool(p.val):
+                p.val = False
+                self.pars.append((p, True))
+        except Exception:
+            pass
+        # comun v70: y sin la noche de enterramiento (fases 23 y 28), que apaga lo que
+        # las pruebas de otras fases miran justo despues de enterrar. Las que la prueban
+        # (23, 27 y 28) ponen Noche ellas.
+        try:
+            p = getattr(self.base.par, 'Noche', None)
+            if p is not None and float(p.val) != 0.0:
+                v = p.val
+                p.val = 0.0
+                self.pars.append((p, v))
+        except Exception:
+            pass
         self._reticula()
 
     def _reticula(self):
@@ -4057,6 +4164,100 @@ class Prueba(object):
         print('  AUTOPRUEBA %s' % ('OK' if good else 'FALLIDA: pegame este bloque'))
         print('-' * 66)
         return good
+
+
+# --- la noche de enterramiento (fase 28) -----------------------------------------
+# El color de luz_principal (luz_tiempo) y el dimmer de luz_destello (frame_u) ya
+# los da el motor, que los multiplica por 1 - noche. El de luz_relleno es una
+# constante: aqui se le pone la expresion <su valor> * dia().
+DIA_EXPR = "parent().op('motor').module.dia(absTime.frame)"
+
+
+def noche_al_dia(base):
+    """Desde la fase 28, el color de luz_relleno se multiplica por 1 - noche
+    (conserva el valor que tuviera). Devuelve si quedo enlazado."""
+    if current_level(base) < 28:
+        return False
+    luz = base.op('luz_relleno')
+    if luz is None:
+        return False
+    hechos = 0
+    for ch in 'rgb':
+        for pat in COLOR_LUZ:
+            p = getattr(luz.par, pat % ch, None)
+            if p is None:
+                continue
+            if DIA_EXPR in (getattr(p, 'expr', '') or ''):
+                hechos += 1
+                break
+            try:
+                v = float(p.eval())
+            except Exception:
+                v = 1.0
+            if setexpr(luz, pat % ch, '%.4f * %s' % (v, DIA_EXPR)):
+                hechos += 1
+            break
+    return hechos == 3
+
+
+def columna_tabla(t, nombre):
+    """Anade la columna a una Table DAT (ciclos...), si no la tiene. Devuelve si
+    la ha anadido."""
+    if t is None or t.numRows == 0:
+        return False
+    if nombre in [t[0, k].val for k in range(t.numCols)]:
+        return False
+    t.appendCol([nombre])
+    return True
+
+
+def pagina_version(base, fase, etiqueta, version):
+    """Una fase sin parametros nuevos lleva su pagina con un solo parametro de
+    solo lectura, VersionNN (P10 del plan v5): la version de su script."""
+    nombre = 'Version%d' % fase
+    page = get_page(base, 'Fase%d' % fase)
+    add_par(base, page, 'str', nombre, etiqueta, version)
+    try:
+        p = getattr(base.par, nombre)
+        p.readOnly = False
+        p.val = version
+        p.default = version
+        p.readOnly = True
+    except Exception as e:
+        info('%s: no pude fijarlo (%s)' % (nombre, e))
+    ok('pagina Fase%d: %s (solo lectura), %s' % (fase, nombre, version))
+    return nombre
+
+
+# --- las autopruebas de la sala (fases 24 a 31) --------------------------------
+
+def guardar_sala(base, nombres):
+    """Lo que una autoprueba de sala cambia: parametros y la tabla sala_personas."""
+    guarda = {}
+    for nm in nombres:
+        try:
+            guarda[nm] = getattr(base.par, nm).eval()
+        except Exception:
+            pass
+    tb = base.op('sala_personas')
+    filas = [[c.val for c in tb.row(r)] for r in range(tb.numRows)] if tb is not None else []
+    return guarda, filas
+
+
+def devolver_sala(base, m, guarda, filas):
+    for nm, v in guarda.items():
+        try:
+            getattr(base.par, nm).val = v
+        except Exception:
+            pass
+    tb = base.op('sala_personas')
+    if tb is not None:
+        tb.clear()
+        for f in filas:
+            tb.appendRow(f)
+    m.sala_reset()
+    m.mic_reset()
+    m._SALA['t_img'] = -99.0
 
 
 def run_test(base, fn):

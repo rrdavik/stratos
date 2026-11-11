@@ -14,7 +14,7 @@ QUE HACE
 --------
   - Si no existe /project1/FASE1 (proyecto nuevo), empieza por fase12_base.py.
     Si ya existe, NO la lanza (es la que crea el proyecto desde cero).
-  - Lanza fase3 ... fase21 en orden, las que haya en la carpeta (las que no
+  - Lanza fase3 ... fase31 en orden, las que haya en la carpeta (las que no
     existan todavia se saltan en silencio).
   - Relanza /project1/SALA con sala_virtual.py solo si ya estaba montada
     (poner SALA = True para montarla tambien si no lo estaba).
@@ -41,7 +41,9 @@ FASES_ORDEN = ['fase3_semilla.py', 'fase4_desborde.py', 'fase5_especies.py',
                'fase12_moduladores.py', 'fase13_tejido.py', 'fase14_destructores.py',
                'fase15_era.py', 'fase16_cortes.py', 'fase17_tiempo.py',
                'fase18_escenas.py', 'fase19_modular.py', 'fase21_microfono.py',
-               'fase22_camara.py', 'fase23_sala.py']
+               'fase22_camara.py', 'fase23_sala.py', 'fase24_personas.py', 'fase25_huella.py',
+               'fase26_borrado.py', 'fase27_clasificacion.py', 'fase28_noche.py', 'fase29_fila.py',
+               'fase30_relampago.py', 'fase31_historico.py']
 
 
 class _Eco(object):

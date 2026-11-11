@@ -60,6 +60,35 @@
 #                 epoca por las eras, corta y planta integrada, vias y red
 #                 electrica (fase 13), grisu y apagon (14), y su sitio en las
 #                 fases 15 a 19).
+#                 Motor v81, fase 22: la camara cenital (casilla probable):
+#                 la densidad de cada casilla del suelo, el mapeo sala ->
+#                 planeta y el sorteo (mapa logistico) de cada senal.
+#                 Motor v82, fase 23: la luz de la sala: el balance entre
+#                 erosion y creacion, el bano, el estroboscopio con su
+#                 limitador de destellos, la noche del fin de ciclo y el colapso.
+#                 Motor v83, fase 24 (plan v5): personas: cabezas (maximos de
+#                 altura), seguimiento, ocupacion binaria por casilla y la celda
+#                 que mira a cada casilla.
+#                 Motor v84, fase 25: la huella minima: inclusiones por llegada
+#                 (Probllegada, mapa logistico) y por parada (Tparada), con el
+#                 escalon de su celda; la paleta humana y sus instancias.
+#                 Motor v85, fase 26: el borrado: una inclusion desaparece
+#                 cuando la erosion baja su celda de su escalon (y, en una
+#                 celda sin construir, con cualquier golpe que la alcance).
+#                 Motor v86, fase 27: la clasificacion al enterrar: estrato
+#                 humano o concha limpia, el recuento horneado en el material
+#                 de cada loseta y el colapso como marca de cierre.
+#                 Motor v87, fase 28: la noche de enterramiento: durante Noche
+#                 segundos la esfera se apaga y solo emiten las inclusiones
+#                 recien horneadas (y las escisiones).
+#                 Motor v88, fase 29: la fila (Minfila personas contiguas
+#                 durante Tfila) y la escision colectiva: un hueco permanente
+#                 en la columna de la celda de origen, con su fulgurita.
+#                 Motor v89, fase 30: el relampago: un destello blanco con
+#                 prioridad al abrirse cada escision.
+#                 Motor v90, fase 31: las escisiones en el historico: el
+#                 testigo (la seccion por el origen, dibujada con numpy), la
+#                 columna resumen de la jornada y el registro.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -72,7 +101,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v80'
+MOTOR_VERSION = 'motor v90'
 
 import math
 
@@ -278,6 +307,25 @@ DEFAULT_CFG = dict(
     # fase 21: el microfono
     umbral_onset=0.6, refractario_mic=0.12, reduccion_mic=1.0, ventana_ruido=60.0, umbral_corte=20.0,
     prof_mic=3, fuente_mic=0, canal_mic=0, chop_mic='',
+    # fase 22: la camara cenital (casilla probable)
+    presencia_activa=1, cuanto=0.5, peso_crear=1.0, peso_erosion=1.0, fuente_sala=0,
+    altura_min=0.8, altura_max=2.2, archivo_fondo='fondo_suelo.exr',
+    ancho_sala=5.4, fondo_sala=4.5, tam_casilla=0.5, desenfoque=1.0, ocupacion_llena=0.6,
+    subida=2.0, bajada=5.0, lon_central=0.0, ancho_angular=180.0, lat_norte=90.0, lat_sur=-90.0,
+    espejo=0, sim_casilla=0,
+    # fase 23: la luz de la sala
+    ventana_balance=30.0, umbral_estrobo=1.0, salida_estrobo=0.8, max_hz=3.0, noche=4.0, colapso_on=0,
+    max_erosion=15.0, sim_balance=-1.0, interfaz_dmx=0, universo_dmx=0,
+    # fase 24: personas
+    sep_cabezas=0.35, confirma_persona=2, sim_fila=3,
+    # fase 25: la huella minima
+    prob_llegada=0.6, t_parada=3.0,
+    # fase 27: la clasificacion al enterrar
+    min_huellas=1, inclusiones_max=0.8,
+    # fase 29: la fila y la escision colectiva
+    min_fila=3, t_fila=5.0, modo_fila=0, conchas_persona=1,
+    # fase 31: las escisiones en el historico
+    carpeta_historico='',
 )
 
 
@@ -645,6 +693,16 @@ def new_world():
         mic=dict(t=-99.0, n=0, descartados=0, flujo=0.0, ultimo=None),
         ruido=dict(onsets=[], cortes=0, ultimo=None),   # onsets de la ventana: [t, flujo, celda]
         sala=dict(destellos=[]),            # instantes de los destellos propios (fase 23)
+        # la huella minima (fase 25): inclusiones de cada celda, [escalon, tipo, t, k]
+        incl=[[] for _ in range(N)],
+        incl_n=dict(llegadas=0, paradas=0),     # las que ha dejado este mundo
+        incl_ultima=None,
+        incl_borradas=dict(erosion=0, micro=0, corte=0, catastrofe=0, escision=0),     # fase 26
+        noche=None,             # la noche de enterramiento en curso (fase 28): [inicio, fin]
+        # las escisiones (fase 29): los huecos que abren las filas
+        escisiones=[],
+        escision_n=0,           # correlativo de la exposicion
+        esc_celdas={},          # celda -> escisiones abiertas en ella (el hueco es permanente)
         aviso='',
         ev={},
         t=None,
@@ -1030,12 +1088,20 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
         W['ev']['ultima'] = dict(s=s, celda=-1, occ=0, estado='fuera de rango', t=now)
         return dict(estado='fuera de rango', inc=0.0, celda=-1)
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
+    if cfg['nivel'] >= 22 and not presencia_sortear(W, cfg, i, 'crear'):
+        # fase 22: la nota no prende (el sorteo de la presencia): se pierde sin rastro
+        W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado='no prende', t=now,
+                                 carga=W['carga'][i], coste=cost(cfg, W['occ'][i]))
+        return dict(estado='no prende', inc=0.0, celda=i, trigger=False)
     W.setdefault('terr', {})[i] = W.get('bar_n', 0)
     W['ruina'][i] = 0                   # fase 14: construir sobre la huella la borra
     W['rebrote'][i] = 0                 # fase 15: una nota completa el rebrote
     if cfg['nivel'] >= 12:              # fase 12: la velocidad da el material
         W['ev']['mod'] = dict(s=s, celda=i, vel=int(vel), rug=rugosidad(cfg, vel), gate=None, efecto='')
+    antes = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     res = grow(W, cfg, i, s, vel, now)
+    if cfg['nivel'] >= 23:              # fase 23: los escalones ganados, al balance
+        balance_suma(W, cfg, now, crea=sum(W['occ']) - antes)
     gate_piel(W, cfg, i, now)           # fase 11: el gate adelanta las obras
     W['pend']['%d:%d' % (s, int(note))] = [i, now, res.get('inc', 0.0), W['occ'][i]]
     W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado=res['estado'], t=now,
@@ -1233,10 +1299,18 @@ def close_cycle(W, cfg, now, motivo):
               segundos=max(0.0, now - t0) if t0 is not None else 0.0,
               motivo=motivo, madurez=W['madurez'], novedad=W['novedad'],
               territorio=W.get('territorio', 0.0), t=now)
+    if cfg['nivel'] >= 23:              # fase 23: el balance al cerrar
+        ev['balance'] = balance(W, cfg, now)
     apagar_destructores(W)              # fase 14: el fin de ciclo lo cierra de golpe
-    if end_cycle(W, cfg, now, bars):
+    if end_cycle(W, cfg, now, bars, motivo):
         ev['grosor'] = shell_th(W['shells'][-1], cfg)
         W['foto_anterior'] = snapshot(W, cfg)
+        if cfg['nivel'] >= 27:          # fase 27: la banda de la concha nueva
+            ev['huellas'] = W['shells'][-1].get('huellas', 0)
+            ev['banda'] = W['shells'][-1].get('banda', 'limpia')
+            ev['colapso'] = bool(W['shells'][-1].get('colapso'))
+    if cfg['nivel'] >= 23:              # fase 23: un destello y la sala a oscuras
+        sala_fin_ciclo(W, cfg, now)
     W['aviso'] = 'fin de ciclo %d: %s a los %d compases' % (ev['ciclo'], motivo, bars)
     W['compases_ciclo'] = 0
     W['quietos'] = 0
@@ -1302,6 +1376,15 @@ def pick_target(W, cfg, pad, vel):
 
 
 def _undo_note(W, cfg, i):
+    """_undo_note_base y, desde la fase 26, la purga de las inclusiones que
+    quedan por encima de la ocupacion de la celda."""
+    hecho = _undo_note_base(W, cfg, i)
+    if hecho and cfg['nivel'] >= 26:
+        purgar_inclusiones(W, i)
+    return hecho
+
+
+def _undo_note_base(W, cfg, i):
     """Deshace una nota de construccion en la celda i: la misma moneda que
     _charge, al reves. Baja la carga y la altura lo que subio esa nota
     (Growstep / coste del escalon); al agotarse la carga baja un escalon y
@@ -1350,6 +1433,8 @@ def bajar_escalon(W, cfg, i):
     W['occ'][i] = o
     W['carga'][i] = 0
     W['h'][i] = min(W['h'][i], height_for(cfg, o))
+    if cfg['nivel'] >= 26:              # fase 26: las inclusiones de un escalon mas alto se borran
+        purgar_inclusiones(W, i)
     return True
 
 
@@ -1398,32 +1483,52 @@ def erosion_notes(cfg, red, vel):
     return max(min(red, 1.0), red * f)
 
 
-def erosion(W, cfg, pad, vel, now):
+def erosion(W, cfg, pad, vel, now, target=None):
     """Un golpe de bateria. Un pad en modo impulso (fase 7 v12) no erosiona:
-    lo atiende impulso()."""
+    lo atiende impulso(). target: la celda del golpe (fase 22: el microfono va
+    a la casilla mas densa); sin el, la elige pick_target. Desde la fase 22 el
+    golpe pasa por el sorteo de la presencia, una vez y en su centro: si no
+    prende, se pierde (el evento lleva prende = False)."""
     perf = cfg['perfiles']
     pad = int(pad) % len(perf)
     if es_impulso(cfg, pad):
         return impulso(W, cfg, pad, vel, now)
     red, rad, depth = perf[pad]
-    target = pick_target(W, cfg, pad, vel)
+    if target is None:
+        target = pick_target(W, cfg, pad, vel)
+    if cfg['nivel'] >= 22 and not presencia_sortear(W, cfg, target, 'erosionar'):
+        tipos = cfg.get('tipos') or []
+        ev = dict(pad=pad, red=red, notas=0.0, rad=0, prof=depth, celda=target,
+                  dens=occupied(W) / float(N), doble=False, quitado=0, t=now, modo='erosion', prende=False,
+                  tipo=tipos[pad] if pad < len(tipos) and tipos[pad] else tipo_perfil(red, rad, depth))
+        W['hits'][3] = W['hits'].get(3, 0) + 1
+        W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
+        W['ev']['erosion'] = ev
+        return ev
     dens = occupied(W) / float(N)
     over = dens > cfg['dens_umbral']
     rad_eff = max(1, int(round(rad * cfg['rad_mult']))) if over else int(rad)
     removed = 0
     W['t'] = W['t'] if W['t'] is not None else now
     resto = W['ero_resto']
+    antes23 = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     mic = pad == PAD_MIC                # fase 21: el microfono baja escalones enteros
     notas = erosion_notes(cfg, red, vel) if not mic else float(red)
     tematico = cfg['nivel'] >= 14 and es_aranazo(cfg, pad)
     antes = antes_del_golpe(W, cfg, target, now) if tematico else None
+    borra = cfg['nivel'] >= 26          # fase 26: el golpe borra inclusiones
+    # la causa de lo que borre este golpe: el microfono, un pad que corta (la caja) o un aranazo
+    _CAUSA[0] = 'micro' if mic else ('corte' if depth > 0 and cfg['nivel'] >= 9 else 'erosion')
     for c, d in rings(target, rad_eff):
         w = ATENUACION ** d             # 1 en la celda, 1/2 el primer anillo, 1/4...
         x = notas * w + resto[c]
         k = int(math.floor(x + 1e-9))
         resto[c] = x - k
         removed += bajar_escalones(W, cfg, c, k) if mic else degrade(W, cfg, c, k)
+        if borra and w > 0.0:           # en una celda sin construir, cualquier anillo que la alcance (P6)
+            golpe_inclusiones(W, c)
         light_cell(W, cfg, c, pad, w, now)
+    _CAUSA[0] = 'erosion'
     W['hits'][3] = W['hits'].get(3, 0) + 1
     W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
     tipos = cfg.get('tipos') or []
@@ -1439,6 +1544,8 @@ def erosion(W, cfg, pad, vel, now):
         elif depth > 0:
             ev['corte'] = cut(W, cfg, target, depth, rad, now)
         W['flash'] = dict(t=now, cell=target, k=1.0 if depth > 0 else 0.35, pad=pad)
+    if cfg['nivel'] >= 23:              # fase 23: los escalones perdidos (con su corte), al balance
+        balance_suma(W, cfg, now, eros=antes23 - sum(W['occ']))
     return ev
 
 
@@ -1547,10 +1654,13 @@ def impulso(W, cfg, pad, vel, now):
     occ0 = W['occ'][target]
     s = W['own'][target] if occ0 > 0 and W['own'][target] else seq_de_objetivo(W, cfg, pad)
     desbordes = []
+    antes = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     for _ in range(n):                  # uno detras de otro, con las reglas de siempre
         j = pulso(W, cfg, target, s, vel, now)
         if j is not None:
             desbordes.append(j)
+    if cfg['nivel'] >= 23:              # fase 23: el bombo y el tom son creacion
+        balance_suma(W, cfg, now, crea=sum(W['occ']) - antes)
     W['ruina'][target] = 0              # fase 14: construir sobre la huella la borra
     W['rebrote'][target] = 0            # fase 15: completa el rebrote
     # la altura nueva, de golpe: sin suavizado ni stop-motion (y sin el rebote
@@ -1631,6 +1741,8 @@ def cut(W, cfg, target, depth, rad, now):
             W['nucleo_av'][c] = 1
             nucleo = c if nucleo is None or c == target else nucleo
         _clear_cell(W, c)
+        if cfg['nivel'] >= 26:          # fase 26: el corte se lleva las inclusiones de la celda
+            borrar_inclusiones(W, c, 'corte')
         W['huella'][c] = 0.0
         W['ruina'][c] = 0
         for j in NEIGH[c]:
@@ -1897,16 +2009,20 @@ def compactar(W, cfg, g):
     return k
 
 
-def end_cycle(W, cfg, now, bars=None):
+def end_cycle(W, cfg, now, bars=None, motivo=None):
     """Entierra el mundo (desde el nivel 8). bars: compases que duro; sin
-    ellos, la concha tiene Shellthick."""
+    ellos, la concha tiene Shellthick. motivo: el del fin de ciclo (fase 27: la
+    concha lo guarda como marca de cierre)."""
     W['ev']['ciclo'] = dict(t=now, n=W.get('ciclo_n', 1))
     W['bomba'] = {}                     # fase 7: sin pumping pendiente
     W['imp_t'] = {}
     if cfg['nivel'] < 8:
         return False
+    if cfg['nivel'] >= 31:              # fase 31: el testigo de las escisiones, antes de enterrar
+        testigos_al_enterrar(W, cfg, now)
     cerrar_obras(W, cfg)                # los transitos se cierran antes de hornear
     reg = registro_concha(W, cfg) if cfg['nivel'] >= 15 else None
+    clas = clasificar_concha(W, cfg, dict(motivo=motivo, t=now)) if cfg['nivel'] >= 27 else None
     g = shell_grosor(cfg, bars)
     W['compacta'] = compactar(W, cfg, g)
     r_in = top_radius(W, cfg)
@@ -1915,16 +2031,30 @@ def end_cycle(W, cfg, now, bars=None):
     # Colmatacion. El radio nominal solo crece g (la colmatacion no es tiempo).
     colm = cfg.get('colmatacion', 0.0)
     s_new = len(W['shells'])
+    huecos = W.get('esc_celdas', {}) if cfg['nivel'] >= 29 else {}
     for c in range(N):
         lg = max(0.0, r_in - suelo(W, cfg, c))
-        W['cols'][c].append([s_new, g + colm * lg])
+        # fase 29: en la celda de una escision la concha tapiza el hueco sin cerrarlo (sin Colmatacion)
+        W['cols'][c].append([s_new, g + (0.0 if c in huecos else colm * lg)])
     W['shells'].append(dict(gen=W['gen'], col=list(shell_color(W['gen'])),
                             occ=list(W['occ']), sp=list(W['sp']), rm=[0] * N,
                             grosor=g, r_in=r_in, r_out=r_in + g))
     if reg:                             # fase 15: el registro de la concha
         W['shells'][-1].update(reg)
+    if clas:                            # fase 27: humana o limpia, con sus inclusiones horneadas
+        W['shells'][-1].update(clas)
+        W['ev']['banda'] = dict(clas, concha=len(W['shells']) - 1, t=now)
+    if cfg['nivel'] >= 28:              # fase 28: la noche empieza en el fotograma del recuento
+        W['noche'] = [now, now + cfg['noche']] if cfg['noche'] > 0.0 else None
+    if cfg['nivel'] >= 29:              # fase 29: las escisiones de este mundo quedan enterradas
+        enterrar_escisiones(W, cfg, now)
+    if cfg['nivel'] >= 31:              # fase 31: la jornada y el ciclo de la concha (la columna resumen)
+        W['shells'][-1].update(jornada=_fecha()[0], ciclo=W.get('ciclo_n', 1))
     W['quitadas'] = [0] * N
     W['gen'] += 1
+    if cfg['nivel'] >= 25:              # fase 25: lo heredado empieza sin inclusiones
+        vaciar_inclusiones(W)
+        W['incl_n'] = dict(llegadas=0, paradas=0)
     her = cfg['herencia']
     for i in range(N):
         W['carga'][i] = 0
@@ -2022,6 +2152,13 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         if dt > 0:
             W['foto_dt'] = dt
         impulso_tick(W, cfg, now)
+    if cfg['nivel'] >= 26:              # fase 26: la pasada de seguridad del borrado
+        purga_segura(W)
+    if cfg['nivel'] >= 28:              # fase 28: la noche acaba (y las losetas dejan de emitir)
+        noche_tick(W, cfg, now)
+    if cfg['nivel'] >= 23:              # fase 23: la luz de la sala y el colapso
+        if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo']:
+            out['ciclo'] = close_cycle(W, cfg, now, 'colapso')
     giro_step(W, cfg, dt, tempo)
     return out
 
@@ -2347,10 +2484,16 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False)
     if lvl >= 18:                   # fase 18: luz local y, fuera de la actuacion, el diagnostico
         out['luz_local'] = build_luz_local(W, cfg, now)
         out['diagnostico'] = [] if hide_beacons or not cfg.get('diagnostico', 0) else build_diagnostico(W, cfg)
+    if lvl >= 25:                   # fase 25: las inclusiones de las personas
+        build_inclusiones(W, cfg, now, out)
+    if lvl >= 29:                   # fase 29: las fulguritas de las escisiones
+        build_fulguritas(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
         out['estratos'] = build_tiles(W, cfg, now)
+    if lvl >= 28:                   # fase 28: la noche apaga las capas de luz y las particulas
+        noche_filas(out, 1.0 - noche_nivel(W, cfg, now))
     return out
 
 
@@ -2366,6 +2509,10 @@ def build_tiles(W, cfg, now):
     core = cfg['core_radius']
     era = cfg['nivel'] >= 15                # fase 15: la rugosidad de cada loseta (canal a)
     respaldo = era and cfg.get('respaldo', 0)
+    humano = cfg['nivel'] >= 27             # fase 27: las inclusiones horneadas
+    q_tapa = 0
+    # fase 28: durante la noche, la concha recien enterrada (sus motas emiten)
+    recien = len(W['shells']) - 1 if cfg['nivel'] >= 28 and W.get('noche') else -1
     for c in range(N):
         col = column_radii(W, cfg, c)
         if not col:
@@ -2382,6 +2529,7 @@ def build_tiles(W, cfg, now):
             if era:
                 rows[-1].append(1.0 if respaldo else RUG_ZOCALO)
         tapa = None
+        q_tapa = 0
         for s, r_in, r_out in col[first:]:
             sh = W['shells'][s]
             colr, rug = tile_material(cfg, sh, s, c)
@@ -2393,13 +2541,21 @@ def build_tiles(W, cfg, now):
                 if ctapa is not None:
                     ctapa = _mix(COL_SCAR, ctapa, f)
             rows.append(_tile_row(c, n, r_in, r_out, colr))
-            if era:
-                rows[-1].append(1.0 if respaldo else rug)
+            q = cobertura_q(cfg, sh, c) if humano and not respaldo else 0
+            if era:                         # fase 27: alfa = rugosidad + 2 x cobertura de inclusiones (en veinteavos)
+                rows[-1].append(1.0 if respaldo else rug + 2.0 * q)
+                if q and s == recien:       # fase 28: recien horneada (emite en la noche): alfa + 100
+                    rows[-1][-1] += ALFA_RECIENTE
             if ctapa is not None:
                 tapa = _tapa_row(rows[-1][:12], ctapa)
+                q_tapa = q
         if tapa is not None:                # solo la loseta de arriba ensena su tapa
-            if era:
-                tapa.append(1.0 if respaldo else RUG_TAPA)
+            if era:                         # fase 25: con inclusiones, la matriz del plastiglomerado
+                con_incl = cfg['nivel'] >= 25 and bool(W['incl'][c]) if len(W.get('incl', ())) == N else False
+                if q_tapa:                  # fase 27: la cara de la loseta de un estrato humano, con sus motas
+                    tapa.append(RUG_TAPA_INCL + 2.0 * q_tapa + (ALFA_RECIENTE if s == recien else 0.0))
+                else:
+                    tapa.append(1.0 if respaldo else (RUG_TAPA_INCL if con_incl else RUG_TAPA))
             rows.append(tapa)
     return rows
 
@@ -8375,7 +8531,8 @@ def cauces(W, cfg, cl=None, ter=None):
                     q = _recodo(c, d_in, _norm(_add(_mul(NORMALS[c], 2.0), d_in, -1.0)),
                                 1.0 if k % 2 else -1.0)
                     recodos[c] = q
-                    if cfg.get('lagos', 1) and laguna(W, cfg, c) > 0.02:
+                    if cfg.get('lagos', 1) and laguna(W, cfg, c) > 0.02 \
+                            and not (cfg['nivel'] >= 29 and es_escision(W, c)):    # fase 29: un rio no la llena
                         lagos.append(c)
                 arista.append((c_ant, c))
             P.append(q)
@@ -9014,10 +9171,12 @@ def bajar_ocupacion(W, cfg, i):
     falta). Devuelve las notas quitadas."""
     o = W['occ'][i]
     k = 0
+    antes, _CAUSA[0] = _CAUSA[0], 'catastrofe'     # fase 26: lo que borre, por catastrofe
     while o > 0 and W['occ'][i] >= o and k < 64:
         if not _undo_note(W, cfg, i):
             break
         k += 1
+    _CAUSA[0] = antes
     return k
 
 
@@ -9491,6 +9650,8 @@ def contenido(sh, c):
 
 def en_corte(W, cfg, c, R=None):
     """La celda c esta dentro de un corte: su suelo, por debajo del radio nominal."""
+    if cfg['nivel'] >= 29 and es_escision(W, c):    # fase 29: una escision no es un corte (sin fosiles)
+        return False
     R = top_radius(W, cfg) if R is None else R
     return R - suelo(W, cfg, c) > 1e-6
 
@@ -10457,9 +10618,17 @@ def erosion_mic(W, cfg, now, flujo=0.0):
     ruido ha abierto un corte, 'corte_ruido')."""
     if len(cfg['perfiles']) <= PAD_MIC:
         return None
-    ev = erosion(W, cfg, PAD_MIC, int(cfg.get('vel_ref', 100)), now)
+    target = None
+    if cfg['nivel'] >= 22:              # fase 22 (D2): a la celda que mira a la casilla mas densa
+        k, _ = casilla_mas_densa(cfg)
+        target = celda_de_casilla(W, cfg, k) if k is not None else None
+    ev = erosion(W, cfg, PAD_MIC, int(cfg.get('vel_ref', 100)), now, target)
     ev['flujo'] = flujo
     W['mic']['ultimo'] = dict(t=now, flujo=flujo, celda=ev['celda'])
+    if ev.get('prende') is False:       # no ha prendido: ni erosion ni ruido de sala
+        ev['corte_ruido'] = None
+        W['ev']['micro'] = ev
+        return ev
     W['ruido']['onsets'].append([now, float(flujo), ev['celda']])
     ev['corte_ruido'] = ruido_tick(W, cfg, now)
     W['ev']['micro'] = ev
@@ -10481,10 +10650,13 @@ def ruido_tick(W, cfg, now):
     celda = r['onsets'][-1][2]
     prof = max(1, int(cfg['prof_mic']))
     union = None
+    antes = sum(W['occ']) if cfg['nivel'] >= 23 else 0
     if cfg['nivel'] >= 16:
         fuera, union = corte_tematico(W, cfg, celda, prof, 1, now)
     else:
         fuera = cut(W, cfg, celda, prof, 1, now)
+    if cfg['nivel'] >= 23:              # fase 23: el corte del ruido de sala es erosion
+        balance_suma(W, cfg, now, eros=antes - sum(W['occ']))
     r['onsets'] = []
     r['total'] = 0.0
     r['cortes'] += 1
@@ -10543,6 +10715,1704 @@ def mic_sim_bloque(n, rate, s0, clic=False, ruido=0.0, drone=False):
 # Todo lo de aqui abajo usa op(), parent(), me y absTime: solo funciona
 # dentro de TouchDesigner.
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la camara cenital (fase 22): casilla probable
+# -----------------------------------------------------------------------------
+# Una camara de profundidad en el techo mide cuanta gente hay en cada casilla
+# del suelo, y esa densidad inclina la probabilidad de que cada senal que llega
+# al planeta actue:  P(c) = C + (1 - C) k d(c).  C es Cuanto (la probabilidad con
+# la sala vacia, 0,5 como mucho), k el peso de la presencia (Pesocrear o
+# Pesoerosion) y d(c) la densidad (0-1) de la casilla que corresponde a la celda.
+# El publico no escribe: solo inclina donde prende lo que ya llega.
+#
+# La imagen llega como ALTURAS sobre el suelo (m), ya enderezada: la fila 0 es la
+# pared de la pantalla (el norte) y la columna 0 la izquierda de la sala mirando
+# a la pantalla; PX_CASILLA pixeles por casilla. De ahi sale todo con numpy:
+# mascara de cuerpos (entre Alturamin y Alturamax), desenfoque (Desenfoque m),
+# rejilla (la fraccion de suelo ocupado de cada casilla) y suavizado (Subida y
+# Bajada). El estado del sensor vive en el modulo (_SALA): no es mundo.
+#
+# Mapeo sala -> planeta: la pared de la pantalla es Latnorte y el fondo Latsur;
+# el ancho de la sala cubre Anchoangular alrededor de Loncentral (la longitud de
+# la cara que mira a la camara del globo: sigue al giro). La izquierda de la
+# sala cae a la izquierda de la cara visible; Espejo lo invierte.
+# El sorteo no usa azar: sale del mapa logistico (celda, tipo y contador de
+# senales), asi que la misma sala da el mismo resultado.
+
+PX_CASILLA = 10                 # pixeles de la imagen de alturas por casilla
+DISCO_SIM = 0.25                # radio (m) de una persona de la sala simulada
+ALTURA_SIM = 1.70               # y su altura
+HOMBROS_SIM = 0.30              # lo que baja del centro (la cabeza) al borde (los hombros)
+FUENTES_SALA = ['camara', 'simulada']
+FUENTE_SIMULADA = 1
+CAM_FPS = 30.0                  # la camara da 30 imagenes por segundo: no se lee mas deprisa
+CUANTO_MAX = 0.5                # tope de Cuanto, tambien en el codigo
+TIPOS_SENAL = ('crear', 'erosionar')
+SALA_COLS = ['x', 'y', 'altura']        # tabla sala_personas (m; x desde la izquierda, y desde la pantalla)
+
+
+def _sala_nueva():
+    return dict(dens=None, t=None, t_img=-99.0, alt=None, hay=False, fps=0.0, senales=0,
+                cuentas=dict(crear=[0, 0], erosionar=[0, 0]), ultima=None,
+                pistas=[], casillas={}, nuevas=0, id=0, ultimas=[], t_personas=None,    # fase 24
+                filas=[], fila_id=0, fila_sim=[])       # fase 29
+
+
+_SALA = _sala_nueva()
+
+
+def sala_reset(cuentas=True):
+    """Olvida la densidad (y, con cuentas, los contadores del sorteo)."""
+    viejo = dict(_SALA)
+    _SALA.clear()
+    _SALA.update(_sala_nueva())
+    if not cuentas:
+        _SALA.update(senales=viejo.get('senales', 0), cuentas=viejo.get('cuentas', _SALA['cuentas']))
+
+
+def reiniciar_cuentas():
+    _SALA['senales'] = 0
+    _SALA['cuentas'] = dict(crear=[0, 0], erosionar=[0, 0])
+
+
+def rejilla_sala(cfg):
+    """(columnas, filas) de casillas: Anchosala x Fondosala en casillas de Tamcasilla."""
+    t = max(0.05, float(cfg['tam_casilla']))
+    return (max(1, int(round(cfg['ancho_sala'] / t))), max(1, int(round(cfg['fondo_sala'] / t))))
+
+
+def casilla_xy(cfg, k):
+    """Centro (x, y) en metros de la casilla k (x desde la izquierda, y desde la pantalla)."""
+    cols, filas = rejilla_sala(cfg)
+    k = max(0, min(cols * filas - 1, int(k)))
+    return ((k % cols + 0.5) * cfg['ancho_sala'] / cols, (k // cols + 0.5) * cfg['fondo_sala'] / filas)
+
+
+def casilla_de_xy(cfg, x, y):
+    """La casilla del punto (x, y) en metros, o None si cae fuera del suelo cubierto."""
+    cols, filas = rejilla_sala(cfg)
+    if not (0.0 <= x <= cfg['ancho_sala'] and 0.0 <= y <= cfg['fondo_sala']):
+        return None
+    return (min(filas - 1, int(y * filas / cfg['fondo_sala'])) * cols
+            + min(cols - 1, int(x * cols / cfg['ancho_sala'])))
+
+
+def lonlat_de_uv(cfg, u, v):
+    """(latitud, longitud) en grados del punto (u, v) del suelo: u 0-1 de izquierda
+    a derecha, v 0-1 de la pantalla al fondo."""
+    if cfg['espejo']:
+        u = 1.0 - u
+    lat = cfg['lat_norte'] - v * (cfg['lat_norte'] - cfg['lat_sur'])
+    lon = cfg['lon_central'] - (u - 0.5) * cfg['ancho_angular']
+    return lat, (lon + 180.0) % 360.0 - 180.0
+
+
+def uv_de_lonlat(cfg, lat, lon):
+    """El punto (u, v) del suelo que corresponde a (latitud, longitud), o None si
+    la celda queda fuera de la cara que mira a la sala."""
+    ancho = cfg['ancho_angular']
+    rango = cfg['lat_norte'] - cfg['lat_sur']
+    if ancho <= 0 or rango == 0:
+        return None
+    dlon = (lon - cfg['lon_central'] + 180.0) % 360.0 - 180.0
+    if abs(dlon) > 0.5 * ancho:
+        return None
+    u = 0.5 - dlon / ancho
+    if cfg['espejo']:
+        u = 1.0 - u
+    v = (cfg['lat_norte'] - lat) / rango
+    if v < 0.0 or v > 1.0:
+        return None
+    return u, v
+
+
+def lonlat_celda(i):
+    """(latitud, longitud) en grados del centro de la celda i."""
+    x, y, z = NORMALS[i]
+    return math.degrees(math.asin(max(-1.0, min(1.0, y)))), math.degrees(math.atan2(z, x))
+
+
+def celda_de_lonlat(lat, lon):
+    """La celda de la reticula que contiene (latitud, longitud)."""
+    R = max(1, len(RINGS))
+    band = 180.0 / (R + 0.5)
+    cap = band * 0.25
+    if lat <= -90.0 + cap or not RINGS:
+        return POLE_S
+    if lat >= 90.0 - cap:
+        return POLE_N
+    cells = RINGS[max(0, min(R - 1, int((lat + 90.0 - cap) / band)))]
+    th = math.radians(lon)
+
+    def lejos(k):
+        x, _, z = NORMALS[k]
+        return abs((math.atan2(z, x) - th + math.pi) % (2.0 * math.pi) - math.pi)
+    return min(cells, key=lejos)
+
+
+def celda_de_casilla(W, cfg, k):
+    """La celda que mira a la casilla k, con Loncentral de este instante."""
+    cols, filas = rejilla_sala(cfg)
+    k = max(0, min(cols * filas - 1, int(k)))
+    lat, lon = lonlat_de_uv(cfg, (k % cols + 0.5) / cols, (k // cols + 0.5) / filas)
+    return celda_de_lonlat(lat, lon)
+
+
+def casilla_de_celda(cfg, i):
+    """La casilla a la que mira el centro de la celda i, o None."""
+    uv = uv_de_lonlat(cfg, *lonlat_celda(i))
+    if uv is None:
+        return None
+    cols, filas = rejilla_sala(cfg)
+    return min(filas - 1, int(uv[1] * filas)) * cols + min(cols - 1, int(uv[0] * cols))
+
+
+def _caja_np(np, a, r, eje):
+    """Media movil de 2r + 1 pixeles a lo largo de un eje (fuera de la imagen, cero)."""
+    r = int(r)
+    if r < 1:
+        return a
+    pad = [(0, 0), (0, 0)]
+    pad[eje] = (r + 1, r)
+    c = np.cumsum(np.pad(a, pad), axis=eje)
+    k = 2 * r + 1
+    return (c[k:] - c[:-k]) / k if eje == 0 else (c[:, k:] - c[:, :-k]) / k
+
+
+def desenfocar(np, a, r_px):
+    """Reparte lo ocupado en un radio de r_px pixeles: dos medias moviles por eje."""
+    r = int(round(0.5 * r_px))
+    for _ in range(2):
+        a = _caja_np(np, _caja_np(np, a, r, 0), r, 1)
+    return a
+
+
+def imagen_sala(np, cfg, alt):
+    """La imagen de alturas, al tamano de la rejilla (PX_CASILLA pixeles por casilla)."""
+    cols, filas = rejilla_sala(cfg)
+    h, w = filas * PX_CASILLA, cols * PX_CASILLA
+    a = np.asarray(alt, dtype=float)
+    if a.ndim == 3:
+        a = a[..., 0]
+    if a.shape != (h, w):
+        fy = (np.arange(h) * (a.shape[0] / float(h))).astype(int)
+        fx = (np.arange(w) * (a.shape[1] / float(w))).astype(int)
+        a = a[fy][:, fx]
+    return a
+
+
+def ocupacion_sala(np, cfg, alt):
+    """Fraccion de suelo ocupado de cada casilla (filas x columnas): la mascara de
+    cuerpos entre Alturamin y Alturamax, repartida con Desenfoque."""
+    cols, filas = rejilla_sala(cfg)
+    a = imagen_sala(np, cfg, alt)
+    m = ((a > cfg['altura_min']) & (a < cfg['altura_max'])).astype(float)
+    m = desenfocar(np, m, cfg['desenfoque'] * a.shape[1] / max(1e-6, cfg['ancho_sala']))
+    return m.reshape(filas, PX_CASILLA, cols, PX_CASILLA).mean(axis=(1, 3))
+
+
+def sala_bloque(W, cfg, alt, now):
+    """Una imagen de la camara (o None si no hay): la densidad de cada casilla
+    persigue a su ocupacion / Ocupacionllena, con Subida al llegar alguien y Bajada
+    al irse. Devuelve la densidad (filas x columnas), o None sin numpy."""
+    np = _np()
+    if np is None:
+        return None
+    cols, filas = rejilla_sala(cfg)
+    prev = _SALA.get('dens')
+    if prev is None or prev.shape != (filas, cols):
+        prev = np.zeros((filas, cols))
+    if alt is None:
+        obj = np.zeros((filas, cols))
+    else:
+        obj = np.clip(ocupacion_sala(np, cfg, alt) / max(1e-6, cfg['ocupacion_llena']), 0.0, 1.0)
+    t0 = _SALA.get('t')
+    dt = 1.0 / CAM_FPS if t0 is None else max(0.0, min(1.0, now - t0))
+    tau = np.where(obj > prev, max(1e-3, cfg['subida']), max(1e-3, cfg['bajada']))
+    d = prev + (obj - prev) * (1.0 - np.exp(-dt / tau))
+    d[d < 1e-4] = 0.0
+    _SALA.update(dens=d, t=now, hay=alt is not None)
+    return d
+
+
+def presencia_densidad(cfg, i):
+    """Densidad (0-1) de la casilla a la que mira la celda i (0 fuera de la sala)."""
+    d = _SALA.get('dens')
+    k = casilla_de_celda(cfg, i) if d is not None else None
+    if k is None:
+        return 0.0
+    cols, filas = rejilla_sala(cfg)
+    if d.shape != (filas, cols):
+        return 0.0
+    return float(d[k // cols, k % cols])
+
+
+def presencia_prob(W, cfg, i, tipo):
+    """P(c) = C + (1 - C) k d(c). Con Activo apagado, 1: todas las senales prenden."""
+    if not cfg['presencia_activa']:
+        return 1.0
+    c = min(max(float(cfg['cuanto']), 0.0), CUANTO_MAX)
+    k = cfg['peso_crear'] if tipo == 'crear' else cfg['peso_erosion']
+    return c + (1.0 - c) * max(0.0, min(1.0, k)) * presencia_densidad(cfg, i)
+
+
+def presencia_sortear(W, cfg, i, tipo):
+    """El sorteo de una senal con posicion (crear o erosionar), una vez por evento
+    y en su centro: prende con la probabilidad de su celda. Sale del mapa logistico
+    (a r = 4, pasado a uniforme), sembrado con la celda, el tipo y el contador de
+    senales. Cuenta las recibidas y las prendidas."""
+    if not cfg['presencia_activa']:
+        return True
+    p = presencia_prob(W, cfg, i, tipo)
+    n = _SALA['senales']
+    _SALA['senales'] = n + 1
+    x0 = 0.05 + 0.9 * ((n * AUREO + int(i) * 0.3819660113 + (0.27 if tipo == 'crear' else 0.71)) % 1.0)
+    u = 2.0 / math.pi * math.asin(math.sqrt(logistica(x0, 4.0, 1)[0]))
+    prende = u < p
+    cu = _SALA['cuentas'].setdefault(tipo, [0, 0])
+    cu[0] += 1
+    cu[1] += int(prende)
+    _SALA['ultima'] = dict(celda=int(i), tipo=tipo, p=p, prende=prende)
+    return prende
+
+
+def casilla_mas_densa(cfg):
+    """(casilla, densidad) de la casilla con mas densidad, o (None, 0)."""
+    d = _SALA.get('dens')
+    if d is None or not d.size:
+        return None, 0.0
+    k = int(d.argmax())
+    v = float(d.flat[k])
+    return (k, v) if v > 0.0 else (None, 0.0)
+
+
+def casillas_con_gente(umbral=0.01):
+    d = _SALA.get('dens')
+    return int((d > umbral).sum()) if d is not None else 0
+
+
+def sala_sim_imagen(cfg, personas):
+    """La imagen de alturas de la sala simulada: un disco de DISCO_SIM m por
+    persona [x, y, altura] (m), mas alto en el centro (la cabeza) que en el borde
+    (los hombros). Es la misma imagen que da la camara, asi que de ahi en adelante
+    todo es igual. None sin numpy."""
+    np = _np()
+    if np is None:
+        return None
+    cols, filas = rejilla_sala(cfg)
+    h, w = filas * PX_CASILLA, cols * PX_CASILLA
+    a = np.zeros((h, w))
+    mx, my = cfg['ancho_sala'] / w, cfg['fondo_sala'] / h      # metros por pixel
+    for p in personas or ():
+        x, y = float(p[0]), float(p[1])
+        alto = float(p[2]) if len(p) > 2 and p[2] else ALTURA_SIM
+        c0, c1 = int((x - DISCO_SIM) / mx), int((x + DISCO_SIM) / mx) + 1
+        f0, f1 = int((y - DISCO_SIM) / my), int((y + DISCO_SIM) / my) + 1
+        c0, c1, f0, f1 = max(0, c0), min(w, c1), max(0, f0), min(h, f1)
+        if c0 >= c1 or f0 >= f1:
+            continue
+        xx = (np.arange(c0, c1) + 0.5) * mx - x
+        yy = (np.arange(f0, f1) + 0.5) * my - y
+        d2 = (xx[None, :] ** 2 + yy[:, None] ** 2) / (DISCO_SIM * DISCO_SIM)
+        cuerpo = np.where(d2 <= 1.0, alto - HOMBROS_SIM * d2, 0.0)
+        a[f0:f1, c0:c1] = np.maximum(a[f0:f1, c0:c1], cuerpo)
+    return a
+
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - personas (fase 24)
+# -----------------------------------------------------------------------------
+# La camara de la fase 22 (o su sala simulada), convertida en personas. En cada
+# imagen de la camara:
+#   1. MAXIMOS DE ALTURA. Un pixel es una cabeza si supera Alturamin, no pasa
+#      de Alturamax y es el maximo en un radio de Separacioncabezas. Dos maximos
+#      mas cerca que eso cuentan como una persona (se queda el mas alto).
+#   2. SEGUIMIENTO por vecino mas cercano: los maximos se emparejan con las
+#      personas de la imagen anterior, de la pareja mas cercana a la mas lejana,
+#      sin pasar de Separacioncabezas. Un maximo sin pareja durante
+#      Confirmapersona imagenes seguidas es una PERSONA NUEVA. Una persona sin
+#      maximo desaparece.
+#   3. OCUPACION BINARIA: una casilla esta ocupada si tiene al menos una persona;
+#      guarda el instante en que se ocupo (t_ocupada) y lo pierde al quedar
+#      libre. No pasa por ningun suavizado (la densidad de la fase 22 sigue a lo
+#      suyo, el sorteo de las senales, y aqui no se usa).
+#   4. LA CELDA QUE MIRA A LA CASILLA se calcula en el instante de cada evento
+#      (celda_de_casilla, con Loncentral de esa imagen).
+# El estado del sensor (pistas, casillas, contadores) vive en _SALA, no en W.
+
+BORDE_CASILLA = 0.08            # m: una persona no cambia de casilla hasta pasar esto del borde
+PERSONAS_COLS = ['id', 'x', 'y', 'altura', 'casilla', 'desde', 'nueva']
+CASILLAS_COLS = ['casilla', 'ocupada', 'personas', 't_ocupada', 'celda']
+
+
+def personas_reset():
+    """Olvida las personas, las casillas ocupadas y sus contadores."""
+    _SALA.update(pistas=[], casillas={}, nuevas=0, id=0, ultimas=[], t_personas=None)
+
+
+def _max_local(np, a, r):
+    """El maximo de cada pixel en una ventana de 2r + 1 (separable)."""
+    r = int(r)
+    if r < 1:
+        return a
+    for eje in (0, 1):
+        pad = [(0, 0), (0, 0)]
+        pad[eje] = (r, r)
+        p = np.pad(a, pad, mode='constant', constant_values=-1.0)
+        n = a.shape[eje]
+        if eje == 0:
+            a = np.maximum.reduce([p[k:k + n] for k in range(2 * r + 1)])
+        else:
+            a = np.maximum.reduce([p[:, k:k + n] for k in range(2 * r + 1)])
+    return a
+
+
+def detectar_cabezas(alturas, cfg):
+    """Las cabezas de la imagen de alturas: [(x, y, altura)] en metros (x desde la
+    izquierda, y desde la pantalla), de la mas alta a la mas baja."""
+    np = _np()
+    if np is None or alturas is None:
+        return []
+    a = imagen_sala(np, cfg, alturas)
+    h, w = a.shape
+    mx, my = cfg['ancho_sala'] / w, cfg['fondo_sala'] / h
+    sep = max(0.01, float(cfg['sep_cabezas']))
+    vale = (a > cfg['altura_min']) & (a <= cfg['altura_max'])
+    if not vale.any():
+        return []
+    b = np.where(vale, a, 0.0)
+    # maximo local en media separacion (los hombros de alguien mas alto no tapan una cabeza
+    # vecina); la separacion entera la impone el descarte de abajo, de mayor a menor
+    cand = vale & (b >= _max_local(np, b, max(1, int(0.5 * sep / max(mx, my)))))
+    fs, cs = np.nonzero(cand)
+    orden = np.argsort(-b[fs, cs], kind='stable')
+    out = []
+    for k in orden:
+        x, y = (cs[k] + 0.5) * mx, (fs[k] + 0.5) * my
+        if all((x - o[0]) ** 2 + (y - o[1]) ** 2 >= sep * sep for o in out):
+            out.append((float(x), float(y), float(b[fs[k], cs[k]])))
+    return out
+
+
+def _casilla_con_borde(cfg, x, y, antes):
+    """La casilla de (x, y); si la persona estaba en otra y no ha pasado
+    BORDE_CASILLA del borde, se queda en la de antes (histeresis)."""
+    k = casilla_de_xy(cfg, x, y)
+    if antes is None or k is None or k == antes:
+        return k
+    cols, filas = rejilla_sala(cfg)
+    tx, ty = cfg['ancho_sala'] / cols, cfg['fondo_sala'] / filas
+    x0, y0 = (antes % cols) * tx, (antes // cols) * ty
+    if x0 - BORDE_CASILLA <= x <= x0 + tx + BORDE_CASILLA and y0 - BORDE_CASILLA <= y <= y0 + ty + BORDE_CASILLA:
+        return antes
+    return k
+
+
+def seguir_personas(prev, maximos, cfg, now=0.0):
+    """Empareja los maximos con las pistas de la imagen anterior (vecino mas
+    cercano, sin pasar de Separacioncabezas). Devuelve (pistas, nuevas): una pista
+    es {id, x, y, alt, n, conf, desde, casilla}; nuevas, las que se confirman en
+    esta imagen (un maximo sin pareja durante Confirmapersona imagenes seguidas)."""
+    sep2 = float(cfg['sep_cabezas']) ** 2
+    pares = sorted(((p['x'] - mxm[0]) ** 2 + (p['y'] - mxm[1]) ** 2, i, j)
+                   for i, p in enumerate(prev) for j, mxm in enumerate(maximos))
+    de_pista, de_max = {}, {}
+    for d2, i, j in pares:
+        if d2 > sep2:
+            break
+        if i in de_pista or j in de_max:
+            continue
+        de_pista[i], de_max[j] = j, i
+    pistas, nuevas = [], []
+    conf_n = max(1, int(cfg['confirma_persona']))
+    for j, mxm in enumerate(maximos):
+        if j in de_max:
+            p = dict(prev[de_max[j]])
+            p.update(x=mxm[0], y=mxm[1], alt=mxm[2], n=p['n'] + 1, nueva=False)
+        else:
+            _SALA['id'] = _SALA.get('id', 0) + 1
+            p = dict(id=_SALA['id'], x=mxm[0], y=mxm[1], alt=mxm[2], n=1, conf=False, desde=now, casilla=None,
+                     nueva=False)
+        p['casilla'] = _casilla_con_borde(cfg, p['x'], p['y'], p.get('casilla'))
+        if not p['conf'] and p['n'] >= conf_n:
+            p['conf'] = True
+            p['nueva'] = True
+            p['desde'] = now
+            nuevas.append(p)
+        pistas.append(p)
+    return pistas, nuevas
+
+
+def ocupacion_casillas(personas, cfg=None):
+    """{casilla: personas} de las personas confirmadas: la ocupacion binaria."""
+    out = {}
+    for p in personas:
+        if p.get('conf') and p.get('casilla') is not None:
+            out[p['casilla']] = out.get(p['casilla'], 0) + 1
+    return out
+
+
+def personas_en_sala():
+    return [p for p in _SALA.get('pistas', ()) if p.get('conf')]
+
+
+def tick_personas(W, cfg, now, maximos):
+    """Una imagen de la camara: el seguimiento, la ocupacion binaria por casilla
+    (con su t_ocupada) y las llegadas. Devuelve {personas, nuevas, casillas,
+    libres}: nuevas es [{id, casilla, celda, t}], con la celda que mira a la
+    casilla en este instante; libres, las casillas que acaban de vaciarse."""
+    if 'pistas' not in _SALA:
+        personas_reset()
+    pistas, nuevas = seguir_personas(_SALA['pistas'], maximos, cfg, now)
+    _SALA['pistas'] = pistas
+    occ = ocupacion_casillas(pistas, cfg)
+    cas = _SALA['casillas']
+    libres = [k for k in cas if k not in occ]
+    for k in libres:
+        del cas[k]
+    for k, n in occ.items():
+        if k not in cas:
+            cas[k] = dict(t_ocupada=now, personas=n)
+        else:
+            cas[k]['personas'] = n
+    evs = []
+    for p in nuevas:
+        if p['casilla'] is None:
+            continue
+        evs.append(dict(id=p['id'], casilla=p['casilla'], celda=celda_de_casilla(W, cfg, p['casilla']), t=now))
+    _SALA['nuevas'] = _SALA.get('nuevas', 0) + len(evs)
+    _SALA['ultimas'] = evs or _SALA.get('ultimas', [])
+    _SALA['t_personas'] = now
+    return dict(personas=len(personas_en_sala()), nuevas=evs, casillas=cas, libres=libres)
+
+
+def casillas_fila_sim(cfg, k0, n):
+    """n casillas contiguas desde k0, en zigzag: hacia la derecha por su fila y, al
+    llegar a la pared, la de debajo y hacia la izquierda (para la fila de prueba)."""
+    cols, filas = rejilla_sala(cfg)
+    k0 = max(0, min(cols * filas - 1, int(k0)))
+    f, c, d = k0 // cols, k0 % cols, 1
+    out = []
+    while len(out) < n and len(out) < cols * filas:
+        out.append(f * cols + c)
+        if 0 <= c + d < cols:
+            c += d
+        else:
+            f = f + 1 if f + 1 < filas else f - 1
+            d = -d
+            if f * cols + c in out:
+                break
+    return out
+
+
+def sala_mundo(W, cfg, now, res):
+    """Lo que las personas hacen en el mundo, por nivel (fases 25 y 29)."""
+    if cfg['nivel'] >= 25:              # fase 25: la huella minima
+        res['llegadas'] = llegadas(W, cfg, res['nuevas'], now)
+        res['paradas'] = paradas(W, cfg, res['casillas'], now)
+    if cfg['nivel'] >= 29:              # fase 29: las filas y sus escisiones
+        res['filas'] = tick_filas(W, cfg, now)
+    return res
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la huella minima (fase 25)
+# -----------------------------------------------------------------------------
+# Las personas dejan INCLUSIONES en la celda que mira a su casilla:
+#   LLEGADA   al detectarse una persona nueva, con probabilidad Probllegada. Sin
+#             azar de software: lo decide el mapa logistico sembrado con el id de
+#             la persona, la celda y el ciclo (la misma sala da el mismo resultado).
+#   PARADA    Tparada segundos seguidos con la casilla ocupada (ocupacion binaria)
+#             dejan una inclusion segura. Una por parada: la casilla se rearma al
+#             quedar libre.
+# Cada inclusion guarda el ESCALON (la ocupacion) de su celda en el instante en
+# que cae: [escalon, tipo, t, k]; k es su semilla (color de la paleta humana,
+# posicion y tamano). Varias por celda, de la mas antigua a la mas nueva, con
+# tope INCL_CELDA (el exceso quita la mas antigua de las de escalon mas alto).
+# Es mundo: vive en W['incl'] (el nombre 'huella' ya es de la fase 7).
+# ASPECTO (plastiglomerado): piezas pequenas medio enterradas en el suelo de la
+# celda, alrededor de la formacion, de color saturado de la paleta humana (nunca
+# cian ni ambar), rugosidad 0,1-0,2 (familia plastico del shader de la piel). La
+# matriz es la loseta: en las celdas con inclusiones su tapa baja de rugosidad 1
+# a RUG_TAPA_INCL.
+
+INCL_CELDA = 12                 # inclusiones por celda, como mucho
+LLEGADA, PARADA = 1, 2
+TIPO_INCL = {LLEGADA: 'llegada', PARADA: 'parada'}
+RUG_TAPA_INCL = 0.85            # la tapa de una celda con inclusiones (v5: 0,8-0,9)
+# la paleta humana (P5): lo que queda del tono OKLCH fuera del cian de las
+# cicatrices (165-235), el ambar del SEQ2 (55-100), los verdes de los pisos
+# (120-165) y el azul de los rios (235-275), y sin el rojo saturado puro (18-40)
+BANDAS_HUMANAS = ((275.0, 360.0), (0.0, 18.0), (40.0, 55.0), (100.0, 120.0))
+L_HUMANA = 0.75                 # luminosidad: ni la de los pads oscuros (0,53-0,69) ni la de los claros (0,81-0,85)
+C_HUMANA = 0.19                 # croma alto (baja lo justo para caber en sRGB)
+CAUSAS_BORRADO = ('erosion', 'micro', 'corte', 'catastrofe', 'escision')
+
+
+def _uniforme_caos(x0):
+    """Un valor uniforme en (0, 1) del mapa logistico a r = 4 sembrado con x0."""
+    return 2.0 / math.pi * math.asin(math.sqrt(logistica(x0, 4.0, 1)[0]))
+
+
+def _frac(x):
+    return x - math.floor(x)
+
+
+def tono_humano(k):
+    """El tono OKLCH (grados) de la semilla k (0-1), repartido por BANDAS_HUMANAS."""
+    total = sum(b - a for a, b in BANDAS_HUMANAS)
+    x = _frac(float(k)) * total
+    for a, b in BANDAS_HUMANAS:
+        if x <= b - a:
+            return a + x
+        x -= b - a
+    return BANDAS_HUMANAS[-1][1]
+
+
+_PAL_HUMANA = {}
+
+
+def paleta_humana(cfg, k):
+    """El color sRGB (0-1) de la semilla k: croma alto, luminosidad L_HUMANA."""
+    q = int(_frac(float(k)) * 256.0)
+    col = _PAL_HUMANA.get(q)
+    if col is None:
+        h = tono_humano(q / 256.0)
+        C = C_HUMANA
+        col, dentro = oklch_to_srgb(L_HUMANA, C, h)
+        while not dentro and C > 0.05:
+            C -= 0.01
+            col, dentro = oklch_to_srgb(L_HUMANA, C, h)
+        _PAL_HUMANA[q] = col
+    return col
+
+
+def incl_de(W):
+    """W['incl'], con una lista por celda."""
+    inc = W.get('incl')
+    if not isinstance(inc, list) or len(inc) != N:
+        inc = W['incl'] = [[] for _ in range(N)]
+    return inc
+
+
+def n_inclusiones(W):
+    return sum(len(x) for x in incl_de(W))
+
+
+def depositar_inclusion(W, cfg, celda, tipo, now):
+    """Una inclusion en la celda, con el escalon (ocupacion) que tiene ahora.
+    Devuelve la inclusion [escalon, tipo, t, k]."""
+    lst = incl_de(W)[celda]
+    cu = W['incl_n']
+    n = cu['llegadas'] + cu['paradas']
+    k = _uniforme_caos(0.05 + 0.9 * _frac(n * AUREO + int(celda) * 0.3819660113 + 0.11 * int(tipo)))
+    inc = [int(W['occ'][celda]), int(tipo), float(now), k]
+    lst.append(inc)
+    while len(lst) > INCL_CELDA:        # el exceso: la mas antigua de las de escalon mas alto
+        alto = max(x[0] for x in lst[:-1])
+        lst.remove(next(x for x in lst[:-1] if x[0] == alto))
+    cu['llegadas' if tipo == LLEGADA else 'paradas'] += 1
+    W['incl_ultima'] = dict(celda=int(celda), escalon=inc[0], tipo=int(tipo), t=float(now))
+    W['dirty'] = True
+    return inc
+
+
+def llegada_prende(W, cfg, persona, celda):
+    """El si o el no de una llegada: el mapa logistico sembrado con el id de la
+    persona, la celda y el ciclo, contra Probllegada."""
+    x0 = 0.05 + 0.9 * _frac(int(persona) * AUREO + int(celda) * 0.3819660113 + int(W.get('ciclo_n', 1)) * 0.137)
+    return _uniforme_caos(x0) < cfg['prob_llegada']
+
+
+def llegadas(W, cfg, nuevas, now):
+    """Las personas nuevas [{id, casilla, celda, t}]: cada una deja una inclusion
+    en la celda que miraba su casilla al confirmarse, con probabilidad Probllegada.
+    Devuelve las inclusiones dejadas."""
+    out = []
+    for ev in nuevas or ():
+        if ev.get('celda') is not None and llegada_prende(W, cfg, ev['id'], ev['celda']):
+            out.append(depositar_inclusion(W, cfg, ev['celda'], LLEGADA, now))
+    return out
+
+
+def paradas(W, cfg, casillas, now):
+    """Tparada segundos seguidos con la casilla ocupada: una inclusion segura en
+    la celda que mira a la casilla en ese instante. Una por parada (la casilla
+    se rearma al quedar libre, cuando pierde su t_ocupada)."""
+    out = []
+    for k, v in (casillas or {}).items():
+        if not v.get('parada') and now - v['t_ocupada'] >= cfg['t_parada'] - 1e-9:
+            v['parada'] = True
+            out.append(depositar_inclusion(W, cfg, celda_de_casilla(W, cfg, k), PARADA, now))
+    return out
+
+
+def vaciar_inclusiones(W):
+    """El mundo se entierra: lo heredado empieza sin inclusiones."""
+    W['incl'] = [[] for _ in range(N)]
+    W['dirty'] = True
+
+
+# --- la noche de enterramiento (fase 28) --------------------------------------------
+# En cada enterramiento, con colapso o sin el, durante Noche segundos (la misma
+# de la oscuridad de sala de la fase 23) la esfera apaga lo mineral: solo emiten
+# las inclusiones supervivientes recien horneadas (las motas de la concha nueva)
+# y, desde la fase 29, las paredes de las escisiones. Empieza en el mismo
+# fotograma del recuento. El mundo nuevo sigue funcionando: lo que nace durante
+# la noche se dibuja apagado. Sin luces ni geometria nuevas: un valor 'noche'
+# (0-1; entra de golpe y sale en NOCHE_SALIDA s) que llega
+#   - al shader de la piel (y de las conchas) como uniforme uNoche: todo se
+#     multiplica por 1 - noche y las motas recien horneadas suben su emisivo;
+#   - a las luces: el color de luz_principal, luz_relleno y luz_destello se
+#     multiplica por 1 - noche (lo que dibuja con Phong se apaga con ellas);
+#   - a las capas de luz y a las particulas (luz_celda, luz_conchas, luz_local,
+#     particulas, humo...): el color de sus instancias, por 1 - noche.
+# Nada se recompila ni sale del render.
+
+NOCHE_SALIDA = 0.4              # s que tarda en volver la luz al acabar la noche
+ALFA_RECIENTE = 100.0           # lo que suma al alfa una loseta recien horneada (el shader lo lee)
+NOCHE_CAPAS = ('luz_celda', 'luz_conchas', 'luz_local', 'particulas', 'humo', 'vagones', 'diagnostico',
+               'coronas')
+NOCHE_FUERA = ('particulas', 'humo')    # transparentes: a oscuras del todo, no se dibujan
+
+
+def noche_nivel(W, cfg, now):
+    """La noche (0-1): 1 desde el fotograma del recuento hasta Noche s despues;
+    luego vuelve a 0 en NOCHE_SALIDA s."""
+    n = W.get('noche')
+    if not n or now < n[0]:
+        return 0.0
+    if now <= n[1]:
+        return 1.0
+    return max(0.0, 1.0 - (now - n[1]) / NOCHE_SALIDA)
+
+
+def noche_tick(W, cfg, now):
+    """Cada fotograma: al acabar la noche (y su salida) se olvida, y las losetas
+    dejan de marcarse como recien horneadas."""
+    n = W.get('noche')
+    if n and now > n[1] + NOCHE_SALIDA:
+        W['noche'] = None
+        W['dirty'] = True
+
+
+def noche_filas(out, dia):
+    """Apaga las capas de luz y las particulas: el color de sus instancias, por
+    dia (1 - noche). A oscuras del todo, las transparentes no se dibujan."""
+    if dia >= 0.999:
+        return out
+    for k in NOCHE_CAPAS:
+        filas = out.get(k)
+        if not filas:
+            continue
+        if dia <= 0.02 and k in NOCHE_FUERA:
+            out[k] = []
+            continue
+        out[k] = [list(f[:9]) + [f[9] * dia, f[10] * dia, f[11] * dia] + list(f[12:]) for f in filas]
+    return out
+
+
+def emiten_noche(W, cfg):
+    """(inclusiones recien horneadas, escisiones abiertas) que emiten en la noche."""
+    sh = W['shells'][-1] if W['shells'] else {}
+    n = sum(len(v) for v in sh.get('incl', {}).values()) if sh.get('banda') == 'humana' else 0
+    esc = sum(1 for e in W.get('escisiones', ()) if e.get('estado') != 'enterrada' or e.get('t_noche'))
+    return n, esc
+
+
+# --- la clasificacion al enterrar (fase 27) ----------------------------------------
+# En end_cycle, antes de hornear: se cuentan las inclusiones supervivientes del
+# mundo que se entierra (las escisiones no cuentan). Con al menos Minhuellas, la
+# concha es ESTRATO HUMANO; si no, CONCHA LIMPIA, aunque haya habido gente todo
+# el dia (todas sus huellas se borraron). El recuento se hornea en el material:
+# cada loseta nueva guarda cuantas inclusiones sobrevivieron en su celda y sus
+# semillas (sus colores), y el shader de las conchas las dibuja como motas de la
+# paleta humana en la cara y los flancos de esa loseta, con una cobertura que
+# crece con su numero y nunca pasa de Inclusionesmax. El grosor de la concha no
+# cambia. La concha guarda tambien el motivo del cierre y la marca de COLAPSO
+# (el motivo 'colapso' de la fase 23), que se combina con humana o limpia. Una
+# concha de antes de la fase 27 se lee como limpia, sin colapso.
+
+COB_PASOS = 20                  # la cobertura viaja en el alfa de la loseta en veinteavos
+COB_K = 3.0                     # inclusiones con las que una loseta llega a 1 - 1/e de Inclusionesmax
+PALETA_HUMANA_8 = [(0.642, 0.635, 0.993), (0.746, 0.587, 0.994), (0.874, 0.509, 0.982), (0.959, 0.475, 0.863), (0.991, 0.484, 0.721), (0.991, 0.510, 0.598), (0.992, 0.546, 0.279), (0.699, 0.716, 0.098)]          # la tabla del shader (comun): paleta_humana en (j + 0,5) / 8
+
+
+def contar_huellas(W):
+    """Las inclusiones supervivientes del mundo (las escisiones no son inclusiones)."""
+    return n_inclusiones(W)
+
+
+def clasificar_concha(W, cfg, ev=None):
+    """La marca de la concha que se entierra: {huellas, banda ('humana' o
+    'limpia'), colapso, cierre, incl ({celda: [semillas]}), escisiones (ids)}."""
+    n = contar_huellas(W)
+    motivo = (ev or {}).get('motivo')
+    incl = dict((i, [x[3] for x in lst]) for i, lst in enumerate(incl_de(W)) if lst)
+    abiertas = [e['id'] for e in W.get('escisiones', ()) if e.get('estado') in ('abierta', 'cerrada')]
+    return dict(huellas=n, banda='humana' if n >= max(1, int(cfg['min_huellas'])) else 'limpia',
+                colapso=motivo == 'colapso', cierre=motivo or '', incl=incl, escisiones=abiertas)
+
+
+def banda_de(sh):
+    """(banda, huellas, colapso) de una concha; sin marca (antes de la fase 27), limpia."""
+    return sh.get('banda', 'limpia'), int(sh.get('huellas', 0)), bool(sh.get('colapso', False))
+
+
+def cobertura(cfg, n):
+    """Cobertura (0-1) de las motas de una loseta con n inclusiones: crece con n y
+    nunca pasa de Inclusionesmax."""
+    if n <= 0:
+        return 0.0
+    return max(0.0, min(1.0, cfg['inclusiones_max'])) * (1.0 - math.exp(-n / COB_K))
+
+
+def cobertura_q(cfg, sh, c):
+    """La cobertura de la loseta de la celda c en la concha sh, en veinteavos
+    (lo que lleva la parte entera de su alfa, / 2). Solo en un estrato humano."""
+    if sh.get('banda') != 'humana':
+        return 0
+    ks = sh.get('incl', {}).get(c) or sh.get('incl', {}).get(str(c))
+    if not ks:
+        return 0
+    tope = int(math.floor(max(0.0, min(1.0, cfg['inclusiones_max'])) * COB_PASOS + 1e-9))
+    return max(1 if tope else 0, min(tope, int(round(cobertura(cfg, len(ks)) * COB_PASOS))))
+
+
+def cobertura_concha(cfg, sh):
+    """La cobertura de la loseta mas cubierta de la concha (0-1)."""
+    return max([cobertura_q(cfg, sh, c) for c in sh.get('incl', {})] or [0]) / float(COB_PASOS)
+
+
+# --- el borrado (fase 26) --------------------------------------------------------
+# Una inclusion desaparece cuando la erosion baja su celda por debajo de su
+# escalon (occ < escalon). En una celda sin construir (escalon 0), cualquier
+# golpe de erosion que la alcance la borra: cualquier anillo con peso mayor que
+# 0, aunque ese golpe no quite una nota entera (P6). Valen todas las fuentes: la
+# caja y los aranazos, el microfono (y su corte por ruido), los cortes (vacian
+# la celda y se llevan todas sus inclusiones), los accidentes y catastrofes de
+# la fase 14 y la escision de la fase 29 (es un corte). El bombo y el tom no
+# borran: son impulso y suben la ocupacion. Un unico punto de purga
+# (purgar_inclusiones), que llaman _undo_note y bajar_escalon; erosion() llama
+# ademas a golpe_inclusiones en cada celda de sus anillos; cut(), a
+# borrar_inclusiones; y una pasada de seguridad por fotograma mira solo las
+# celdas con inclusiones. La causa de cada borrado se cuenta en
+# W['incl_borradas'].
+
+_CAUSA = ['erosion']            # quien esta bajando la ocupacion ahora (erosion, micro, catastrofe)
+
+
+def _borradas(W, causa, n):
+    if n:
+        b = W['incl_borradas']
+        causa = causa or _CAUSA[0]
+        b[causa] = b.get(causa, 0) + n
+        W['dirty'] = True
+    return n
+
+
+def purgar_inclusiones(W, celda, causa=None):
+    """Borra las inclusiones de la celda cuyo escalon queda por encima de su
+    ocupacion (occ < escalon). Devuelve cuantas."""
+    lst = incl_de(W)[celda]
+    if not lst:
+        return 0
+    o = W['occ'][celda]
+    quedan = [x for x in lst if x[0] <= o]
+    n = len(lst) - len(quedan)
+    if n:
+        W['incl'][celda] = quedan
+    return _borradas(W, causa, n)
+
+
+def golpe_inclusiones(W, celda, causa=None):
+    """Un golpe de erosion alcanza la celda: borra sus inclusiones de escalon 0
+    (las que cayeron sobre la celda sin construir), aunque no baje nada."""
+    lst = incl_de(W)[celda]
+    if not lst:
+        return 0
+    quedan = [x for x in lst if x[0] > 0]
+    n = len(lst) - len(quedan)
+    if n:
+        W['incl'][celda] = quedan
+    return _borradas(W, causa, n)
+
+
+def borrar_inclusiones(W, celda, causa):
+    """Un corte (o una escision) se lleva todas las inclusiones de la celda."""
+    n = len(incl_de(W)[celda])
+    if n:
+        W['incl'][celda] = []
+    return _borradas(W, causa, n)
+
+
+def purga_segura(W):
+    """La pasada de seguridad de cada fotograma, solo en las celdas con
+    inclusiones: lo que haya bajado la ocupacion por otro camino."""
+    n = 0
+    for i, lst in enumerate(incl_de(W)):
+        if lst:
+            n += purgar_inclusiones(W, i, 'catastrofe' if W.get('cats') else 'erosion')
+    return n
+
+
+def fila_inclusion(W, cfg, i, inc, r0=None):
+    """La instancia de una inclusion de la celda i: una pieza pequena, medio
+    enterrada en el suelo de la celda, alrededor de la formacion. Posicion, forma
+    y color salen de su semilla k."""
+    k = inc[3]
+    n = normal_i(i)
+    r0 = base_radius(W, cfg, i) if r0 is None else r0
+    cw, cl = _cell_sizes(r0, i)
+    ex, ez = tangents(n)
+    ang = 2.0 * math.pi * _frac(k * 7.31)
+    rad = 0.26 + 0.16 * _frac(k * 13.7)            # un anillo alrededor de la formacion
+    d = _norm(_add(_add(n, ex, rad * cw * math.cos(ang) / r0), ez, rad * cl * math.sin(ang) / r0))
+    t = _TERRENO.get('t') if cfg['nivel'] >= 11 else None
+    try:
+        r = r0 + (alto_en(t, d) if t is not None else 0.0)
+    except Exception:
+        r = r0
+    s = (0.035 + 0.035 * _frac(k * 29.3)) * min(cw, cl)
+    fila = _row(_mul(d, r), d, s * (0.7 + 0.6 * _frac(k * 3.7)), s * (0.45 + 0.35 * _frac(k * 5.3)),
+                s * (0.7 + 0.6 * _frac(k * 11.1)), paleta_humana(cfg, k))
+    fila[5] = 360.0 * _frac(k * 17.9)               # girada sobre la normal
+    fila.append(0.10 + 0.10 * _frac(k * 19.7))      # rugosidad 0,1-0,2 (canal a)
+    return fila
+
+
+def build_inclusiones(W, cfg, now, out):
+    """Las inclusiones vivas del mundo, una instancia cada una (out['inclusiones'])."""
+    rows = []
+    for i, lst in enumerate(incl_de(W)):
+        if not lst:
+            continue
+        r0 = base_radius(W, cfg, i)
+        for inc in lst:
+            rows.append(fila_inclusion(W, cfg, i, inc, r0))
+    out['inclusiones'] = rows
+    return rows
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la fila y la escision colectiva (fase 29)
+# -----------------------------------------------------------------------------
+# FILA: Minfila personas o mas en casillas contiguas (diagonales incluidas),
+# sostenida Tfila segundos sobre la ocupacion binaria. Modofila = cadena
+# (cualquier forma contigua) o recta (todas las casillas en una misma fila,
+# columna o diagonal de la rejilla, seguidas). Una fila es una componente conexa
+# de casillas ocupadas; se reconoce de una imagen a la siguiente si comparte
+# alguna casilla con la de antes. Cuenta personas, no casillas. Puede haber
+# varias filas a la vez, cada una con su escision (P14).
+# ESCISION: se abre en la celda que mira a la casilla de la fila con el t_ocupada
+# mas antiguo, en el instante en que la fila cumple Tfila; esa celda queda fija.
+# Profundidad: personas x Conchasporpersona losetas de la columna de origen, con
+# el nucleo como tope; si se suman personas mientras la fila aguanta, la misma
+# escision baja mas (sigue al maximo visto). La fila solo abre otra cuando se
+# deshace. Es un HUECO permanente: quita losetas de la columna (como cut, con
+# radio 0), vacia la celda y borra sus inclusiones (es un corte, P7). No cuenta
+# en el tope por mundo de los cortes (quitadas), no enciende cicatriz cian,
+# ignora Colmatacion en su celda (la concha siguiente la tapiza sin cerrarla) y
+# las fases 13 (lagos) y 16 (fosiles) la excluyen. No pasa por erosion() ni por
+# pulso(): no es erosion ni creacion para el balance de la fase 23.
+# FULGURITA: una pieza por concha atravesada, de la superficie al fondo, en su
+# propia geometria: pared exterior de arena fundida, interior vitreo y nucleo
+# emisivo de la paleta humana (nunca cian), con dos o tres ramas finas por concha
+# hacia las paredes vecinas, decididas por el mapa logistico (la escision y la
+# concha como semilla). Las ramas son solo visuales: no quitan material (P11).
+# Las filas son del sensor (_SALA['filas']); las escisiones, mundo (W['escisiones']).
+
+ESCISIONES_MAX = 200            # las mas viejas se quedan solo en el registro
+MODOS_FILA = ['cadena', 'recta']
+COL_ARENA = (0.66, 0.58, 0.46)  # la pared de la fulgurita: arena fundida
+PARED, VIDRIO, NUCLEO = 0, 1, 2  # las partes de la fulgurita (en el alfa: rugosidad + 2 x parte)
+FULG_RAMAS = (2, 3)             # ramas por concha
+
+
+def _vecinas_casilla(k, cols, filas):
+    f, c = k // cols, k % cols
+    for df in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if (df or dc) and 0 <= f + df < filas and 0 <= c + dc < cols:
+                yield (f + df) * cols + c + dc
+
+
+def es_recta(casillas, cols):
+    """Las casillas estan todas en una misma fila, columna o diagonal de la
+    rejilla, seguidas."""
+    ks = sorted(int(k) for k in casillas)
+    if len(ks) <= 1:
+        return True
+    pts = [(k // cols, k % cols) for k in ks]
+    df, dc = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
+    if (df, dc) not in ((0, 1), (1, 0), (1, 1), (1, -1)):
+        return False
+    return all((pts[j + 1][0] - pts[j][0], pts[j + 1][1] - pts[j][1]) == (df, dc) for j in range(len(pts) - 1))
+
+
+def buscar_filas(casillas, cfg):
+    """Las componentes conexas (diagonales incluidas) de las casillas ocupadas
+    {casilla: {personas, t_ocupada}}: [{casillas, personas, origen}], donde origen
+    es la casilla ocupada desde hace mas tiempo. Sin filtrar por Minfila."""
+    cols, filas = rejilla_sala(cfg)
+    quedan = set(casillas)
+    out = []
+    while quedan:
+        k0 = min(quedan)
+        quedan.discard(k0)
+        comp, pila = [k0], [k0]
+        while pila:
+            k = pila.pop()
+            for v in _vecinas_casilla(k, cols, filas):
+                if v in quedan:
+                    quedan.discard(v)
+                    comp.append(v)
+                    pila.append(v)
+        comp.sort()
+        out.append(dict(casillas=comp, personas=sum(int(casillas[k].get('personas', 1)) for k in comp),
+                        origen=min(comp, key=lambda k: (casillas[k]['t_ocupada'], k))))
+    return out
+
+
+def es_escision(W, c):
+    """La celda c tiene una escision (un hueco permanente)."""
+    return int(c) in W.get('esc_celdas', {})
+
+
+def _fecha():
+    import time
+    return time.strftime('%Y-%m-%d'), time.strftime('%H:%M:%S')
+
+
+def _quitar_losetas(W, celda, k):
+    """Quita hasta k losetas de arriba de la columna de la celda (el nucleo es el
+    tope). Devuelve las conchas quitadas, de arriba abajo."""
+    col = W['cols'][celda]
+    fuera = []
+    while len(fuera) < k and col:
+        s, _ = col.pop()
+        if 0 <= s < len(W['shells']):
+            W['shells'][s]['rm'][celda] = 1
+        fuera.append(s)
+    return fuera
+
+
+def abrir_escision(W, cfg, fila, casilla, now):
+    """La fila ha cumplido Tfila: abre una escision en la celda que mira a su
+    casilla de origen en este instante. Devuelve la escision."""
+    origen = celda_de_casilla(W, cfg, casilla)
+    W['escision_n'] = W.get('escision_n', 0) + 1
+    personas = int(fila.get('max', fila['personas']))
+    jornada, hora = _fecha()
+    e = dict(id=W['escision_n'], origen=origen, casilla=int(casilla), personas=personas,
+             profundidad=personas * max(1, int(cfg['conchas_persona'])), cortadas=[],
+             suelo0=suelo(W, cfg, origen), estado='abierta', t0=now, t1=None,
+             ciclo=W.get('ciclo_n', 1), jornada=jornada, hora=hora, testigo=None,
+             ramas=_uniforme_caos(0.05 + 0.9 * _frac(W['escision_n'] * AUREO + origen * 0.3819660113)))
+    e['cortadas'] = _quitar_losetas(W, origen, e['profundidad'])
+    f0, b0 = hueco_escision(W, cfg, origen)
+    e['hondo0'] = max(0.0, b0 - f0)       # lo hondo del hueco al abrirse (para la fulgurita)
+    _clear_cell(W, origen)              # un hueco: la celda queda vacia
+    W['huella'][origen] = 0.0
+    W['ruina'][origen] = 0
+    for j in NEIGH[origen]:
+        if W['par'][j] == origen:
+            W['par'][j] = -1
+    borrar_inclusiones(W, origen, 'escision')       # es un corte (P7)
+    W.setdefault('esc_celdas', {})[origen] = W.get('esc_celdas', {}).get(origen, 0) + 1
+    W['escisiones'].append(e)
+    del W['escisiones'][:-ESCISIONES_MAX]
+    W['ev']['escision'] = dict(id=e['id'], celda=origen, conchas=len(e['cortadas']), personas=personas, t=now)
+    if cfg['nivel'] >= 30:              # fase 30: un relampago por escision
+        e['relampago'] = relampago(W, cfg, now)
+    W['aviso'] = 'escision %d: %d personas abren %d conchas en la celda %d' % (
+        e['id'], personas, len(e['cortadas']), origen)
+    W['dirty'] = True
+    return e
+
+
+def profundizar_escision(W, cfg, e, personas, now):
+    """Mas personas en la fila: la misma escision baja mas (hasta el nucleo).
+    Devuelve las losetas quitadas ahora."""
+    if e['estado'] != 'abierta' or personas <= e['personas']:
+        return 0
+    e['personas'] = int(personas)
+    e['profundidad'] = e['personas'] * max(1, int(cfg['conchas_persona']))
+    mas = _quitar_losetas(W, e['origen'], e['profundidad'] - len(e['cortadas']))
+    e['cortadas'] += mas
+    if mas:
+        f0, b0 = hueco_escision(W, cfg, e['origen'])
+        e['hondo0'] = max(0.0, b0 - f0)
+        W['dirty'] = True
+    return len(mas)
+
+
+def cerrar_escision(W, cfg, e, now, estado='cerrada'):
+    """La fila se deshace (cerrada) o su mundo se entierra (enterrada): la
+    escision ya no baja mas. El hueco se queda."""
+    if e['estado'] == 'abierta' or (estado == 'enterrada' and e['estado'] == 'cerrada'):
+        e['estado'] = estado
+        if e['t1'] is None:
+            e['t1'] = now
+        if cfg['nivel'] >= 31:          # fase 31: el disparo de testigo, con su profundidad final
+            encolar_testigo(W, cfg, e, now)
+        return True
+    return False
+
+
+# --- el relampago (fase 30) --------------------------------------------------------
+# Al abrirse una escision, un unico destello blanco por DMX. Pasa por el
+# limitador comun de la fase 23 (como mucho 3 destellos en cualquier ventana de
+# 1 s, junto con el estroboscopio): si esta lleno, el relampago espera al primer
+# hueco y el estroboscopio cede ese destello (P12). Solo blanco. Profundizar la
+# escision no da otro. En pantalla, la fulgurita recien abierta sube su emisivo
+# un instante. Sin interfaz DMX, el evento queda en el motor y en la leyenda.
+
+RELAMPAGO_BRILLO = 2.5          # lo que sube el emisivo de la fulgurita recien abierta
+RELAMPAGO_CAIDA = 0.35          # s con los que vuelve
+
+
+def relampago(W, cfg, now):
+    """Pide el destello del relampago al limitador, con prioridad. Devuelve si
+    ha salido ahora (si no, queda pendiente y sale en el primer hueco)."""
+    s = sala_de(W)
+    s['relampagos'] = s.get('relampagos', 0) + 1
+    s['t_pedido'] = now
+    return limitador_destellos(W, cfg, now, 'relampago', prioridad=True)
+
+
+def brillo_fulgurita(cfg, e, now):
+    """El emisivo de la fulgurita de la escision e: sube al abrirse (fase 30) y vuelve a 1."""
+    if cfg['nivel'] < 30:
+        return 1.0
+    dt = now - e['t0']
+    if dt < 0.0 or dt > 10.0 * RELAMPAGO_CAIDA:
+        return 1.0
+    return 1.0 + RELAMPAGO_BRILLO * math.exp(-dt / RELAMPAGO_CAIDA)
+
+
+def escision_de(W, ide):
+    return next((e for e in reversed(W['escisiones']) if e['id'] == ide), None)
+
+
+def filas_reset():
+    _SALA['filas'] = []
+    _SALA['fila_id'] = 0
+
+
+def tick_filas(W, cfg, now):
+    """Cada imagen de la camara: las filas de la sala (componentes de Minfila
+    personas o mas, con la forma de Modofila), lo que llevan sostenidas y sus
+    escisiones. Devuelve las filas en curso."""
+    cas = _SALA.get('casillas', {})
+    cols, _ = rejilla_sala(cfg)
+    recta = int(cfg['modo_fila']) == 1
+    comps = [f for f in buscar_filas(cas, cfg) if f['personas'] >= cfg['min_fila']
+             and (not recta or es_recta(f['casillas'], cols))]
+    prev = _SALA.get('filas') or []
+    usadas, filas = set(), []
+    for f in comps:
+        cs = set(f['casillas'])
+        ant = next((p for p in prev if id(p) not in usadas and p['casillas'] & cs), None)
+        if ant is None:
+            _SALA['fila_id'] = _SALA.get('fila_id', 0) + 1
+            ant = dict(id=_SALA['fila_id'], t0=now, max=0, escision=None)
+        else:
+            usadas.add(id(ant))
+        ant.update(casillas=cs, personas=f['personas'], origen=f['origen'], max=max(ant['max'], f['personas']))
+        filas.append(ant)
+        if ant['escision'] is None:
+            if now - ant['t0'] >= cfg['t_fila'] - 1e-9:
+                ant['escision'] = abrir_escision(W, cfg, ant, f['origen'], now)['id']
+        else:
+            e = escision_de(W, ant['escision'])
+            if e is not None:
+                profundizar_escision(W, cfg, e, ant['max'], now)
+    for p in prev:                      # la fila se deshace: su escision se cierra
+        if id(p) not in usadas and p.get('escision') is not None:
+            e = escision_de(W, p['escision'])
+            if e is not None:
+                cerrar_escision(W, cfg, e, now)
+    _SALA['filas'] = filas
+    return filas
+
+
+def enterrar_escisiones(W, cfg, now):
+    """El mundo se entierra: sus escisiones quedan enterradas (el hueco sigue)."""
+    n = 0
+    for e in W['escisiones']:
+        if e['estado'] in ('abierta', 'cerrada'):
+            e['estado'] = 'enterrada'
+            if e['t1'] is None:
+                e['t1'] = now
+            e['t_noche'] = now          # sus paredes brillan en la noche de este entierro
+            n += 1
+        elif e.get('t_noche') is not None and e['t_noche'] != now:
+            e['t_noche'] = None
+    return n
+
+
+def hueco_escision(W, cfg, i):
+    """(fondo, borde) del hueco de la celda i: su suelo y el suelo mas alto de sus vecinas."""
+    return suelo(W, cfg, i), max([suelo(W, cfg, j) for j in NEIGH[i]] or [suelo(W, cfg, i)])
+
+
+def filas_fulgurita(W, cfg, e, now=0.0):
+    """Las instancias de la fulgurita de la escision e: por cada concha atravesada
+    que sigue a la vista (lo que queda bajo el tapiz de una concha posterior no se
+    dibuja), cuatro paredes de arena fundida, cuatro laminas de vidrio por dentro,
+    un nucleo emisivo y dos o tres ramas finas. El alfa lleva rugosidad + 2 x parte."""
+    i = e['origen']
+    fondo, borde = hueco_escision(W, cfg, i)
+    alto = borde - fondo
+    if alto < 1e-4:
+        return []
+    hondo0 = max(1e-6, e.get('hondo0') or alto)
+    n = max(1, len(e['cortadas']))
+    vistas = max(1, min(n, int(math.ceil(n * min(1.0, alto / hondo0) - 1e-6))))
+    h = alto / vistas
+    nrm = normal_i(i)
+    X, Y, Z, _ = marco = _marco(i, 0)
+    col_n = paleta_humana(cfg, e['ramas'])
+    brillo = brillo_fulgurita(cfg, e, now)
+    col_n = (col_n[0] * brillo, col_n[1] * brillo, col_n[2] * brillo)
+    col_v = _mix(col_n, (0.05, 0.05, 0.06), 0.45)
+    rows = []
+    for k in range(vistas):
+        r0 = fondo + k * h
+        cw, cl = _cell_sizes(r0 + 0.5 * h, i)
+        base = _mul(nrm, r0)
+        concha = e['cortadas'][min(len(e['cortadas']) - 1, n - 1 - k)] if e['cortadas'] else 0
+        gris = 0.85 + 0.3 * _hash01(e['id'], concha, 7)
+        arena = (COL_ARENA[0] * gris, COL_ARENA[1] * gris, COL_ARENA[2] * gris)
+        for sgn in (-1.0, 1.0):         # las paredes y, por dentro, el vidrio
+            # al este y al oeste: finas en X, largas en Z
+            rows.append(_fila_m(_add(base, X, sgn * 0.46 * cw), marco, 0.06 * cw, h, 0.98 * cl, arena)
+                        + [0.9 + 2 * PARED])
+            rows.append(_fila_m(_add(base, X, sgn * 0.40 * cw), marco, 0.05 * cw, h, 0.84 * cl, col_v)
+                        + [0.07 + 2 * VIDRIO])
+            # al norte y al sur: largas en X, finas en Z
+            rows.append(_fila_m(_add(base, Z, sgn * 0.46 * cl), marco, 0.98 * cw, h, 0.06 * cl, arena)
+                        + [0.9 + 2 * PARED])
+            rows.append(_fila_m(_add(base, Z, sgn * 0.40 * cl), marco, 0.84 * cw, h, 0.05 * cl, col_v)
+                        + [0.07 + 2 * VIDRIO])
+        g = 0.07 * min(cw, cl)
+        rows.append(_fila_m(base, marco, g, h, g, col_n) + [0.10 + 2 * NUCLEO])
+        # las ramas de esta concha: solo visuales
+        x0 = 0.05 + 0.9 * _frac(e['ramas'] + concha * AUREO + e['id'] * 0.137)
+        us = logistica(x0, 4.0, 4)
+        nr = FULG_RAMAS[0] + (1 if us[0] > 0.5 else 0)
+        for j in range(nr):
+            ang = int(360.0 * _frac(us[j + 1] + j / float(nr))) // 15 * 15
+            mr = _marco(i, ang)
+            L = 0.36 * min(cw, cl)
+            p = _add(_add(base, mr[0], 0.5 * L), nrm, h * (0.25 + 0.5 * _frac(us[j + 1] * 7.3)))
+            rows.append(_fila_m(p, mr, L, 0.10 * h, 0.03 * min(cw, cl), col_n) + [0.10 + 2 * NUCLEO])
+    return rows
+
+
+def build_fulguritas(W, cfg, now, out):
+    """Las fulguritas de todas las escisiones con el hueco a la vista."""
+    rows = []
+    for e in W['escisiones']:
+        rows += filas_fulgurita(W, cfg, e, now)
+    out['fulguritas'] = rows
+    return rows
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - las escisiones en el historico (fase 31)
+# -----------------------------------------------------------------------------
+# TESTIGO: cada escision exporta una imagen cuando su fila se deshace o cuando
+# se entierra su mundo, lo que ocurra antes, con su profundidad final. Una sola
+# vez. La imagen es la SECCION POR EL ORIGEN: un corte del planeta por la celda
+# de origen y unas celdas a cada lado de su anillo, desde la superficie hasta la
+# ultima concha atravesada. Se dibuja aqui, con numpy, a partir de las columnas:
+# cada loseta es una banda de su color, las bandas humanas con sus motas y la
+# escision con su fulgurita (paredes de arena fundida, vidrio, nucleo y ramas).
+# Sin un segundo render ni planos de recorte: se prueba fuera de TouchDesigner.
+# COLUMNA DE LA JORNADA: una banda por ciclo de la jornada (humana, limpia, con
+# colapso o sin el), de la mas antigua abajo a la mas nueva arriba; cada
+# escision es una veta que une las bandas que atraveso, con un ancho
+# proporcional a sus personas.
+# REGISTRO: jornada, ciclo, hora, personas, conchas cruzadas y celda de origen
+# de cada escision, en la tabla escisiones y en historico/escisiones.csv.
+# La jornada, hasta que exista la de D5, es la fecha del sistema al abrirse la
+# escision (P13). Las imagenes pendientes de guardar viven en _HIST (modulo).
+
+SECCION_PX = (640, 360)         # ancho x alto de la seccion
+COLUMNA_PX = (200, 720)         # y de la columna de la jornada
+SECCION_LADO = 2                # celdas a cada lado del origen
+FRANJA_SUP = 0.12               # la banda de superficie: esta fraccion del alto
+COL_HUECO = (0.03, 0.03, 0.035)
+COL_CIELO = (0.0, 0.0, 0.0)
+COL_SUELO_VIVO = (0.20, 0.20, 0.21)
+REGISTRO_COLS = ['id', 'jornada', 'ciclo', 'hora', 'personas', 'conchas', 'celda', 'estado', 'testigo']
+_HIST = dict(pend=[], imagen=None, meta=None, exportadas=0, avisos=[])
+
+
+def hist_reset():
+    _HIST.update(pend=[], imagen=None, meta=None, exportadas=0, avisos=[])
+
+
+def celdas_seccion(i, lado=SECCION_LADO):
+    """Las celdas de la seccion: el origen en el centro y 'lado' a cada lado, por su anillo."""
+    if is_pole(i):
+        nb = list(NEIGH[i])
+        return list(reversed(nb[:lado])) + [i] + nb[lado:2 * lado]
+    R = RINGS[RING_OF[i]]
+    q = R.index(i)
+    lado = min(lado, (len(R) - 1) // 2)
+    return [R[(q + d) % len(R)] for d in range(-lado, lado + 1)]
+
+
+def _tramo_de(W, cfg, celdas, s):
+    """(r_in, r_out) de la concha s en la primera celda de la lista que la conserve."""
+    for c in celdas:
+        for s2, r_in, r_out in column_radii(W, cfg, c):
+            if s2 == s:
+                return c, r_in, r_out
+    return None, None, None
+
+
+def _motas(np, img, y0, y1, x0, x1, cob, s, c):
+    """Las motas de una banda humana: bloques de la paleta humana, sin azar."""
+    paso = 6
+    for gy in range(y0, y1, paso):
+        for gx in range(x0, x1, paso):
+            if _hash01(s, c, gx, gy) < cob:
+                col = PALETA_HUMANA_8[int(_hash01(gy, gx, c, s, 3) * 8) % 8]
+                img[gy:min(y1, gy + paso - 2), gx:min(x1, gx + paso - 2), :3] = col
+
+
+def seccion_escision(W, cfg, e, ancho=None, alto=None):
+    """La seccion por el origen de la escision e: (imagen alto x ancho x 4, float32,
+    la fila 0 arriba; meta). meta['bandas'] son las bandas que cruza, de arriba
+    abajo: la de superficie y una por concha atravesada, con su color y sus filas
+    de pixeles. None sin numpy."""
+    np = _np()
+    if np is None:
+        return None, None
+    ancho = int(ancho or SECCION_PX[0])
+    alto = int(alto or SECCION_PX[1])
+    i = e['origen']
+    celdas = celdas_seccion(i)
+    otras = [c for c in celdas if c != i]
+    tramos = [(s,) + _tramo_de(W, cfg, otras, s)[1:] for s in e['cortadas']]
+    r_top = max(suelo(W, cfg, c) for c in celdas)
+    fondos = [t[1] for t in tramos if t[1] is not None]
+    r_bot = min(fondos + [suelo(W, cfg, i)]) if fondos else suelo(W, cfg, i)
+    if r_top - r_bot < 1e-6:
+        r_bot = r_top - max(1e-3, cfg['shell_thick'])
+    ys = int(round(FRANJA_SUP * alto))
+
+    def fila_de(r):
+        return int(round(ys + (r_top - r) / (r_top - r_bot) * (alto - ys)))
+    img = np.zeros((alto, ancho, 4), dtype=np.float32)
+    img[..., 3] = 1.0
+    img[..., :3] = COL_CIELO
+    wc = ancho // len(celdas)
+    for j, c in enumerate(celdas):
+        x0, x1 = j * wc + 1, (j + 1) * wc - 1
+        for s, r_in, r_out in column_radii(W, cfg, c):
+            y0, y1 = max(ys, fila_de(min(r_out, r_top))), min(alto, fila_de(max(r_in, r_bot)))
+            if y1 <= y0:
+                continue
+            sh = W['shells'][s]
+            img[y0:y1, x0:x1, :3] = tile_material(cfg, sh, s, c)[0]
+            q = cobertura_q(cfg, sh, c)
+            if q:
+                _motas(np, img, y0, y1, x0, x1, q / float(COB_PASOS), s, c)
+            img[y0:y0 + 1, x0:x1, :3] *= 0.6                     # el limite entre conchas
+        if c != i:                                                  # la superficie viva de cada celda
+            vivo = W['occ'][c] > 0
+            col = seq_color(cfg, 1 if W['own'][c] == GEO else 2) if vivo else COL_SUELO_VIVO
+            ysu = fila_de(suelo(W, cfg, c))
+            img[max(0, ysu - 6):ysu, x0:x1, :3] = col
+    # el hueco de la escision y su fulgurita
+    j = celdas.index(i)
+    x0, x1 = j * wc + 1, (j + 1) * wc - 1
+    yf = min(alto, fila_de(max(r_bot, suelo(W, cfg, i))))
+    img[0:yf, x0:x1, :3] = COL_HUECO
+    w = x1 - x0
+    col_n = paleta_humana(cfg, e['ramas'])
+    col_v = _mix(col_n, (0.05, 0.05, 0.06), 0.45)
+    pa, pv, pn = max(2, int(0.07 * w)), max(2, int(0.05 * w)), max(2, int(0.04 * w))
+    xc = (x0 + x1) // 2
+    bandas = [dict(concha='superficie', color=COL_HUECO, y0=0, y1=ys)]
+    for k, (s, r_in, r_out) in enumerate(tramos):
+        if r_in is None:                # nadie conserva esa concha: reparto a partes iguales
+            h = (r_top - r_bot) / max(1, len(tramos))
+            r_out, r_in = r_top - k * h, r_top - (k + 1) * h
+        y0, y1 = max(ys, fila_de(min(r_out, r_top))), min(yf, fila_de(max(r_in, r_bot)))
+        vecina = _tramo_de(W, cfg, otras, s)[0]
+        bandas.append(dict(concha=s, color=tile_material(cfg, W['shells'][s], s, vecina if vecina is not None else i)[0],
+                           y0=y0, y1=y1))
+        if y1 <= y0:
+            continue
+        gris = 0.85 + 0.3 * _hash01(e['id'], s, 7)
+        arena = [x * gris for x in COL_ARENA]
+        img[y0:y1, x0:x0 + pa, :3] = arena
+        img[y0:y1, x1 - pa:x1, :3] = arena
+        img[y0:y1, x0 + pa:x0 + pa + pv, :3] = col_v
+        img[y0:y1, x1 - pa - pv:x1 - pa, :3] = col_v
+        img[y0:y1, xc - pn // 2:xc - pn // 2 + pn, :3] = col_n
+        us = logistica(0.05 + 0.9 * _frac(e['ramas'] + s * AUREO + e['id'] * 0.137), 4.0, 4)
+        for q in range(FULG_RAMAS[0] + (1 if us[0] > 0.5 else 0)):  # las ramas, hacia una pared o la otra
+            yr = y0 + int((0.25 + 0.5 * _frac(us[q + 1] * 7.3)) * (y1 - y0))
+            if math.cos(2.0 * math.pi * _frac(us[q + 1] + q / 3.0)) >= 0.0:
+                img[yr:yr + 2, xc:x1 - pa - pv, :3] = col_n
+            else:
+                img[yr:yr + 2, x0 + pa + pv:xc, :3] = col_n
+    meta = dict(id=e['id'], celdas=celdas, bandas=bandas, r_top=r_top, r_bot=r_bot, ancho=ancho, alto=alto,
+                columna=wc)
+    return img, meta
+
+
+def encolar_testigo(W, cfg, e, now):
+    """El disparo de testigo de la escision e: dibuja su seccion y la deja pendiente
+    de guardar. Una sola vez por escision. Devuelve si la ha encolado."""
+    if e.get('testigo'):
+        return False
+    img, meta = seccion_escision(W, cfg, e)
+    if img is None:
+        return False
+    e['testigo'] = 'pendiente'
+    _HIST['pend'].append((e['id'], img, meta))
+    return True
+
+
+def testigos_al_enterrar(W, cfg, now):
+    """Antes de enterrar el mundo: el testigo de las escisiones que aun no lo tienen."""
+    return sum(1 for e in W['escisiones'] if e['estado'] in ('abierta', 'cerrada') and encolar_testigo(W, cfg, e, now))
+
+
+def nombre_testigo(e):
+    return 'escision_%s_c%s_%d.png' % (e.get('jornada', ''), e.get('ciclo', ''), e['id'])
+
+
+def ciclos_jornada(W, jornada):
+    """Las conchas enterradas en la jornada: [(indice, concha)], de la mas antigua a la mas nueva."""
+    return [(s, sh) for s, sh in enumerate(W['shells']) if sh.get('jornada') == jornada]
+
+
+def tipo_banda(sh):
+    b, _, col = banda_de(sh)
+    return b + (' + colapso' if col else '')
+
+
+def columna_jornada(W, cfg, jornada, ancho=None, alto=None):
+    """La columna resumen de la jornada: (imagen, meta). Una banda por ciclo (la mas
+    antigua abajo), del color de su concha: las humanas con motas, las de colapso
+    con una franja oscura arriba. Cada escision de la jornada es una veta de la
+    paleta humana que une las bandas que atraveso, con un ancho proporcional a
+    sus personas. meta: bandas [(ciclo, tipo, y0, y1)] de arriba abajo y vetas
+    [(id, personas, x0, x1, y0, y1)]."""
+    np = _np()
+    if np is None:
+        return None, None
+    ancho = int(ancho or COLUMNA_PX[0])
+    alto = int(alto or COLUMNA_PX[1])
+    img = np.zeros((alto, ancho, 4), dtype=np.float32)
+    img[..., 3] = 1.0
+    ciclos = ciclos_jornada(W, jornada)
+    n = len(ciclos)
+    meta = dict(jornada=jornada, bandas=[], vetas=[], ancho=ancho, alto=alto)
+    if not n:
+        return img, meta
+    hb = alto / float(n)
+    y_de = {}
+    for k, (s, sh) in enumerate(ciclos):            # k = 0 la mas antigua: abajo
+        y1 = int(round(alto - k * hb))
+        y0 = int(round(alto - (k + 1) * hb))
+        y_de[s] = (y0, y1)
+        img[y0:y1, :, :3] = tile_color(cfg, sh, 0, s)
+        b, huellas, col = banda_de(sh)
+        if b == 'humana':
+            _motas(np, img, y0, y1, 0, ancho, max(0.05, cobertura_concha(cfg, sh)), s, 0)
+        if col:
+            img[y0:y0 + max(2, int(0.18 * (y1 - y0))), :, :3] *= 0.25
+        img[y1 - 1:y1, :, :3] *= 0.5
+        meta['bandas'].insert(0, (sh.get('ciclo', s), tipo_banda(sh), y0, y1))
+    esc = [e for e in W['escisiones'] if e.get('jornada') == jornada]
+    unidad = max(2.0, ancho / 40.0)
+    for q, e in enumerate(esc):
+        cruza = [y_de[s] for s in e['cortadas'] if s in y_de]
+        propia = [y_de[s] for s, sh in ciclos if sh.get('ciclo') == e.get('ciclo')]
+        tramo = cruza + propia
+        if not tramo:
+            continue
+        y0, y1 = min(t[0] for t in tramo), max(t[1] for t in tramo)
+        wv = int(round(e['personas'] * unidad))
+        xc = int((0.12 + 0.76 * _frac((q + 1) * AUREO)) * ancho)
+        x0 = max(0, min(ancho - wv, xc - wv // 2))
+        img[y0:y1, x0:x0 + wv, :3] = paleta_humana(cfg, e['ramas'])
+        meta['vetas'].append((e['id'], e['personas'], x0, x0 + wv, y0, y1))
+    return img, meta
+
+
+def linea_registro(e):
+    """La linea del fichero historico/escisiones.csv de la escision e (separador ;)."""
+    return ';'.join(str(x) for x in [e['id'], e.get('jornada', ''), e.get('ciclo', ''), e.get('hora', ''),
+                                     e['personas'], len(e['cortadas']), e['origen'], e['estado'],
+                                     e.get('testigo') or ''])
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la luz de la sala (fase 23): balance, bano, estroboscopio y colapso
+# -----------------------------------------------------------------------------
+# La sala se ilumina con el estado del planeta. En una ventana de Ventanabalance
+# segundos se compara la ocupacion destruida con la depositada, en escalones de
+# ocupacion (D6): el BALANCE es erosion / creacion. La erosion suma los pads de
+# erosion (caja y aranazos), sus cortes y el microfono; la creacion, las notas
+# de los secuenciadores y los pulsos del bombo y el tom.
+#   deposito   (balance < 0,5)  casi a oscuras: ambar tenue que respira con
+#              cada nota depositada.
+#   tension    (0,5 a 1)        la intensidad sube y vira a blanco frio; cada
+#              onset del microfono anade un pulso breve.
+#   erosion dominante (> 1)     estroboscopio blanco; su frecuencia crece con el
+#              exceso, hasta Maxhz. Entra con Umbralestrobo y sale por debajo de
+#              Salidaestrobo (histeresis).
+#   fin de ciclo               un unico destello blanco y oscuridad durante
+#              Noche segundos (D7).
+# SEGURIDAD (no son parametros que se puedan saltar): como mucho DESTELLOS_MAX
+# (3) destellos en cualquier ventana de 1 s, contando TODOS los de la sala en un
+# solo limitador (el relampago de la fase 30 pasa por el con prioridad: espera
+# al primer hueco y el estroboscopio cede ese destello); el estroboscopio solo
+# destella en blanco; el fin de ciclo lo apaga. Cada destello queda en
+# W['sala']['destellos'] para que el microfono descarte su clic.
+# El colapso (D8), apagado por defecto: con Colapsoon, Maxerosion segundos
+# seguidos con el balance por encima de 1 cierran el ciclo con el motivo
+# 'colapso'. 'estancado' no es colapso.
+
+DESTELLOS_MAX = 3               # destellos por segundo de toda la sala (WCAG 2.3.1): tope duro
+VENTANA_DESTELLOS = 1.0
+DUR_DESTELLO = 0.05             # lo que dura encendido un destello (s)
+ESTADOS_SALA = ['deposito', 'tension', 'erosion dominante']
+DEPOSITO, TENSION, DOMINANTE = 0, 1, 2
+BALANCE_TENSION = 0.5
+BALANCE_COLAPSO = 1.0           # el colapso cuenta el tiempo con el balance por encima de 1
+BALANCE_SIN_CREACION = 99.0     # erosion sin creacion en la ventana
+COL_AMBAR = (1.0, 0.62, 0.22)
+COL_FRIO = (0.82, 0.90, 1.0)
+BANO_SUAVE = 0.4                # s con los que el bano persigue a su estado
+INTERFACES_DMX = ['artnet', 'usbpro']
+DMX_COLS = ['canal', 'funcion', 'foco']
+# funciones de un canal: el bano con dimmer aparte (bano_dimmer + bano_rojo...), o
+# con la intensidad en el color (bano_r, bano_g, bano_b), y el estroboscopio
+# (cualquier destello de la sala: el suyo, el del fin de ciclo y el relampago); 'relampago'
+# (fase 30) es solo para un foco propio del relampago
+FUNCIONES_DMX = ['bano_dimmer', 'bano_rojo', 'bano_verde', 'bano_azul', 'bano_r', 'bano_g', 'bano_b', 'estrobo',
+                 'relampago']
+DMX_DEFECTO = ([[4 * k + j + 1, f, 'bano%d' % (k + 1)] for k in range(4)
+                for j, f in enumerate(FUNCIONES_DMX[:4])] + [[17, 'estrobo', 'estrobo']])
+SALA_BASE = dict(bal=[], estado=DEPOSITO, balance=0.0, hz=0.0, estrobo_t=-99.0, ultimo=None, pend=None,
+                 noche=None, desde=None, t_nota=-99.0, bano=[0.0, 0.0, 0.0, 0.0], t_luz=None, n=0,
+                 cedidos=0)
+
+
+def sala_de(W):
+    """W['sala'], con las claves de la fase 23."""
+    s = W['sala']
+    for k, v in SALA_BASE.items():
+        if k not in s:
+            s[k] = list(v) if isinstance(v, list) else v
+    return s
+
+
+def balance_suma(W, cfg, now, crea=0, eros=0):
+    """Apunta escalones de ocupacion ganados (crea) o perdidos (eros)."""
+    if crea <= 0 and eros <= 0:
+        return
+    s = sala_de(W)
+    s['bal'].append([now, max(0, int(crea)), max(0, int(eros))])
+    if crea > 0:
+        s['t_nota'] = now
+
+
+def balance(W, cfg, now):
+    """Erosion entre creacion en la ventana de Ventanabalance s. Sin creacion y con
+    erosion, erosion dominante (BALANCE_SIN_CREACION); sin nada, 0. Simbalance >= 0
+    lo fuerza."""
+    s = sala_de(W)
+    v = max(0.0, cfg['ventana_balance'])
+    s['bal'] = [e for e in s['bal'] if 0.0 <= now - e[0] <= v]
+    if cfg['sim_balance'] >= 0.0:
+        b = float(cfg['sim_balance'])
+    else:
+        crea = sum(e[1] for e in s['bal'])
+        eros = sum(e[2] for e in s['bal'])
+        b = eros / float(crea) if crea > 0 else (BALANCE_SIN_CREACION if eros > 0 else 0.0)
+    s['balance'] = b
+    return b
+
+
+def estado_sala(W, cfg, now=None, b=None):
+    """El estado de la luz (DEPOSITO, TENSION o DOMINANTE) con histeresis: entra
+    en erosion dominante con Umbralestrobo y no sale hasta bajar de Salidaestrobo."""
+    s = sala_de(W)
+    if b is None:
+        b = balance(W, cfg, now if now is not None else (W.get('t') or 0.0))
+    entra = cfg['umbral_estrobo']
+    sale = min(cfg['salida_estrobo'], entra)
+    if s['estado'] == DOMINANTE:
+        dom = b >= sale
+    else:
+        dom = b >= entra
+    s['estado'] = DOMINANTE if dom else (TENSION if b >= BALANCE_TENSION else DEPOSITO)
+    return s['estado']
+
+
+def en_noche(W, now):
+    n = W['sala'].get('noche')
+    return bool(n) and n[0] <= now < n[1]
+
+
+def destellos_ventana(W, now):
+    """Destellos de toda la sala en la ultima ventana de 1 s."""
+    return sum(1 for t in W['sala']['destellos'] if 0.0 <= now - t <= VENTANA_DESTELLOS)
+
+
+def _hueco(W, cfg, now):
+    tope = min(DESTELLOS_MAX, int(math.floor(cfg['max_hz'] + 1e-9)))
+    return destellos_ventana(W, now) < tope
+
+
+def _destello(W, now, quien):
+    s = sala_de(W)
+    s['destellos'].append(now)
+    s['destellos'] = [t for t in s['destellos'] if now - t <= 5.0]
+    s['ultimo'] = dict(t=now, quien=quien)
+    s['n'] += 1
+    if quien == 'relampago':
+        s['t_relampago'] = now
+    return True
+
+
+def limitador_destellos(W, cfg, now, quien='estrobo', prioridad=False):
+    """El limitador comun de destellos: concede uno si en la ultima ventana de 1 s
+    hay menos de DESTELLOS_MAX (y de Maxhz). Con prioridad (el relampago y el fin de
+    ciclo), si no hay hueco el destello queda pendiente: sale en el primero, y el
+    estroboscopio cede. Devuelve si el destello ha salido ahora."""
+    s = sala_de(W)
+    if s['pend'] and not prioridad:
+        return False                    # el estroboscopio cede el hueco al pendiente
+    if _hueco(W, cfg, now):
+        if prioridad and s['pend']:
+            s['pend'] = None
+        return _destello(W, now, quien)
+    if prioridad and not s['pend']:
+        s['pend'] = dict(t=now, quien=quien)
+    return False
+
+
+def hz_estrobo(cfg, b):
+    """Destellos por segundo del estroboscopio: crece con el exceso del balance
+    sobre Salidaestrobo, hasta Maxhz (y nunca mas de DESTELLOS_MAX)."""
+    entra = cfg['umbral_estrobo']
+    sale = min(cfg['salida_estrobo'], entra)
+    x = (b - sale) / max(1e-6, 2.0 * (entra - sale)) if entra > sale else 1.0
+    return min(DESTELLOS_MAX, max(0.0, cfg['max_hz'])) * max(0.0, min(1.0, x))
+
+
+def sala_luz_tick(W, cfg, now):
+    """Cada fotograma: el balance y el estado, el destello pendiente, el
+    estroboscopio y el colapso. Devuelve 'colapso' si toca cerrar el ciclo."""
+    s = sala_de(W)
+    b = balance(W, cfg, now)
+    est = estado_sala(W, cfg, now, b)
+    noche = en_noche(W, now)
+    if s['noche'] and now >= s['noche'][1]:
+        s['noche'] = None
+    if s['pend'] and _hueco(W, cfg, now):           # el destello con prioridad, en el primer hueco
+        quien = s['pend']['quien']
+        s['pend'] = None
+        _destello(W, now, quien)
+        if s['hz'] > 0.0:               # era el hueco del estroboscopio: lo cede y espera su turno
+            s['cedidos'] += 1
+            s['estrobo_t'] = now
+    s['hz'] = hz_estrobo(cfg, b) if est == DOMINANTE and not noche else 0.0
+    if s['hz'] > 0.0 and now - s['estrobo_t'] >= 1.0 / s['hz'] - 1e-9:
+        if limitador_destellos(W, cfg, now, 'estrobo'):
+            s['estrobo_t'] = now
+    # el bano persigue a su estado
+    obj = _bano_objetivo(W, cfg, now, b, est, noche)
+    dt = 0.0 if s['t_luz'] is None else max(0.0, min(0.25, now - s['t_luz']))
+    s['t_luz'] = now
+    a = 1.0 if noche or s['bano'] == [0.0, 0.0, 0.0, 0.0] else 1.0 - math.exp(-dt / BANO_SUAVE)
+    s['bano'] = [x + (o - x) * a for x, o in zip(s['bano'], obj)]
+    # colapso (D8)
+    if cfg['colapso_on'] and b > BALANCE_COLAPSO and not noche:
+        if s['desde'] is None:
+            s['desde'] = now
+        if now - s['desde'] >= cfg['max_erosion']:
+            s['desde'] = None
+            return 'colapso'
+    else:
+        s['desde'] = None
+    return None
+
+
+def _bano_objetivo(W, cfg, now, b, est, noche):
+    if noche:
+        return [0.0, 0.0, 0.0, 0.0]
+    s = W['sala']
+    if est == DEPOSITO:
+        return list(COL_AMBAR) + [0.04 + 0.10 * math.exp(-max(0.0, now - s['t_nota']) / 0.8)]
+    x = 1.0 if est == DOMINANTE else max(0.0, min(1.0, (b - BALANCE_TENSION) / BALANCE_TENSION))
+    return [a + (f - a) * x for a, f in zip(COL_AMBAR, COL_FRIO)] + [0.15 + 0.55 * x]
+
+
+def bano_valor(W, cfg, now):
+    """(r, g, b, intensidad) del bano de luz, 0-1: el del estado mas, fuera del
+    deposito, un pulso breve por cada onset del microfono. A oscuras en la noche."""
+    s = sala_de(W)
+    if en_noche(W, now):
+        return (0.0, 0.0, 0.0, 0.0)
+    r, g, b_, dim = s['bano']
+    if s['estado'] != DEPOSITO:
+        dim += 0.25 * math.exp(-max(0.0, now - W['mic']['t']) / 0.15)
+    return (r, g, b_, max(0.0, min(1.0, dim)))
+
+
+def destello_valor(W, now):
+    """1 mientras dura un destello (blanco: r = g = b), 0 si no."""
+    u = W['sala'].get('ultimo')
+    return 1.0 if u and 0.0 <= now - u['t'] < DUR_DESTELLO else 0.0
+
+
+def color_destello(W, now):
+    v = destello_valor(W, now)
+    return (v, v, v)                    # solo blanco
+
+
+def sala_fin_ciclo(W, cfg, now):
+    """Al enterrar: un unico destello blanco (con prioridad), el estroboscopio
+    apagado y la sala a oscuras durante Noche s. El balance empieza de cero con
+    el mundo nuevo."""
+    s = sala_de(W)
+    s['bal'] = []
+    s['estado'] = DEPOSITO
+    s['hz'] = 0.0
+    s['desde'] = None
+    s['estrobo_t'] = now
+    s['bano'] = [0.0, 0.0, 0.0, 0.0]
+    limitador_destellos(W, cfg, now, 'fin de ciclo', prioridad=True)
+    s['noche'] = [now, now + cfg['noche']] if cfg['noche'] > 0.0 else None
+
+
+def valores_dmx(W, cfg, now, filas):
+    """El valor 0-255 de cada fila [canal, funcion, foco] de dmx_canales."""
+    r, g, b_, dim = bano_valor(W, cfg, now)
+    fl = destello_valor(W, now)
+    u = W['sala'].get('ultimo')
+    v = dict(bano_dimmer=dim, bano_rojo=r, bano_verde=g, bano_azul=b_, bano_r=r * dim, bano_g=g * dim,
+             bano_b=b_ * dim, estrobo=fl, relampago=fl if u and u.get('quien') == 'relampago' else 0.0)
+    return [int(round(255.0 * max(0.0, min(1.0, v.get(str(f[1]).strip(), 0.0))))) for f in filas]
+
+
+
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
@@ -10557,6 +12427,8 @@ def chop_names(c=None):
         return list(CHOP_NAMES)
     extra = ['i_tejido', 'i_rios'] if c['nivel'] >= 13 else []
     extra += ['i_luz_local', 'i_diagnostico'] if c['nivel'] >= 18 else []
+    extra += ['i_inclusiones'] if c['nivel'] >= 25 else []
+    extra += ['i_fulguritas'] if c['nivel'] >= 29 else []
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -10896,6 +12768,51 @@ def cfg():
                  chop_mic=str(_p('Chopmic', '')).strip())
         red, rad, prof = c['perfiles'][PAD_MIC]           # la reduccion del pad 9, de Reduccionmic
         c['perfiles'][PAD_MIC] = (c['reduccion_mic'], rad, prof)
+    if c['nivel'] >= 22:
+        c.update(presencia_activa=int(_p('Activo', True)),
+                 cuanto=min(CUANTO_MAX, max(0.0, _p('Cuanto', c['cuanto']))),
+                 peso_crear=max(0.0, min(1.0, _p('Pesocrear', c['peso_crear']))),
+                 peso_erosion=max(0.0, min(1.0, _p('Pesoerosion', c['peso_erosion']))),
+                 fuente_sala=_menu('Fuente', FUENTES_SALA, c['fuente_sala']),
+                 altura_min=_p('Alturamin', c['altura_min']), altura_max=_p('Alturamax', c['altura_max']),
+                 archivo_fondo=str(_p('Archivofondo', c['archivo_fondo'])).strip(),
+                 ancho_sala=max(0.5, _p('Anchosala', c['ancho_sala'])),
+                 fondo_sala=max(0.5, _p('Fondosala', c['fondo_sala'])),
+                 tam_casilla=max(0.25, min(1.0, _p('Tamcasilla', c['tam_casilla']))),
+                 desenfoque=max(0.0, _p('Desenfoque', c['desenfoque'])),
+                 ocupacion_llena=max(0.1, min(1.0, _p('Ocupacionllena', c['ocupacion_llena']))),
+                 subida=max(0.0, _p('Subida', c['subida'])), bajada=max(0.0, _p('Bajada', c['bajada'])),
+                 lon_central=_p('Loncentral', c['lon_central']),
+                 ancho_angular=max(0.0, min(360.0, _p('Anchoangular', c['ancho_angular']))),
+                 lat_norte=_p('Latnorte', c['lat_norte']), lat_sur=_p('Latsur', c['lat_sur']),
+                 espejo=int(_p('Espejo', False)), sim_casilla=max(0, int(_p('Simcasilla', 0))))
+    if c['nivel'] >= 23:
+        c.update(ventana_balance=max(1.0, _p('Ventanabalance', c['ventana_balance'])),
+                 umbral_estrobo=max(0.1, _p('Umbralestrobo', c['umbral_estrobo'])),
+                 salida_estrobo=max(0.0, _p('Salidaestrobo', c['salida_estrobo'])),
+                 max_hz=max(0.0, min(float(DESTELLOS_MAX), _p('Maxhz', c['max_hz']))),
+                 noche=max(0.0, _p('Noche', c['noche'])), colapso_on=int(_p('Colapsoon', False)),
+                 max_erosion=max(1.0, _p('Maxerosion', c['max_erosion'])),
+                 sim_balance=_p('Simbalance', c['sim_balance']),
+                 interfaz_dmx=_menu('Interfazdmx', INTERFACES_DMX, c['interfaz_dmx']),
+                 universo_dmx=max(0, int(_p('Universodmx', c['universo_dmx']))))
+    if c['nivel'] >= 24:
+        c.update(sep_cabezas=max(0.05, _p('Separacioncabezas', c['sep_cabezas'])),
+                 confirma_persona=max(1, int(_p('Confirmapersona', c['confirma_persona']))),
+                 sim_fila=max(1, int(_p('Simfila', c['sim_fila']))))
+    if c['nivel'] >= 25:
+        c.update(prob_llegada=max(0.0, min(1.0, _p('Probllegada', c['prob_llegada']))),
+                 t_parada=max(0.1, _p('Tparada', c['t_parada'])))
+    if c['nivel'] >= 27:
+        c.update(min_huellas=max(1, int(_p('Minhuellas', c['min_huellas']))),
+                 inclusiones_max=max(0.0, min(1.0, _p('Inclusionesmax', c['inclusiones_max']))))
+    if c['nivel'] >= 29:
+        c.update(min_fila=max(2, int(_p('Minfila', c['min_fila']))),
+                 t_fila=max(0.1, _p('Tfila', c['t_fila'])),
+                 modo_fila=_menu('Modofila', MODOS_FILA, c['modo_fila']),
+                 conchas_persona=max(1, int(_p('Conchasporpersona', c['conchas_persona']))))
+    if c['nivel'] >= 31:
+        c.update(carpeta_historico=str(_p('Carpetahistorico', '')).strip())
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -11106,7 +13023,8 @@ def midi_note_on(ch, note, vel):
                 res = 'IMPULSO pad %d +%d celda %d ocupacion %d->%d' % (pad + 1, ev['pulsos'], ev['celda'],
                                                                       ev['occ0'], ev['occ'])
             else:
-                res = 'EROSION pad %d %s celda %d' % (pad + 1, ev['tipo'], ev['celda'])
+                res = 'EROSION pad %d %s celda %d%s' % (pad + 1, ev['tipo'], ev['celda'],
+                                                       ' (no prende)' if ev.get('prende') is False else '')
         else:
             res = 'ignorado: pad fuera de 1-8'
     else:
@@ -11154,7 +13072,7 @@ def midi_sysex(b):
 # --- fin de ciclo ------------------------------------------------------------
 
 CICLOS_COLS = ['ciclo', 'compases', 'segundos', 'motivo', 'madurez', 'novedad', 'grosor',
-               'territorio']
+               'territorio', 'balance', 'huellas', 'banda']
 CICLOS_MAX = 200
 
 
@@ -11171,7 +13089,10 @@ def registrar_ciclo(W, c, ev):
                     motivo=ev['motivo'], madurez='%.2f' % ev['madurez'],
                     novedad='%.2f' % ev['novedad'],
                     grosor='%.3f' % ev['grosor'] if 'grosor' in ev else '',
-                    territorio='%.2f' % ev.get('territorio', 0.0))
+                    territorio='%.2f' % ev.get('territorio', 0.0),
+                    balance='%.2f' % ev['balance'] if 'balance' in ev else '',
+                    huellas=ev.get('huellas', ''),
+                    banda=('%s%s' % (ev['banda'], ' + colapso' if ev.get('colapso') else '')) if 'banda' in ev else '')
         cab = [t[0, k].val for k in range(t.numCols)]     # por nombre de columna
         t.appendRow([vals.get(k, '') for k in cab])
         while t.numRows > CICLOS_MAX + 1:
@@ -11192,15 +13113,25 @@ def frame_tick():
         dt = max(0.0, min(0.25, now - md.get('t_fotograma', now)))
         md['t_fotograma'] = now
         modular_tick(W, c, leer_modular(c, now), dt, now)
+    if c['nivel'] >= 22:                # fase 22: la camara, antes del microfono (su objetivo)
+        sala_tick(W, c, now)
     if c['nivel'] >= 21:                # fase 21: el microfono, antes del mundo
         mic_tick(W, c, now)
     res = tick(W, c, now, tempo(), playing())
+    if c['nivel'] >= 23:                # fase 23: los valores DMX de este fotograma
+        o = parent().op('dmx_valores')
+        if o is not None:
+            try:
+                o.cook(force=True)
+            except Exception as e:
+                _say('dmx_valores', 'AVISO  dmx_valores: %s' % e)
     _CACHE['nivel'] = c['nivel']        # fase 17: para la luz y las ventanas del shader
     _CACHE['modular'] = dict(W['modular']) if c['nivel'] >= 19 else None
     _CACHE['ventanas'] = ventanas_luz_de(W, c)
     _CACHE['tinte'] = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
     _CACHE['luz_calida'] = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
     _CACHE['uni'] = uniformes_piel(W, c, now)       # fase 11 v5: pisos, borde y agua del shader
+    _CACHE['dia'] = 1.0 - noche_nivel(W, c, now) if c['nivel'] >= 28 else 1.0     # fase 28: las luces
     if res.get('burst'):
         print('AVISO  %s' % W['aviso'])
     if res.get('frente'):
@@ -11235,6 +13166,13 @@ def frame_tick():
         o = parent().op('reticula_chop')
         if o is not None:
             o.cook(force=True)
+    if c['nivel'] >= 31:                # fase 31: testigos, registro y columna de la jornada
+        try:
+            historico_tick(W, c, now)
+        except Exception as e:
+            _say('historico_tick', 'AVISO  historico: %s' % e)
+    if c['nivel'] >= 29:                # fase 29: la tabla de las escisiones
+        escisiones_tabla(W)
     terreno_al_dia_td(W, c)
     render_tema_al_dia(c)               # motor v69: el render, solo con el tema actual
     fu = parent().op('frame_u')         # motor v69: giro y uniformes, una vez por fotograma
@@ -11305,6 +13243,7 @@ def uniformes_piel(W, c, now):
                     1.0 if c['nivel'] >= 11 and tema_de(c) in CONSTRUIDOS else 0.0, 0.0)
     u['uSeq1'] = tuple(seq_color(c, 1)) + (0.0,)
     u['uSeq2'] = tuple(seq_color(c, 2)) + (0.0,)
+    u['uNoche'] = (noche_nivel(W, c, now) if c['nivel'] >= 28 else 0.0, 0.0, 0.0, 0.0)     # fase 28
     focos = focos_tinte(W, c, now) if nat else []
     for k in range(3):
         if k < len(focos):
@@ -11515,6 +13454,19 @@ def on_pulse(name):
                   % ('SEQ1' if s == GEO else 'SEQ2', note_name(note), ci, len(NEIGH[ci]),
                      'cluster de %d celdas, capital %d' % (len(cl['celdas'][k]), cl['capital'][k])
                      if k >= 0 else 'sin cluster todavia (pulsa otra vez)'))
+    elif name in ('Simponer', 'Simquitar', 'Simvaciar'):      # fase 22: la sala simulada
+        print(sala_sim_pulso(W, c, name))
+    elif name == 'Simformarfila':       # fase 24: una fila de prueba en la sala simulada
+        print(sala_fila_pulso(W, c, name))
+    elif name == 'Simsumar':            # fase 29: una persona mas, contigua a la fila de prueba
+        print(sala_sumar_pulso(W, c))
+    elif name == 'Exportartestigo':     # fase 31: la seccion de la ultima escision y la columna de hoy
+        print(exportar_pulso(W, c))
+    elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
+        print(capturar_fondo(c))
+    elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
+        reiniciar_cuentas()
+        print('CAMARA  contadores de senales recibidas y prendidas, a cero')
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
@@ -11598,6 +13550,8 @@ def mic_cook(scriptOp):
 
 def _log_onset(W, ev):
     txt = 'MICRO onset flujo %.2f celda %d' % (ev['flujo'], ev['celda'])
+    if ev.get('prende') is False:
+        txt += ' (no prende)'
     if ev.get('escalada'):
         txt += ' ESCALADA %s' % ev['escalada']
     cr = ev.get('corte_ruido')
@@ -11649,6 +13603,739 @@ def _legend_micro(W, c):
     return txt
 
 
+# --- la camara cenital (fase 22) -----------------------------------------------
+
+def lon_central(frame=None):
+    """Longitud (grados) del centro de la cara del planeta que mira a la camara
+    del globo: Loncentral se enlaza aqui, para que la sala caiga siempre en la
+    cara visible. La camara mira desde +z y el planeta gira ry: 90 + ry."""
+    try:
+        ry = float(_ritmo().rotation(frame))
+    except Exception:
+        ry = 0.0
+    return (90.0 + ry + 180.0) % 360.0 - 180.0
+
+
+def _top_array(o):
+    """La imagen de un TOP como (filas x columnas) del canal rojo, con la fila 0
+    arriba; None si no hay imagen. numpyArray() entrega primero la fila de abajo."""
+    if o is None:
+        return None
+    try:
+        a = o.numpyArray(delayed=True)
+    except TypeError:
+        a = o.numpyArray()
+    except Exception:
+        a = None
+    if a is None or getattr(a, 'size', 0) == 0:
+        return None
+    if a.ndim == 3:
+        a = a[..., 0]
+    return a[::-1]
+
+
+def sala_personas():
+    """Las personas de la tabla sala_personas (la sala simulada): [[x, y, altura], ...]."""
+    t = parent().op('sala_personas')
+    out = []
+    if t is None:
+        return out
+    for r in range(1, t.numRows):
+        try:
+            out.append([float(t[r, 0].val), float(t[r, 1].val),
+                        float(t[r, 2].val) if t.numCols > 2 and t[r, 2].val else ALTURA_SIM])
+        except Exception:
+            pass
+    return out
+
+
+def sala_sim_cook(scriptOp):
+    """onCook del Script TOP sala_sim: la imagen de alturas de la sala simulada."""
+    np = _np()
+    a = sala_sim_imagen(cfg(), sala_personas())
+    if a is None:
+        return
+    out = np.zeros(a.shape + (4,), dtype=np.float32)
+    out[..., 0] = out[..., 1] = out[..., 2] = a[::-1]
+    out[..., 3] = 1.0
+    scriptOp.copyNumpyArray(out)
+
+
+def sala_tick(W, c, now):
+    """Cada fotograma (como mucho CAM_FPS veces por segundo): lee la imagen de
+    alturas (alturas_sala: la camara o la sala simulada) y actualiza la densidad."""
+    if now - _SALA.get('t_img', -99.0) < 1.0 / CAM_FPS - 1e-4 and now >= _SALA.get('t_img', -99.0):
+        return None
+    _SALA['t_img'] = now
+    if c['fuente_sala'] == FUENTE_SIMULADA:
+        o = parent().op('sala_sim')
+        if o is not None:
+            try:
+                o.cook(force=True)
+            except Exception as e:
+                _say('sala_sim', 'AVISO  sala_sim: %s' % e)
+    alt = None
+    try:
+        alt = _top_array(parent().op('alturas_sala'))
+    except Exception as e:
+        _say('alturas_sala', 'AVISO  camara: %s' % e)
+    _SALA['alt'] = alt
+    d = sala_bloque(W, c, alt, now)
+    if c['nivel'] >= 24:                # fase 24: las personas de esta imagen
+        try:
+            personas_tick(W, c, now, alt)
+        except Exception as e:
+            _say('personas', 'AVISO  personas: %s' % e)
+    o = parent().op('densidad')
+    if o is not None:
+        try:
+            o.cook(force=True)
+        except Exception:
+            pass
+    return d
+
+
+def px_sala(k=0, frame=None):
+    """Ancho (k = 0) o alto (1) en pixeles de la imagen de alturas: PX_CASILLA
+    por casilla. Es la resolucion del Resolution TOP alturas_sala."""
+    try:
+        return rejilla_sala(cfg_foto())[int(k)] * PX_CASILLA
+    except Exception:
+        return 110 if not k else 90
+
+
+def densidad_cook(scriptOp):
+    """onCook del Script TOP densidad: la densidad de cada casilla, para mirarla."""
+    np = _np()
+    d = _SALA.get('dens')
+    if np is None:
+        return
+    if d is None:
+        cols, filas = rejilla_sala(cfg_foto())
+        d = np.zeros((filas, cols))
+    out = np.zeros(d.shape + (4,), dtype=np.float32)
+    out[..., 0] = out[..., 1] = out[..., 2] = d[::-1]
+    out[..., 3] = 1.0
+    scriptOp.copyNumpyArray(out)
+
+
+def camara_encontrada():
+    """(si, texto) del Orbbec TOP orbbec1: con imagen y sin errores."""
+    o = parent().op('orbbec1')
+    if o is None:
+        return False, 'sin orbbec1'
+    try:
+        err = o.errors()
+    except Exception:
+        err = ''
+    try:
+        w, h = int(o.width), int(o.height)
+    except Exception:
+        w = h = 0
+    if err or w <= 1 or _top_array(o) is None:
+        return False, (err.splitlines()[0] if err else 'sin imagen')
+    return True, '%d x %d' % (w, h)
+
+
+def _sim_casilla(c):
+    cols, filas = rejilla_sala(c)
+    return max(0, min(cols * filas - 1, int(c['sim_casilla'])))
+
+
+def sala_sim_pulso(W, c, name):
+    """Simponer, Simquitar y Simvaciar: escriben en la tabla sala_personas, de la
+    que sala_sim dibuja la imagen (el mismo camino que la camara)."""
+    t = parent().op('sala_personas')
+    if t is None:
+        return 'SALA  no esta la tabla sala_personas: relanza fase22_camara.py'
+    if t.numRows == 0:
+        t.appendRow(SALA_COLS)
+    k = _sim_casilla(c)
+    if name == 'Simponer':
+        x, y = casilla_xy(c, k)
+        t.appendRow(['%.3f' % x, '%.3f' % y, '%.2f' % ALTURA_SIM])
+        txt = 'una persona en la casilla %d (%.2f, %.2f m)' % (k, x, y)
+    elif name == 'Simquitar':
+        fuera = 0
+        for r in range(t.numRows - 1, 0, -1):
+            try:
+                if casilla_de_xy(c, float(t[r, 0].val), float(t[r, 1].val)) == k:
+                    t.deleteRow(r)
+                    fuera += 1
+            except Exception:
+                pass
+        txt = '%d fuera de la casilla %d' % (fuera, k)
+    else:
+        n = t.numRows - 1
+        t.clear()
+        t.appendRow(SALA_COLS)
+        txt = 'sala vacia (%d fuera)' % max(0, n)
+    _SALA['t_img'] = -99.0              # la proxima lectura, ya
+    return 'SALA  %s   personas simuladas: %d%s' % (
+        txt, t.numRows - 1, '' if c['fuente_sala'] == FUENTE_SIMULADA else '   (Fuente no es simulada: no se ven)')
+
+
+def capturar_fondo(c):
+    """Capturarfondo: guarda el suelo vacio (la salida de cornerpin1) en
+    Archivofondo y recarga fondo."""
+    src, fondo = parent().op('cornerpin1'), parent().op('fondo')
+    ruta = c['archivo_fondo'] or 'fondo_suelo.exr'
+    if src is None:
+        return 'FONDO  no esta cornerpin1: relanza fase22_camara.py'
+    try:
+        src.save(ruta)
+    except Exception as e:
+        return 'FONDO  no pude guardar %s: %s' % (ruta, e)
+    if fondo is not None:
+        for nm in ('reloadpulse', 'reload'):
+            p = getattr(fondo.par, nm, None)
+            if p is not None:
+                try:
+                    p.pulse()
+                    break
+                except Exception:
+                    pass
+    return 'FONDO  suelo vacio guardado en %s' % ruta
+
+
+def _legend_camara(W, c):
+    """CAMARA (fase 22): la fuente, las casillas con gente, la mas densa y la
+    celda que la mira, y las senales prendidas."""
+    cols, filas = rejilla_sala(c)
+    if c['fuente_sala'] == FUENTE_SIMULADA:
+        fuente = 'simulada'
+    else:
+        fuente = 'femto %g fps' % CAM_FPS if _SALA.get('hay') else 'femto (sin camara)'
+    k, d = casilla_mas_densa(c)
+    mas = 'densidad max %.2f (casilla %d -> celda %d)' % (d, k, celda_de_casilla(W, c, k)) if k is not None \
+        else 'densidad max 0.00'
+    cu = _SALA['cuentas']
+    rec = cu['crear'][0] + cu['erosionar'][0]
+    pre = cu['crear'][1] + cu['erosionar'][1]
+    txt = '  CAMARA   %s   casillas %d/%d   %s   prendidas %d/%d' % (
+        fuente, casillas_con_gente(), cols * filas, mas, pre, rec)
+    if not c['presencia_activa']:
+        txt += '   (Activo apagado: todo prende)'
+    return txt
+
+
+# --- la luz de la sala (fase 23) -------------------------------------------------
+
+def dmx_filas():
+    """Las filas [canal, funcion, foco] de la tabla dmx_canales."""
+    t = parent().op('dmx_canales')
+    out = []
+    if t is None:
+        return out
+    for r in range(1, t.numRows):
+        try:
+            out.append([int(float(t[r, 0].val)), t[r, 1].val, t[r, 2].val if t.numCols > 2 else ''])
+        except Exception:
+            pass
+    return out
+
+
+def dmx_cook(scriptOp):
+    """onCook del Script CHOP dmx_valores: un canal por canal DMX (c1, c2...),
+    hasta el mayor de dmx_canales, con su valor 0-255."""
+    W, c = world(), cfg_foto()
+    filas = dmx_filas()
+    vals = valores_dmx(W, c, absTime.seconds, filas) if c['nivel'] >= 23 else [0] * len(filas)
+    n = max([f[0] for f in filas] or [0])
+    canales = [0.0] * n
+    for f, v in zip(filas, vals):
+        if 1 <= f[0] <= n:
+            canales[f[0] - 1] = max(canales[f[0] - 1], float(v))
+    _sin_timeslice(scriptOp)
+    scriptOp.clear()
+    scriptOp.numSamples = 1
+    for k, v in enumerate(canales):
+        scriptOp.appendChan('c%d' % (k + 1))[0] = v
+
+
+def luz_sala(que, k=0, frame=None):
+    """Para quien quiera la luz de la sala sin DMX (la sala virtual): 'bano' (k =
+    0 r, 1 g, 2 b, 3 intensidad), 'destello' (0 o 1), 'balance', 'estado', 'noche'."""
+    W, c = world(), cfg_foto()
+    now = absTime.seconds
+    if c['nivel'] < 23:
+        return 0.0
+    if que == 'bano':
+        return float(bano_valor(W, c, now)[int(k)])
+    if que == 'destello':
+        return destello_valor(W, now)
+    if que == 'balance':
+        return float(sala_de(W)['balance'])
+    if que == 'estado':
+        return float(sala_de(W)['estado'])
+    if que == 'noche':
+        return 1.0 if en_noche(W, now) else 0.0
+    return 0.0
+
+
+def dmx_encontrado():
+    """(si, texto) del DMX Out CHOP dmx_out: activo y sin errores."""
+    o = parent().op('dmx_out')
+    if o is None:
+        return False, 'sin dmx_out'
+    try:
+        err = o.errors()
+    except Exception:
+        err = ''
+    if err:
+        return False, err.splitlines()[0]
+    try:
+        if not o.par.active.eval():
+            return False, 'apagado'
+    except Exception:
+        pass
+    return True, INTERFACES_DMX[int(cfg_foto().get('interfaz_dmx', 0)) % len(INTERFACES_DMX)]
+
+
+def interfaz_dmx_al_dia(nombre=None):
+    """Lleva Interfazdmx al menu Interface del DMX Out CHOP (sus nombres pueden
+    variar entre versiones de TouchDesigner). Devuelve si lo ha conseguido."""
+    o = parent().op('dmx_out')
+    nombre = str(nombre or _p('Interfazdmx', 'artnet'))
+    if o is None:
+        return False
+    p = getattr(o.par, 'interface', None)
+    if p is None:
+        return False
+    quiere = dict(artnet=['artnet', 'art-net'], usbpro=['usbpro', 'enttecusbpro', 'enttec', 'usbpromk2'])
+    try:
+        nombres = [str(x).lower() for x in p.menuNames]
+        for w in quiere.get(nombre, [nombre]):
+            if w in nombres:
+                p.val = p.menuNames[nombres.index(w)]
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _legend_sala(W, c):
+    """SALA (fase 23): el balance, el estado, el estroboscopio, los destellos del
+    ultimo segundo y la salida DMX."""
+    s = sala_de(W)
+    now = absTime.seconds
+    b = s['balance']
+    bal = 'sin creacion' if b >= BALANCE_SIN_CREACION else '%.2f' % b
+    txt = '  SALA     balance %s (%g s%s)   %s' % (bal, c['ventana_balance'],
+                                               ', forzado' if c['sim_balance'] >= 0.0 else '',
+                                               ESTADOS_SALA[s['estado']])
+    if s['hz'] > 0.0:
+        txt += '   estrobo %.1f Hz' % s['hz']
+    txt += '   destellos %d/%d' % (destellos_ventana(W, now), DESTELLOS_MAX)
+    if en_noche(W, now):
+        txt += '   noche %.1f s' % max(0.0, s['noche'][1] - now)
+    if c['colapso_on']:
+        txt += '   colapso %s' % ('en %.1f s' % max(0.0, c['max_erosion'] - (now - s['desde']))
+                                  if s['desde'] is not None else 'armado')
+    hay, texto = dmx_encontrado()
+    txt += '   dmx %s' % texto if hay else '   sin dmx (%s)' % texto
+    return txt
+
+
+# --- personas (fase 24) -----------------------------------------------------------
+
+def personas_tablas(W, c, now):
+    """Escribe las tablas personas y casillas_ocupadas (solo si han cambiado)."""
+    filas_p = [[p['id'], '%.2f' % p['x'], '%.2f' % p['y'], '%.2f' % p['alt'],
+                p['casilla'] if p['casilla'] is not None else '', '%.1f' % max(0.0, now - p['desde']),
+                1 if p.get('nueva') else 0] for p in personas_en_sala()]
+    filas_c = [[k, 1, v['personas'], '%.1f' % max(0.0, now - v['t_ocupada']), celda_de_casilla(W, c, k)]
+               for k, v in sorted(_SALA.get('casillas', {}).items())]
+    for nombre, cab, filas in (('personas', PERSONAS_COLS, filas_p), ('casillas_ocupadas', CASILLAS_COLS, filas_c)):
+        t = parent().op(nombre)
+        firma = [[str(x) for x in f] for f in filas]
+        if t is None or _CACHE.get('tabla_' + nombre) == firma and t.numRows == len(filas) + 1:
+            continue
+        _CACHE['tabla_' + nombre] = firma
+        t.clear()
+        t.appendRow(cab)
+        for f in filas:
+            t.appendRow(f)
+
+
+def personas_cook(scriptOp):
+    """onCook del Script CHOP personas_chop: personas en sala, casillas ocupadas y
+    llegadas (personas nuevas) desde que se cargo el motor."""
+    _sin_timeslice(scriptOp)
+    scriptOp.clear()
+    scriptOp.numSamples = 1
+    scriptOp.appendChan('personas')[0] = float(len(personas_en_sala()))
+    scriptOp.appendChan('casillas')[0] = float(len(_SALA.get('casillas', {})))
+    scriptOp.appendChan('nuevas')[0] = float(_SALA.get('nuevas', 0))
+
+
+def personas_tick(W, c, now, alt):
+    """Tras cada imagen de la camara (sala_tick): las cabezas, el seguimiento, lo
+    que las personas hacen en el mundo y las tablas."""
+    res = tick_personas(W, c, now, detectar_cabezas(alt, c) if alt is not None else [])
+    sala_mundo(W, c, now, res)
+    personas_tablas(W, c, now)
+    o = parent().op('personas_chop')
+    if o is not None:
+        try:
+            o.cook(force=True)
+        except Exception:
+            pass
+    return res
+
+
+def sala_fila_pulso(W, c, name):
+    """Simformarfila: Simfila personas en casillas contiguas desde Simcasilla, en
+    la tabla sala_personas (el mismo camino que la camara)."""
+    t = parent().op('sala_personas')
+    if t is None:
+        return 'SALA  no esta la tabla sala_personas: relanza fase22_camara.py'
+    if t.numRows == 0:
+        t.appendRow(SALA_COLS)
+    cas = casillas_fila_sim(c, _sim_casilla(c), max(1, int(c['sim_fila'])))
+    for k in cas:
+        x, y = casilla_xy(c, k)
+        t.appendRow(['%.3f' % x, '%.3f' % y, '%.2f' % ALTURA_SIM])
+    _SALA['fila_sim'] = list(cas)
+    _SALA['t_img'] = -99.0
+    return 'SALA  fila de %d personas en las casillas %s   personas simuladas: %d%s' % (
+        len(cas), ' '.join(str(k) for k in cas), t.numRows - 1,
+        '' if c['fuente_sala'] == FUENTE_SIMULADA else '   (Fuente no es simulada: no se ven)')
+
+
+def _legend_personas(W, c):
+    """PERSONAS (fase 24): las que hay, las casillas ocupadas y las llegadas."""
+    cols, filas = rejilla_sala(c)
+    fuente = 'simulada' if c['fuente_sala'] == FUENTE_SIMULADA else ('camara' if _SALA.get('hay') else 'sin camara')
+    return '  PERSONAS %d en sala   casillas %d/%d   nuevas %d   %s' % (
+        len(personas_en_sala()), len(_SALA.get('casillas', {})), cols * filas, _SALA.get('nuevas', 0), fuente)
+
+
+# --- la huella minima (fase 25) -----------------------------------------------------
+
+def _legend_huella(W, c):
+    """HUELLA (fase 25): las inclusiones vivas, las llegadas y las paradas que
+    las dejaron en este mundo, la ultima y Probllegada."""
+    cu = W['incl_n']
+    u = W.get('incl_ultima')
+    ult = 'ultima celda %d escalon %d (%s)' % (u['celda'], u['escalon'], TIPO_INCL.get(u['tipo'], '?')) if u \
+        else 'ultima -'
+    return '  HUELLA   inclusiones %d (llegadas %d, paradas %d)   %s   llegada %g   parada %g s' % (
+        n_inclusiones(W), cu['llegadas'], cu['paradas'], ult, c['prob_llegada'], c['t_parada'])
+
+
+# --- la fila y la escision (fase 29) ---------------------------------------------------
+
+ESCISIONES_COLS = ['id', 'jornada', 'ciclo', 'hora', 'personas', 'conchas', 'celda', 'estado', 'testigo']
+
+
+def fila_escision(e):
+    """La fila de la tabla escisiones (y del registro del historico) de una escision."""
+    return [e['id'], e.get('jornada', ''), e.get('ciclo', ''), e.get('hora', ''), e['personas'],
+            len(e['cortadas']), e['origen'], e['estado'], e.get('testigo') or '']
+
+
+def escisiones_tabla(W):
+    """Escribe la tabla escisiones (las ultimas ESCISIONES_MAX), solo si ha cambiado."""
+    t = parent().op('escisiones')
+    if t is None:
+        return
+    filas = [[str(x) for x in fila_escision(e)] for e in W['escisiones']]
+    if _CACHE.get('tabla_escisiones') == filas and t.numRows == len(filas) + 1:
+        return
+    _CACHE['tabla_escisiones'] = filas
+    t.clear()
+    t.appendRow(ESCISIONES_COLS)
+    for f in filas:
+        t.appendRow(f)
+
+
+def sala_sumar_pulso(W, c):
+    """Simsumar: una persona mas en la casilla contigua a la fila de prueba."""
+    t = parent().op('sala_personas')
+    if t is None:
+        return 'SALA  no esta la tabla sala_personas: relanza fase22_camara.py'
+    fila = list(_SALA.get('fila_sim') or [])
+    if not fila:
+        return 'SALA  no hay fila de prueba: pulsa antes Simformarfila'
+    sig = casillas_fila_sim(c, fila[0], len(fila) + 1)
+    if len(sig) <= len(fila):
+        return 'SALA  la fila de prueba no cabe mas en la sala'
+    x, y = casilla_xy(c, sig[-1])
+    t.appendRow(['%.3f' % x, '%.3f' % y, '%.2f' % ALTURA_SIM])
+    _SALA['fila_sim'] = sig
+    _SALA['t_img'] = -99.0
+    return 'SALA  una persona mas en la casilla %d: fila de %d   personas simuladas: %d' % (
+        sig[-1], len(sig), t.numRows - 1)
+
+
+def _legend_fila(W, c):
+    """FILA y ESCISION (fase 29): la fila mas larga de la sala y la ultima escision."""
+    now = _SALA.get('t_personas') or absTime.seconds
+    modo = MODOS_FILA[int(c['modo_fila']) % len(MODOS_FILA)]
+    filas = _SALA.get('filas') or []
+    if filas:
+        f = max(filas, key=lambda x: (x['personas'], -x['id']))
+        l1 = '  FILA     %d personas   %s   %.1f/%.1f s' % (
+            f['personas'], modo, min(c['t_fila'], max(0.0, now - f['t0'])), c['t_fila'])
+        if len(filas) > 1:
+            l1 += '   (%d filas)' % len(filas)
+    else:
+        l1 = '  FILA     -   %s   (desde %d personas, %g s)' % (modo, int(c['min_fila']), c['t_fila'])
+    esc = W['escisiones']
+    if esc:
+        e = esc[-1]
+        l2 = '  ESCISION #%d   celda %d   conchas %d/%d   %s' % (
+            e['id'], e['origen'], len(e['cortadas']), n_shells(W), e['estado'])
+    else:
+        l2 = '  ESCISION -'
+    pend = [f for f in filas if f['escision'] is None]
+    if pend:
+        f = max(pend, key=lambda x: now - x['t0'])
+        l2 += '   (sin abrir: fila %.1f/%.1f s)' % (max(0.0, now - f['t0']), c['t_fila'])
+    return l1 + '\n' + l2
+
+
+def _legend_relampago(W, c):
+    """RELAMPAGO (fase 30): cuanto hace del ultimo, los destellos del ultimo segundo y el DMX."""
+    s = sala_de(W)
+    now = absTime.seconds
+    tr = s.get('t_relampago')
+    if s.get('pend') and s['pend'].get('quien') == 'relampago':
+        cuando = 'pendiente (espera un hueco)'
+    elif tr is not None:
+        cuando = 'hace %.1f s' % max(0.0, now - tr)
+    else:
+        cuando = '-'
+    hay, texto = dmx_encontrado()
+    return '  RELAMPAGO %s   destellos %d/%d en el ultimo segundo   %s' % (
+        cuando, destellos_ventana(W, now), DESTELLOS_MAX, 'dmx %s' % texto if hay else 'sin dmx')
+
+
+# --- las escisiones en el historico (fase 31) ---------------------------------------
+
+def carpeta_historico(c=None):
+    """La carpeta del historico (Carpetahistorico), creada si hace falta. None si no se puede."""
+    import os
+    c = c or cfg_foto()
+    ruta = str(c.get('carpeta_historico') or '').strip()
+    if not ruta:
+        return None
+    try:
+        os.makedirs(ruta, exist_ok=True)
+    except Exception as e:
+        _say('historico', 'AVISO  historico: no puedo crear %s (%s)' % (ruta, e))
+        return None
+    return ruta.replace('\\', '/').rstrip('/')
+
+
+def _a_top(img):
+    """La imagen (fila 0 arriba) como la quiere un Script TOP (fila 0 abajo)."""
+    return img[::-1].copy()
+
+
+def seccion_cook(scriptOp):
+    """onCook del Script TOP seccion: la ultima seccion dibujada."""
+    img = _HIST.get('imagen')
+    if img is None:
+        np = _np()
+        if np is None:
+            return
+        img = np.zeros((SECCION_PX[1], SECCION_PX[0], 4), dtype=np.float32)
+        img[..., 3] = 1.0
+    scriptOp.copyNumpyArray(_a_top(img))
+
+
+def columna_cook(scriptOp):
+    """onCook del Script TOP columna_jornada: la columna resumen de la jornada de hoy
+    (o de la que se esta exportando)."""
+    W, c = world(), cfg_foto()
+    img, meta = columna_jornada(W, c, _HIST.get('jornada_top') or _fecha()[0])
+    if img is not None:
+        _HIST['columna_meta'] = meta
+        scriptOp.copyNumpyArray(_a_top(img))
+
+
+def _guardar_top(nombre, ruta):
+    """Recuece el Script TOP y lo guarda en ruta (TOP.save). Devuelve si ha ido bien."""
+    o = parent().op(nombre)
+    if o is None:
+        return False
+    try:
+        o.cook(force=True)
+        o.save(ruta)
+        return True
+    except Exception as e:
+        _say('guardar_' + nombre, 'AVISO  historico: no pude guardar %s (%s)' % (ruta, e))
+        return False
+
+
+def exportar_testigo(e, img=None, meta=None):
+    """Guarda la seccion de la escision e en historico/escision_<jornada>_c<ciclo>_<id>.png
+    (si no se la dan, la dibuja ahora). Devuelve el nombre del fichero, o None."""
+    W, c = world(), cfg_foto()
+    if img is None:
+        img, meta = seccion_escision(W, c, e)
+    carpeta = carpeta_historico(c)
+    if img is None or carpeta is None:
+        return None
+    _HIST['imagen'], _HIST['meta'] = img, meta
+    nombre = nombre_testigo(e)
+    if not _guardar_top('seccion', carpeta + '/' + nombre):
+        return None
+    e['testigo'] = nombre
+    _HIST['exportadas'] += 1
+    return nombre
+
+
+def exportar_columna(jornada=None):
+    """Guarda la columna resumen de la jornada en historico/columna_<jornada>.png."""
+    c = cfg_foto()
+    carpeta = carpeta_historico(c)
+    jornada = jornada or _fecha()[0]
+    if carpeta is None:
+        return None
+    _HIST['jornada_top'] = jornada
+    nombre = 'columna_%s.png' % jornada
+    bien = _guardar_top('columna_jornada', carpeta + '/' + nombre)
+    _HIST['jornada_top'] = None
+    return nombre if bien else None
+
+
+def registrar_escision(W, e):
+    """Una fila por escision en historico/escisiones.csv (UTF-8, separador ;), al
+    cerrarse. No duplica: si ya esta (id, jornada y hora), no la repite. Devuelve
+    si la ha escrito."""
+    import os
+    carpeta = carpeta_historico()
+    e['registrada'] = True
+    if carpeta is None:
+        return False
+    ruta = carpeta + '/escisiones.csv'
+    clave = '%s;%s;' % (e['id'], e.get('jornada', ''))
+    try:
+        viejas = []
+        if os.path.exists(ruta):
+            with open(ruta, encoding='utf-8') as f:
+                viejas = f.read().splitlines()
+        if any(l.startswith(clave) and l.split(';')[3:4] == [str(e.get('hora', ''))] for l in viejas):
+            return False
+        with open(ruta, 'a', encoding='utf-8') as f:
+            if not viejas:
+                f.write(';'.join(REGISTRO_COLS) + '\n')
+            f.write(linea_registro(e) + '\n')
+        return True
+    except Exception as ex:
+        _say('registro', 'AVISO  historico: no pude escribir %s (%s)' % (ruta, ex))
+        return False
+
+
+def historico_tick(W, c, now):
+    """Cada fotograma: guarda como mucho un testigo pendiente (para no cortar el
+    fotograma), apunta en el registro las escisiones que se han cerrado y, al
+    cambiar la fecha, exporta la columna de la jornada que acaba."""
+    pend = _HIST['pend']
+    ids = set(p[0] for p in pend)
+    for e in W['escisiones']:           # pendientes de una sesion anterior (el motor se recargo)
+        if e.get('testigo') == 'pendiente' and e['id'] not in ids:
+            e['testigo'] = None
+            encolar_testigo(W, c, e, now)
+    if pend:
+        ide, img, meta = pend.pop(0)
+        e = escision_de(W, ide)
+        if e is not None and exportar_testigo(e, img, meta) is None:
+            e['testigo'] = None         # no se pudo: no se queda pendiente para siempre
+            e['sin_testigo'] = True
+    for e in W['escisiones']:
+        if e['estado'] != 'abierta' and not e.get('registrada') and e.get('testigo') != 'pendiente':
+            registrar_escision(W, e)
+    hoy = _fecha()[0]
+    ayer = _HIST.get('jornada')
+    if ayer and ayer != hoy and (ciclos_jornada(W, ayer) or any(e.get('jornada') == ayer for e in W['escisiones'])):
+        exportar_columna(ayer)
+    _HIST['jornada'] = hoy
+    firma = (len(W['shells']), len(W['escisiones']), hoy)
+    if _HIST.get('firma_columna') != firma:
+        _HIST['firma_columna'] = firma
+        o = parent().op('columna_jornada')
+        if o is not None:
+            try:
+                o.cook(force=True)
+            except Exception:
+                pass
+
+
+def exportar_pulso(W, c):
+    """Exportartestigo: la seccion de la ultima escision (como esta ahora) y la columna de hoy."""
+    if not W['escisiones']:
+        return 'HISTORICO  no hay ninguna escision'
+    e = W['escisiones'][-1]
+    nombre = exportar_testigo(e)
+    col = exportar_columna()
+    if nombre is None:
+        return 'HISTORICO  no pude exportar el testigo de la escision %d (mira Carpetahistorico)' % e['id']
+    return 'HISTORICO  %s%s en %s' % (nombre, ' y %s' % col if col else '', carpeta_historico(c))
+
+
+def _legend_historico(W, c):
+    """HISTORICO (fase 31): las escisiones de hoy, la ultima y su testigo."""
+    hoy = _fecha()[0]
+    n = sum(1 for e in W['escisiones'] if e.get('jornada') == hoy)
+    if not W['escisiones']:
+        return '  HISTORICO escisiones hoy 0   ultima -'
+    e = W['escisiones'][-1]
+    tg = e.get('testigo')
+    estado = 'testigo pendiente' if tg == 'pendiente' else ('testigo exportado' if tg else
+                                                             ('sin testigo' if e['estado'] != 'abierta'
+                                                              else 'testigo al deshacerse la fila o al enterrar'))
+    return '  HISTORICO escisiones hoy %d   ultima #%d J%s C%s %d personas %d conchas celda %d   %s' % (
+        n, e['id'], e.get('jornada', ''), e.get('ciclo', ''), e['personas'], len(e['cortadas']), e['origen'], estado)
+
+
+def dia(frame=None):
+    """1 - noche (fase 28): lo que multiplica el color de las luces. 1 antes de la
+    fase 28. Una vez por fotograma (frame_tick); fuera de el, del mundo."""
+    v = _CACHE.get('dia')
+    if v is None or _CFG_FOTO.get('off'):
+        try:
+            c = cfg_foto()
+            v = 1.0 - noche_nivel(world(), c, absTime.seconds) if c['nivel'] >= 28 else 1.0
+        except Exception:
+            v = 1.0
+    return float(v)
+
+
+def _legend_noche(W, c):
+    """NOCHE (fase 28): lo que dura, lo que queda y lo que emite."""
+    n = W.get('noche')
+    now = absTime.seconds
+    quedan = max(0.0, n[1] - now) if n and now >= n[0] else 0.0
+    inc, esc = emiten_noche(W, c)
+    return '  NOCHE    %.1f s   quedan %.1f   emiten %d inclusion%s y %d escision%s' % (
+        c['noche'], quedan, inc, '' if inc == 1 else 'es', esc, '' if esc == 1 else 'es')
+
+
+def _legend_banda(W, c):
+    """BANDA (fase 27): la ultima concha (humana o limpia, sus huellas y su
+    cobertura), el colapso y cuantas conchas son estratos humanos."""
+    shells = W['shells']
+    humanas = sum(1 for sh in shells if sh.get('banda') == 'humana')
+    if not shells:
+        return '  BANDA    ultima: -   (min %d)   humanas 0 de 0' % int(c['min_huellas'])
+    banda, n, col = banda_de(shells[-1])
+    return '  BANDA    ultima: %s %d huellas (min %d)   cobertura %d%% (max %d%%)   colapso %s   humanas %d de %d' % (
+        'estrato humano' if banda == 'humana' else 'concha limpia', n, int(c['min_huellas']),
+        int(round(100.0 * cobertura_concha(c, shells[-1]))), int(round(100.0 * c['inclusiones_max'])),
+        'si' if col else 'no', humanas, len(shells))
+
+
+def _legend_borrado(W, c):
+    """BORRADO (fase 26): las inclusiones vivas y las borradas, por causa."""
+    b = W['incl_borradas']
+    partes = ['%s %d' % (k, b.get(k, 0)) for k in CAUSAS_BORRADO if k != 'escision' or b.get(k, 0)]
+    return '  BORRADO  vivas %d   borradas %d (%s)' % (n_inclusiones(W), sum(b.values()), ', '.join(partes))
+
+
 def on_value(name, val):
     if name == 'Modoactuacion':
         try:
@@ -11686,6 +14373,9 @@ def on_value(name, val):
     elif name == 'Escena':              # fase 18: cargar la escena elegida
         n = cargar_escena(str(val))
         print('ESCENA  %s cargada (%d parametros)' % (val, n))
+    elif name == 'Interfazdmx':         # fase 23: la interfaz del DMX Out CHOP
+        if parent().op('dmx_out') is not None and not interfaz_dmx_al_dia(str(val)):
+            print('AVISO  dmx_out: no pude poner la interfaz %s; elige Interface a mano' % val)
 
 
 # --- escenas (fase 18) --------------------------------------------------------
@@ -11881,7 +14571,8 @@ def seqs_de_geometria(nombre, cfg=None):
     """{1}, {2} o {1, 2}: de que secuenciador sale lo que dibuja la geometria
     nombre de FASE1 (para los bocetos); None si es de las conchas o la esfera, o
     del armazon (nucleo, reticula, luces de las conchas), que no van por secuenciador."""
-    if nombre in ('estratos', 'terreno', 'nucleo', 'reticula', 'luz_conchas', 'diagnostico'):
+    if nombre in ('estratos', 'terreno', 'nucleo', 'reticula', 'luz_conchas', 'diagnostico',
+                  'inclusiones', 'fulguritas'):     # fases 25 y 29: las huellas de las personas
         return None
     if nombre in BOCETO_SEQ1:
         return frozenset({1})
@@ -11986,7 +14677,7 @@ def flash_light():
         ang, tilt = 0.0, 0.0
     v = world_dir(normal_i(f['cell']), ang, tilt, wobble())
     d = suelo(W, c, f['cell']) + W['vh'][f['cell']] + 4.0   # sobre su suelo y su formacion
-    return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env) + tuple(flash_color(W, c))
+    return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env * dia()) + tuple(flash_color(W, c))     # fase 28
 
 
 DESTELLO_CANALES = ('fl_tx', 'fl_ty', 'fl_tz', 'fl_dim', 'fl_r', 'fl_g', 'fl_b')
@@ -12552,6 +15243,26 @@ def _legend():
         lines.append(_legend_modular(W, c))
     if lvl >= 21:
         lines.append(_legend_micro(W, c))
+    if lvl >= 22:
+        lines.append(_legend_camara(W, c))
+    if lvl >= 23:
+        lines.append(_legend_sala(W, c))
+    if lvl >= 24:
+        lines.append(_legend_personas(W, c))
+    if lvl >= 25:
+        lines.append(_legend_huella(W, c))
+    if lvl >= 26:
+        lines.append(_legend_borrado(W, c))
+    if lvl >= 27:
+        lines.append(_legend_banda(W, c))
+    if lvl >= 28:
+        lines.append(_legend_noche(W, c))
+    if lvl >= 29:
+        lines.append(_legend_fila(W, c))
+    if lvl >= 30:
+        lines.append(_legend_relampago(W, c))
+    if lvl >= 31:
+        lines.append(_legend_historico(W, c))
     return '\n'.join(lines)
 
 
@@ -12718,7 +15429,7 @@ def luz_tiempo(k, frame=None):
             t = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
             cal = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
         k = int(k)
-        return (LUZ_BASE[k] + (LUZ_CALIDA[k] - LUZ_BASE[k]) * cal) * t[k]
+        return (LUZ_BASE[k] + (LUZ_CALIDA[k] - LUZ_BASE[k]) * cal) * t[k] * dia()     # fase 28: la noche
     except Exception:
         return LUZ_BASE[int(k) % 3]
 
