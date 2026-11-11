@@ -3,7 +3,7 @@
 
 *Continúa `MONTAJE_FASES_21_23.md`. Referencia: `docs/PLAN_V5.md` (el doc «Estratos · Plan v5: la huella inevitable», decisiones P1 a P14 cerradas el 28 de octubre de 2026). Las reglas de siempre: un script por fase, encima de la anterior, con su versión en la primera línea del informe, su página `FaseNN`, su línea en la leyenda, su `LEEME` y una AUTOPRUEBA al final que deja el mundo como estaba. El motor gana una versión por fase (de la v83 a la v90). Para tenerlo todo al día, `recargar_todo.py`.*
 
-**Antes de nada:** las fases 24 a 31 necesitan la cámara (o su sala simulada) de la fase 22 y la luz de sala de la fase 23. Todo se prueba sin cámara con `Fuente` = simulada (página Fase22). Las autopruebas de todas las fases corren con `Activo` apagado (el sorteo de la fase 22), para probar lo suyo con todas las señales.
+**Antes de nada:** las fases 24 a 31 necesitan la cámara (o su sala simulada) de la fase 22 y la luz de sala de la fase 23. Todo se prueba sin cámara con `Fuente` = simulada (página Fase22). Las autopruebas de todas las fases corren con `Activo` apagado (el sorteo de la fase 22), para probar lo suyo con todas las señales. Y con `Noche` a 0 (comun v70), salvo las de las fases 23, 27 y 28, que la prueban: así la noche de enterramiento no apaga lo que otras fases miran justo después de enterrar. Al terminar devuelven tus valores.
 
 | Fase | Script | Qué hace | Motor |
 |---|---|---|---|
@@ -11,6 +11,7 @@
 | 25 | `fase25_huella.py` | Huella mínima: inclusiones por llegada y por parada, con su escalón | v84 |
 | 26 | `fase26_borrado.py` | Borrado: la erosión borra las inclusiones que quedan sobre su escalón | v85 |
 | 27 | `fase27_clasificacion.py` | Clasificación al enterrar: estrato humano o concha limpia, y el colapso | v86 |
+| 28 | `fase28_noche.py` | Noche de enterramiento: la esfera se apaga y emiten las inclusiones horneadas | v87 |
 
 ---
 
@@ -260,6 +261,62 @@ Deja tres inclusiones (`Probllegada` 1 y `Simponer` en tres casillas) y `Forzarc
 | ¿Qué curva sigue la cobertura? | `Inclusionesmax × (1 − e^(−n/3))`, en veinteavos (lo que cabe en el alfa); con al menos una inclusión, al menos un veinteavo |
 | ¿Motas en una concha limpia que tenía supervivientes bajo el mínimo? | No se dibujan (es limpia), pero la concha las guarda |
 | ¿Los colores de cada inclusión? | La concha guarda la semilla de cada una; el shader reparte los ocho colores de la paleta entre las motas de la loseta (no una mota por inclusión) |
+
+---
+
+## FASE 28 · Noche de enterramiento
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/fase28_noche.py').read())
+```
+
+### Qué hace
+
+En cada enterramiento, con colapso o sin él, durante `Noche` segundos la esfera se apaga: solo emiten las inclusiones supervivientes recién horneadas (las motas de la concha nueva) y, cuando exista la fase 29, las paredes de las escisiones. Empieza en el mismo fotograma del recuento (fase 27) y vuelve en 0,4 s. Mientras tanto la sala está a oscuras (fase 23, la misma `Noche`; P9). El mundo nuevo sigue funcionando: lo que nace durante la noche se dibuja apagado. Un segundo entierro durante la noche la reinicia. `Modoactuacion` no la quita: es parte del mundo. Con `Noche` 0 no hay noche.
+
+**Cómo** (sin luces nuevas ni geometría nueva): un valor `noche` (0–1) que sale del motor (`noche_nivel`) y llega:
+
+- al shader de la piel y de las conchas como uniforme `uNoche`: todo se multiplica por 1 − `noche`, y las motas de las losetas recién horneadas suben su emisivo. Esas losetas se marcan en su alfa (+100) solo mientras dura la noche;
+- a las luces: el **color** de `luz_principal` (que ya da el motor, `luz_tiempo`), de `luz_relleno` (una expresión: su valor × `dia()`) y el dimmer de `luz_destello` (que ya sale de `frame_u`) se multiplican por 1 − `noche`. Lo que dibuja con Phong se apaga con ellas;
+- a las capas de luz y a las partículas (`luz_celda`, `luz_conchas`, `luz_local`, `particulas`, `humo`, `vagones`, `diagnostico`): el color de sus instancias, por 1 − `noche`; a oscuras del todo, las partículas y el humo no se dibujan.
+
+Nada se recompila ni sale del render: solo cambian uniformes, una expresión y colores de instancia.
+
+### Parámetros
+
+Ninguno nuevo: usa `Noche` (4 s), que crea la fase 23. La página Fase28 lleva solo `Version28` (P10).
+
+### Leyenda
+
+```
+NOCHE    4.0 s   quedan 2.3   emiten 12 inclusiones y 1 escision
+```
+
+### Probar
+
+Con inclusiones vivas (`Probllegada` 1 y `Simponer`), `Forzarciclo`: el planeta se apaga 4 s y solo brillan las motas de la concha nueva. Sin inclusiones: 4 s de oscuridad.
+
+### Autoprueba
+
+- `noche` vale 1 desde el fotograma del recuento hasta `Noche` s y 0 después; coincide con la oscuridad de sala de la fase 23;
+- durante la noche: `uNoche` 1, las capas de luz a 0, las luces a 0, y solo las losetas recién horneadas emiten;
+- lo que nace de noche existe y se dibuja apagado; al acabar, la luz vuelve y las losetas dejan de emitir;
+- con colapso y sin él dura lo mismo; un segundo entierro la reinicia; sin inclusiones, oscuridad sin nada que emita; `Modoactuacion` no la quita; `Noche` 2 dura 2 s;
+- la línea `NOCHE` y `Version28`.
+
+### Decisiones tomadas en la fase 28
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Dimmers o color de las luces? | El color: los dimmers de `luz_principal` y `luz_relleno` son de las escenas de la fase 18, y una expresión en ellos las rompería. El resultado es el mismo (color × dimmer = 0) |
+| ¿Los materiales constantes? | Se apaga el color de sus instancias en el motor, en vez de una expresión en cada material: relanzar una fase anterior rehace esos materiales y perdería la expresión |
+| ¿Qué motas emiten? | Solo las de la concha recién enterrada (un estrato humano más viejo, expuesto en un corte, sigue apagado) |
+| ¿Las inclusiones que caen durante la noche? | Apagadas, como todo lo que nace de noche |
+| ¿La retícula? | No se toca: solo se ve fuera de la actuación (`Showgrid`) |
+
+### Pruebas pendientes en TouchDesigner
+
+Que nada parpadee al entrar en la noche (no debe recompilarse ningún shader), y que el fondo del render sea negro. Si algún material Phong o constante sigue viéndose de noche, dímelo: es una geometría que no pasa por las luces ni por las capas de la lista.
 
 ---
 

@@ -186,13 +186,13 @@ def _prueba(t, m):
     q0, q1 = m.cobertura_q(c, sh, celdas[0]), m.cobertura_q(c, sh, celdas[1])
     t.check('el recuento se hornea en el material: el alfa de la loseta (y de su tapa) lleva rugosidad + 2 x '
             'cobertura, mas con 3 inclusiones que con 1, y nada en una celda sin ellas',
-            q0 > q1 >= 1 and len(a0) == 2 and all(int(a // 2) == q0 for a in a0)
-            and all(int(a // 2) == q1 for a in a1) and all(a <= 1.0 for a in a2)
-            and all(0.0 < a - 2 * q0 <= 1.0 for a in a0), 'alfa %s, %s y %s' % (a0, a1, a2))
+            q0 > q1 >= 1 and len(a0) == 2 and all(int((a % 100) // 2) == q0 for a in a0)
+            and all(int((a % 100) // 2) == q1 for a in a1) and all(a <= 1.0 for a in a2)
+            and all(0.0 < a % 100 - 2 * q0 <= 1.0 for a in a0), 'alfa %s, %s y %s' % (a0, a1, a2))
     entierra(W, c)                      # otra concha encima: la de abajo conserva sus motas
     a0b = [f[12] for f in losetas(W, c, celdas[0])]
     t.check('la loseta humana conserva sus motas bajo la concha siguiente (un corte las ensena en la pared)',
-            sorted(int(a // 2) for a in a0b) == [0, 0, q0], str(a0b))
+            sorted(int((a % 100) // 2) for a in a0b) == [0, 0, q0], str(a0b))
     tabla = [m.paleta_humana(c, (j + 0.5) / 8.0) for j in range(8)]
     px = base.op('piel_pixel').text if base.op('piel_pixel') is not None else ''
     en_shader = all('vec3(%.3f, %.3f, %.3f)' % col in px for col in tabla)

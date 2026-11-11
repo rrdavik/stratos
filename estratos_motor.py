@@ -78,6 +78,9 @@
 #                 Motor v86, fase 27: la clasificacion al enterrar: estrato
 #                 humano o concha limpia, el recuento horneado en el material
 #                 de cada loseta y el colapso como marca de cierre.
+#                 Motor v87, fase 28: la noche de enterramiento: durante Noche
+#                 segundos la esfera se apaga y solo emiten las inclusiones
+#                 recien horneadas (y las escisiones).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -90,7 +93,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v86'
+MOTOR_VERSION = 'motor v87'
 
 import math
 
@@ -683,6 +686,7 @@ def new_world():
         incl_n=dict(llegadas=0, paradas=0),     # las que ha dejado este mundo
         incl_ultima=None,
         incl_borradas=dict(erosion=0, micro=0, corte=0, catastrofe=0, escision=0),     # fase 26
+        noche=None,             # la noche de enterramiento en curso (fase 28): [inicio, fin]
         aviso='',
         ev={},
         t=None,
@@ -2020,6 +2024,8 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
     if clas:                            # fase 27: humana o limpia, con sus inclusiones horneadas
         W['shells'][-1].update(clas)
         W['ev']['banda'] = dict(clas, concha=len(W['shells']) - 1, t=now)
+    if cfg['nivel'] >= 28:              # fase 28: la noche empieza en el fotograma del recuento
+        W['noche'] = [now, now + cfg['noche']] if cfg['noche'] > 0.0 else None
     W['quitadas'] = [0] * N
     W['gen'] += 1
     if cfg['nivel'] >= 25:              # fase 25: lo heredado empieza sin inclusiones
@@ -2124,6 +2130,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         impulso_tick(W, cfg, now)
     if cfg['nivel'] >= 26:              # fase 26: la pasada de seguridad del borrado
         purga_segura(W)
+    if cfg['nivel'] >= 28:              # fase 28: la noche acaba (y las losetas dejan de emitir)
+        noche_tick(W, cfg, now)
     if cfg['nivel'] >= 23:              # fase 23: la luz de la sala y el colapso
         if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo']:
             out['ciclo'] = close_cycle(W, cfg, now, 'colapso')
@@ -2458,6 +2466,8 @@ def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False)
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
         out['estratos'] = build_tiles(W, cfg, now)
+    if lvl >= 28:                   # fase 28: la noche apaga las capas de luz y las particulas
+        noche_filas(out, 1.0 - noche_nivel(W, cfg, now))
     return out
 
 
@@ -2475,6 +2485,8 @@ def build_tiles(W, cfg, now):
     respaldo = era and cfg.get('respaldo', 0)
     humano = cfg['nivel'] >= 27             # fase 27: las inclusiones horneadas
     q_tapa = 0
+    # fase 28: durante la noche, la concha recien enterrada (sus motas emiten)
+    recien = len(W['shells']) - 1 if cfg['nivel'] >= 28 and W.get('noche') else -1
     for c in range(N):
         col = column_radii(W, cfg, c)
         if not col:
@@ -2506,6 +2518,8 @@ def build_tiles(W, cfg, now):
             q = cobertura_q(cfg, sh, c) if humano and not respaldo else 0
             if era:                         # fase 27: alfa = rugosidad + 2 x cobertura de inclusiones (en veinteavos)
                 rows[-1].append(1.0 if respaldo else rug + 2.0 * q)
+                if q and s == recien:       # fase 28: recien horneada (emite en la noche): alfa + 100
+                    rows[-1][-1] += ALFA_RECIENTE
             if ctapa is not None:
                 tapa = _tapa_row(rows[-1][:12], ctapa)
                 q_tapa = q
@@ -2513,7 +2527,7 @@ def build_tiles(W, cfg, now):
             if era:                         # fase 25: con inclusiones, la matriz del plastiglomerado
                 con_incl = cfg['nivel'] >= 25 and bool(W['incl'][c]) if len(W.get('incl', ())) == N else False
                 if q_tapa:                  # fase 27: la cara de la loseta de un estrato humano, con sus motas
-                    tapa.append(RUG_TAPA_INCL + 2.0 * q_tapa)
+                    tapa.append(RUG_TAPA_INCL + 2.0 * q_tapa + (ALFA_RECIENTE if s == recien else 0.0))
                 else:
                     tapa.append(1.0 if respaldo else (RUG_TAPA_INCL if con_incl else RUG_TAPA))
             rows.append(tapa)
@@ -11308,6 +11322,73 @@ def vaciar_inclusiones(W):
     W['dirty'] = True
 
 
+# --- la noche de enterramiento (fase 28) --------------------------------------------
+# En cada enterramiento, con colapso o sin el, durante Noche segundos (la misma
+# de la oscuridad de sala de la fase 23) la esfera apaga lo mineral: solo emiten
+# las inclusiones supervivientes recien horneadas (las motas de la concha nueva)
+# y, desde la fase 29, las paredes de las escisiones. Empieza en el mismo
+# fotograma del recuento. El mundo nuevo sigue funcionando: lo que nace durante
+# la noche se dibuja apagado. Sin luces ni geometria nuevas: un valor 'noche'
+# (0-1; entra de golpe y sale en NOCHE_SALIDA s) que llega
+#   - al shader de la piel (y de las conchas) como uniforme uNoche: todo se
+#     multiplica por 1 - noche y las motas recien horneadas suben su emisivo;
+#   - a las luces: el color de luz_principal, luz_relleno y luz_destello se
+#     multiplica por 1 - noche (lo que dibuja con Phong se apaga con ellas);
+#   - a las capas de luz y a las particulas (luz_celda, luz_conchas, luz_local,
+#     particulas, humo...): el color de sus instancias, por 1 - noche.
+# Nada se recompila ni sale del render.
+
+NOCHE_SALIDA = 0.4              # s que tarda en volver la luz al acabar la noche
+ALFA_RECIENTE = 100.0           # lo que suma al alfa una loseta recien horneada (el shader lo lee)
+NOCHE_CAPAS = ('luz_celda', 'luz_conchas', 'luz_local', 'particulas', 'humo', 'vagones', 'diagnostico',
+               'coronas')
+NOCHE_FUERA = ('particulas', 'humo')    # transparentes: a oscuras del todo, no se dibujan
+
+
+def noche_nivel(W, cfg, now):
+    """La noche (0-1): 1 desde el fotograma del recuento hasta Noche s despues;
+    luego vuelve a 0 en NOCHE_SALIDA s."""
+    n = W.get('noche')
+    if not n or now < n[0]:
+        return 0.0
+    if now <= n[1]:
+        return 1.0
+    return max(0.0, 1.0 - (now - n[1]) / NOCHE_SALIDA)
+
+
+def noche_tick(W, cfg, now):
+    """Cada fotograma: al acabar la noche (y su salida) se olvida, y las losetas
+    dejan de marcarse como recien horneadas."""
+    n = W.get('noche')
+    if n and now > n[1] + NOCHE_SALIDA:
+        W['noche'] = None
+        W['dirty'] = True
+
+
+def noche_filas(out, dia):
+    """Apaga las capas de luz y las particulas: el color de sus instancias, por
+    dia (1 - noche). A oscuras del todo, las transparentes no se dibujan."""
+    if dia >= 0.999:
+        return out
+    for k in NOCHE_CAPAS:
+        filas = out.get(k)
+        if not filas:
+            continue
+        if dia <= 0.02 and k in NOCHE_FUERA:
+            out[k] = []
+            continue
+        out[k] = [list(f[:9]) + [f[9] * dia, f[10] * dia, f[11] * dia] + list(f[12:]) for f in filas]
+    return out
+
+
+def emiten_noche(W, cfg):
+    """(inclusiones recien horneadas, escisiones abiertas) que emiten en la noche."""
+    sh = W['shells'][-1] if W['shells'] else {}
+    n = sum(len(v) for v in sh.get('incl', {}).values()) if sh.get('banda') == 'humana' else 0
+    esc = sum(1 for e in W.get('escisiones', ()) if e.get('estado') != 'enterrada' or e.get('t_noche'))
+    return n, esc
+
+
 # --- la clasificacion al enterrar (fase 27) ----------------------------------------
 # En end_cycle, antes de hornear: se cuentan las inclusiones supervivientes del
 # mundo que se entierra (las escisiones no cuentan). Con al menos Minhuellas, la
@@ -11719,7 +11800,7 @@ def sala_fin_ciclo(W, cfg, now):
     s['estrobo_t'] = now
     s['bano'] = [0.0, 0.0, 0.0, 0.0]
     limitador_destellos(W, cfg, now, 'fin de ciclo', prioridad=True)
-    s['noche'] = [now, now + max(0.0, cfg['noche'])]
+    s['noche'] = [now, now + cfg['noche']] if cfg['noche'] > 0.0 else None
 
 
 def valores_dmx(W, cfg, now, filas):
@@ -12442,6 +12523,7 @@ def frame_tick():
     _CACHE['tinte'] = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
     _CACHE['luz_calida'] = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
     _CACHE['uni'] = uniformes_piel(W, c, now)       # fase 11 v5: pisos, borde y agua del shader
+    _CACHE['dia'] = 1.0 - noche_nivel(W, c, now) if c['nivel'] >= 28 else 1.0     # fase 28: las luces
     if res.get('burst'):
         print('AVISO  %s' % W['aviso'])
     if res.get('frente'):
@@ -12546,6 +12628,7 @@ def uniformes_piel(W, c, now):
                     1.0 if c['nivel'] >= 11 and tema_de(c) in CONSTRUIDOS else 0.0, 0.0)
     u['uSeq1'] = tuple(seq_color(c, 1)) + (0.0,)
     u['uSeq2'] = tuple(seq_color(c, 2)) + (0.0,)
+    u['uNoche'] = (noche_nivel(W, c, now) if c['nivel'] >= 28 else 0.0, 0.0, 0.0, 0.0)     # fase 28
     focos = focos_tinte(W, c, now) if nat else []
     for k in range(3):
         if k < len(focos):
@@ -13322,6 +13405,29 @@ def _legend_huella(W, c):
         n_inclusiones(W), cu['llegadas'], cu['paradas'], ult, c['prob_llegada'], c['t_parada'])
 
 
+def dia(frame=None):
+    """1 - noche (fase 28): lo que multiplica el color de las luces. 1 antes de la
+    fase 28. Una vez por fotograma (frame_tick); fuera de el, del mundo."""
+    v = _CACHE.get('dia')
+    if v is None or _CFG_FOTO.get('off'):
+        try:
+            c = cfg_foto()
+            v = 1.0 - noche_nivel(world(), c, absTime.seconds) if c['nivel'] >= 28 else 1.0
+        except Exception:
+            v = 1.0
+    return float(v)
+
+
+def _legend_noche(W, c):
+    """NOCHE (fase 28): lo que dura, lo que queda y lo que emite."""
+    n = W.get('noche')
+    now = absTime.seconds
+    quedan = max(0.0, n[1] - now) if n and now >= n[0] else 0.0
+    inc, esc = emiten_noche(W, c)
+    return '  NOCHE    %.1f s   quedan %.1f   emiten %d inclusion%s y %d escision%s' % (
+        c['noche'], quedan, inc, '' if inc == 1 else 'es', esc, '' if esc == 1 else 'es')
+
+
 def _legend_banda(W, c):
     """BANDA (fase 27): la ultima concha (humana o limpia, sus huellas y su
     cobertura), el colapso y cuantas conchas son estratos humanos."""
@@ -13684,7 +13790,7 @@ def flash_light():
         ang, tilt = 0.0, 0.0
     v = world_dir(normal_i(f['cell']), ang, tilt, wobble())
     d = suelo(W, c, f['cell']) + W['vh'][f['cell']] + 4.0   # sobre su suelo y su formacion
-    return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env) + tuple(flash_color(W, c))
+    return (v[0] * d, v[1] * d, v[2] * d, c['flash'] * env * dia()) + tuple(flash_color(W, c))     # fase 28
 
 
 DESTELLO_CANALES = ('fl_tx', 'fl_ty', 'fl_tz', 'fl_dim', 'fl_r', 'fl_g', 'fl_b')
@@ -14262,6 +14368,8 @@ def _legend():
         lines.append(_legend_borrado(W, c))
     if lvl >= 27:
         lines.append(_legend_banda(W, c))
+    if lvl >= 28:
+        lines.append(_legend_noche(W, c))
     return '\n'.join(lines)
 
 
@@ -14428,7 +14536,7 @@ def luz_tiempo(k, frame=None):
             t = tinte_actual(W, c) if c['nivel'] >= 17 else [1.0, 1.0, 1.0]
             cal = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
         k = int(k)
-        return (LUZ_BASE[k] + (LUZ_CALIDA[k] - LUZ_BASE[k]) * cal) * t[k]
+        return (LUZ_BASE[k] + (LUZ_CALIDA[k] - LUZ_BASE[k]) * cal) * t[k] * dia()     # fase 28: la noche
     except Exception:
         return LUZ_BASE[int(k) % 3]
 

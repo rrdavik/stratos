@@ -210,6 +210,7 @@ def _prueba(t, m):
     base.par.Objetivo = 'seq1'
     base.par.Temaenciclo = False
     base.par.Colapsoon = False
+    base.par.Noche = 4.0                # las autopruebas corren sin noche (comun v70): esta la prueba
     reloj = [absTime.seconds + 300.0]
     FPS = 60.0
 

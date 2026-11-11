@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v69'
+VERSION_COMUN = 'comun v70'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -878,6 +878,7 @@ uniform vec4 uSeq2;         // el del SEQ2
 uniform vec4 uBoceto;       // comun v62: x Bocetoseq1, y Bocetoseq2, z Bocetoconchas (solo mat_piel_tierra), w Bocetoreticula
 uniform vec4 uBocetoCol;    // rgb Colorboceto
 uniform sampler2D sAlturas; // comun v63: b de quien es el relieve (1 SEQ2, 0 los montes del SEQ1)
+uniform vec4 uNoche;        // fase 28: x la noche de enterramiento (0-1)
 
 in Vertex {
     vec4 color;
@@ -990,8 +991,12 @@ void main()
     float fam = uFamilia.x;
     // el alfa trae la rugosidad (0-1) y, desde la fase 17, las ventanas del
     // edificio: alfa = rugosidad + 2 x nivel (0-4)
-    float nivelv = floor(iVert.color.a * 0.5 + 0.0001);
-    float rug = clamp(iVert.color.a - 2.0 * nivelv, 0.02, 1.0);
+    // fase 28: una loseta recien horneada trae alfa + 100 (sus motas emiten en la noche)
+    float alfa = iVert.color.a;
+    float reciente = step(99.5, alfa);
+    alfa -= 100.0 * reciente;
+    float nivelv = floor(alfa * 0.5 + 0.0001);
+    float rug = clamp(alfa - 2.0 * nivelv, 0.02, 1.0);
     float luces = min(1.0, nivelv * 0.25);
     vec3 base = iVert.color.rgb;
     vec3 n = normalize(iVert.wNorm);
@@ -1391,6 +1396,12 @@ void main()
         float borde = 0.15 + 0.85 * pow(1.0 - max(dot(n, v), 0.0), 2.0);
         col += uBorde.x * borde * tin;
     }
+    if (uNoche.x > 0.001) {
+        // fase 28: la noche de enterramiento apaga todo; solo emiten las inclusiones
+        // supervivientes recien horneadas (las motas de la concha nueva)
+        col *= 1.0 - uNoche.x;
+        col += uNoche.x * reciente * humano * base * 1.3;
+    }
     // fase 19: saturacion del modular -> fracturas y glitch en los materiales
     float gl = uGlitch.x;
     if (gl > 0.001) {
@@ -1405,7 +1416,7 @@ void main()
     if (uNiebla.x > 0.001) {
         float dist = length(cam - iVert.wPos);
         float f = uNiebla.x * smoothstep(uNiebla.y, max(uNiebla.y + 0.01, uNiebla.z), dist);
-        col = mix(col, uNieblaCol.rgb, f);
+        col = mix(col, uNieblaCol.rgb * (1.0 - uNoche.x), f);
     }
     oFragColor[0] = TDOutputSwizzle(vec4(col, 1.0));
     for (int i = 1; i < TD_NUM_COLOR_BUFFERS; i++)
@@ -1975,6 +1986,7 @@ def install_core(base, carpeta, fase):
     calibracion_al_dia(base)
     tiempo_al_dia(base)
     modular_al_dia(base)
+    noche_al_dia(base)               # comun v70 (fase 28): la luz de relleno, con la noche
 
     formas = get_or_make(base, 'textDAT', 'formas_callbacks', -660, -200)
     formas.text = FORMAS_CB
@@ -3383,6 +3395,7 @@ PIEL_UNIFORMES = [
     ('uBoceto', ('parent().par.Bocetoseq1', 'parent().par.Bocetoseq2', 'parent().par.Bocetoconchas',
                  'parent().par.Bocetoreticula')),
     ('uBocetoCol', ('parent().par.Colorbocetor', 'parent().par.Colorbocetog', 'parent().par.Colorbocetob', '0')),
+    ('uNoche', (PIEL_U % ('uNoche', 0), '0', '0', '0')),      # fase 28: la noche de enterramiento
 ]
 # comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio']
@@ -4041,6 +4054,17 @@ class Prueba(object):
                 self.pars.append((p, True))
         except Exception:
             pass
+        # comun v70: y sin la noche de enterramiento (fases 23 y 28), que apaga lo que
+        # las pruebas de otras fases miran justo despues de enterrar. Las que la prueban
+        # (23, 27 y 28) ponen Noche ellas.
+        try:
+            p = getattr(self.base.par, 'Noche', None)
+            if p is not None and float(p.val) != 0.0:
+                v = p.val
+                p.val = 0.0
+                self.pars.append((p, v))
+        except Exception:
+            pass
         self._reticula()
 
     def _reticula(self):
@@ -4114,6 +4138,40 @@ class Prueba(object):
         print('  AUTOPRUEBA %s' % ('OK' if good else 'FALLIDA: pegame este bloque'))
         print('-' * 66)
         return good
+
+
+# --- la noche de enterramiento (fase 28) -----------------------------------------
+# El color de luz_principal (luz_tiempo) y el dimmer de luz_destello (frame_u) ya
+# los da el motor, que los multiplica por 1 - noche. El de luz_relleno es una
+# constante: aqui se le pone la expresion <su valor> * dia().
+DIA_EXPR = "parent().op('motor').module.dia(absTime.frame)"
+
+
+def noche_al_dia(base):
+    """Desde la fase 28, el color de luz_relleno se multiplica por 1 - noche
+    (conserva el valor que tuviera). Devuelve si quedo enlazado."""
+    if current_level(base) < 28:
+        return False
+    luz = base.op('luz_relleno')
+    if luz is None:
+        return False
+    hechos = 0
+    for ch in 'rgb':
+        for pat in COLOR_LUZ:
+            p = getattr(luz.par, pat % ch, None)
+            if p is None:
+                continue
+            if DIA_EXPR in (getattr(p, 'expr', '') or ''):
+                hechos += 1
+                break
+            try:
+                v = float(p.eval())
+            except Exception:
+                v = 1.0
+            if setexpr(luz, pat % ch, '%.4f * %s' % (v, DIA_EXPR)):
+                hechos += 1
+            break
+    return hechos == 3
 
 
 def columna_tabla(t, nombre):
