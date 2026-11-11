@@ -66,6 +66,9 @@
 #                 Motor v82, fase 23: la luz de la sala: el balance entre
 #                 erosion y creacion, el bano, el estroboscopio con su
 #                 limitador de destellos, la noche del fin de ciclo y el colapso.
+#                 Motor v83, fase 24 (plan v5): personas: cabezas (maximos de
+#                 altura), seguimiento, ocupacion binaria por casilla y la celda
+#                 que mira a cada casilla.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -78,7 +81,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v82'
+MOTOR_VERSION = 'motor v83'
 
 import math
 
@@ -293,6 +296,8 @@ DEFAULT_CFG = dict(
     # fase 23: la luz de la sala
     ventana_balance=30.0, umbral_estrobo=1.0, salida_estrobo=0.8, max_hz=3.0, noche=4.0, colapso_on=0,
     max_erosion=15.0, sim_balance=-1.0, interfaz_dmx=0, universo_dmx=0,
+    # fase 24: personas
+    sep_cabezas=0.35, confirma_persona=2, sim_fila=3,
 )
 
 
@@ -10641,7 +10646,8 @@ SALA_COLS = ['x', 'y', 'altura']        # tabla sala_personas (m; x desde la izq
 
 def _sala_nueva():
     return dict(dens=None, t=None, t_img=-99.0, alt=None, hay=False, fps=0.0, senales=0,
-                cuentas=dict(crear=[0, 0], erosionar=[0, 0]), ultima=None)
+                cuentas=dict(crear=[0, 0], erosionar=[0, 0]), ultima=None,
+                pistas=[], casillas={}, nuevas=0, id=0, ultimas=[], t_personas=None)    # fase 24
 
 
 _SALA = _sala_nueva()
@@ -10904,6 +10910,197 @@ def sala_sim_imagen(cfg, personas):
         a[f0:f1, c0:c1] = np.maximum(a[f0:f1, c0:c1], cuerpo)
     return a
 
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - personas (fase 24)
+# -----------------------------------------------------------------------------
+# La camara de la fase 22 (o su sala simulada), convertida en personas. En cada
+# imagen de la camara:
+#   1. MAXIMOS DE ALTURA. Un pixel es una cabeza si supera Alturamin, no pasa
+#      de Alturamax y es el maximo en un radio de Separacioncabezas. Dos maximos
+#      mas cerca que eso cuentan como una persona (se queda el mas alto).
+#   2. SEGUIMIENTO por vecino mas cercano: los maximos se emparejan con las
+#      personas de la imagen anterior, de la pareja mas cercana a la mas lejana,
+#      sin pasar de Separacioncabezas. Un maximo sin pareja durante
+#      Confirmapersona imagenes seguidas es una PERSONA NUEVA. Una persona sin
+#      maximo desaparece.
+#   3. OCUPACION BINARIA: una casilla esta ocupada si tiene al menos una persona;
+#      guarda el instante en que se ocupo (t_ocupada) y lo pierde al quedar
+#      libre. No pasa por ningun suavizado (la densidad de la fase 22 sigue a lo
+#      suyo, el sorteo de las senales, y aqui no se usa).
+#   4. LA CELDA QUE MIRA A LA CASILLA se calcula en el instante de cada evento
+#      (celda_de_casilla, con Loncentral de esa imagen).
+# El estado del sensor (pistas, casillas, contadores) vive en _SALA, no en W.
+
+BORDE_CASILLA = 0.08            # m: una persona no cambia de casilla hasta pasar esto del borde
+PERSONAS_COLS = ['id', 'x', 'y', 'altura', 'casilla', 'desde', 'nueva']
+CASILLAS_COLS = ['casilla', 'ocupada', 'personas', 't_ocupada', 'celda']
+
+
+def personas_reset():
+    """Olvida las personas, las casillas ocupadas y sus contadores."""
+    _SALA.update(pistas=[], casillas={}, nuevas=0, id=0, ultimas=[], t_personas=None)
+
+
+def _max_local(np, a, r):
+    """El maximo de cada pixel en una ventana de 2r + 1 (separable)."""
+    r = int(r)
+    if r < 1:
+        return a
+    for eje in (0, 1):
+        pad = [(0, 0), (0, 0)]
+        pad[eje] = (r, r)
+        p = np.pad(a, pad, mode='constant', constant_values=-1.0)
+        n = a.shape[eje]
+        if eje == 0:
+            a = np.maximum.reduce([p[k:k + n] for k in range(2 * r + 1)])
+        else:
+            a = np.maximum.reduce([p[:, k:k + n] for k in range(2 * r + 1)])
+    return a
+
+
+def detectar_cabezas(alturas, cfg):
+    """Las cabezas de la imagen de alturas: [(x, y, altura)] en metros (x desde la
+    izquierda, y desde la pantalla), de la mas alta a la mas baja."""
+    np = _np()
+    if np is None or alturas is None:
+        return []
+    a = imagen_sala(np, cfg, alturas)
+    h, w = a.shape
+    mx, my = cfg['ancho_sala'] / w, cfg['fondo_sala'] / h
+    sep = max(0.01, float(cfg['sep_cabezas']))
+    vale = (a > cfg['altura_min']) & (a <= cfg['altura_max'])
+    if not vale.any():
+        return []
+    b = np.where(vale, a, 0.0)
+    # maximo local en media separacion (los hombros de alguien mas alto no tapan una cabeza
+    # vecina); la separacion entera la impone el descarte de abajo, de mayor a menor
+    cand = vale & (b >= _max_local(np, b, max(1, int(0.5 * sep / max(mx, my)))))
+    fs, cs = np.nonzero(cand)
+    orden = np.argsort(-b[fs, cs], kind='stable')
+    out = []
+    for k in orden:
+        x, y = (cs[k] + 0.5) * mx, (fs[k] + 0.5) * my
+        if all((x - o[0]) ** 2 + (y - o[1]) ** 2 >= sep * sep for o in out):
+            out.append((float(x), float(y), float(b[fs[k], cs[k]])))
+    return out
+
+
+def _casilla_con_borde(cfg, x, y, antes):
+    """La casilla de (x, y); si la persona estaba en otra y no ha pasado
+    BORDE_CASILLA del borde, se queda en la de antes (histeresis)."""
+    k = casilla_de_xy(cfg, x, y)
+    if antes is None or k is None or k == antes:
+        return k
+    cols, filas = rejilla_sala(cfg)
+    tx, ty = cfg['ancho_sala'] / cols, cfg['fondo_sala'] / filas
+    x0, y0 = (antes % cols) * tx, (antes // cols) * ty
+    if x0 - BORDE_CASILLA <= x <= x0 + tx + BORDE_CASILLA and y0 - BORDE_CASILLA <= y <= y0 + ty + BORDE_CASILLA:
+        return antes
+    return k
+
+
+def seguir_personas(prev, maximos, cfg, now=0.0):
+    """Empareja los maximos con las pistas de la imagen anterior (vecino mas
+    cercano, sin pasar de Separacioncabezas). Devuelve (pistas, nuevas): una pista
+    es {id, x, y, alt, n, conf, desde, casilla}; nuevas, las que se confirman en
+    esta imagen (un maximo sin pareja durante Confirmapersona imagenes seguidas)."""
+    sep2 = float(cfg['sep_cabezas']) ** 2
+    pares = sorted(((p['x'] - mxm[0]) ** 2 + (p['y'] - mxm[1]) ** 2, i, j)
+                   for i, p in enumerate(prev) for j, mxm in enumerate(maximos))
+    de_pista, de_max = {}, {}
+    for d2, i, j in pares:
+        if d2 > sep2:
+            break
+        if i in de_pista or j in de_max:
+            continue
+        de_pista[i], de_max[j] = j, i
+    pistas, nuevas = [], []
+    conf_n = max(1, int(cfg['confirma_persona']))
+    for j, mxm in enumerate(maximos):
+        if j in de_max:
+            p = dict(prev[de_max[j]])
+            p.update(x=mxm[0], y=mxm[1], alt=mxm[2], n=p['n'] + 1, nueva=False)
+        else:
+            _SALA['id'] = _SALA.get('id', 0) + 1
+            p = dict(id=_SALA['id'], x=mxm[0], y=mxm[1], alt=mxm[2], n=1, conf=False, desde=now, casilla=None,
+                     nueva=False)
+        p['casilla'] = _casilla_con_borde(cfg, p['x'], p['y'], p.get('casilla'))
+        if not p['conf'] and p['n'] >= conf_n:
+            p['conf'] = True
+            p['nueva'] = True
+            p['desde'] = now
+            nuevas.append(p)
+        pistas.append(p)
+    return pistas, nuevas
+
+
+def ocupacion_casillas(personas, cfg=None):
+    """{casilla: personas} de las personas confirmadas: la ocupacion binaria."""
+    out = {}
+    for p in personas:
+        if p.get('conf') and p.get('casilla') is not None:
+            out[p['casilla']] = out.get(p['casilla'], 0) + 1
+    return out
+
+
+def personas_en_sala():
+    return [p for p in _SALA.get('pistas', ()) if p.get('conf')]
+
+
+def tick_personas(W, cfg, now, maximos):
+    """Una imagen de la camara: el seguimiento, la ocupacion binaria por casilla
+    (con su t_ocupada) y las llegadas. Devuelve {personas, nuevas, casillas,
+    libres}: nuevas es [{id, casilla, celda, t}], con la celda que mira a la
+    casilla en este instante; libres, las casillas que acaban de vaciarse."""
+    if 'pistas' not in _SALA:
+        personas_reset()
+    pistas, nuevas = seguir_personas(_SALA['pistas'], maximos, cfg, now)
+    _SALA['pistas'] = pistas
+    occ = ocupacion_casillas(pistas, cfg)
+    cas = _SALA['casillas']
+    libres = [k for k in cas if k not in occ]
+    for k in libres:
+        del cas[k]
+    for k, n in occ.items():
+        if k not in cas:
+            cas[k] = dict(t_ocupada=now, personas=n)
+        else:
+            cas[k]['personas'] = n
+    evs = []
+    for p in nuevas:
+        if p['casilla'] is None:
+            continue
+        evs.append(dict(id=p['id'], casilla=p['casilla'], celda=celda_de_casilla(W, cfg, p['casilla']), t=now))
+    _SALA['nuevas'] = _SALA.get('nuevas', 0) + len(evs)
+    _SALA['ultimas'] = evs or _SALA.get('ultimas', [])
+    _SALA['t_personas'] = now
+    return dict(personas=len(personas_en_sala()), nuevas=evs, casillas=cas, libres=libres)
+
+
+def casillas_fila_sim(cfg, k0, n):
+    """n casillas contiguas desde k0, en zigzag: hacia la derecha por su fila y, al
+    llegar a la pared, la de debajo y hacia la izquierda (para la fila de prueba)."""
+    cols, filas = rejilla_sala(cfg)
+    k0 = max(0, min(cols * filas - 1, int(k0)))
+    f, c, d = k0 // cols, k0 % cols, 1
+    out = []
+    while len(out) < n and len(out) < cols * filas:
+        out.append(f * cols + c)
+        if 0 <= c + d < cols:
+            c += d
+        else:
+            f = f + 1 if f + 1 < filas else f - 1
+            d = -d
+            if f * cols + c in out:
+                break
+    return out
+
+
+def sala_mundo(W, cfg, now, res):
+    """Lo que las personas hacen en el mundo, por nivel (fases 25 y 29)."""
+    return res
 
 
 # -----------------------------------------------------------------------------
@@ -11537,6 +11734,10 @@ def cfg():
                  sim_balance=_p('Simbalance', c['sim_balance']),
                  interfaz_dmx=_menu('Interfazdmx', INTERFACES_DMX, c['interfaz_dmx']),
                  universo_dmx=max(0, int(_p('Universodmx', c['universo_dmx']))))
+    if c['nivel'] >= 24:
+        c.update(sep_cabezas=max(0.05, _p('Separacioncabezas', c['sep_cabezas'])),
+                 confirma_persona=max(1, int(_p('Confirmapersona', c['confirma_persona']))),
+                 sim_fila=max(1, int(_p('Simfila', c['sim_fila']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -12169,6 +12370,8 @@ def on_pulse(name):
                      if k >= 0 else 'sin cluster todavia (pulsa otra vez)'))
     elif name in ('Simponer', 'Simquitar', 'Simvaciar'):      # fase 22: la sala simulada
         print(sala_sim_pulso(W, c, name))
+    elif name == 'Simformarfila':       # fase 24: una fila de prueba en la sala simulada
+        print(sala_fila_pulso(W, c, name))
     elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
         print(capturar_fondo(c))
     elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
@@ -12388,6 +12591,11 @@ def sala_tick(W, c, now):
         _say('alturas_sala', 'AVISO  camara: %s' % e)
     _SALA['alt'] = alt
     d = sala_bloque(W, c, alt, now)
+    if c['nivel'] >= 24:                # fase 24: las personas de esta imagen
+        try:
+            personas_tick(W, c, now, alt)
+        except Exception as e:
+            _say('personas', 'AVISO  personas: %s' % e)
     o = parent().op('densidad')
     if o is not None:
         try:
@@ -12637,6 +12845,80 @@ def _legend_sala(W, c):
     hay, texto = dmx_encontrado()
     txt += '   dmx %s' % texto if hay else '   sin dmx (%s)' % texto
     return txt
+
+
+# --- personas (fase 24) -----------------------------------------------------------
+
+def personas_tablas(W, c, now):
+    """Escribe las tablas personas y casillas_ocupadas (solo si han cambiado)."""
+    filas_p = [[p['id'], '%.2f' % p['x'], '%.2f' % p['y'], '%.2f' % p['alt'],
+                p['casilla'] if p['casilla'] is not None else '', '%.1f' % max(0.0, now - p['desde']),
+                1 if p.get('nueva') else 0] for p in personas_en_sala()]
+    filas_c = [[k, 1, v['personas'], '%.1f' % max(0.0, now - v['t_ocupada']), celda_de_casilla(W, c, k)]
+               for k, v in sorted(_SALA.get('casillas', {}).items())]
+    for nombre, cab, filas in (('personas', PERSONAS_COLS, filas_p), ('casillas_ocupadas', CASILLAS_COLS, filas_c)):
+        t = parent().op(nombre)
+        firma = [[str(x) for x in f] for f in filas]
+        if t is None or _CACHE.get('tabla_' + nombre) == firma and t.numRows == len(filas) + 1:
+            continue
+        _CACHE['tabla_' + nombre] = firma
+        t.clear()
+        t.appendRow(cab)
+        for f in filas:
+            t.appendRow(f)
+
+
+def personas_cook(scriptOp):
+    """onCook del Script CHOP personas_chop: personas en sala, casillas ocupadas y
+    llegadas (personas nuevas) desde que se cargo el motor."""
+    _sin_timeslice(scriptOp)
+    scriptOp.clear()
+    scriptOp.numSamples = 1
+    scriptOp.appendChan('personas')[0] = float(len(personas_en_sala()))
+    scriptOp.appendChan('casillas')[0] = float(len(_SALA.get('casillas', {})))
+    scriptOp.appendChan('nuevas')[0] = float(_SALA.get('nuevas', 0))
+
+
+def personas_tick(W, c, now, alt):
+    """Tras cada imagen de la camara (sala_tick): las cabezas, el seguimiento, lo
+    que las personas hacen en el mundo y las tablas."""
+    res = tick_personas(W, c, now, detectar_cabezas(alt, c) if alt is not None else [])
+    sala_mundo(W, c, now, res)
+    personas_tablas(W, c, now)
+    o = parent().op('personas_chop')
+    if o is not None:
+        try:
+            o.cook(force=True)
+        except Exception:
+            pass
+    return res
+
+
+def sala_fila_pulso(W, c, name):
+    """Simformarfila: Simfila personas en casillas contiguas desde Simcasilla, en
+    la tabla sala_personas (el mismo camino que la camara)."""
+    t = parent().op('sala_personas')
+    if t is None:
+        return 'SALA  no esta la tabla sala_personas: relanza fase22_camara.py'
+    if t.numRows == 0:
+        t.appendRow(SALA_COLS)
+    cas = casillas_fila_sim(c, _sim_casilla(c), max(1, int(c['sim_fila'])))
+    for k in cas:
+        x, y = casilla_xy(c, k)
+        t.appendRow(['%.3f' % x, '%.3f' % y, '%.2f' % ALTURA_SIM])
+    _SALA['fila_sim'] = list(cas)
+    _SALA['t_img'] = -99.0
+    return 'SALA  fila de %d personas en las casillas %s   personas simuladas: %d%s' % (
+        len(cas), ' '.join(str(k) for k in cas), t.numRows - 1,
+        '' if c['fuente_sala'] == FUENTE_SIMULADA else '   (Fuente no es simulada: no se ven)')
+
+
+def _legend_personas(W, c):
+    """PERSONAS (fase 24): las que hay, las casillas ocupadas y las llegadas."""
+    cols, filas = rejilla_sala(c)
+    fuente = 'simulada' if c['fuente_sala'] == FUENTE_SIMULADA else ('camara' if _SALA.get('hay') else 'sin camara')
+    return '  PERSONAS %d en sala   casillas %d/%d   nuevas %d   %s' % (
+        len(personas_en_sala()), len(_SALA.get('casillas', {})), cols * filas, _SALA.get('nuevas', 0), fuente)
 
 
 def on_value(name, val):
@@ -13549,6 +13831,8 @@ def _legend():
         lines.append(_legend_camara(W, c))
     if lvl >= 23:
         lines.append(_legend_sala(W, c))
+    if lvl >= 24:
+        lines.append(_legend_personas(W, c))
     return '\n'.join(lines)
 
 
