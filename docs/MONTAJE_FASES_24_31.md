@@ -14,6 +14,7 @@
 | 28 | `fase28_noche.py` | Noche de enterramiento: la esfera se apaga y emiten las inclusiones horneadas | v87 |
 | 29 | `fase29_fila.py` | Fila y escisión colectiva: un hueco permanente con su fulgurita | v88 |
 | 30 | `fase30_relampago.py` | Relámpago: un destello blanco con prioridad al abrirse cada escisión | v89 |
+| 31 | `fase31_historico.py` | Escisiones en el histórico: testigo en sección, columna de la jornada y registro | v90 |
 
 ---
 
@@ -439,3 +440,80 @@ Formar una fila (`Simfila` 3, `Simformarfila`): a los 5 s la leyenda dice `RELAM
 
 ---
 
+## FASE 31 · Escisiones en el histórico
+
+```python
+exec(open('C:/Users/DareDave/Downloads/est/fase31_historico.py').read())
+```
+
+### Qué hace
+
+- **Disparo de testigo:** cada escisión exporta una imagen cuando la fila se deshace o cuando se entierra el mundo, lo que ocurra antes, con su profundidad final. Una sola vez (la escisión guarda el nombre del fichero en `testigo`).
+- **Sección por el origen:** un corte del planeta por la celda de origen y dos celdas a cada lado de su anillo, desde la superficie hasta la última concha atravesada. Se dibuja **en Python a partir de las columnas** (numpy, `seccion_escision`): cada loseta es una banda de su color, las bandas humanas con sus motas, y en el hueco la fulgurita (paredes de arena fundida, vidrio, núcleo y ramas, con las mismas semillas que en el planeta). No hace falta un segundo render ni planos de recorte, y se prueba fuera de TouchDesigner. Se guarda con `TOP.save()` en PNG, como mucho un testigo por fotograma. La sección se dibuja en el instante del disparo (antes de que el entierro tapice el hueco) y se guarda en el fotograma siguiente.
+- **Columna resumen de la jornada:** una banda por ciclo de la jornada, la más antigua abajo, del color de su concha: las humanas con motas, y una franja oscura arriba si el ciclo cerró por colapso. Cada escisión es una veta de la paleta humana que une las bandas que atravesó (y la de su propio ciclo), con un ancho proporcional a sus personas. Se exporta al cambiar la fecha (la jornada que acaba) y con `Exportartestigo`. La mostrará el proyector del histórico (D5).
+- **Registro:** cada escisión, con jornada, ciclo, hora, personas, conchas cruzadas y celda de origen, en la tabla `escisiones` (fase 29) y en `escisiones.csv`, una fila al cerrarse (UTF-8, separador `;` para abrirlo en una hoja en español). Relanzar no duplica filas.
+- **Jornada:** la de D5 cuando exista; hasta entonces, **la fecha del sistema al abrirse la escisión** (P13). Desde esta fase cada concha guarda la jornada y el ciclo en que se enterró.
+
+### Operadores y ficheros
+
+| Qué | Dónde |
+|---|---|
+| `seccion` | Script TOP (640 × 360): la última sección dibujada |
+| `columna_jornada` | Script TOP (200 × 720): la columna resumen de hoy |
+| `escisiones` | La tabla de la fase 29; su columna `testigo` dice el fichero |
+| `escision_<jornada>_c<ciclo>_<id>.png` | La carpeta de `Carpetahistorico` (por defecto, `historico/` junto a los scripts; está en `.gitignore`) |
+| `columna_<jornada>.png` | Ídem |
+| `escisiones.csv` | Ídem: `id;jornada;ciclo;hora;personas;conchas;celda;estado;testigo` |
+
+### Parámetros (página Fase31)
+
+`Exportartestigo` (la sección de la última escisión, como está ahora, y la columna de hoy) · `Carpetahistorico` (por defecto `C:/Users/DareDave/Downloads/est/historico`)
+
+### Leyenda
+
+```
+HISTORICO escisiones hoy 3   ultima #3 J2026-11-11 C14 4 personas 4 conchas celda 40   testigo exportado
+```
+
+### Probar
+
+Una fila (`Simfila` 3, `Simformarfila`), espera 5 s y `Simvaciar`: aparece `historico/escision_….png` con el pozo en sección y una línea en `escisiones.csv`. Otra fila y `Forzarciclo` sin deshacerla: se exporta al enterrar, con su profundidad de ese momento.
+
+### Autoprueba
+
+- una escisión abierta no tiene testigo; al deshacerse la fila se dispara; al enterrar después no se repite; una fila que sigue en pie al enterrar dispara al enterrar, con su profundidad de ese momento, y no otra vez al deshacerse;
+- la sección tiene tantas bandas como conchas cruzó la escisión más una de superficie, en el orden de la columna, con los colores de la paleta; en el hueco, el núcleo de la paleta humana y la pared de arena; la banda humana, con sus motas; sin el cian de los cortes;
+- el testigo se exporta una sola vez; el registro tiene sus siete campos en la tabla y en el fichero; relanzar no duplica filas;
+- la columna resumen tiene una banda por ciclo, con su tipo, y una veta por escisión, con anchos en la proporción de sus personas (3 y 6);
+- `Exportartestigo`, la línea `HISTORICO` y los dos Script TOP.
+
+La autoprueba escribe en una carpeta temporal y la borra: no toca tu `historico/`.
+
+### Decisiones tomadas en la fase 31
+
+| Pregunta | Decisión |
+|---|---|
+| ¿Qué celdas enseña la sección? | El origen y dos a cada lado de su anillo (en un polo, sus vecinas) |
+| ¿Cuándo se guarda? | La imagen se dibuja en el disparo y se guarda en el fotograma siguiente, una por fotograma (`historico_tick`). El plan decía «el primer fotograma de la noche o uno sin cambios»: guardar un PNG de 640 × 360 es la única parte lenta, y queda fuera del fotograma del entierro |
+| ¿Cuándo «cierra la jornada»? | Al cambiar la fecha del sistema, hasta que D5 la defina |
+| ¿La clave de una fila del registro? | `id`, `jornada` y `hora`: `Resetmundo` reinicia los ids |
+
+### Pruebas pendientes en TouchDesigner
+
+Que `TOP.save()` del Script TOP escribe el PNG en `Carpetahistorico` (si no puede, la consola dice `AVISO  historico: …` y la escisión queda `sin testigo`); el tiempo que tarda (no debe cortar el fotograma); y D5: la jornada, el testigo diario y el proyector del histórico, que siguen fuera.
+
+---
+
+## Cómo se ha probado (fases 22 a 31)
+
+```
+python3 pruebas/correr_fases.py                  # base y fases 3 a 31 desde cero, sesión, relanzar y otra sesión
+python3 pruebas/correr_fases.py --hasta=fase29   # solo hasta esa fase
+xvfb-run -a python3 pruebas/glsl_piel.py         # el shader de la piel en un OpenGL de verdad (pip install moderngl)
+```
+
+- Las fases 22 a 31 dan `AUTOPRUEBA OK` al aplicarse y al relanzarse sobre el proyecto en el nivel 31, y las fases 11 a 21 siguen dando `AUTOPRUEBA OK` relanzadas encima; el mundo se conserva y las sesiones simuladas no dejan expresiones con error ni avisos.
+- El shader de la piel compila con las familias `plastico` y `vidrio`, las motas de la paleta humana y `uNoche`.
+- **Fallos que ya estaban en `main` y no son de estas fases:** en el simulador, la primera pasada de cada fase da `FALLO  particulas.material: Materialrespaldo` (y `humo`) hasta que la fase 12 crea ese parámetro (y las fases 3 a 10, también al relanzarlas), y `sala_virtual.py` falla cuatro comprobaciones de su esfera (`frente`). Por eso `correr_fases.py` termina con FALLO aunque todas las autopruebas pasen.
+
+Lo que el simulador no comprueba: la imagen real (cómo se ven las inclusiones, las motas, la noche y la fulgurita), los nombres exactos de los parámetros del Orbbec TOP, el Corner Pin TOP, el GLSL TOP y el DMX Out CHOP, la cámara y el DMX de verdad, y el rendimiento.

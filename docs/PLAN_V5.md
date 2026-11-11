@@ -2,6 +2,8 @@
 
 *Plan de fases para llevar el Marco conceptual v5 («La huella inevitable») al proyecto de TouchDesigner. Encargo «conceptualizar v5 stratos», 26 de octubre de 2026; numeración y decisiones cerradas el 28 de octubre de 2026. **No implementa nada.** Cada fase se revisa y se aprueba antes de pasar a código.*
 
+> **Estado (11 de noviembre de 2026): implementado.** Las fases 22 y 23 (requerimiento v4) y las fases 24 a 31 de este plan tienen su script, su parte del motor (v81 a v90) y su autoprueba. Qué hace cada una, las diferencias con este plan y lo que queda por probar en sala están en `MONTAJE_FASES_21_23.md` y `MONTAJE_FASES_24_31.md`. Lo que sigue es el plan tal como se aprobó.
+
 **Numeración.** `main` llega a la fase 19. La 20 (POPs) está hecha en su rama y de momento no se fusiona. Lo que falta del marco v4 entra antes, en las fases 21 (micrófono), 22 (cámara, según la especificación «casilla probable») y 23 (luz de sala por DMX), descritas en «Requerimiento v4 · micrófono, cámara y DMX» y «Tareas técnicas v4 · micrófono, cámara y DMX». Las fases de este plan van de la **24 a la 31**.
 
 | Fase | Qué hace | Marco |

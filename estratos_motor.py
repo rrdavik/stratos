@@ -86,6 +86,9 @@
 #                 en la columna de la celda de origen, con su fulgurita.
 #                 Motor v89, fase 30: el relampago: un destello blanco con
 #                 prioridad al abrirse cada escision.
+#                 Motor v90, fase 31: las escisiones en el historico: el
+#                 testigo (la seccion por el origen, dibujada con numpy), la
+#                 columna resumen de la jornada y el registro.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -98,7 +101,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v89'
+MOTOR_VERSION = 'motor v90'
 
 import math
 
@@ -321,6 +324,8 @@ DEFAULT_CFG = dict(
     min_huellas=1, inclusiones_max=0.8,
     # fase 29: la fila y la escision colectiva
     min_fila=3, t_fila=5.0, modo_fila=0, conchas_persona=1,
+    # fase 31: las escisiones en el historico
+    carpeta_historico='',
 )
 
 
@@ -2013,6 +2018,8 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
     W['imp_t'] = {}
     if cfg['nivel'] < 8:
         return False
+    if cfg['nivel'] >= 31:              # fase 31: el testigo de las escisiones, antes de enterrar
+        testigos_al_enterrar(W, cfg, now)
     cerrar_obras(W, cfg)                # los transitos se cierran antes de hornear
     reg = registro_concha(W, cfg) if cfg['nivel'] >= 15 else None
     clas = clasificar_concha(W, cfg, dict(motivo=motivo, t=now)) if cfg['nivel'] >= 27 else None
@@ -2041,6 +2048,8 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
         W['noche'] = [now, now + cfg['noche']] if cfg['noche'] > 0.0 else None
     if cfg['nivel'] >= 29:              # fase 29: las escisiones de este mundo quedan enterradas
         enterrar_escisiones(W, cfg, now)
+    if cfg['nivel'] >= 31:              # fase 31: la jornada y el ciclo de la concha (la columna resumen)
+        W['shells'][-1].update(jornada=_fecha()[0], ciclo=W.get('ciclo_n', 1))
     W['quitadas'] = [0] * N
     W['gen'] += 1
     if cfg['nivel'] >= 25:              # fase 25: lo heredado empieza sin inclusiones
@@ -11746,6 +11755,8 @@ def cerrar_escision(W, cfg, e, now, estado='cerrada'):
         e['estado'] = estado
         if e['t1'] is None:
             e['t1'] = now
+        if cfg['nivel'] >= 31:          # fase 31: el disparo de testigo, con su profundidad final
+            encolar_testigo(W, cfg, e, now)
         return True
     return False
 
@@ -11908,6 +11919,244 @@ def build_fulguritas(W, cfg, now, out):
         rows += filas_fulgurita(W, cfg, e, now)
     out['fulguritas'] = rows
     return rows
+
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - las escisiones en el historico (fase 31)
+# -----------------------------------------------------------------------------
+# TESTIGO: cada escision exporta una imagen cuando su fila se deshace o cuando
+# se entierra su mundo, lo que ocurra antes, con su profundidad final. Una sola
+# vez. La imagen es la SECCION POR EL ORIGEN: un corte del planeta por la celda
+# de origen y unas celdas a cada lado de su anillo, desde la superficie hasta la
+# ultima concha atravesada. Se dibuja aqui, con numpy, a partir de las columnas:
+# cada loseta es una banda de su color, las bandas humanas con sus motas y la
+# escision con su fulgurita (paredes de arena fundida, vidrio, nucleo y ramas).
+# Sin un segundo render ni planos de recorte: se prueba fuera de TouchDesigner.
+# COLUMNA DE LA JORNADA: una banda por ciclo de la jornada (humana, limpia, con
+# colapso o sin el), de la mas antigua abajo a la mas nueva arriba; cada
+# escision es una veta que une las bandas que atraveso, con un ancho
+# proporcional a sus personas.
+# REGISTRO: jornada, ciclo, hora, personas, conchas cruzadas y celda de origen
+# de cada escision, en la tabla escisiones y en historico/escisiones.csv.
+# La jornada, hasta que exista la de D5, es la fecha del sistema al abrirse la
+# escision (P13). Las imagenes pendientes de guardar viven en _HIST (modulo).
+
+SECCION_PX = (640, 360)         # ancho x alto de la seccion
+COLUMNA_PX = (200, 720)         # y de la columna de la jornada
+SECCION_LADO = 2                # celdas a cada lado del origen
+FRANJA_SUP = 0.12               # la banda de superficie: esta fraccion del alto
+COL_HUECO = (0.03, 0.03, 0.035)
+COL_CIELO = (0.0, 0.0, 0.0)
+COL_SUELO_VIVO = (0.20, 0.20, 0.21)
+REGISTRO_COLS = ['id', 'jornada', 'ciclo', 'hora', 'personas', 'conchas', 'celda', 'estado', 'testigo']
+_HIST = dict(pend=[], imagen=None, meta=None, exportadas=0, avisos=[])
+
+
+def hist_reset():
+    _HIST.update(pend=[], imagen=None, meta=None, exportadas=0, avisos=[])
+
+
+def celdas_seccion(i, lado=SECCION_LADO):
+    """Las celdas de la seccion: el origen en el centro y 'lado' a cada lado, por su anillo."""
+    if is_pole(i):
+        nb = list(NEIGH[i])
+        return list(reversed(nb[:lado])) + [i] + nb[lado:2 * lado]
+    R = RINGS[RING_OF[i]]
+    q = R.index(i)
+    lado = min(lado, (len(R) - 1) // 2)
+    return [R[(q + d) % len(R)] for d in range(-lado, lado + 1)]
+
+
+def _tramo_de(W, cfg, celdas, s):
+    """(r_in, r_out) de la concha s en la primera celda de la lista que la conserve."""
+    for c in celdas:
+        for s2, r_in, r_out in column_radii(W, cfg, c):
+            if s2 == s:
+                return c, r_in, r_out
+    return None, None, None
+
+
+def _motas(np, img, y0, y1, x0, x1, cob, s, c):
+    """Las motas de una banda humana: bloques de la paleta humana, sin azar."""
+    paso = 6
+    for gy in range(y0, y1, paso):
+        for gx in range(x0, x1, paso):
+            if _hash01(s, c, gx, gy) < cob:
+                col = PALETA_HUMANA_8[int(_hash01(gy, gx, c, s, 3) * 8) % 8]
+                img[gy:min(y1, gy + paso - 2), gx:min(x1, gx + paso - 2), :3] = col
+
+
+def seccion_escision(W, cfg, e, ancho=None, alto=None):
+    """La seccion por el origen de la escision e: (imagen alto x ancho x 4, float32,
+    la fila 0 arriba; meta). meta['bandas'] son las bandas que cruza, de arriba
+    abajo: la de superficie y una por concha atravesada, con su color y sus filas
+    de pixeles. None sin numpy."""
+    np = _np()
+    if np is None:
+        return None, None
+    ancho = int(ancho or SECCION_PX[0])
+    alto = int(alto or SECCION_PX[1])
+    i = e['origen']
+    celdas = celdas_seccion(i)
+    otras = [c for c in celdas if c != i]
+    tramos = [(s,) + _tramo_de(W, cfg, otras, s)[1:] for s in e['cortadas']]
+    r_top = max(suelo(W, cfg, c) for c in celdas)
+    fondos = [t[1] for t in tramos if t[1] is not None]
+    r_bot = min(fondos + [suelo(W, cfg, i)]) if fondos else suelo(W, cfg, i)
+    if r_top - r_bot < 1e-6:
+        r_bot = r_top - max(1e-3, cfg['shell_thick'])
+    ys = int(round(FRANJA_SUP * alto))
+
+    def fila_de(r):
+        return int(round(ys + (r_top - r) / (r_top - r_bot) * (alto - ys)))
+    img = np.zeros((alto, ancho, 4), dtype=np.float32)
+    img[..., 3] = 1.0
+    img[..., :3] = COL_CIELO
+    wc = ancho // len(celdas)
+    for j, c in enumerate(celdas):
+        x0, x1 = j * wc + 1, (j + 1) * wc - 1
+        for s, r_in, r_out in column_radii(W, cfg, c):
+            y0, y1 = max(ys, fila_de(min(r_out, r_top))), min(alto, fila_de(max(r_in, r_bot)))
+            if y1 <= y0:
+                continue
+            sh = W['shells'][s]
+            img[y0:y1, x0:x1, :3] = tile_material(cfg, sh, s, c)[0]
+            q = cobertura_q(cfg, sh, c)
+            if q:
+                _motas(np, img, y0, y1, x0, x1, q / float(COB_PASOS), s, c)
+            img[y0:y0 + 1, x0:x1, :3] *= 0.6                     # el limite entre conchas
+        if c != i:                                                  # la superficie viva de cada celda
+            vivo = W['occ'][c] > 0
+            col = seq_color(cfg, 1 if W['own'][c] == GEO else 2) if vivo else COL_SUELO_VIVO
+            ysu = fila_de(suelo(W, cfg, c))
+            img[max(0, ysu - 6):ysu, x0:x1, :3] = col
+    # el hueco de la escision y su fulgurita
+    j = celdas.index(i)
+    x0, x1 = j * wc + 1, (j + 1) * wc - 1
+    yf = min(alto, fila_de(max(r_bot, suelo(W, cfg, i))))
+    img[0:yf, x0:x1, :3] = COL_HUECO
+    w = x1 - x0
+    col_n = paleta_humana(cfg, e['ramas'])
+    col_v = _mix(col_n, (0.05, 0.05, 0.06), 0.45)
+    pa, pv, pn = max(2, int(0.07 * w)), max(2, int(0.05 * w)), max(2, int(0.04 * w))
+    xc = (x0 + x1) // 2
+    bandas = [dict(concha='superficie', color=COL_HUECO, y0=0, y1=ys)]
+    for k, (s, r_in, r_out) in enumerate(tramos):
+        if r_in is None:                # nadie conserva esa concha: reparto a partes iguales
+            h = (r_top - r_bot) / max(1, len(tramos))
+            r_out, r_in = r_top - k * h, r_top - (k + 1) * h
+        y0, y1 = max(ys, fila_de(min(r_out, r_top))), min(yf, fila_de(max(r_in, r_bot)))
+        vecina = _tramo_de(W, cfg, otras, s)[0]
+        bandas.append(dict(concha=s, color=tile_material(cfg, W['shells'][s], s, vecina if vecina is not None else i)[0],
+                           y0=y0, y1=y1))
+        if y1 <= y0:
+            continue
+        gris = 0.85 + 0.3 * _hash01(e['id'], s, 7)
+        arena = [x * gris for x in COL_ARENA]
+        img[y0:y1, x0:x0 + pa, :3] = arena
+        img[y0:y1, x1 - pa:x1, :3] = arena
+        img[y0:y1, x0 + pa:x0 + pa + pv, :3] = col_v
+        img[y0:y1, x1 - pa - pv:x1 - pa, :3] = col_v
+        img[y0:y1, xc - pn // 2:xc - pn // 2 + pn, :3] = col_n
+        us = logistica(0.05 + 0.9 * _frac(e['ramas'] + s * AUREO + e['id'] * 0.137), 4.0, 4)
+        for q in range(FULG_RAMAS[0] + (1 if us[0] > 0.5 else 0)):  # las ramas, hacia una pared o la otra
+            yr = y0 + int((0.25 + 0.5 * _frac(us[q + 1] * 7.3)) * (y1 - y0))
+            if math.cos(2.0 * math.pi * _frac(us[q + 1] + q / 3.0)) >= 0.0:
+                img[yr:yr + 2, xc:x1 - pa - pv, :3] = col_n
+            else:
+                img[yr:yr + 2, x0 + pa + pv:xc, :3] = col_n
+    meta = dict(id=e['id'], celdas=celdas, bandas=bandas, r_top=r_top, r_bot=r_bot, ancho=ancho, alto=alto,
+                columna=wc)
+    return img, meta
+
+
+def encolar_testigo(W, cfg, e, now):
+    """El disparo de testigo de la escision e: dibuja su seccion y la deja pendiente
+    de guardar. Una sola vez por escision. Devuelve si la ha encolado."""
+    if e.get('testigo'):
+        return False
+    img, meta = seccion_escision(W, cfg, e)
+    if img is None:
+        return False
+    e['testigo'] = 'pendiente'
+    _HIST['pend'].append((e['id'], img, meta))
+    return True
+
+
+def testigos_al_enterrar(W, cfg, now):
+    """Antes de enterrar el mundo: el testigo de las escisiones que aun no lo tienen."""
+    return sum(1 for e in W['escisiones'] if e['estado'] in ('abierta', 'cerrada') and encolar_testigo(W, cfg, e, now))
+
+
+def nombre_testigo(e):
+    return 'escision_%s_c%s_%d.png' % (e.get('jornada', ''), e.get('ciclo', ''), e['id'])
+
+
+def ciclos_jornada(W, jornada):
+    """Las conchas enterradas en la jornada: [(indice, concha)], de la mas antigua a la mas nueva."""
+    return [(s, sh) for s, sh in enumerate(W['shells']) if sh.get('jornada') == jornada]
+
+
+def tipo_banda(sh):
+    b, _, col = banda_de(sh)
+    return b + (' + colapso' if col else '')
+
+
+def columna_jornada(W, cfg, jornada, ancho=None, alto=None):
+    """La columna resumen de la jornada: (imagen, meta). Una banda por ciclo (la mas
+    antigua abajo), del color de su concha: las humanas con motas, las de colapso
+    con una franja oscura arriba. Cada escision de la jornada es una veta de la
+    paleta humana que une las bandas que atraveso, con un ancho proporcional a
+    sus personas. meta: bandas [(ciclo, tipo, y0, y1)] de arriba abajo y vetas
+    [(id, personas, x0, x1, y0, y1)]."""
+    np = _np()
+    if np is None:
+        return None, None
+    ancho = int(ancho or COLUMNA_PX[0])
+    alto = int(alto or COLUMNA_PX[1])
+    img = np.zeros((alto, ancho, 4), dtype=np.float32)
+    img[..., 3] = 1.0
+    ciclos = ciclos_jornada(W, jornada)
+    n = len(ciclos)
+    meta = dict(jornada=jornada, bandas=[], vetas=[], ancho=ancho, alto=alto)
+    if not n:
+        return img, meta
+    hb = alto / float(n)
+    y_de = {}
+    for k, (s, sh) in enumerate(ciclos):            # k = 0 la mas antigua: abajo
+        y1 = int(round(alto - k * hb))
+        y0 = int(round(alto - (k + 1) * hb))
+        y_de[s] = (y0, y1)
+        img[y0:y1, :, :3] = tile_color(cfg, sh, 0, s)
+        b, huellas, col = banda_de(sh)
+        if b == 'humana':
+            _motas(np, img, y0, y1, 0, ancho, max(0.05, cobertura_concha(cfg, sh)), s, 0)
+        if col:
+            img[y0:y0 + max(2, int(0.18 * (y1 - y0))), :, :3] *= 0.25
+        img[y1 - 1:y1, :, :3] *= 0.5
+        meta['bandas'].insert(0, (sh.get('ciclo', s), tipo_banda(sh), y0, y1))
+    esc = [e for e in W['escisiones'] if e.get('jornada') == jornada]
+    unidad = max(2.0, ancho / 40.0)
+    for q, e in enumerate(esc):
+        cruza = [y_de[s] for s in e['cortadas'] if s in y_de]
+        propia = [y_de[s] for s, sh in ciclos if sh.get('ciclo') == e.get('ciclo')]
+        tramo = cruza + propia
+        if not tramo:
+            continue
+        y0, y1 = min(t[0] for t in tramo), max(t[1] for t in tramo)
+        wv = int(round(e['personas'] * unidad))
+        xc = int((0.12 + 0.76 * _frac((q + 1) * AUREO)) * ancho)
+        x0 = max(0, min(ancho - wv, xc - wv // 2))
+        img[y0:y1, x0:x0 + wv, :3] = paleta_humana(cfg, e['ramas'])
+        meta['vetas'].append((e['id'], e['personas'], x0, x0 + wv, y0, y1))
+    return img, meta
+
+
+def linea_registro(e):
+    """La linea del fichero historico/escisiones.csv de la escision e (separador ;)."""
+    return ';'.join(str(x) for x in [e['id'], e.get('jornada', ''), e.get('ciclo', ''), e.get('hora', ''),
+                                     e['personas'], len(e['cortadas']), e['origen'], e['estado'],
+                                     e.get('testigo') or ''])
 
 
 # -----------------------------------------------------------------------------
@@ -12562,6 +12811,8 @@ def cfg():
                  t_fila=max(0.1, _p('Tfila', c['t_fila'])),
                  modo_fila=_menu('Modofila', MODOS_FILA, c['modo_fila']),
                  conchas_persona=max(1, int(_p('Conchasporpersona', c['conchas_persona']))))
+    if c['nivel'] >= 31:
+        c.update(carpeta_historico=str(_p('Carpetahistorico', '')).strip())
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -12915,6 +13166,11 @@ def frame_tick():
         o = parent().op('reticula_chop')
         if o is not None:
             o.cook(force=True)
+    if c['nivel'] >= 31:                # fase 31: testigos, registro y columna de la jornada
+        try:
+            historico_tick(W, c, now)
+        except Exception as e:
+            _say('historico_tick', 'AVISO  historico: %s' % e)
     if c['nivel'] >= 29:                # fase 29: la tabla de las escisiones
         escisiones_tabla(W)
     terreno_al_dia_td(W, c)
@@ -13204,6 +13460,8 @@ def on_pulse(name):
         print(sala_fila_pulso(W, c, name))
     elif name == 'Simsumar':            # fase 29: una persona mas, contigua a la fila de prueba
         print(sala_sumar_pulso(W, c))
+    elif name == 'Exportartestigo':     # fase 31: la seccion de la ultima escision y la columna de hoy
+        print(exportar_pulso(W, c))
     elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
         print(capturar_fondo(c))
     elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
@@ -13852,6 +14110,186 @@ def _legend_relampago(W, c):
     hay, texto = dmx_encontrado()
     return '  RELAMPAGO %s   destellos %d/%d en el ultimo segundo   %s' % (
         cuando, destellos_ventana(W, now), DESTELLOS_MAX, 'dmx %s' % texto if hay else 'sin dmx')
+
+
+# --- las escisiones en el historico (fase 31) ---------------------------------------
+
+def carpeta_historico(c=None):
+    """La carpeta del historico (Carpetahistorico), creada si hace falta. None si no se puede."""
+    import os
+    c = c or cfg_foto()
+    ruta = str(c.get('carpeta_historico') or '').strip()
+    if not ruta:
+        return None
+    try:
+        os.makedirs(ruta, exist_ok=True)
+    except Exception as e:
+        _say('historico', 'AVISO  historico: no puedo crear %s (%s)' % (ruta, e))
+        return None
+    return ruta.replace('\\', '/').rstrip('/')
+
+
+def _a_top(img):
+    """La imagen (fila 0 arriba) como la quiere un Script TOP (fila 0 abajo)."""
+    return img[::-1].copy()
+
+
+def seccion_cook(scriptOp):
+    """onCook del Script TOP seccion: la ultima seccion dibujada."""
+    img = _HIST.get('imagen')
+    if img is None:
+        np = _np()
+        if np is None:
+            return
+        img = np.zeros((SECCION_PX[1], SECCION_PX[0], 4), dtype=np.float32)
+        img[..., 3] = 1.0
+    scriptOp.copyNumpyArray(_a_top(img))
+
+
+def columna_cook(scriptOp):
+    """onCook del Script TOP columna_jornada: la columna resumen de la jornada de hoy
+    (o de la que se esta exportando)."""
+    W, c = world(), cfg_foto()
+    img, meta = columna_jornada(W, c, _HIST.get('jornada_top') or _fecha()[0])
+    if img is not None:
+        _HIST['columna_meta'] = meta
+        scriptOp.copyNumpyArray(_a_top(img))
+
+
+def _guardar_top(nombre, ruta):
+    """Recuece el Script TOP y lo guarda en ruta (TOP.save). Devuelve si ha ido bien."""
+    o = parent().op(nombre)
+    if o is None:
+        return False
+    try:
+        o.cook(force=True)
+        o.save(ruta)
+        return True
+    except Exception as e:
+        _say('guardar_' + nombre, 'AVISO  historico: no pude guardar %s (%s)' % (ruta, e))
+        return False
+
+
+def exportar_testigo(e, img=None, meta=None):
+    """Guarda la seccion de la escision e en historico/escision_<jornada>_c<ciclo>_<id>.png
+    (si no se la dan, la dibuja ahora). Devuelve el nombre del fichero, o None."""
+    W, c = world(), cfg_foto()
+    if img is None:
+        img, meta = seccion_escision(W, c, e)
+    carpeta = carpeta_historico(c)
+    if img is None or carpeta is None:
+        return None
+    _HIST['imagen'], _HIST['meta'] = img, meta
+    nombre = nombre_testigo(e)
+    if not _guardar_top('seccion', carpeta + '/' + nombre):
+        return None
+    e['testigo'] = nombre
+    _HIST['exportadas'] += 1
+    return nombre
+
+
+def exportar_columna(jornada=None):
+    """Guarda la columna resumen de la jornada en historico/columna_<jornada>.png."""
+    c = cfg_foto()
+    carpeta = carpeta_historico(c)
+    jornada = jornada or _fecha()[0]
+    if carpeta is None:
+        return None
+    _HIST['jornada_top'] = jornada
+    nombre = 'columna_%s.png' % jornada
+    bien = _guardar_top('columna_jornada', carpeta + '/' + nombre)
+    _HIST['jornada_top'] = None
+    return nombre if bien else None
+
+
+def registrar_escision(W, e):
+    """Una fila por escision en historico/escisiones.csv (UTF-8, separador ;), al
+    cerrarse. No duplica: si ya esta (id, jornada y hora), no la repite. Devuelve
+    si la ha escrito."""
+    import os
+    carpeta = carpeta_historico()
+    e['registrada'] = True
+    if carpeta is None:
+        return False
+    ruta = carpeta + '/escisiones.csv'
+    clave = '%s;%s;' % (e['id'], e.get('jornada', ''))
+    try:
+        viejas = []
+        if os.path.exists(ruta):
+            with open(ruta, encoding='utf-8') as f:
+                viejas = f.read().splitlines()
+        if any(l.startswith(clave) and l.split(';')[3:4] == [str(e.get('hora', ''))] for l in viejas):
+            return False
+        with open(ruta, 'a', encoding='utf-8') as f:
+            if not viejas:
+                f.write(';'.join(REGISTRO_COLS) + '\n')
+            f.write(linea_registro(e) + '\n')
+        return True
+    except Exception as ex:
+        _say('registro', 'AVISO  historico: no pude escribir %s (%s)' % (ruta, ex))
+        return False
+
+
+def historico_tick(W, c, now):
+    """Cada fotograma: guarda como mucho un testigo pendiente (para no cortar el
+    fotograma), apunta en el registro las escisiones que se han cerrado y, al
+    cambiar la fecha, exporta la columna de la jornada que acaba."""
+    pend = _HIST['pend']
+    ids = set(p[0] for p in pend)
+    for e in W['escisiones']:           # pendientes de una sesion anterior (el motor se recargo)
+        if e.get('testigo') == 'pendiente' and e['id'] not in ids:
+            e['testigo'] = None
+            encolar_testigo(W, c, e, now)
+    if pend:
+        ide, img, meta = pend.pop(0)
+        e = escision_de(W, ide)
+        if e is not None and exportar_testigo(e, img, meta) is None:
+            e['testigo'] = None         # no se pudo: no se queda pendiente para siempre
+            e['sin_testigo'] = True
+    for e in W['escisiones']:
+        if e['estado'] != 'abierta' and not e.get('registrada') and e.get('testigo') != 'pendiente':
+            registrar_escision(W, e)
+    hoy = _fecha()[0]
+    ayer = _HIST.get('jornada')
+    if ayer and ayer != hoy and (ciclos_jornada(W, ayer) or any(e.get('jornada') == ayer for e in W['escisiones'])):
+        exportar_columna(ayer)
+    _HIST['jornada'] = hoy
+    firma = (len(W['shells']), len(W['escisiones']), hoy)
+    if _HIST.get('firma_columna') != firma:
+        _HIST['firma_columna'] = firma
+        o = parent().op('columna_jornada')
+        if o is not None:
+            try:
+                o.cook(force=True)
+            except Exception:
+                pass
+
+
+def exportar_pulso(W, c):
+    """Exportartestigo: la seccion de la ultima escision (como esta ahora) y la columna de hoy."""
+    if not W['escisiones']:
+        return 'HISTORICO  no hay ninguna escision'
+    e = W['escisiones'][-1]
+    nombre = exportar_testigo(e)
+    col = exportar_columna()
+    if nombre is None:
+        return 'HISTORICO  no pude exportar el testigo de la escision %d (mira Carpetahistorico)' % e['id']
+    return 'HISTORICO  %s%s en %s' % (nombre, ' y %s' % col if col else '', carpeta_historico(c))
+
+
+def _legend_historico(W, c):
+    """HISTORICO (fase 31): las escisiones de hoy, la ultima y su testigo."""
+    hoy = _fecha()[0]
+    n = sum(1 for e in W['escisiones'] if e.get('jornada') == hoy)
+    if not W['escisiones']:
+        return '  HISTORICO escisiones hoy 0   ultima -'
+    e = W['escisiones'][-1]
+    tg = e.get('testigo')
+    estado = 'testigo pendiente' if tg == 'pendiente' else ('testigo exportado' if tg else
+                                                             ('sin testigo' if e['estado'] != 'abierta'
+                                                              else 'testigo al deshacerse la fila o al enterrar'))
+    return '  HISTORICO escisiones hoy %d   ultima #%d J%s C%s %d personas %d conchas celda %d   %s' % (
+        n, e['id'], e.get('jornada', ''), e.get('ciclo', ''), e['personas'], len(e['cortadas']), e['origen'], estado)
 
 
 def dia(frame=None):
@@ -14823,6 +15261,8 @@ def _legend():
         lines.append(_legend_fila(W, c))
     if lvl >= 30:
         lines.append(_legend_relampago(W, c))
+    if lvl >= 31:
+        lines.append(_legend_historico(W, c))
     return '\n'.join(lines)
 
 

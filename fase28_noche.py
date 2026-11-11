@@ -143,6 +143,8 @@ def _prueba(t, m):
             '%d losetas emiten; capas %s' % (len(emiten), capas))
     W['noche'] = [absTime.seconds - 1.0, absTime.seconds + 3.0]     # las luces leen el reloj de TouchDesigner
     m._CACHE.pop('dia', None)
+    if base.op('frame_u') is not None:      # el dimmer de luz_destello sale de frame_u: el de este instante
+        base.op('frame_u').cook(force=True)
     luces = [m.luz_color(nm, k) for nm in ('luz_principal', 'luz_relleno', 'luz_destello') for k in range(3)]
     fl = m.flash_light()
     W['noche'] = None

@@ -2,7 +2,8 @@
 Ejecuta los scripts de fase en un TouchDesigner simulado y resume lo que
 dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
-    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 23 (las que haya)
+    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 31 (las que haya)
+    python3 pruebas/correr_fases.py --hasta=fase24   # solo hasta esa fase
     python3 pruebas/correr_fases.py -v         # con todo el Textport
 
 Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
@@ -103,6 +104,11 @@ def sesion(sim, compases=48, fps=30.0):
 
 
 def main():
+    # las rutas de Windows de los scripts (C:/...) no existen aqui: lo que alguno cree con
+    # una ruta asi (la carpeta historico de la fase 31) cae en una carpeta temporal, no en
+    # el repositorio
+    import tempfile
+    os.chdir(tempfile.mkdtemp(prefix='estratos_pruebas_'))
     verbose = '-v' in sys.argv
     hasta = None
     for a in sys.argv[1:]:

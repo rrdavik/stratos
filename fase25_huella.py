@@ -278,9 +278,13 @@ def _prueba(t, m):
         reloj[0] += 1.0
     W['occ'][celda] = 3
     W['dirty'] = True
-    sin = [f[12] for f in m.build_tiles(W, c, reloj[0]) if f[7] < 0.03 and m._norm(f[0:3]) == m._norm(n)]
+    def tapas(W, c):
+        """La rugosidad de la tapa (la pieza fina) de la columna de la celda."""
+        return [f[12] for f in m.build_tiles(W, c, reloj[0])
+                if f[7] < 0.03 and sum(a * b for a, b in zip(m._norm(f[0:3]), n)) > 0.999999]
+    sin = tapas(W, c)
     m.depositar_inclusion(W, c, celda, m.PARADA, reloj[0])
-    con = [f[12] for f in m.build_tiles(W, c, reloj[0]) if f[7] < 0.03 and m._norm(f[0:3]) == m._norm(n)]
+    con = tapas(W, c)
     t.check('la matriz: en una celda con inclusiones la tapa de su loseta baja de rugosidad 1 a 0,85',
             sin == [m.RUG_TAPA] and con == [m.RUG_TAPA_INCL], '%s -> %s' % (sin, con))
     m.end_cycle(W, c, reloj[0])

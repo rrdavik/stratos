@@ -179,7 +179,8 @@ def _prueba(t, m):
 
     def losetas(W, c, i):
         n = m._norm(m.normal_i(i))
-        return [f for f in m.build_tiles(W, c, reloj[0]) if m._norm(f[0:3]) == n]
+        return [f for f in m.build_tiles(W, c, reloj[0])
+                if sum(a * b for a, b in zip(m._norm(f[0:3]), n)) > 0.999999]
     a0 = [f[12] for f in losetas(W, c, celdas[0])]
     a1 = [f[12] for f in losetas(W, c, celdas[1])]
     a2 = [f[12] for f in losetas(W, c, celdas[2])]
