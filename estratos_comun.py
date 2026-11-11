@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v64'
+VERSION_COMUN = 'comun v65'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -3984,6 +3984,15 @@ class Prueba(object):
                     self.pars.append((p, v))
             except Exception:
                 pass
+        # comun v65: las autopruebas corren sin el sorteo de la presencia (fase 22):
+        # prueban lo suyo con todas las senales. La de la fase 22 lo enciende ella.
+        try:
+            p = getattr(self.base.par, 'Activo', None)
+            if p is not None and bool(p.val):
+                p.val = False
+                self.pars.append((p, True))
+        except Exception:
+            pass
         self._reticula()
 
     def _reticula(self):

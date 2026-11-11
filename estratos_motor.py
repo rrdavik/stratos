@@ -60,6 +60,9 @@
 #                 epoca por las eras, corta y planta integrada, vias y red
 #                 electrica (fase 13), grisu y apagon (14), y su sitio en las
 #                 fases 15 a 19).
+#                 Motor v81, fase 22: la camara cenital (casilla probable):
+#                 la densidad de cada casilla del suelo, el mapeo sala ->
+#                 planeta y el sorteo (mapa logistico) de cada senal.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -72,7 +75,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v80'
+MOTOR_VERSION = 'motor v81'
 
 import math
 
@@ -278,6 +281,12 @@ DEFAULT_CFG = dict(
     # fase 21: el microfono
     umbral_onset=0.6, refractario_mic=0.12, reduccion_mic=1.0, ventana_ruido=60.0, umbral_corte=20.0,
     prof_mic=3, fuente_mic=0, canal_mic=0, chop_mic='',
+    # fase 22: la camara cenital (casilla probable)
+    presencia_activa=1, cuanto=0.5, peso_crear=1.0, peso_erosion=1.0, fuente_sala=0,
+    altura_min=0.8, altura_max=2.2, archivo_fondo='fondo_suelo.exr',
+    ancho_sala=5.4, fondo_sala=4.5, tam_casilla=0.5, desenfoque=1.0, ocupacion_llena=0.6,
+    subida=2.0, bajada=5.0, lon_central=0.0, ancho_angular=180.0, lat_norte=90.0, lat_sur=-90.0,
+    espejo=0, sim_casilla=0,
 )
 
 
@@ -1030,6 +1039,11 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
         W['ev']['ultima'] = dict(s=s, celda=-1, occ=0, estado='fuera de rango', t=now)
         return dict(estado='fuera de rango', inc=0.0, celda=-1)
     W['last'][s] = dict(note=int(note), cell=i, t=now, vel=int(vel))
+    if cfg['nivel'] >= 22 and not presencia_sortear(W, cfg, i, 'crear'):
+        # fase 22: la nota no prende (el sorteo de la presencia): se pierde sin rastro
+        W['ev']['ultima'] = dict(s=s, celda=i, occ=W['occ'][i], estado='no prende', t=now,
+                                 carga=W['carga'][i], coste=cost(cfg, W['occ'][i]))
+        return dict(estado='no prende', inc=0.0, celda=i, trigger=False)
     W.setdefault('terr', {})[i] = W.get('bar_n', 0)
     W['ruina'][i] = 0                   # fase 14: construir sobre la huella la borra
     W['rebrote'][i] = 0                 # fase 15: una nota completa el rebrote
@@ -1398,15 +1412,28 @@ def erosion_notes(cfg, red, vel):
     return max(min(red, 1.0), red * f)
 
 
-def erosion(W, cfg, pad, vel, now):
+def erosion(W, cfg, pad, vel, now, target=None):
     """Un golpe de bateria. Un pad en modo impulso (fase 7 v12) no erosiona:
-    lo atiende impulso()."""
+    lo atiende impulso(). target: la celda del golpe (fase 22: el microfono va
+    a la casilla mas densa); sin el, la elige pick_target. Desde la fase 22 el
+    golpe pasa por el sorteo de la presencia, una vez y en su centro: si no
+    prende, se pierde (el evento lleva prende = False)."""
     perf = cfg['perfiles']
     pad = int(pad) % len(perf)
     if es_impulso(cfg, pad):
         return impulso(W, cfg, pad, vel, now)
     red, rad, depth = perf[pad]
-    target = pick_target(W, cfg, pad, vel)
+    if target is None:
+        target = pick_target(W, cfg, pad, vel)
+    if cfg['nivel'] >= 22 and not presencia_sortear(W, cfg, target, 'erosionar'):
+        tipos = cfg.get('tipos') or []
+        ev = dict(pad=pad, red=red, notas=0.0, rad=0, prof=depth, celda=target,
+                  dens=occupied(W) / float(N), doble=False, quitado=0, t=now, modo='erosion', prende=False,
+                  tipo=tipos[pad] if pad < len(tipos) and tipos[pad] else tipo_perfil(red, rad, depth))
+        W['hits'][3] = W['hits'].get(3, 0) + 1
+        W['drum'][pad] = dict(t=now, cell=target, vel=int(vel))
+        W['ev']['erosion'] = ev
+        return ev
     dens = occupied(W) / float(N)
     over = dens > cfg['dens_umbral']
     rad_eff = max(1, int(round(rad * cfg['rad_mult']))) if over else int(rad)
@@ -10457,9 +10484,17 @@ def erosion_mic(W, cfg, now, flujo=0.0):
     ruido ha abierto un corte, 'corte_ruido')."""
     if len(cfg['perfiles']) <= PAD_MIC:
         return None
-    ev = erosion(W, cfg, PAD_MIC, int(cfg.get('vel_ref', 100)), now)
+    target = None
+    if cfg['nivel'] >= 22:              # fase 22 (D2): a la celda que mira a la casilla mas densa
+        k, _ = casilla_mas_densa(cfg)
+        target = celda_de_casilla(W, cfg, k) if k is not None else None
+    ev = erosion(W, cfg, PAD_MIC, int(cfg.get('vel_ref', 100)), now, target)
     ev['flujo'] = flujo
     W['mic']['ultimo'] = dict(t=now, flujo=flujo, celda=ev['celda'])
+    if ev.get('prende') is False:       # no ha prendido: ni erosion ni ruido de sala
+        ev['corte_ruido'] = None
+        W['ev']['micro'] = ev
+        return ev
     W['ruido']['onsets'].append([now, float(flujo), ev['celda']])
     ev['corte_ruido'] = ruido_tick(W, cfg, now)
     W['ev']['micro'] = ev
@@ -10542,6 +10577,309 @@ def mic_sim_bloque(n, rate, s0, clic=False, ruido=0.0, drone=False):
 # =============================================================================
 # Todo lo de aqui abajo usa op(), parent(), me y absTime: solo funciona
 # dentro de TouchDesigner.
+
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la camara cenital (fase 22): casilla probable
+# -----------------------------------------------------------------------------
+# Una camara de profundidad en el techo mide cuanta gente hay en cada casilla
+# del suelo, y esa densidad inclina la probabilidad de que cada senal que llega
+# al planeta actue:  P(c) = C + (1 - C) k d(c).  C es Cuanto (la probabilidad con
+# la sala vacia, 0,5 como mucho), k el peso de la presencia (Pesocrear o
+# Pesoerosion) y d(c) la densidad (0-1) de la casilla que corresponde a la celda.
+# El publico no escribe: solo inclina donde prende lo que ya llega.
+#
+# La imagen llega como ALTURAS sobre el suelo (m), ya enderezada: la fila 0 es la
+# pared de la pantalla (el norte) y la columna 0 la izquierda de la sala mirando
+# a la pantalla; PX_CASILLA pixeles por casilla. De ahi sale todo con numpy:
+# mascara de cuerpos (entre Alturamin y Alturamax), desenfoque (Desenfoque m),
+# rejilla (la fraccion de suelo ocupado de cada casilla) y suavizado (Subida y
+# Bajada). El estado del sensor vive en el modulo (_SALA): no es mundo.
+#
+# Mapeo sala -> planeta: la pared de la pantalla es Latnorte y el fondo Latsur;
+# el ancho de la sala cubre Anchoangular alrededor de Loncentral (la longitud de
+# la cara que mira a la camara del globo: sigue al giro). La izquierda de la
+# sala cae a la izquierda de la cara visible; Espejo lo invierte.
+# El sorteo no usa azar: sale del mapa logistico (celda, tipo y contador de
+# senales), asi que la misma sala da el mismo resultado.
+
+PX_CASILLA = 10                 # pixeles de la imagen de alturas por casilla
+DISCO_SIM = 0.25                # radio (m) de una persona de la sala simulada
+ALTURA_SIM = 1.70               # y su altura
+HOMBROS_SIM = 0.30              # lo que baja del centro (la cabeza) al borde (los hombros)
+FUENTES_SALA = ['camara', 'simulada']
+FUENTE_SIMULADA = 1
+CAM_FPS = 30.0                  # la camara da 30 imagenes por segundo: no se lee mas deprisa
+CUANTO_MAX = 0.5                # tope de Cuanto, tambien en el codigo
+TIPOS_SENAL = ('crear', 'erosionar')
+SALA_COLS = ['x', 'y', 'altura']        # tabla sala_personas (m; x desde la izquierda, y desde la pantalla)
+
+
+def _sala_nueva():
+    return dict(dens=None, t=None, t_img=-99.0, alt=None, hay=False, fps=0.0, senales=0,
+                cuentas=dict(crear=[0, 0], erosionar=[0, 0]), ultima=None)
+
+
+_SALA = _sala_nueva()
+
+
+def sala_reset(cuentas=True):
+    """Olvida la densidad (y, con cuentas, los contadores del sorteo)."""
+    viejo = dict(_SALA)
+    _SALA.clear()
+    _SALA.update(_sala_nueva())
+    if not cuentas:
+        _SALA.update(senales=viejo.get('senales', 0), cuentas=viejo.get('cuentas', _SALA['cuentas']))
+
+
+def reiniciar_cuentas():
+    _SALA['senales'] = 0
+    _SALA['cuentas'] = dict(crear=[0, 0], erosionar=[0, 0])
+
+
+def rejilla_sala(cfg):
+    """(columnas, filas) de casillas: Anchosala x Fondosala en casillas de Tamcasilla."""
+    t = max(0.05, float(cfg['tam_casilla']))
+    return (max(1, int(round(cfg['ancho_sala'] / t))), max(1, int(round(cfg['fondo_sala'] / t))))
+
+
+def casilla_xy(cfg, k):
+    """Centro (x, y) en metros de la casilla k (x desde la izquierda, y desde la pantalla)."""
+    cols, filas = rejilla_sala(cfg)
+    k = max(0, min(cols * filas - 1, int(k)))
+    return ((k % cols + 0.5) * cfg['ancho_sala'] / cols, (k // cols + 0.5) * cfg['fondo_sala'] / filas)
+
+
+def casilla_de_xy(cfg, x, y):
+    """La casilla del punto (x, y) en metros, o None si cae fuera del suelo cubierto."""
+    cols, filas = rejilla_sala(cfg)
+    if not (0.0 <= x <= cfg['ancho_sala'] and 0.0 <= y <= cfg['fondo_sala']):
+        return None
+    return (min(filas - 1, int(y * filas / cfg['fondo_sala'])) * cols
+            + min(cols - 1, int(x * cols / cfg['ancho_sala'])))
+
+
+def lonlat_de_uv(cfg, u, v):
+    """(latitud, longitud) en grados del punto (u, v) del suelo: u 0-1 de izquierda
+    a derecha, v 0-1 de la pantalla al fondo."""
+    if cfg['espejo']:
+        u = 1.0 - u
+    lat = cfg['lat_norte'] - v * (cfg['lat_norte'] - cfg['lat_sur'])
+    lon = cfg['lon_central'] - (u - 0.5) * cfg['ancho_angular']
+    return lat, (lon + 180.0) % 360.0 - 180.0
+
+
+def uv_de_lonlat(cfg, lat, lon):
+    """El punto (u, v) del suelo que corresponde a (latitud, longitud), o None si
+    la celda queda fuera de la cara que mira a la sala."""
+    ancho = cfg['ancho_angular']
+    rango = cfg['lat_norte'] - cfg['lat_sur']
+    if ancho <= 0 or rango == 0:
+        return None
+    dlon = (lon - cfg['lon_central'] + 180.0) % 360.0 - 180.0
+    if abs(dlon) > 0.5 * ancho:
+        return None
+    u = 0.5 - dlon / ancho
+    if cfg['espejo']:
+        u = 1.0 - u
+    v = (cfg['lat_norte'] - lat) / rango
+    if v < 0.0 or v > 1.0:
+        return None
+    return u, v
+
+
+def lonlat_celda(i):
+    """(latitud, longitud) en grados del centro de la celda i."""
+    x, y, z = NORMALS[i]
+    return math.degrees(math.asin(max(-1.0, min(1.0, y)))), math.degrees(math.atan2(z, x))
+
+
+def celda_de_lonlat(lat, lon):
+    """La celda de la reticula que contiene (latitud, longitud)."""
+    R = max(1, len(RINGS))
+    band = 180.0 / (R + 0.5)
+    cap = band * 0.25
+    if lat <= -90.0 + cap or not RINGS:
+        return POLE_S
+    if lat >= 90.0 - cap:
+        return POLE_N
+    cells = RINGS[max(0, min(R - 1, int((lat + 90.0 - cap) / band)))]
+    th = math.radians(lon)
+
+    def lejos(k):
+        x, _, z = NORMALS[k]
+        return abs((math.atan2(z, x) - th + math.pi) % (2.0 * math.pi) - math.pi)
+    return min(cells, key=lejos)
+
+
+def celda_de_casilla(W, cfg, k):
+    """La celda que mira a la casilla k, con Loncentral de este instante."""
+    cols, filas = rejilla_sala(cfg)
+    k = max(0, min(cols * filas - 1, int(k)))
+    lat, lon = lonlat_de_uv(cfg, (k % cols + 0.5) / cols, (k // cols + 0.5) / filas)
+    return celda_de_lonlat(lat, lon)
+
+
+def casilla_de_celda(cfg, i):
+    """La casilla a la que mira el centro de la celda i, o None."""
+    uv = uv_de_lonlat(cfg, *lonlat_celda(i))
+    if uv is None:
+        return None
+    cols, filas = rejilla_sala(cfg)
+    return min(filas - 1, int(uv[1] * filas)) * cols + min(cols - 1, int(uv[0] * cols))
+
+
+def _caja_np(np, a, r, eje):
+    """Media movil de 2r + 1 pixeles a lo largo de un eje (fuera de la imagen, cero)."""
+    r = int(r)
+    if r < 1:
+        return a
+    pad = [(0, 0), (0, 0)]
+    pad[eje] = (r + 1, r)
+    c = np.cumsum(np.pad(a, pad), axis=eje)
+    k = 2 * r + 1
+    return (c[k:] - c[:-k]) / k if eje == 0 else (c[:, k:] - c[:, :-k]) / k
+
+
+def desenfocar(np, a, r_px):
+    """Reparte lo ocupado en un radio de r_px pixeles: dos medias moviles por eje."""
+    r = int(round(0.5 * r_px))
+    for _ in range(2):
+        a = _caja_np(np, _caja_np(np, a, r, 0), r, 1)
+    return a
+
+
+def imagen_sala(np, cfg, alt):
+    """La imagen de alturas, al tamano de la rejilla (PX_CASILLA pixeles por casilla)."""
+    cols, filas = rejilla_sala(cfg)
+    h, w = filas * PX_CASILLA, cols * PX_CASILLA
+    a = np.asarray(alt, dtype=float)
+    if a.ndim == 3:
+        a = a[..., 0]
+    if a.shape != (h, w):
+        fy = (np.arange(h) * (a.shape[0] / float(h))).astype(int)
+        fx = (np.arange(w) * (a.shape[1] / float(w))).astype(int)
+        a = a[fy][:, fx]
+    return a
+
+
+def ocupacion_sala(np, cfg, alt):
+    """Fraccion de suelo ocupado de cada casilla (filas x columnas): la mascara de
+    cuerpos entre Alturamin y Alturamax, repartida con Desenfoque."""
+    cols, filas = rejilla_sala(cfg)
+    a = imagen_sala(np, cfg, alt)
+    m = ((a > cfg['altura_min']) & (a < cfg['altura_max'])).astype(float)
+    m = desenfocar(np, m, cfg['desenfoque'] * a.shape[1] / max(1e-6, cfg['ancho_sala']))
+    return m.reshape(filas, PX_CASILLA, cols, PX_CASILLA).mean(axis=(1, 3))
+
+
+def sala_bloque(W, cfg, alt, now):
+    """Una imagen de la camara (o None si no hay): la densidad de cada casilla
+    persigue a su ocupacion / Ocupacionllena, con Subida al llegar alguien y Bajada
+    al irse. Devuelve la densidad (filas x columnas), o None sin numpy."""
+    np = _np()
+    if np is None:
+        return None
+    cols, filas = rejilla_sala(cfg)
+    prev = _SALA.get('dens')
+    if prev is None or prev.shape != (filas, cols):
+        prev = np.zeros((filas, cols))
+    if alt is None:
+        obj = np.zeros((filas, cols))
+    else:
+        obj = np.clip(ocupacion_sala(np, cfg, alt) / max(1e-6, cfg['ocupacion_llena']), 0.0, 1.0)
+    t0 = _SALA.get('t')
+    dt = 1.0 / CAM_FPS if t0 is None else max(0.0, min(1.0, now - t0))
+    tau = np.where(obj > prev, max(1e-3, cfg['subida']), max(1e-3, cfg['bajada']))
+    d = prev + (obj - prev) * (1.0 - np.exp(-dt / tau))
+    d[d < 1e-4] = 0.0
+    _SALA.update(dens=d, t=now, hay=alt is not None)
+    return d
+
+
+def presencia_densidad(cfg, i):
+    """Densidad (0-1) de la casilla a la que mira la celda i (0 fuera de la sala)."""
+    d = _SALA.get('dens')
+    k = casilla_de_celda(cfg, i) if d is not None else None
+    if k is None:
+        return 0.0
+    cols, filas = rejilla_sala(cfg)
+    if d.shape != (filas, cols):
+        return 0.0
+    return float(d[k // cols, k % cols])
+
+
+def presencia_prob(W, cfg, i, tipo):
+    """P(c) = C + (1 - C) k d(c). Con Activo apagado, 1: todas las senales prenden."""
+    if not cfg['presencia_activa']:
+        return 1.0
+    c = min(max(float(cfg['cuanto']), 0.0), CUANTO_MAX)
+    k = cfg['peso_crear'] if tipo == 'crear' else cfg['peso_erosion']
+    return c + (1.0 - c) * max(0.0, min(1.0, k)) * presencia_densidad(cfg, i)
+
+
+def presencia_sortear(W, cfg, i, tipo):
+    """El sorteo de una senal con posicion (crear o erosionar), una vez por evento
+    y en su centro: prende con la probabilidad de su celda. Sale del mapa logistico
+    (a r = 4, pasado a uniforme), sembrado con la celda, el tipo y el contador de
+    senales. Cuenta las recibidas y las prendidas."""
+    if not cfg['presencia_activa']:
+        return True
+    p = presencia_prob(W, cfg, i, tipo)
+    n = _SALA['senales']
+    _SALA['senales'] = n + 1
+    x0 = 0.05 + 0.9 * ((n * AUREO + int(i) * 0.3819660113 + (0.27 if tipo == 'crear' else 0.71)) % 1.0)
+    u = 2.0 / math.pi * math.asin(math.sqrt(logistica(x0, 4.0, 1)[0]))
+    prende = u < p
+    cu = _SALA['cuentas'].setdefault(tipo, [0, 0])
+    cu[0] += 1
+    cu[1] += int(prende)
+    _SALA['ultima'] = dict(celda=int(i), tipo=tipo, p=p, prende=prende)
+    return prende
+
+
+def casilla_mas_densa(cfg):
+    """(casilla, densidad) de la casilla con mas densidad, o (None, 0)."""
+    d = _SALA.get('dens')
+    if d is None or not d.size:
+        return None, 0.0
+    k = int(d.argmax())
+    v = float(d.flat[k])
+    return (k, v) if v > 0.0 else (None, 0.0)
+
+
+def casillas_con_gente(umbral=0.01):
+    d = _SALA.get('dens')
+    return int((d > umbral).sum()) if d is not None else 0
+
+
+def sala_sim_imagen(cfg, personas):
+    """La imagen de alturas de la sala simulada: un disco de DISCO_SIM m por
+    persona [x, y, altura] (m), mas alto en el centro (la cabeza) que en el borde
+    (los hombros). Es la misma imagen que da la camara, asi que de ahi en adelante
+    todo es igual. None sin numpy."""
+    np = _np()
+    if np is None:
+        return None
+    cols, filas = rejilla_sala(cfg)
+    h, w = filas * PX_CASILLA, cols * PX_CASILLA
+    a = np.zeros((h, w))
+    mx, my = cfg['ancho_sala'] / w, cfg['fondo_sala'] / h      # metros por pixel
+    for p in personas or ():
+        x, y = float(p[0]), float(p[1])
+        alto = float(p[2]) if len(p) > 2 and p[2] else ALTURA_SIM
+        c0, c1 = int((x - DISCO_SIM) / mx), int((x + DISCO_SIM) / mx) + 1
+        f0, f1 = int((y - DISCO_SIM) / my), int((y + DISCO_SIM) / my) + 1
+        c0, c1, f0, f1 = max(0, c0), min(w, c1), max(0, f0), min(h, f1)
+        if c0 >= c1 or f0 >= f1:
+            continue
+        xx = (np.arange(c0, c1) + 0.5) * mx - x
+        yy = (np.arange(f0, f1) + 0.5) * my - y
+        d2 = (xx[None, :] ** 2 + yy[:, None] ** 2) / (DISCO_SIM * DISCO_SIM)
+        cuerpo = np.where(d2 <= 1.0, alto - HOMBROS_SIM * d2, 0.0)
+        a[f0:f1, c0:c1] = np.maximum(a[f0:f1, c0:c1], cuerpo)
+    return a
+
+
 
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
@@ -10896,6 +11234,24 @@ def cfg():
                  chop_mic=str(_p('Chopmic', '')).strip())
         red, rad, prof = c['perfiles'][PAD_MIC]           # la reduccion del pad 9, de Reduccionmic
         c['perfiles'][PAD_MIC] = (c['reduccion_mic'], rad, prof)
+    if c['nivel'] >= 22:
+        c.update(presencia_activa=int(_p('Activo', True)),
+                 cuanto=min(CUANTO_MAX, max(0.0, _p('Cuanto', c['cuanto']))),
+                 peso_crear=max(0.0, min(1.0, _p('Pesocrear', c['peso_crear']))),
+                 peso_erosion=max(0.0, min(1.0, _p('Pesoerosion', c['peso_erosion']))),
+                 fuente_sala=_menu('Fuente', FUENTES_SALA, c['fuente_sala']),
+                 altura_min=_p('Alturamin', c['altura_min']), altura_max=_p('Alturamax', c['altura_max']),
+                 archivo_fondo=str(_p('Archivofondo', c['archivo_fondo'])).strip(),
+                 ancho_sala=max(0.5, _p('Anchosala', c['ancho_sala'])),
+                 fondo_sala=max(0.5, _p('Fondosala', c['fondo_sala'])),
+                 tam_casilla=max(0.25, min(1.0, _p('Tamcasilla', c['tam_casilla']))),
+                 desenfoque=max(0.0, _p('Desenfoque', c['desenfoque'])),
+                 ocupacion_llena=max(0.1, min(1.0, _p('Ocupacionllena', c['ocupacion_llena']))),
+                 subida=max(0.0, _p('Subida', c['subida'])), bajada=max(0.0, _p('Bajada', c['bajada'])),
+                 lon_central=_p('Loncentral', c['lon_central']),
+                 ancho_angular=max(0.0, min(360.0, _p('Anchoangular', c['ancho_angular']))),
+                 lat_norte=_p('Latnorte', c['lat_norte']), lat_sur=_p('Latsur', c['lat_sur']),
+                 espejo=int(_p('Espejo', False)), sim_casilla=max(0, int(_p('Simcasilla', 0))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -11106,7 +11462,8 @@ def midi_note_on(ch, note, vel):
                 res = 'IMPULSO pad %d +%d celda %d ocupacion %d->%d' % (pad + 1, ev['pulsos'], ev['celda'],
                                                                       ev['occ0'], ev['occ'])
             else:
-                res = 'EROSION pad %d %s celda %d' % (pad + 1, ev['tipo'], ev['celda'])
+                res = 'EROSION pad %d %s celda %d%s' % (pad + 1, ev['tipo'], ev['celda'],
+                                                       ' (no prende)' if ev.get('prende') is False else '')
         else:
             res = 'ignorado: pad fuera de 1-8'
     else:
@@ -11192,6 +11549,8 @@ def frame_tick():
         dt = max(0.0, min(0.25, now - md.get('t_fotograma', now)))
         md['t_fotograma'] = now
         modular_tick(W, c, leer_modular(c, now), dt, now)
+    if c['nivel'] >= 22:                # fase 22: la camara, antes del microfono (su objetivo)
+        sala_tick(W, c, now)
     if c['nivel'] >= 21:                # fase 21: el microfono, antes del mundo
         mic_tick(W, c, now)
     res = tick(W, c, now, tempo(), playing())
@@ -11515,6 +11874,13 @@ def on_pulse(name):
                   % ('SEQ1' if s == GEO else 'SEQ2', note_name(note), ci, len(NEIGH[ci]),
                      'cluster de %d celdas, capital %d' % (len(cl['celdas'][k]), cl['capital'][k])
                      if k >= 0 else 'sin cluster todavia (pulsa otra vez)'))
+    elif name in ('Simponer', 'Simquitar', 'Simvaciar'):      # fase 22: la sala simulada
+        print(sala_sim_pulso(W, c, name))
+    elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
+        print(capturar_fondo(c))
+    elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
+        reiniciar_cuentas()
+        print('CAMARA  contadores de senales recibidas y prendidas, a cero')
     elif name == 'Forzarciclo':
         registrar_ciclo(W, c, close_cycle(W, c, now, 'forzado'))
     elif name == 'Resetmundo':
@@ -11598,6 +11964,8 @@ def mic_cook(scriptOp):
 
 def _log_onset(W, ev):
     txt = 'MICRO onset flujo %.2f celda %d' % (ev['flujo'], ev['celda'])
+    if ev.get('prende') is False:
+        txt += ' (no prende)'
     if ev.get('escalada'):
         txt += ' ESCALADA %s' % ev['escalada']
     cr = ev.get('corte_ruido')
@@ -11646,6 +12014,217 @@ def _legend_micro(W, c):
         txt += '   cortes %d' % r['cortes']
     if mc['descartados']:
         txt += '   descartados %d' % mc['descartados']
+    return txt
+
+
+# --- la camara cenital (fase 22) -----------------------------------------------
+
+def lon_central(frame=None):
+    """Longitud (grados) del centro de la cara del planeta que mira a la camara
+    del globo: Loncentral se enlaza aqui, para que la sala caiga siempre en la
+    cara visible. La camara mira desde +z y el planeta gira ry: 90 + ry."""
+    try:
+        ry = float(_ritmo().rotation(frame))
+    except Exception:
+        ry = 0.0
+    return (90.0 + ry + 180.0) % 360.0 - 180.0
+
+
+def _top_array(o):
+    """La imagen de un TOP como (filas x columnas) del canal rojo, con la fila 0
+    arriba; None si no hay imagen. numpyArray() entrega primero la fila de abajo."""
+    if o is None:
+        return None
+    try:
+        a = o.numpyArray(delayed=True)
+    except TypeError:
+        a = o.numpyArray()
+    except Exception:
+        a = None
+    if a is None or getattr(a, 'size', 0) == 0:
+        return None
+    if a.ndim == 3:
+        a = a[..., 0]
+    return a[::-1]
+
+
+def sala_personas():
+    """Las personas de la tabla sala_personas (la sala simulada): [[x, y, altura], ...]."""
+    t = parent().op('sala_personas')
+    out = []
+    if t is None:
+        return out
+    for r in range(1, t.numRows):
+        try:
+            out.append([float(t[r, 0].val), float(t[r, 1].val),
+                        float(t[r, 2].val) if t.numCols > 2 and t[r, 2].val else ALTURA_SIM])
+        except Exception:
+            pass
+    return out
+
+
+def sala_sim_cook(scriptOp):
+    """onCook del Script TOP sala_sim: la imagen de alturas de la sala simulada."""
+    np = _np()
+    a = sala_sim_imagen(cfg(), sala_personas())
+    if a is None:
+        return
+    out = np.zeros(a.shape + (4,), dtype=np.float32)
+    out[..., 0] = out[..., 1] = out[..., 2] = a[::-1]
+    out[..., 3] = 1.0
+    scriptOp.copyNumpyArray(out)
+
+
+def sala_tick(W, c, now):
+    """Cada fotograma (como mucho CAM_FPS veces por segundo): lee la imagen de
+    alturas (alturas_sala: la camara o la sala simulada) y actualiza la densidad."""
+    if now - _SALA.get('t_img', -99.0) < 1.0 / CAM_FPS - 1e-4 and now >= _SALA.get('t_img', -99.0):
+        return None
+    _SALA['t_img'] = now
+    if c['fuente_sala'] == FUENTE_SIMULADA:
+        o = parent().op('sala_sim')
+        if o is not None:
+            try:
+                o.cook(force=True)
+            except Exception as e:
+                _say('sala_sim', 'AVISO  sala_sim: %s' % e)
+    alt = None
+    try:
+        alt = _top_array(parent().op('alturas_sala'))
+    except Exception as e:
+        _say('alturas_sala', 'AVISO  camara: %s' % e)
+    _SALA['alt'] = alt
+    d = sala_bloque(W, c, alt, now)
+    o = parent().op('densidad')
+    if o is not None:
+        try:
+            o.cook(force=True)
+        except Exception:
+            pass
+    return d
+
+
+def px_sala(k=0, frame=None):
+    """Ancho (k = 0) o alto (1) en pixeles de la imagen de alturas: PX_CASILLA
+    por casilla. Es la resolucion del Resolution TOP alturas_sala."""
+    try:
+        return rejilla_sala(cfg_foto())[int(k)] * PX_CASILLA
+    except Exception:
+        return 110 if not k else 90
+
+
+def densidad_cook(scriptOp):
+    """onCook del Script TOP densidad: la densidad de cada casilla, para mirarla."""
+    np = _np()
+    d = _SALA.get('dens')
+    if np is None:
+        return
+    if d is None:
+        cols, filas = rejilla_sala(cfg_foto())
+        d = np.zeros((filas, cols))
+    out = np.zeros(d.shape + (4,), dtype=np.float32)
+    out[..., 0] = out[..., 1] = out[..., 2] = d[::-1]
+    out[..., 3] = 1.0
+    scriptOp.copyNumpyArray(out)
+
+
+def camara_encontrada():
+    """(si, texto) del Orbbec TOP orbbec1: con imagen y sin errores."""
+    o = parent().op('orbbec1')
+    if o is None:
+        return False, 'sin orbbec1'
+    try:
+        err = o.errors()
+    except Exception:
+        err = ''
+    try:
+        w, h = int(o.width), int(o.height)
+    except Exception:
+        w = h = 0
+    if err or w <= 1 or _top_array(o) is None:
+        return False, (err.splitlines()[0] if err else 'sin imagen')
+    return True, '%d x %d' % (w, h)
+
+
+def _sim_casilla(c):
+    cols, filas = rejilla_sala(c)
+    return max(0, min(cols * filas - 1, int(c['sim_casilla'])))
+
+
+def sala_sim_pulso(W, c, name):
+    """Simponer, Simquitar y Simvaciar: escriben en la tabla sala_personas, de la
+    que sala_sim dibuja la imagen (el mismo camino que la camara)."""
+    t = parent().op('sala_personas')
+    if t is None:
+        return 'SALA  no esta la tabla sala_personas: relanza fase22_camara.py'
+    if t.numRows == 0:
+        t.appendRow(SALA_COLS)
+    k = _sim_casilla(c)
+    if name == 'Simponer':
+        x, y = casilla_xy(c, k)
+        t.appendRow(['%.3f' % x, '%.3f' % y, '%.2f' % ALTURA_SIM])
+        txt = 'una persona en la casilla %d (%.2f, %.2f m)' % (k, x, y)
+    elif name == 'Simquitar':
+        fuera = 0
+        for r in range(t.numRows - 1, 0, -1):
+            try:
+                if casilla_de_xy(c, float(t[r, 0].val), float(t[r, 1].val)) == k:
+                    t.deleteRow(r)
+                    fuera += 1
+            except Exception:
+                pass
+        txt = '%d fuera de la casilla %d' % (fuera, k)
+    else:
+        n = t.numRows - 1
+        t.clear()
+        t.appendRow(SALA_COLS)
+        txt = 'sala vacia (%d fuera)' % max(0, n)
+    _SALA['t_img'] = -99.0              # la proxima lectura, ya
+    return 'SALA  %s   personas simuladas: %d%s' % (
+        txt, t.numRows - 1, '' if c['fuente_sala'] == FUENTE_SIMULADA else '   (Fuente no es simulada: no se ven)')
+
+
+def capturar_fondo(c):
+    """Capturarfondo: guarda el suelo vacio (la salida de cornerpin1) en
+    Archivofondo y recarga fondo."""
+    src, fondo = parent().op('cornerpin1'), parent().op('fondo')
+    ruta = c['archivo_fondo'] or 'fondo_suelo.exr'
+    if src is None:
+        return 'FONDO  no esta cornerpin1: relanza fase22_camara.py'
+    try:
+        src.save(ruta)
+    except Exception as e:
+        return 'FONDO  no pude guardar %s: %s' % (ruta, e)
+    if fondo is not None:
+        for nm in ('reloadpulse', 'reload'):
+            p = getattr(fondo.par, nm, None)
+            if p is not None:
+                try:
+                    p.pulse()
+                    break
+                except Exception:
+                    pass
+    return 'FONDO  suelo vacio guardado en %s' % ruta
+
+
+def _legend_camara(W, c):
+    """CAMARA (fase 22): la fuente, las casillas con gente, la mas densa y la
+    celda que la mira, y las senales prendidas."""
+    cols, filas = rejilla_sala(c)
+    if c['fuente_sala'] == FUENTE_SIMULADA:
+        fuente = 'simulada'
+    else:
+        fuente = 'femto %g fps' % CAM_FPS if _SALA.get('hay') else 'femto (sin camara)'
+    k, d = casilla_mas_densa(c)
+    mas = 'densidad max %.2f (casilla %d -> celda %d)' % (d, k, celda_de_casilla(W, c, k)) if k is not None \
+        else 'densidad max 0.00'
+    cu = _SALA['cuentas']
+    rec = cu['crear'][0] + cu['erosionar'][0]
+    pre = cu['crear'][1] + cu['erosionar'][1]
+    txt = '  CAMARA   %s   casillas %d/%d   %s   prendidas %d/%d' % (
+        fuente, casillas_con_gente(), cols * filas, mas, pre, rec)
+    if not c['presencia_activa']:
+        txt += '   (Activo apagado: todo prende)'
     return txt
 
 
@@ -12552,6 +13131,8 @@ def _legend():
         lines.append(_legend_modular(W, c))
     if lvl >= 21:
         lines.append(_legend_micro(W, c))
+    if lvl >= 22:
+        lines.append(_legend_camara(W, c))
     return '\n'.join(lines)
 
 

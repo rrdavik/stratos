@@ -8,10 +8,17 @@ storage, el modulo de los Text DAT, Script CHOP y TOP, Table DAT, absTime y el
 componente de tiempo del proyecto (/local/time).
 
 Los COMP (base, geometry, camera, light, null) y los operadores de sala de
-la fase 21 (Audio Device In CHOP y Switch CHOP y TOP) solo aceptan los
-parametros que tienen en TouchDesigner: un nombre equivocado devuelve None,
-como alli, y el script lo avisa con '..'. Los demas SOP, MAT, TOP, CHOP y
-DAT aceptan cualquier nombre (no comprobamos sus parametros).
+las fases 21 a 23 (Audio Device In CHOP, Switch CHOP y TOP, Orbbec TOP, Corner
+Pin TOP, Resolution TOP, GLSL TOP, Movie File In TOP y DMX Out CHOP) solo
+aceptan los parametros que tienen en TouchDesigner: un nombre equivocado
+devuelve None, como alli, y el script lo avisa con '..'. Los demas SOP, MAT,
+TOP, CHOP y DAT aceptan cualquier nombre (no comprobamos sus parametros).
+
+Camara (fase 22): el Orbbec TOP no tiene camara (sin imagen), y un GLSL TOP no
+calcula nada. Un Script TOP guarda lo que le copian (copyNumpyArray), y
+Resolution, Null y Switch TOP dejan pasar la imagen de su entrada, asi que la
+sala simulada (un Script TOP) llega al motor por el mismo camino que la camara.
+TOP.save() apunta el archivo en Sim.guardados, sin escribir nada.
 
 Audio: el Audio Device In CHOP no tiene dispositivo (sin canales, como un
 ordenador sin microfono) y va en modo Time Slice, como alli: un CHOP que lo
@@ -51,6 +58,9 @@ _DEFAULTS = {'sx': 1.0, 'sy': 1.0, 'sz': 1.0, 'scale': 1.0, 'rord': 'xyz', 'xord
              'near': 0.1, 'far': 1000.0, 'dimmer': 1.0, 'render': True, 'instancing': False,
              'cr': 1.0, 'cg': 1.0, 'cb': 1.0,
              'resolutionw': 1280, 'resolutionh': 720, 'lighttype': 'point'}
+# la pagina Common de un TOP
+_TOP_COMUN = ['outputresolution', 'resolutionw', 'resolutionh', 'resmult', 'outputaspect', 'inputfiltertype',
+              'fillmode', 'filtertype', 'npasses', 'chanmask', 'format']
 STRICT = {
     'baseCOMP': [],
     'nullCOMP': list(_XFORM) + ['xord', 'rord'],
@@ -67,11 +77,40 @@ STRICT = {
     'audiodeviceinCHOP': ['active', 'driver', 'device', 'rate', 'bufferlength'],
     'switchCHOP': ['index'],
     'switchTOP': ['index', 'blend'],
+    # fase 22 (camara)
+    'orbbecTOP': ['active', 'sensor', 'image', 'colorres', 'depthres', 'fps', 'aligntoother', 'mirrorimage']
+    + _TOP_COMUN,
+    'cornerpinTOP': ['extractp1x', 'extractp1y', 'extractp2x', 'extractp2y', 'extractp3x', 'extractp3y',
+                     'extractp4x', 'extractp4y', 'pinp1x', 'pinp1y', 'pinp2x', 'pinp2y', 'pinp3x', 'pinp3y',
+                     'pinp4x', 'pinp4y'] + _TOP_COMUN,
+    'resolutionTOP': list(_TOP_COMUN),
+    'glslTOP': ['pixeldat', 'vertexdat', 'computedat', 'mode'] + _TOP_COMUN
+    + ['vec%d%s' % (k, s) for k in range(8) for s in ('name', 'valuex', 'valuey', 'valuez', 'valuew')],
+    'moviefileinTOP': ['file', 'reloadpulse', 'play'] + _TOP_COMUN,
+    # fase 23 (luz de sala)
+    'dmxoutCHOP': ['active', 'interface', 'device', 'net', 'subnet', 'universe', 'netaddress', 'localaddress',
+                   'rate'],
 }
 # los valores por defecto de estos, solo en ellos (no en los demas operadores)
+_TOP_DEF = dict(outputresolution='useinput', resolutionw=256, resolutionh=256, resmult=True, format='useinput',
+                inputfiltertype='linear')
 _SALA = {'audiodeviceinCHOP': dict(active=True, driver='default', device='', rate=44100.0, bufferlength=0.1),
-         'switchCHOP': dict(index=0.0), 'switchTOP': dict(index=0.0, blend=False)}
-_MENUS_SALA = dict(driver=['default', 'asio'])
+         'switchCHOP': dict(index=0.0), 'switchTOP': dict(index=0.0, blend=False),
+         'orbbecTOP': dict(_TOP_DEF, active=True, sensor='', image='color', fps=30.0),
+         'cornerpinTOP': dict(_TOP_DEF), 'resolutionTOP': dict(_TOP_DEF),
+         'glslTOP': dict(_TOP_DEF, pixeldat='', vertexdat='', computedat='', mode='vertexpixel',
+                         **dict(('vec%dname' % k, '') for k in range(8))),
+         'moviefileinTOP': dict(_TOP_DEF, file='', play=True),
+         'dmxoutCHOP': dict(active=True, interface='usbpro', device='', net=0.0, subnet=0.0, universe=0.0,
+                            netaddress='255.255.255.255', localaddress='', rate=40.0)}
+_MENUS_SALA = dict(driver=['default', 'asio'],
+                   outputresolution=['useinput', 'eighth', 'quarter', 'half', '2x', '4x', '8x', 'fit', 'limit',
+                                     'custom'],
+                   inputfiltertype=['nearest', 'linear', 'mipmap'],
+                   format=['useinput', 'rgba8fixed', 'rgba16float', 'rgba32float', 'mono8fixed', 'mono16float',
+                           'mono32float'],
+                   image=['color', 'depth', 'ir', 'pointcloud'],
+                   interface=['usbpro', 'artnet', 'sacn', 'kinet'])
 
 
 class AbsTime(object):
@@ -196,9 +235,13 @@ class ParCollection(object):
                     kind = 'toggle'
                 if n == 'device':
                     kind = 'str'
+                defs = _SALA.get(owner.OPType, _DEFAULTS)
+                if owner.OPType in _SALA and isinstance(defs.get(n), bool):
+                    kind = 'toggle'
+                elif owner.OPType in _SALA and isinstance(defs.get(n), str):
+                    kind = 'str'
                 if n in _MENUS_SALA:
                     kind = 'menu'
-                defs = _SALA.get(owner.OPType, _DEFAULTS)
                 self._pars[n] = Par(owner, n, defs.get(n, '' if kind == 'str' else 0.0), kind=kind)
                 if n in _MENUS_SALA:
                     self._pars[n].menuNames = list(_MENUS_SALA[n])
@@ -686,8 +729,21 @@ class OP(object):
     def copyNumpyArray(self, a):
         self._np = a
 
-    def numpyArray(self):
+    def save(self, ruta, *a, **kw):
+        """TOP.save(): aqui solo se apunta (Sim.guardados); no se escribe nada."""
+        self.sim.guardados.append((self.path, str(ruta)))
+        return str(ruta)
+
+    def numpyArray(self, delayed=False, **kw):
         if not self.OPType.endswith('CHOP'):
+            if self.OPType in ('resolutionTOP', 'nullTOP', 'switchTOP'):    # dejan pasar su entrada
+                ins = self.inputs
+                if not ins:
+                    return None
+                k = 0
+                if self.OPType == 'switchTOP':
+                    k = max(0, min(len(ins) - 1, int(float(self.par.index.eval()))))
+                return ins[k].numpyArray()
             return getattr(self, '_np', None)
         import numpy
         if self.OPType == 'switchCHOP':
@@ -763,6 +819,7 @@ class Sim(object):
         self.estricto = False
         self.callbacks_pars = True
         self.avisos = []                    # [(ruta, texto)] de lo que TouchDesigner avisaria
+        self.guardados = []                 # [(ruta del TOP, archivo)] de los TOP.save()
         self.root = OP(self, 'baseCOMP', '', None)
         self.root._name = ''
         local = self.root.create('baseCOMP', 'local')
