@@ -200,3 +200,19 @@ Queda por hacer el paso 0 (mirar la piel de cerca con los parámetros de hoy) y 
 5. Naturaleza frente a ciudad: si en la ciudad la cámara atraviesa edificios (lo esperable, ver 4.3).
 6. Fotogramas por segundo en `rasante` frente a `globo`.
 7. Cómo se ve la piel de cerca: es la pregunta del paso 0.
+
+## 9. Tras la primera prueba en TouchDesigner: tumbada (13 de noviembre de 2026)
+
+`motor v94`, `fase10 v13`. En TouchDesigner la v12 quedaba pegada a las paredes de las conchas y casi no se veía nada, y la vista que se busca es otra: **tumbado, flotando, mirando hacia arriba con todo el angular posible**.
+
+**Qué cambia**
+
+- Por defecto mira al cenit (`Rasmirada` 90), con `Rasfov` 140 y `Rasaltura` 0,6. Los valores de la v12 pasan a estos solo si no se habían tocado; los deslizadores llegan ahora a 90, 160 y 4.
+- La cámara flota sobre el suelo más alto de las celdas de los lados **y de las de delante y detrás** (15° atrás, 15° y 30° adelante). Antes solo contaban las dos de al lado, y la pared de la celda siguiente llenaba el cuadro.
+
+**El límite de esta versión.** La cámara sigue siendo rectilínea. Con 140° en horizontal (114° en vertical) mirando al cenit entra lo que esté a más de 20° sobre el horizonte por los lados y a más de 33° por arriba y abajo: las formaciones vecinas asoman por los bordes y fugan hacia el centro, pero el anillo del horizonte no se ve. A partir de 150° los bordes se estiran mucho.
+
+**«Casi 360» de verdad es un ojo de pez**, y eso no sale de una cámara normal: hay que renderizar un cubemap (seis vistas) y reproyectarlo. Es el mismo trabajo que el mapa equirectangular de la esfera (apartado 3). Cuesta hasta seis renders por fotograma, así que hay que medirlo contra los 20 fps antes de comprometerse.
+
+**Palancas mientras tanto:** `Rasmirada` 50–70 mete más formación y menos cielo; `Rasaltura` más alta despega de las paredes; `Rasfov` hasta 160.
+
