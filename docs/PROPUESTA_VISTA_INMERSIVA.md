@@ -2,6 +2,8 @@
 
 *Análisis de la petición «un nuevo punto de vista inmersivo, darle una vuelta al de acercamiento a la superficie, con alguna vista de cerca con gran angular». 12 de noviembre de 2026, sobre `main` en `motor v91`. **No implementa nada**: es el análisis y una propuesta para aprobar antes de pasar a código.*
 
+> **Decisiones cerradas el 12 de noviembre de 2026** (apartado 7): modo nuevo, en la fase 10, cielo negro, para proyector y pantalla, y recorrido por el pasillo entre anillos.
+
 ## En dos líneas
 
 La cámara de superficie de hoy no es inmersiva porque **vuela a más del doble de la altura de lo que mira, en picado y con teleobjetivo**. La propuesta es un tercer modo de cámara, **rasante**: a la altura de una semilla, con gran angular (90°), mirando un poco hacia arriba y **anclada al planeta**, recorriendo el pasillo que queda entre dos anillos de celdas.
@@ -86,7 +88,7 @@ Tres rutas posibles:
 
 | Ruta | Qué es | Valoración |
 |---|---|---|
-| **Paralelo** | Avanza despacio (`Rasvel`) por el límite entre dos anillos de celdas: un círculo continuo con formaciones a ambos lados, como una calle o un valle. | **Recomendada para la primera versión.** Determinista, sin azar, y lejos del centro de las celdas. |
+| **Paralelo** | Avanza despacio (`Rasvel`) por el límite entre dos anillos de celdas: un círculo continuo con formaciones a ambos lados, como una calle o un valle. | **La de la primera versión (decidido).** Determinista, sin azar, y lejos del centro de las celdas. |
 | Acción | Viaja hacia la celda de la última nota (`W['ev']['ultima']`) y se queda mirándola crecer. | La más musical. Segunda versión: necesita una ruta entre celdas y decidir qué hace con notas rápidas. |
 | Trípode | Quieta en un punto; el mundo cambia delante. | Trivial una vez hecho el paralelo (`Rasvel` 0). |
 
@@ -101,7 +103,7 @@ El paralelo se elige con `Rasanillo` (entre qué anillos) o deriva solo de uno a
 | `camera_state()` | El tercer modo, con su peso de transición; posición en coordenadas del planeta llevada al mundo; altura sobre el suelo local; `near` y `far` medidos desde el suelo real y no desde `Re`. |
 | FOV | Hoy el motor lo lee del Camera COMP y la cámara no lo recibe del motor. Hay que invertirlo: el FOV del globo pasa a un parámetro (`Camfov`, con el valor que tenga hoy la cámara), el motor entrega el FOV mezclado (`cam('fov')`) y `_cam_optics()` lee el parámetro. Si no, el encuadre del globo se calcularía con el FOV del rasante. |
 | Orientación | El *Look At* del Camera COMP usa un vector arriba fijo; una cámara que recorre el planeta necesita que arriba sea la vertical local. O se le da un vector arriba desde el motor o el motor entrega el giro completo y se quita el *Look At*. **Hay que mirarlo en TouchDesigner**: no sé desde aquí qué admite el Camera COMP de la versión instalada. |
-| `niebla()` / `niebla_camara()` | En rasante, la bruma empieza a media celda y es total poco más allá de lo que asoma sobre el horizonte. Propongo además una cantidad mínima propia (`Rasbruma`) aunque el modular no mande espacialidad: sin perspectiva aérea no hay escala. |
+| `niebla()` / `niebla_camara()` | En rasante, la bruma empieza a media celda y es total poco más allá de lo que asoma sobre el horizonte. Con el cielo negro (decidido), en este modo la bruma funde hacia negro y no hacia `NIEBLA_COL`: lo lejano se apaga contra el cielo en vez de quedar más claro que él. Propongo además una cantidad mínima propia (`Rasbruma`) aunque el modular no mande espacialidad: sin perspectiva aérea no hay escala. |
 | LOD (`lod_cerca`, `lod_ciudad`) | Hoy `superficie` pone **todas** las celdas en detalle alto. En rasante solo se ven la celda propia y dos anillos de vecinas: detalle alto para esas (por `NEIGH`) y el lejano para el resto. Primera versión: la bandera de hoy, y medir. |
 | Retícula, leyenda, diagnóstico | La retícula asoma 0,2 sobre el suelo y la cámara iría a 0,35: hay que ocultarla en este modo, como hace `Modoactuacion`. |
 | `fase10_direccion.py` | El valor nuevo del menú, los parámetros `Ras…` y `Camfov`, la expresión del FOV y su autoprueba. |
@@ -125,11 +127,11 @@ El paralelo se elige con `Rasanillo` (entre qué anillos) o deriva solo de uno a
 | Riesgo | Por qué | Qué propongo |
 |---|---|---|
 | **La piel no está hecha para verse de cerca** | Las formaciones se diseñaron y se prueban para leerse a pocos píxeles con la cámara de globo (anchos mínimos en píxeles, siluetas a 18 px, tarjetas de racimo). A pantalla completa pueden verse pobres: cajas, prismas, losetas planas con escalones entre celdas. | El paso 0: mirarlo antes de escribir nada. Es el riesgo que decide si la propuesta vale la pena. |
-| **El cielo** | Con la mirada hacia arriba, media imagen es fondo. Hoy es negro, y la bruma es gris azulado (`NIEBLA_COL`): lo lejano quedaría **más claro** que el cielo. | Decidir el cielo: negro con la bruma teñida hacia negro, o un degradado de horizonte del color de la bruma. Es una decisión de dirección visual. |
+| **El cielo** | Con la mirada hacia arriba, media imagen es fondo. Hoy es negro, y la bruma es gris azulado (`NIEBLA_COL`): lo lejano quedaría **más claro** que el cielo. | **Decidido: cielo negro.** La bruma del modo rasante funde hacia negro. El color de la bruma en `globo` y `superficie` no cambia. |
 | Atravesar geometría | Satélites, puentes y coronas pueden cruzar el recorrido. | Subir sobre lo que haya delante; el plano cercano (0,05) hace el resto. Autoprueba con un mundo saturado. |
 | Rendimiento | Detalle alto en todas las celdas, como hoy en superficie, contra el presupuesto de hojas (`HOJAS_LIGERO`, 100 000). Además, el cambio de LOD ocurre al cambiar el parámetro, no al acabar la transición: puede notarse un tirón al empezar. | Medir con `pruebas/sesion_escena.py`; si hace falta, el LOD por vecindad. |
 | Transición | Pasar de globo a rasante cambia posición, orientación y FOV a la vez durante 20 s. | Mezclar el FOV con la misma curva que la posición; probar si conviene llegar primero y abrir el angular al final. |
-| La esfera | El gran angular tiene sentido en una pantalla plana o un proyector. En la esfera real (mapa equirectangular) esta vista no se puede mostrar tal cual. | Asumo que es para proyector o pantalla. Si es para la esfera, la propuesta es otra (apartado 3, cubemap). |
+| La esfera | El gran angular tiene sentido en una pantalla plana o un proyector. En la esfera real (mapa equirectangular) esta vista no se puede mostrar tal cual. | **Decidido: proyector y pantalla.** La esfera queda fuera (apartado 3, cubemap). |
 
 ## 6. Plan por pasos
 
@@ -159,10 +161,14 @@ No es el modo propuesto (no está anclada, no sigue el suelo y mira casi a la ho
 - con un mundo saturado, ninguna pieza queda entre la cámara y su plano cercano;
 - ida y vuelta de globo a rasante sin saltos; `globo` y `superficie` dan lo mismo que antes.
 
-## 7. Decisiones que necesito
+## 7. Decisiones cerradas (12 de noviembre de 2026)
 
-1. **¿Modo nuevo o sustituir `superficie`?** Recomiendo modo nuevo: `superficie` sigue sirviendo de plano medio entre el globo y el suelo, y sus autopruebas no se tocan.
-2. **¿Dónde entra?** Recomiendo en `fase10_direccion.py` (v12) y el motor (v92), donde vive `Modocamara`, y no como fase 32: así sirve en cualquier proyecto desde el nivel 10.
-3. **El cielo:** negro o degradado de horizonte.
-4. **¿Pantalla y proyector, o también la esfera?**
-5. **Ruta de la primera versión:** paralelo (recomendado) o directamente seguir la acción.
+| | Decisión |
+|---|---|
+| 1 | **Modo nuevo.** `rasante` es un tercer valor de `Modocamara`; `globo` y `superficie` no se tocan, ni sus autopruebas. |
+| 2 | **En la fase 10.** `fase10_direccion.py` (v12) y el motor (v92): sirve en cualquier proyecto desde el nivel 10. No hay fase 32. |
+| 3 | **Cielo negro.** Sin degradado de horizonte; la bruma del modo funde hacia negro. |
+| 4 | **Proyector y pantalla.** Proyección rectilínea; sin ojo de pez ni salida equirectangular. |
+| 5 | **Pasillo entre anillos.** La primera versión recorre el paralelo entre dos anillos (`Rasanillo`, `Rasvel`; con `Rasvel` 0, trípode). Seguir la acción queda para el paso 3. |
+
+Queda por hacer el paso 0 (mirar la piel de cerca con los parámetros de hoy) y las dos comprobaciones señaladas en 4.3 y 4.4: lo que invade el límite entre anillos y cómo dar a la cámara la vertical local en TouchDesigner.
