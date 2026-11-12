@@ -109,6 +109,10 @@
 #                 (Rasaltura 0,6), sobre el suelo mas alto de las celdas de los
 #                 lados, de las de delante y de las de detras (antes solo las
 #                 dos de al lado: la pared de la celda siguiente tapaba el cuadro).
+#                 Motor v95: ojo de pez (Rasojo): con la camara rasante, el
+#                 Render TOP pasa a su modo Fish-Eye (180): un solo render con
+#                 180 grados alrededor de adonde mira la camara (al cenit: el
+#                 horizonte entero en el borde del circulo). Rasfov no cuenta.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -121,7 +125,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v94'
+MOTOR_VERSION = 'motor v95'
 
 import math
 
@@ -13211,6 +13215,7 @@ def frame_tick():
         escisiones_tabla(W)
     terreno_al_dia_td(W, c)
     render_tema_al_dia(c)               # motor v69: el render, solo con el tema actual
+    render_modo_al_dia(c)               # motor v95: ojo de pez con la camara rasante
     fu = parent().op('frame_u')         # motor v69: giro y uniformes, una vez por fotograma
     if fu is not None:
         try:
@@ -14636,6 +14641,43 @@ def geometrias_activas(cfg):
     return [g for g, mo, _ in geometrias_piel(cfg) if tema in temas_de_modelo(mo)]
 
 
+RENDER_2D, RENDER_OJO = 'render2d', 'fisheye180'    # Render Mode del Render TOP: 2D y Fish-Eye (180)
+
+
+def modo_render(c):
+    """El Render Mode que toca: ojo de pez con la camara rasante (desde la mitad de
+    su transicion) y Rasojo; si no, el 2D de siempre."""
+    if c['nivel'] < 10 or not _p('Rasojo', False):
+        return RENDER_2D
+    try:
+        return RENDER_OJO if camera_state()['wr'] >= 0.5 else RENDER_2D
+    except Exception:
+        return RENDER_2D
+
+
+def render_modo_al_dia(c):
+    """Motor v95: pone el Render Mode del Render TOP cuando cambia (no en cada
+    fotograma). Devuelve si lo ha cambiado."""
+    quiere = modo_render(c)
+    if _CACHE.get('render_modo') == quiere:
+        return False
+    try:
+        r = parent().op('render')
+        if str(r.par.rendermode.eval()) != quiere:
+            r.par.rendermode = quiere
+        if str(r.par.rendermode.eval()) != quiere:
+            raise ValueError('el Render TOP no tiene el modo %s' % quiere)
+    except Exception as e:
+        if quiere == RENDER_OJO and not _CACHE.get('render_modo_aviso'):
+            _CACHE['render_modo_aviso'] = True
+            print('AVISO  ojo de pez: no pude poner Render Mode = Fish-Eye (180) en render (%s); '
+                  'ponlo a mano o apaga Rasojo' % e)
+        _CACHE['render_modo'] = quiere      # no se reintenta en cada fotograma
+        return False
+    _CACHE['render_modo'] = quiere
+    return True
+
+
 def render_tema_al_dia(c):
     """Motor v69: el Render TOP solo dibuja las geometrias del tema actual (con las
     ~300 de los tres temas, TouchDesigner cocinaba y dibujaba las vacias en cada
@@ -15368,7 +15410,8 @@ def _legend():
                 lines.append('  RASANTE  anillos %d-%d (lat %.0f)   lon %.0f   suelo %.2f   ojos a %.2f   '
                              'fov %.0f   entre las celdas %d y %d   %d%%'
                              % (rs['anillo'] - 1, rs['anillo'], rs['lat'], rs['lon'], rs['suelo'], rs['alt'],
-                                cs['fovcam'], rs['celdas'][0], rs['celdas'][1], int(round(cs['wr'] * 100))))
+                                cs['fovcam'], rs['celdas'][0], rs['celdas'][1], int(round(cs['wr'] * 100)))
+                             + ('   ojo de pez 180' if _CACHE.get('render_modo') == RENDER_OJO else ''))
         except Exception:
             pass
     if lvl >= 9:

@@ -23,7 +23,15 @@ QUE HACE
                  planeta ensenan todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
-     rasante     (v13, motor v94: TUMBADA, como flotando boca arriba: por
+     rasante     (v14, motor v95: OJO DE PEZ. Con Rasojo, en rasante el Render
+                 TOP pasa a su modo Fish-Eye (180): un solo render con 180
+                 grados alrededor de adonde mira la camara. Mirando al cenit,
+                 el horizonte entero queda en el borde del circulo y las
+                 formaciones fugan hacia el centro. Rasfov no cuenta. El
+                 cambio de modo es un corte a mitad de la transicion. Lo que
+                 tenga caras grandes cerca de la camara sale con los bordes
+                 rectos: el ojo de pez dobla vertices, no caras.)
+                 (v13, motor v94: TUMBADA, como flotando boca arriba: por
                  defecto mira al cenit, Rasmirada 90, con 140 grados, Rasfov,
                  a Rasaltura 0,6 del suelo mas alto de las celdas de
                  alrededor; las formaciones entran por los bordes y fugan
@@ -56,7 +64,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v13  (camara rasante tumbada: mira al cenit con 140 grados y flota mas alta, sobre las celdas de alrededor)'
+VERSION = 'fase10 v14  (ojo de pez con la camara rasante: Rasojo pone el render en Fish-Eye de 180 grados)'
 banner(VERSION)
 
 base = require_base(10)
@@ -119,6 +127,9 @@ def rasante_al_dia(base):
     return movidos
 
 
+# v14: ojo de pez. Con la camara rasante el Render TOP pasa a Fish-Eye (180): un solo
+# render con 180 grados alrededor de adonde mira la camara
+add_par(base, page, 'toggle', 'Rasojo', 'Rasante: ojo de pez (180 grados; Rasfov no cuenta)', True)
 _mov = rasante_al_dia(base)
 if _mov:
     info('rasante: %s pasan a los valores de la v13 (tumbada, mirando al cenit)' % ', '.join(_mov))
@@ -393,7 +404,29 @@ def _rasante(t, m):
     t.check('rasante: transicion de %d s desde el globo, sin saltos; el angular se abre con ella' % m.CAM_TRANS,
             st['wr'] == 1.0 and salto < 0.08 * d_globo and all(b >= a - 1e-9 for a, b in zip(fovs_, fovs_[1:]))
             and abs(fovs_[-1] - vals0['Rasfov']) < 1e-9, 'paso mayor %.2f' % salto)
-    t.check('leyenda RASANTE', 'RASANTE' in m.legend())
+    # v14: ojo de pez
+    r = base.op('render')
+    ojo0 = bool(base.par.Rasojo)
+
+    def modo_tras(modo, ojo, wr):
+        base.par.Modocamara = modo
+        base.par.Rasojo = ojo
+        leer(cam_wr=wr)
+        m._CACHE.pop('render_modo', None)
+        m.render_modo_al_dia(m.cfg())
+        return str(r.par.rendermode.eval())
+
+    t.check('v14 ojo de pez: en rasante con Rasojo el render pasa a Fish-Eye (180); sin Rasojo o en globo, 2D',
+            modo_tras('rasante', True, 1.0) == m.RENDER_OJO and modo_tras('rasante', False, 1.0) == m.RENDER_2D
+            and modo_tras('globo', True, 0.0) == m.RENDER_2D, str(r.par.rendermode.eval()))
+    t.check('v14 ojo de pez: el corte, a mitad de la transicion (y no se toca el render en cada fotograma)',
+            modo_tras('rasante', True, 0.3) == m.RENDER_2D and modo_tras('rasante', True, 0.7) == m.RENDER_OJO
+            and modo_tras('globo', True, 0.7) == m.RENDER_OJO and not m.render_modo_al_dia(m.cfg()))
+    base.par.Modocamara = 'rasante'
+    leer(cam_wr=1.0)
+    t.check('leyenda RASANTE', 'RASANTE' in m.legend() and 'ojo de pez' in m.legend())
+    base.par.Rasojo = ojo0
+    modo_tras('globo', ojo0, 0.0)
     for n, v in vals0.items():
         setattr(base.par, n, int(v) if n == 'Rasanillo' else v)
     base.par.Modocamara = modo0
