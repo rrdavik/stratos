@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v71'
+VERSION_COMUN = 'comun v72'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2915,6 +2915,11 @@ def camara_neutra(cam):
         if p is None:
             continue
         try:
+            if ax in ('rx', 'ry', 'rz') and "cam('rot'" in (p.expr or ''):
+                continue                # comun v72: el giro lo da el motor (camara_del_motor)
+        except Exception:
+            pass
+        try:
             if abs(float(p.eval()) - v) > 1e-6:
                 movidos.append(ax)
         except Exception:
@@ -2935,7 +2940,9 @@ def set_camera(base):
     """Camara de globo (motor v24): el planeta entero, centrado y tan cerca
     como permite el cuadro. Posicion y planos de recorte los da el motor.
     Si existe 'objetivo' (fase 10) mira a el; si no, mira al centro desde +Z.
-    Giro, pivote y escala vuelven a su valor neutro (camara_neutra)."""
+    Giro, pivote y escala vuelven a su valor neutro (camara_neutra).
+    comun v72: si el proyecto tiene Camfov (fase 10 v12, motor v92), el giro y
+    el FOV de la camara los da el motor y no hay Look At (camara_del_motor)."""
     cam = base.op('camara')
     if cam is None:
         fail('no encuentro la camara')
@@ -2950,11 +2957,30 @@ def set_camera(base):
              'el planeta usa el visor del render, no el de la camara' % ' '.join(movidos))
     setexpr(cam, 'near', CAM_EXPR % ('near', 0))
     setexpr(cam, 'far', CAM_EXPR % ('far', 0))
+    if has_par(base, 'Camfov'):
+        good = camara_del_motor(base) and good
     if good:
         ok('camara: el globo entero y centrado; retrocede a cada enterramiento')
     else:
         fail('no pude enlazar la camara al motor')
     return good
+
+
+def camara_del_motor(base):
+    """comun v72 (fase 10 v12, motor v92): el giro (rx ry rz, orden xyz) y el FOV
+    de la camara los entrega el motor, y la camara deja el Look At. Hace falta
+    para la camara rasante: su arriba es la vertical del sitio, no el +Y del
+    mundo, y su angular no es el del globo. En globo y superficie el motor da
+    el mismo giro que daba el Look At a 'objetivo'."""
+    cam = base.op('camara')
+    if cam is None:
+        return False
+    bien = all(setexpr(cam, ax, CAM_EXPR % ('rot', k)) for k, ax in enumerate(('rx', 'ry', 'rz')))
+    setmenu(cam, ['rord'], ['xyz'])
+    bien = setexpr(cam, 'fov', CAM_EXPR % ('fovcam', 0)) and bien
+    if bien:
+        setp(cam, 'lookat', '')        # solo si el motor ya da el giro
+    return bien
 
 
 def remove_par(base, name):
