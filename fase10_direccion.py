@@ -23,6 +23,18 @@ QUE HACE
                  planeta ensenan todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
+     rasante     (v12, motor v92) a ras de suelo y con gran angular. Va
+                 ANCLADA al planeta (gira, se balancea y se inclina con el):
+                 recorre el paralelo que separa dos anillos de celdas
+                 (Rasanillo) a Rasvel grados/s (0 = tripode), a Rasaltura
+                 sobre el suelo real de las celdas que tiene a los lados, y
+                 mira hacia delante, Rasmirada grados sobre la horizontal.
+                 Su angular es Rasfov (90); el del globo y la superficie,
+                 Camfov. Las luces no giran con el planeta: desde el suelo,
+                 la luz cambia con el giro.
+               Desde la v12 el giro y el FOV de la camara los da el motor
+               (ya no usa Look At): NO se cambia el FOV en el Camera COMP,
+               sino en Camfov y Rasfov.
                Cambiar de modo en directo hace una transicion de 20 s.
                (v11: sin Planofinal: el globo ya es la camara por defecto;
                relanzar la fase lo borra de la pagina)
@@ -39,15 +51,21 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v11  (sin Planofinal: la camara la gobiernan Modocamara, Camaltura y Camvel)'
+VERSION = 'fase10 v12  (camara rasante: a ras de suelo, gran angular, anclada al planeta; el motor da el giro y el FOV)'
 banner(VERSION)
 
 base = require_base(10)
 motor = install_core(base, CARPETA, 10)
 
 page = get_page(base, 'Fase10')
-add_par(base, page, 'menu', 'Modocamara', 'Camara', 'globo', menu=['globo', 'superficie'],
-        menu_labels=['Globo entero', 'Superficie'])
+MODOS_CAM, ROTULOS_CAM = ['globo', 'superficie', 'rasante'], ['Globo entero', 'Superficie', 'Rasante (a ras de suelo)']
+add_par(base, page, 'menu', 'Modocamara', 'Camara', 'globo', menu=MODOS_CAM, menu_labels=ROTULOS_CAM)
+try:                                    # v12: un proyecto con el menu de antes gana el modo rasante
+    if list(base.par.Modocamara.menuNames) != MODOS_CAM:
+        base.par.Modocamara.menuNames = MODOS_CAM
+        base.par.Modocamara.menuLabels = ROTULOS_CAM
+except Exception:
+    info('no pude anadir "rasante" al menu Modocamara')
 add_encuadre(base)                      # motor v36: un solo parametro de encuadre
 add_par(base, page, 'float', 'Camsuave', 'Segundos para el encuadre nuevo', 3.0, 0.0, 20.0)
 add_par(base, page, 'toggle', 'Modoactuacion', 'Modo actuacion (sin diagnostico)', False)
@@ -59,8 +77,25 @@ for nm, lb in (('Camaltura', 'Altura de camara sobre la superficie (superficie)'
         getattr(base.par, nm).label = lb
     except Exception:
         pass
+# v12: el FOV del globo y de superficie pasa a un parametro (antes se leia del
+# Camera COMP): nace con el que tenga la camara
+_fov0 = 45.0
+try:
+    _pf = base.op('camara').par.fov
+    if not _pf.expr:
+        _fov0 = float(_pf.eval())
+except Exception:
+    pass
+if not 20.0 <= _fov0 <= 120.0:
+    _fov0 = 45.0
+add_par(base, page, 'float', 'Camfov', 'Angulo de vision, grados (globo y superficie)', _fov0, 20.0, 120.0)
+add_par(base, page, 'float', 'Rasaltura', 'Rasante: altura de ojos sobre el suelo', 0.35, 0.1, 3.0)
+add_par(base, page, 'float', 'Rasfov', 'Rasante: angulo de vision, grados', 90.0, 60.0, 120.0)
+add_par(base, page, 'float', 'Rasmirada', 'Rasante: mirada, grados sobre la horizontal', 8.0, -20.0, 40.0)
+add_par(base, page, 'float', 'Rasvel', 'Rasante: velocidad, grados/s (0 = tripode)', 0.5, 0.0, 6.0)
+add_par(base, page, 'int', 'Rasanillo', 'Rasante: va entre el anillo de este numero y el anterior', 4, 1, 12)
 ok('pagina Fase10: Modocamara (globo), Encuadre (0,85), Camsuave (3 s), Modoactuacion, '
-   'Camaltura, Camvel')
+   'Camaltura, Camvel; Camfov y rasante (Rasaltura, Rasfov, Rasmirada, Rasvel, Rasanillo)')
 
 
 def quitar_planofinal(base):
@@ -73,19 +108,26 @@ if quitar_planofinal(base):
     ok('Planofinal: quitado de la pagina Fase10 (la camara la gobiernan Modocamara, Camaltura y Camvel)')
 
 # --- camara -------------------------------------------------------------------
+def camara_al_motor(cam):
+    """v12: rx ry rz y fov de la camara son expresiones del motor."""
+    try:
+        return all("cam('rot'" in getattr(cam.par, ax).expr for ax in ('rx', 'ry', 'rz')) \
+            and "cam('fovcam'" in cam.par.fov.expr
+    except Exception:
+        return False
+
+
 obj = get_or_make(base, 'nullCOMP', 'objetivo', 400, -280)
 for k, ax in enumerate(('tx', 'ty', 'tz')):
     setexpr(obj, ax, "parent().op('motor').module.cam('tgt', %d, absTime.frame)" % k)
 set_camera(base)                       # ahora con 'objetivo': Look At
 cam = base.op('camara')
-try:
-    lk = cam.par.lookat.eval()
-except Exception:
-    lk = None
-if lk:
-    ok('camara: globo por defecto (mira al centro); superficie como modo')
+if camara_al_motor(cam):
+    ok('camara: globo por defecto (mira al centro); superficie y rasante como modos; '
+       'el giro y el FOV los da el motor (sin Look At)')
 else:
-    fail('no pude poner Look At en la camara: pon "objetivo" a mano')
+    fail('la camara no recibe el giro o el FOV del motor: en "camara", rx ry rz = cam(\'rot\', 0 1 2) '
+         'y fov = cam(\'fovcam\', 0), y Look At vacio')
 
 # --- luces --------------------------------------------------------------------
 luz = base.op('luz_principal')
@@ -129,8 +171,11 @@ set_render(base)
 leeme(base, 10, """FASE 10 - DIRECCION VISUAL
   Camara de globo (Modocamara): el planeta entero y centrado; Encuadre es
   su alto en la pantalla (1 = de borde a borde). Con cada concha nueva se
-  aleja en Camsuave s. Superficie: a Camaltura, orbita a Camvel grados/s;
-  cambiar de modo hace una transicion de 20 s.
+  aleja en Camsuave s. Superficie: a Camaltura, orbita a Camvel grados/s.
+  Rasante: a ras de suelo (Rasaltura), gran angular (Rasfov), anclada al
+  planeta, por el paralelo entre dos anillos (Rasanillo) a Rasvel grados/s,
+  mirando Rasmirada grados sobre la horizontal. Con Modoactuacion, sin reticula.
+  Cambiar de modo hace una transicion de 20 s. El angular del globo: Camfov.
   Modoactuacion: sin reticula ni leyenda; la luz de celda se ve.
   Luz cenital fria; nucleo negro; una concha de cada color; cian en cicatrices.""")
 
@@ -179,9 +224,14 @@ def prueba(t):
     g = st['tgt']
     t.check('superficie: mira a un punto de la superficie',
             abs((g[0] ** 2 + g[1] ** 2 + g[2] ** 2) ** 0.5 - R) < 0.05)
+    de_, ar_ = m.ejes_de_giro(*st['rot'])[2], m.ejes_de_giro(*st['rot'])[1]
+    mira = m._norm((g[0] - p[0], g[1] - p[1], g[2] - p[2]))
+    t.check('v12 superficie: el giro del motor mira al objetivo con el horizonte nivelado (como el Look At)',
+            m._dot(de_, mira) > 1 - 1e-9 and ar_[1] > 0 and abs(m.ejes_de_giro(*st['rot'])[0][1]) < 1e-9)
     base.par.Modocamara = modo0
     m._CACHE.pop('cam_w', None)
     m._CACHE.pop('cam_frame', None)
+    _rasante(t, m)
     t.check('leyenda CAMARA', 'CAMARA' in m.legend())
     before = bool(base.par.Modoactuacion)
     base.par.Modoactuacion = True
@@ -195,6 +245,119 @@ def prueba(t):
     base.par.Modoactuacion = before
     m.on_value('Modoactuacion', before)
     t.check('al quitarlo vuelve la reticula', bool(int(base.par.Showgrid)) == (not before))
+
+
+def _rasante(t, m):
+    """v12 (motor v92): la camara rasante."""
+    import math
+    cam = base.op('camara')
+    t.check('v12: la camara recibe el giro y el FOV del motor, sin Look At',
+            camara_al_motor(cam) and not cam.par.lookat.eval(), 'lookat %r' % (cam.par.lookat.eval(),))
+    # el giro: ida y vuelta por varias direcciones (tambien en vertical)
+    bien = True
+    for de, ar in (((0, 0, -1), (0, 1, 0)), ((1, 0, 0), (0, 1, 0)), ((0.3, 0.2, 0.9), (0.1, 1, -0.2)),
+                   ((0, 1, 0), (0, 0, 1)), ((0, -1, 0), (1, 0, 0)), ((-0.6, 0.7, 0.1), (0.5, 0.2, -0.8)),
+                   ((1, 0, 0), (0, 0, 1)), ((-1, 0, 0), (0, -1, 0))):
+        rot = m.giro_camara(de, ar)
+        d_, a_, f_ = m.ejes_de_giro(*rot)
+        ar_o = m._norm(m._cross(m._cross(m._norm(de), ar), m._norm(de)))
+        bien = bien and m._dot(f_, m._norm(de)) > 1 - 1e-9 and m._dot(a_, ar_o) > 1 - 1e-9
+    t.check('v12: el giro de la camara (rx ry rz, orden xyz) mira adonde se le pide con su arriba', bien)
+    modo0 = str(base.par.Modocamara.eval())
+    vals0 = dict((n, float(getattr(base.par, n))) for n in ('Rasaltura', 'Rasfov', 'Rasmirada', 'Rasvel',
+                                                            'Rasanillo', 'Camfov'))
+
+    def leer(**cache):
+        m._CACHE.update(cache)
+        m._CACHE.pop('cam_frame', None)
+        return m.camera_state()
+
+    # globo: sin giro, y con el angular de Camfov
+    base.par.Modocamara = 'globo'
+    m.cam_reset()
+    st = leer(cam_w=0.0, cam_wr=0.0)
+    d_globo = st['d']
+    t.check('v12 globo: sin giro, con el angular de Camfov',
+            max(abs(x) for x in st['rot']) < 1e-9 and abs(st['fovcam'] - vals0['Camfov']) < 1e-9
+            and abs(st['fov'] - vals0['Camfov']) < 1e-9, 'giro %s, fov %.1f' % (st['rot'], st['fovcam']))
+    base.par.Rasfov = 110.0
+    st = leer()
+    t.check('v12: Rasfov no cambia el encuadre del globo', abs(st['d'] - d_globo) < 1e-9
+            and abs(st['fovcam'] - vals0['Camfov']) < 1e-9)
+    base.par.Rasfov = vals0['Rasfov']
+    # rasante, sin transicion
+    base.par.Modocamara = 'rasante'
+    m._CACHE.pop('ras_g', None)
+    st = leer(cam_wr=1.0)
+    W, c = m.world(), m.cfg()
+    rs, p = st['ras'], st['pos']
+    dist = math.sqrt(m._dot(p, p))
+    arriba = m._norm(p)
+    ca, cb = rs['celdas']
+    t.check('rasante: a Rasaltura del suelo de las celdas que tiene a los lados',
+            abs(dist - rs['suelo'] - vals0['Rasaltura']) < 1e-6
+            and rs['suelo'] >= max(m.suelo(W, c, ca), m.suelo(W, c, cb)) - 1e-6 and ca != cb,
+            'ojos a %.2f del centro, suelo %.2f (celdas %d y %d)' % (dist, rs['suelo'], ca, cb))
+    de_, ar_ = m.ejes_de_giro(*st['rot'])[2], m.ejes_de_giro(*st['rot'])[1]
+    mir = math.degrees(math.asin(max(-1.0, min(1.0, m._dot(de_, arriba)))))
+    t.check('rasante: mira Rasmirada grados sobre la horizontal y su arriba es la vertical del sitio',
+            abs(mir - vals0['Rasmirada']) < 1e-6
+            and abs(m._dot(ar_, arriba) - math.cos(math.radians(vals0['Rasmirada']))) < 1e-6
+            and abs(m._dot(m.ejes_de_giro(*st['rot'])[0], arriba)) < 1e-9, 'mirada %.2f' % mir)
+    t.check('rasante: el angular es Rasfov', abs(st['fovcam'] - vals0['Rasfov']) < 1e-9 and st['modo'] == 'rasante')
+    t.check('rasante: planos de recorte', 0 < st['near'] < vals0['Rasaltura'] and st['far'] > dist + 2 * st['R'])
+    # anclada al planeta: sobre su paralelo, gire lo que gire
+    eje = m.world_dir((0.0, 1.0, 0.0), *m._giro_planeta())
+    lat = math.degrees(math.asin(max(-1.0, min(1.0, m._dot(arriba, eje)))))
+    t.check('rasante: anclada al planeta, sobre el paralelo entre dos anillos',
+            abs(lat - rs['lat']) < 1e-6 and abs(m.paralelo_rasante(vals0['Rasanillo'])[0] - rs['lat']) < 1e-9
+            and m.RING_OF[ca] != m.RING_OF[cb], 'latitud %.1f' % lat)
+    n_an = len(m.RINGS)
+    t.check('rasante: Rasanillo fuera de rango se queda en el primer o el ultimo limite',
+            m.paralelo_rasante(-3)[1] == 1 and m.paralelo_rasante(99)[1] == max(1, n_an - 1))
+    # avanza por el paralelo a Rasvel; en tripode no se mueve
+    base.par.Rasvel = 2.0
+    lon0 = st['ras']['lon']
+    st = leer(cam_t=absTime.seconds - 0.25)
+    avanza = abs((st['ras']['lon'] - lon0) % 360.0 - 0.5) < 1e-6
+    base.par.Rasvel = 0.0
+    lon0 = st['ras']['lon']
+    st = leer(cam_t=absTime.seconds - 0.25)
+    t.check('rasante: avanza a Rasvel grados/s; con 0, tripode', avanza and abs(st['ras']['lon'] - lon0) < 1e-9)
+    # sigue al suelo: una vuelta entera, nunca bajo tierra
+    base.par.Rasvel = 6.0
+    bajo = 0
+    for _ in range(260):
+        st = leer(cam_t=absTime.seconds - 0.25)
+        rs = st['ras']
+        p = st['pos']
+        g = max(m.suelo(W, c, rs['celdas'][0]), m.suelo(W, c, rs['celdas'][1]))
+        if math.sqrt(m._dot(p, p)) < g + 0.5 * vals0['Rasaltura'] - 1e-9:
+            bajo += 1
+    t.check('rasante: una vuelta entera sin quedar bajo tierra', bajo == 0, '%d fotogramas' % bajo)
+    # transicion desde el globo: sin saltos, y llega
+    base.par.Rasvel = 0.0
+    base.par.Modocamara = 'globo'
+    m.cam_reset()
+    st = leer(cam_wr=0.0, cam_w=0.0)
+    base.par.Modocamara = 'rasante'
+    ant, salto, fovs_ = st['pos'], 0.0, []
+    for _ in range(int(m.CAM_TRANS / 0.25) + 4):
+        st = leer(cam_t=absTime.seconds - 0.25)
+        q = st['pos']
+        salto = max(salto, math.sqrt(sum((q[k] - ant[k]) ** 2 for k in range(3))))
+        ant = q
+        fovs_.append(st['fovcam'])
+    t.check('rasante: transicion de %d s desde el globo, sin saltos; el angular se abre con ella' % m.CAM_TRANS,
+            st['wr'] == 1.0 and salto < 0.08 * d_globo and all(b >= a - 1e-9 for a, b in zip(fovs_, fovs_[1:]))
+            and abs(fovs_[-1] - vals0['Rasfov']) < 1e-9, 'paso mayor %.2f' % salto)
+    t.check('leyenda RASANTE', 'RASANTE' in m.legend())
+    for n, v in vals0.items():
+        setattr(base.par, n, int(v) if n == 'Rasanillo' else v)
+    base.par.Modocamara = modo0
+    for k in ('cam_w', 'cam_wr', 'cam_frame', 'ras_g', 'ras_gv'):
+        m._CACHE.pop(k, None)
+    m.cam_reset()
 
 
 def _encuadre_cercano(t, m):

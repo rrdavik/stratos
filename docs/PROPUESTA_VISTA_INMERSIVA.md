@@ -2,6 +2,8 @@
 
 *Análisis de la petición «un nuevo punto de vista inmersivo, darle una vuelta al de acercamiento a la superficie, con alguna vista de cerca con gran angular». 12 de noviembre de 2026, sobre `main` en `motor v91`. **No implementa nada**: es el análisis y una propuesta para aprobar antes de pasar a código.*
 
+> **Paso 1 implementado (12 de noviembre de 2026):** `motor v92`, `comun v72`, `fase10 v12`. Qué hay y qué probar, en el apartado 8.
+>
 > **Decisiones cerradas el 12 de noviembre de 2026** (apartado 7): modo nuevo, en la fase 10, cielo negro, para proyector y pantalla, y recorrido por el pasillo entre anillos.
 
 ## En dos líneas
@@ -94,7 +96,7 @@ Tres rutas posibles:
 
 El paralelo se elige con `Rasanillo` (entre qué anillos) o deriva solo de uno a otro muy despacio.
 
-**Por comprobar al implementar:** cuánto invaden el límite entre anillos los satélites, las fusiones de cluster y los puentes, carreteras y ríos del tejido (fase 13). Si lo cruzan, la cámara sube lo justo sobre lo que tenga delante en lugar de atravesarlo. No he verificado la huella exacta de cada pieza dentro de su celda.
+**Comprobado al implementar (12 de noviembre):** en la **naturaleza** el pasillo existe: los árboles quedan a los lados y asoman sobre el horizonte. En la **ciudad no**: la planta de un edificio ocupa la celda entera (su escala es el ancho de la celda), así que el límite entre anillos es un callejón sin anchura y la cámara queda pegada a las fachadas o dentro de alguna estructura. La primera versión no esquiva nada: lo que quede a menos del plano cercano se recorta. Es lo primero que hay que mirar en TouchDesigner y lo que decide el siguiente paso (subir la altura en la ciudad, apartar la cámara de lo que tenga delante o dar aire entre anillos).
 
 ### 4.4 Lo que hay que cambiar
 
@@ -172,3 +174,29 @@ No es el modo propuesto (no está anclada, no sigue el suelo y mira casi a la ho
 | 5 | **Pasillo entre anillos.** La primera versión recorre el paralelo entre dos anillos (`Rasanillo`, `Rasvel`; con `Rasvel` 0, trípode). Seguir la acción queda para el paso 3. |
 
 Queda por hacer el paso 0 (mirar la piel de cerca con los parámetros de hoy) y las dos comprobaciones señaladas en 4.3 y 4.4: lo que invade el límite entre anillos y cómo dar a la cámara la vertical local en TouchDesigner.
+
+## 8. Paso 1: lo implementado y qué probar
+
+`motor v92`, `comun v72` y `fase10_direccion.py` v12. Para tenerlo: relanzar `fase10_direccion.py` (o `recargar_todo.py`).
+
+**Qué hay**
+
+- `Modocamara` = `rasante`: la cámara anclada al planeta, por el paralelo entre dos anillos (`Rasanillo`, 4: latitud 12° N con 7 anillos), a `Rasvel` grados/s (0,5; con 0, trípode), a `Rasaltura` (0,35) sobre el suelo más alto de las dos celdas que tiene a los lados (con el relieve de la naturaleza), mirando `Rasmirada` (8°) sobre la horizontal, con `Rasfov` (90°). Transición de 20 s desde y hacia los otros modos; el angular se abre con ella.
+- **El giro y el FOV de la cámara los da ahora el motor** (`cam('rot')`, `cam('fovcam')`) y el Camera COMP ya no usa *Look At*. El angular del globo y de superficie es el parámetro nuevo `Camfov`, que nace con el FOV que tuviera la cámara. **El FOV ya no se cambia en el Camera COMP.**
+- Con `rasante`, todas las celdas van con el detalle alto (la misma bandera que `superficie`).
+- Leyenda: línea `RASANTE` con anillos, latitud, longitud, suelo, altura de ojos, FOV y las dos celdas vecinas.
+- `pruebas/vista_rasante.py`: una vista previa sin TouchDesigner (superficie de hoy arriba, rasante abajo). Luz plana y sin materiales: sirve para el encuadre, no para el acabado. `pruebas/vista_rasante_naturaleza.png` y `pruebas/vista_rasante_ciudad.png` son sus salidas.
+
+**Lo que no hace todavía:** no esquiva geometría, no oculta la retícula por sí sola (usar `Modoactuacion`), no tiene bruma ni LOD propios (pasos 2 y 3).
+
+**Probado fuera de TouchDesigner:** la autoprueba de la fase 10 (15 comprobaciones nuevas, todas OK, también relanzada sobre el nivel 31) y la batería `pruebas/correr_fases.py`, que da lo mismo que antes del cambio. Esa batería ya traía fallos antes de tocar nada (`particulas` y `humo` con `Materialrespaldo` desde la fase 11, y cuatro de la esfera en `sala_virtual.py`); no son de este cambio y siguen igual.
+
+**Qué mirar en TouchDesigner, por orden**
+
+1. Tras relanzar la fase 10, **el globo se ve exactamente igual que antes**. Si no, el fallo está en el giro o el FOV que entrega el motor: es lo único que cambia para los modos de siempre.
+2. `superficie` se ve igual que antes (antes la orientaba el *Look At*; ahora, el motor).
+3. El menú `Modocamara` tiene `Rasante`. Si no aparece, el informe de la fase lo dice.
+4. `rasante` con `Modoactuacion`: horizonte nivelado y abajo, formaciones alzándose, sin avisos de bucle de cocinado en `camara`.
+5. Naturaleza frente a ciudad: si en la ciudad la cámara atraviesa edificios (lo esperable, ver 4.3).
+6. Fotogramas por segundo en `rasante` frente a `globo`.
+7. Cómo se ve la piel de cerca: es la pregunta del paso 0.
