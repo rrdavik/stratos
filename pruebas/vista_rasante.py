@@ -4,6 +4,12 @@ prueba visto con la camara de superficie de siempre y con la rasante, una
 imagen sobre la otra, con el rasterizador de vista_previa (luz plana, sin
 materiales, sin bruma: sirve para juzgar el encuadre, no el acabado).
 
+Limite: el rasterizador descarta los triangulos que cruzan el plano de la
+camara. Mirando al cenit con mucho angular (lo de la v13) se pierde casi todo
+lo que entra por los bordes, asi que la imagen sale mas vacia de lo que es:
+para esa vista, mirar en TouchDesigner. Las dos PNG guardadas son de la v12
+(ojos a 0,35, mirada 8, angular 90).
+
     python3 pruebas/vista_rasante.py [escena] [salida.png] [segundos]
 
 escena: naturaleza, ciudad o industria (por defecto, ciudad). segundos: lo que
@@ -103,7 +109,7 @@ def principal(nombre='ciudad', salida=None, segundos=90.0):
     lat, _ = m.paralelo_rasante(4)
     lon = max(range(0, 360, 5), key=lambda lo: sum(W['vh'][i] for i in m.suelo_rasante(W, c, lat, lo + 25.0)[1:]))
     g = m.suelo_rasante(W, c, lat, lon)[0]
-    pos, de, ar = m.pose_rasante(lat, lon, g + 0.35, 8.0)
+    pos, de, ar = m.pose_rasante(lat, lon, g + m.RAS_ALTURA, m.RAS_MIRADA)
     # superficie (la de hoy): a 4 de altura sobre el mismo sitio, mirando 25 grados por delante
     az, el = math.radians(lon), math.radians(lat)
 
@@ -112,13 +118,13 @@ def principal(nombre='ciudad', salida=None, segundos=90.0):
     s_pos, s_tgt = sph(az, el, R + 4.0), sph(az + math.radians(25.0), el - math.radians(6.0), R)
     s_de = tuple(s_tgt[k] - s_pos[k] for k in range(3))
     a = vista(inst, c, R, s_pos, s_de, (0.0, 1.0, 0.0), 45.0)
-    b = vista(inst, c, R, pos, de, ar, 90.0)
+    b = vista(inst, c, R, pos, de, ar, m.RAS_FOV)
     hoja = Image.new('RGB', (ANCHO, 2 * ALTO + 6), (255, 255, 255))
     y0 = (ANCHO - ALTO) // 2
     hoja.paste(a.crop((0, y0, ANCHO, y0 + ALTO)), (0, 0))
     hoja.paste(b.crop((0, y0, ANCHO, y0 + ALTO)), (0, ALTO + 6))
     hoja.save(salida)
-    print('%s: arriba, superficie (altura 4, fov 45); abajo, rasante (ojos a 0,35, fov 90, mirada 8)' % salida)
+    print('%s: arriba, superficie (altura 4, fov 45); abajo, rasante (ojos a %.2f, fov %d, mirada %d)' % (salida, m.RAS_ALTURA, m.RAS_FOV, m.RAS_MIRADA))
     print('mundo: %s, %d celdas ocupadas, radio %.2f; rasante en lat %.0f lon %.0f' % (
         nombre, m.occupied(W), R, lat, lon))
     return salida

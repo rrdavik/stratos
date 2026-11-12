@@ -104,6 +104,11 @@
 #                 los parametros: Loncentral (fase 22) sigue al giro, y con el
 #                 planeta girando las 160 mallas se rehacian en cada fotograma
 #                 (1 s por fotograma en TouchDesigner).
+#                 Motor v94: la camara rasante, tumbada: por defecto mira al
+#                 cenit (Rasmirada 90) con 140 grados (Rasfov) y flota mas alta
+#                 (Rasaltura 0,6), sobre el suelo mas alto de las celdas de los
+#                 lados, de las de delante y de las de detras (antes solo las
+#                 dos de al lado: la pared de la celda siguiente tapaba el cuadro).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -116,7 +121,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v93'
+MOTOR_VERSION = 'motor v94'
 
 import math
 
@@ -14977,6 +14982,8 @@ def _slerp_dir(a, b, t):
 
 RAS_SUAVE = 1.5                    # segundos con los que la altura sigue al suelo
 RAS_LEJOS = 5.0                    # distancia al punto al que mira
+RAS_VECINAS = (-15.0, 15.0, 30.0)  # grados de longitud, detras y delante, cuyo suelo tambien cuenta
+RAS_ALTURA, RAS_MIRADA, RAS_FOV = 0.6, 90.0, 140.0      # v94: tumbada, mirando al cenit (antes 0,35, 8 y 90)
 
 
 def paralelo_rasante(k):
@@ -14992,6 +14999,9 @@ def suelo_rasante(W, cfg, lat, lon):
     a los lados del paralelo, con el relieve de la naturaleza si lo hay."""
     a, b = celda_de_lonlat(lat - 1.0, lon), celda_de_lonlat(lat + 1.0, lon)
     g = max(suelo(W, cfg, a), suelo(W, cfg, b))
+    for dl in RAS_VECINAS:              # v94: y las de delante y detras (sus paredes no tapan el cuadro)
+        g = max(g, suelo(W, cfg, celda_de_lonlat(lat - 1.0, lon + dl)),
+                suelo(W, cfg, celda_de_lonlat(lat + 1.0, lon + dl)))
     try:
         if cfg['nivel'] >= 11 and tema_de(cfg) == 'naturaleza':
             la, lo = math.radians(lat), math.radians(lon)
@@ -15070,10 +15080,10 @@ def _rasante(W, c, dt, activo):
         g, gv = g_obj, 0.0             # al entrar: sobre el suelo, sin transicion
     else:
         g, gv = smooth_damp(g, _CACHE.get('ras_gv', 0.0), g_obj, dt, RAS_SUAVE)
-    alt = max(0.05, _p('Rasaltura', 0.35))
+    alt = max(0.05, _p('Rasaltura', RAS_ALTURA))
     g = max(g, g_obj - 0.5 * alt)      # nunca bajo tierra, por brusco que sea el escalon
     _CACHE['ras_g'], _CACHE['ras_gv'] = g, gv
-    pos, de, ar = pose_rasante(lat, lon, g + alt, max(-60.0, min(80.0, _p('Rasmirada', 8.0))))
+    pos, de, ar = pose_rasante(lat, lon, g + alt, max(-60.0, min(90.0, _p('Rasmirada', RAS_MIRADA))))
     ang, tilt, wob = _giro_planeta()
     return dict(pos=world_dir(pos, ang, tilt, wob), de=world_dir(de, ang, tilt, wob),
                 ar=world_dir(ar, ang, tilt, wob), lat=lat, lon=lon, anillo=k, suelo=g, alt=alt,
@@ -15153,7 +15163,7 @@ def camera_state():
         de = _norm(_add(_mul(de, 1.0 - sr), rs['de'], sr)) if sr < 1.0 else rs['de']
         ar = _norm(_add(_mul(ar, 1.0 - sr), rs['ar'], sr)) if sr < 1.0 else rs['ar']
         tgt = _add(pos, de, RAS_LEJOS)
-        fovcam = fov + (max(20.0, min(140.0, _p('Rasfov', 90.0))) - fov) * sr
+        fovcam = fov + (max(20.0, min(160.0, _p('Rasfov', RAS_FOV))) - fov) * sr
     else:
         _CACHE.pop('ras_g', None)
     rot = giro_camara(de, ar)

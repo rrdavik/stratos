@@ -23,7 +23,12 @@ QUE HACE
                  planeta ensenan todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
-     rasante     (v12, motor v92) a ras de suelo y con gran angular. Va
+     rasante     (v13, motor v94: TUMBADA, como flotando boca arriba: por
+                 defecto mira al cenit, Rasmirada 90, con 140 grados, Rasfov,
+                 a Rasaltura 0,6 del suelo mas alto de las celdas de
+                 alrededor; las formaciones entran por los bordes y fugan
+                 hacia el centro. Con Rasmirada 8 y Rasfov 90, la de la v12.)
+                 (v12, motor v92) a ras de suelo y con gran angular. Va
                  ANCLADA al planeta (gira, se balancea y se inclina con el):
                  recorre el paralelo que separa dos anillos de celdas
                  (Rasanillo) a Rasvel grados/s (0 = tripode), a Rasaltura
@@ -51,7 +56,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v12  (camara rasante: a ras de suelo, gran angular, anclada al planeta; el motor da el giro y el FOV)'
+VERSION = 'fase10 v13  (camara rasante tumbada: mira al cenit con 140 grados y flota mas alta, sobre las celdas de alrededor)'
 banner(VERSION)
 
 base = require_base(10)
@@ -89,9 +94,34 @@ except Exception:
 if not 20.0 <= _fov0 <= 120.0:
     _fov0 = 45.0
 add_par(base, page, 'float', 'Camfov', 'Angulo de vision, grados (globo y superficie)', _fov0, 20.0, 120.0)
-add_par(base, page, 'float', 'Rasaltura', 'Rasante: altura de ojos sobre el suelo', 0.35, 0.1, 3.0)
-add_par(base, page, 'float', 'Rasfov', 'Rasante: angulo de vision, grados', 90.0, 60.0, 120.0)
-add_par(base, page, 'float', 'Rasmirada', 'Rasante: mirada, grados sobre la horizontal', 8.0, -20.0, 40.0)
+# v13: tumbada. Los valores de la v12 (0,35 de altura, 90 de angular y mirada 8) pasan a los
+# nuevos solo si no se habian tocado; los limites de los deslizadores se amplian
+RASANTE_V13 = (('Rasaltura', 'Rasante: altura de ojos sobre el suelo', 0.35, motor.module.RAS_ALTURA, 0.1, 4.0),
+               ('Rasfov', 'Rasante: angulo de vision, grados', 90.0, motor.module.RAS_FOV, 60.0, 160.0),
+               ('Rasmirada', 'Rasante: mirada, grados sobre la horizontal (90 = al cenit)', 8.0, motor.module.RAS_MIRADA,
+                -20.0, 90.0))
+
+
+def rasante_al_dia(base):
+    """Devuelve los parametros que han pasado del valor de la v12 al de la v13."""
+    movidos = []
+    for nm, rotulo, antes, ahora, lo, hi in RASANTE_V13:
+        if add_par(base, page, 'float', nm, rotulo, ahora, lo, hi):
+            continue
+        p = getattr(base.par, nm)
+        try:
+            p.normMin, p.normMax, p.label = lo, hi, rotulo
+        except Exception:
+            pass
+        if abs(float(p.eval()) - antes) < 1e-6:
+            p.val = ahora
+            movidos.append(nm)
+    return movidos
+
+
+_mov = rasante_al_dia(base)
+if _mov:
+    info('rasante: %s pasan a los valores de la v13 (tumbada, mirando al cenit)' % ', '.join(_mov))
 add_par(base, page, 'float', 'Rasvel', 'Rasante: velocidad, grados/s (0 = tripode)', 0.5, 0.0, 6.0)
 add_par(base, page, 'int', 'Rasanillo', 'Rasante: va entre el anillo de este numero y el anterior', 4, 1, 12)
 ok('pagina Fase10: Modocamara (globo), Encuadre (0,85), Camsuave (3 s), Modoactuacion, '
@@ -301,7 +331,7 @@ def _rasante(t, m):
     de_, ar_ = m.ejes_de_giro(*st['rot'])[2], m.ejes_de_giro(*st['rot'])[1]
     mir = math.degrees(math.asin(max(-1.0, min(1.0, m._dot(de_, arriba)))))
     t.check('rasante: mira Rasmirada grados sobre la horizontal y su arriba es la vertical del sitio',
-            abs(mir - vals0['Rasmirada']) < 1e-6
+            abs(mir - vals0['Rasmirada']) < 1e-3       # cerca de 90 el arcoseno pierde precision
             and abs(m._dot(ar_, arriba) - math.cos(math.radians(vals0['Rasmirada']))) < 1e-6
             and abs(m._dot(m.ejes_de_giro(*st['rot'])[0], arriba)) < 1e-9, 'mirada %.2f' % mir)
     t.check('rasante: el angular es Rasfov', abs(st['fovcam'] - vals0['Rasfov']) < 1e-9 and st['modo'] == 'rasante')
@@ -313,6 +343,18 @@ def _rasante(t, m):
             abs(lat - rs['lat']) < 1e-6 and abs(m.paralelo_rasante(vals0['Rasanillo'])[0] - rs['lat']) < 1e-9
             and m.RING_OF[ca] != m.RING_OF[cb], 'latitud %.1f' % lat)
     n_an = len(m.RINGS)
+    delante = max(m.suelo(W, c, m.celda_de_lonlat(rs['lat'] + s_, rs['lon'] + dl))
+                  for s_ in (-1.0, 1.0) for dl in m.RAS_VECINAS)
+    t.check('v13 rasante: flota tambien sobre el suelo de las celdas de delante y de detras',
+            rs['suelo'] >= delante - 1e-6, 'suelo %.2f, alrededor %.2f' % (rs['suelo'], delante))
+    base.par.Rasmirada = 90.0
+    st9 = leer()
+    e9 = m.ejes_de_giro(*st9['rot'])
+    t.check('v13 rasante: con Rasmirada 90 mira al cenit (por defecto: altura %.1f, mirada %d, angular %d)'
+            % (m.RAS_ALTURA, m.RAS_MIRADA, m.RAS_FOV),
+            m._dot(e9[2], m._norm(st9['pos'])) > 1 - 1e-9 and abs(m._dot(e9[1], m._norm(st9['pos']))) < 1e-9
+            and (m.RAS_ALTURA, m.RAS_MIRADA, m.RAS_FOV) == (0.6, 90.0, 140.0))
+    base.par.Rasmirada = vals0['Rasmirada']
     t.check('rasante: Rasanillo fuera de rango se queda en el primer o el ultimo limite',
             m.paralelo_rasante(-3)[1] == 1 and m.paralelo_rasante(99)[1] == max(1, n_an - 1))
     # avanza por el paralelo a Rasvel; en tripode no se mueve
