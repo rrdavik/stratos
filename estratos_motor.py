@@ -93,6 +93,9 @@
 #                 lectura diferida de la camara tras sala_reset o un cambio de
 #                 Fuente se tira (era la imagen de antes: una sala vacia
 #                 heredaba la densidad de la ultima persona).
+#                 Motor v92: Sensor = femto (orbbec1) o kinect (kinect1, la
+#                 Kinect v2); sin aparato (errores o avisos en su TOP, o sin
+#                 imagen) la camara no se lee: densidad 0 y 'sin camara'.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -105,7 +108,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v91'
+MOTOR_VERSION = 'motor v92'
 
 import math
 
@@ -312,7 +315,7 @@ DEFAULT_CFG = dict(
     umbral_onset=0.6, refractario_mic=0.12, reduccion_mic=1.0, ventana_ruido=60.0, umbral_corte=20.0,
     prof_mic=3, fuente_mic=0, canal_mic=0, chop_mic='',
     # fase 22: la camara cenital (casilla probable)
-    presencia_activa=1, cuanto=0.5, peso_crear=1.0, peso_erosion=1.0, fuente_sala=0,
+    presencia_activa=1, cuanto=0.5, peso_crear=1.0, peso_erosion=1.0, fuente_sala=0, sensor_sala=0,
     altura_min=0.8, altura_max=2.2, archivo_fondo='fondo_suelo.exr',
     ancho_sala=5.4, fondo_sala=4.5, tam_casilla=0.5, desenfoque=1.0, ocupacion_llena=0.6,
     subida=2.0, bajada=5.0, lon_central=0.0, ancho_angular=180.0, lat_norte=90.0, lat_sur=-90.0,
@@ -10749,6 +10752,8 @@ ALTURA_SIM = 1.70               # y su altura
 HOMBROS_SIM = 0.30              # lo que baja del centro (la cabeza) al borde (los hombros)
 FUENTES_SALA = ['camara', 'simulada']
 FUENTE_SIMULADA = 1
+SENSORES_SALA = ['femto', 'kinect']     # v92: el aparato del techo (menu Sensor)
+SENSOR_OPS = ('orbbec1', 'kinect1')     # su TOP: Orbbec TOP (Femto Bolt) o Kinect TOP (Kinect v2)
 CAM_FPS = 30.0                  # la camara da 30 imagenes por segundo: no se lee mas deprisa
 CUANTO_MAX = 0.5                # tope de Cuanto, tambien en el codigo
 TIPOS_SENAL = ('crear', 'erosionar')
@@ -12779,6 +12784,7 @@ def cfg():
                  peso_crear=max(0.0, min(1.0, _p('Pesocrear', c['peso_crear']))),
                  peso_erosion=max(0.0, min(1.0, _p('Pesoerosion', c['peso_erosion']))),
                  fuente_sala=_menu('Fuente', FUENTES_SALA, c['fuente_sala']),
+                 sensor_sala=_menu('Sensor', SENSORES_SALA, c['sensor_sala']),
                  altura_min=_p('Alturamin', c['altura_min']), altura_max=_p('Alturamax', c['altura_max']),
                  archivo_fondo=str(_p('Archivofondo', c['archivo_fondo'])).strip(),
                  ancho_sala=max(0.5, _p('Anchosala', c['ancho_sala'])),
@@ -13685,16 +13691,20 @@ def sala_tick(W, c, now):
     # dice la tabla sala_personas es lo que ve esta imagen. La camara, en diferido
     # (una imagen por detras, sin parar la GPU); tras sala_reset o un cambio de
     # Fuente la primera lectura diferida se tira: es de antes.
+    # v92: sin aparato (su TOP con errores o avisos, o sin imagen) no se lee: alturas_sala
+    # daria igual una imagen (negra, o la ultima) y la sala no esta vacia de verdad.
     sim = c['fuente_sala'] == FUENTE_SIMULADA
     alt = None
-    try:
-        o = parent().op('alturas_sala')
-        if not sim and (_SALA.get('purgar', True) or _SALA.get('fuente') != c['fuente_sala']):
-            _top_array(o)
-        alt = _top_array(o, diferida=not sim)
-    except Exception as e:
-        _say('alturas_sala', 'AVISO  camara: %s' % e)
-    _SALA.update(alt=alt, purgar=False, fuente=c['fuente_sala'])
+    viva = sim or camara_encontrada(c)[0]
+    if viva:
+        try:
+            o = parent().op('alturas_sala')
+            if not sim and (_SALA.get('purgar', True) or _SALA.get('fuente') != c['fuente_sala']):
+                _top_array(o)
+            alt = _top_array(o, diferida=not sim)
+        except Exception as e:
+            _say('alturas_sala', 'AVISO  camara: %s' % e)
+    _SALA.update(alt=alt, purgar=not viva, fuente=c['fuente_sala'])
     d = sala_bloque(W, c, alt, now)
     if c['nivel'] >= 24:                # fase 24: las personas de esta imagen
         try:
@@ -13734,22 +13744,33 @@ def densidad_cook(scriptOp):
     scriptOp.copyNumpyArray(out)
 
 
-def camara_encontrada():
-    """(si, texto) del Orbbec TOP orbbec1: con imagen y sin errores."""
-    o = parent().op('orbbec1')
+def sensor_sala(c=None):
+    """(nombre, TOP) del aparato del menu Sensor: ('femto', 'orbbec1') o ('kinect', 'kinect1')."""
+    k = (cfg() if c is None else c).get('sensor_sala', 0)
+    k = k if k in (0, 1) else 0
+    return SENSORES_SALA[k], SENSOR_OPS[k]
+
+
+def camara_encontrada(c=None):
+    """(si, texto) del TOP del Sensor (orbbec1 o kinect1): sin errores ni avisos y
+    con imagen de mas de un pixel. No descarga la imagen: se mira cada fotograma."""
+    nombre, nop = sensor_sala(c)
+    o = parent().op(nop)
     if o is None:
-        return False, 'sin orbbec1'
-    try:
-        err = o.errors()
-    except Exception:
-        err = ''
+        return False, 'sin %s' % nop
+    err = ''
+    for f in ('errors', 'warnings'):
+        try:
+            err = err or str(getattr(o, f)() or '').strip()
+        except Exception:
+            pass
     try:
         w, h = int(o.width), int(o.height)
     except Exception:
         w = h = 0
-    if err or w <= 1 or _top_array(o) is None:
-        return False, (err.splitlines()[0] if err else 'sin imagen')
-    return True, '%d x %d' % (w, h)
+    if err or w <= 1:
+        return False, '%s: %s' % (nop, err.splitlines()[0] if err else 'sin imagen')
+    return True, '%s %d x %d' % (nop, w, h)
 
 
 def _sim_casilla(c):
@@ -13820,7 +13841,8 @@ def _legend_camara(W, c):
     if c['fuente_sala'] == FUENTE_SIMULADA:
         fuente = 'simulada'
     else:
-        fuente = 'femto %g fps' % CAM_FPS if _SALA.get('hay') else 'femto (sin camara)'
+        nombre = sensor_sala(c)[0]
+        fuente = '%s %g fps' % (nombre, CAM_FPS) if _SALA.get('hay') else '%s (sin camara)' % nombre
     k, d = casilla_mas_densa(c)
     mas = 'densidad max %.2f (casilla %d -> celda %d)' % (d, k, celda_de_casilla(W, c, k)) if k is not None \
         else 'densidad max 0.00'

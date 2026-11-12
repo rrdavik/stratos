@@ -37,7 +37,7 @@ La sala entra en la pieza: desde la fase 21 el micrófono escucha al público, y
 | `sala_virtual.py` y `sala_motor.py` | No son una fase: la maqueta de la instalación en `/project1/SALA` (ver *Sala virtual*; v2: estar en la sala, un solo monitor; v3: el render de FASE1 sale por el Out TOP `out_render`; v4: la sala dibujada, el suelo del público con su retícula y la vista desde la entrada; v5: demos de público, la esfera a 1 m de la esquina, retícula en todo el suelo y público sin cabeza; v6: rendimiento, el color de la esfera por el TOP to CHOP `esfera_color` con descarga diferida, `luz_esfera` fuera de los render con `Luzesfera` 0 y el rótulo cada 15 fotogramas; v7: la esfera 3D con el centro del render (el planeta), sin el recuadro de la esfera en el monitor, sin el sub dibujado (rayas bajo la esfera) y fondo negro; v8: sin zona de la cámara, la cenital ve todo el suelo; v9: la esfera gira para que el planeta mire al centro de la sala, `Girosfera` lo ajusta; v10: la esfera lleva coordenadas de textura (Texture SOP) y, desde la v13, es una malla de polígonos (era una esfera primitiva de un punto y salía gris), así que se ve el render, y desde la v19 de frente sobre la cara que mira a la entrada (Script SOP `frente`), como se ve en FASE1; hasta la v18 se envolvía alrededor de la bola y salía estirado, de lado o del revés, y la miniatura de abajo a la derecha es la cámara cenital, más pequeña) | `sala_virtual v23`, `sala v12` |
 | `fase7_erosion.py` | v15: relanzada sobre la fase 21, conserva la fila del micrófono (pad 9) de `perfiles_erosion`; v16: la página Fase7 con 12 parámetros en vez de 18 (ver «Página Fase7» en `MONTAJE_FASES_3_10.md`) | `fase7 v16` |
 | `fase14_destructores.py` | v3: solo la autoprueba (cuenta también el pad 9 al repartir los pads en arañazos, cortes e impulsos) | `fase14 v3` |
-| `fase22_camara.py` | La cámara cenital: página Fase22, `orbbec1`, `cornerpin1`, `fondo`, `altura_cam`, `sala_sim`, `fuente`, `alturas_sala` y `densidad`; el motor v81 trae la densidad por casilla, el mapeo sala → planeta y el sorteo de cada señal; comun v65, las autopruebas con `Activo` apagado | `fase22 v1` |
+| `fase22_camara.py` | La cámara cenital: página Fase22, `orbbec1` (o `kinect1` y `kinect_metros`, según `Sensor`), `sensor_cam`, `cornerpin1`, `fondo`, `altura_cam`, `sala_sim`, `fuente`, `alturas_sala` y `densidad`; el motor v81 trae la densidad por casilla, el mapeo sala → planeta y el sorteo de cada señal; comun v65, las autopruebas con `Activo` apagado; motor v92: `Sensor` (Femto Bolt o Kinect v2) | `fase22 v2` |
 | `fase23_sala.py` | La luz de sala: página Fase23, `dmx_canales`, `dmx_valores` y `dmx_out`; el motor v82 trae el balance, el baño, el estroboscopio con su limitador de destellos, la noche del fin de ciclo y el colapso; comun v66 | `fase23 v1` |
 | `docs/PLAN_V5.md` | El plan v5, renumerado a las fases 24–31, encima de la 23 | — |
 | `pruebas/` | El TouchDesigner simulado sabe Audio Device In CHOP (sin dispositivo) y Switch CHOP y TOP con sus parámetros reales, y `numpyArray()` en un CHOP; `correr_fases.py` corre las fases 21 a 23 que existan y mete onsets en la sesión | — |
@@ -174,7 +174,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase22_camara.py').read())
 
 ### Qué hace
 
-Una cámara de profundidad en el techo (Orbbec Femto Bolt) mide cuánta gente hay en cada casilla del suelo, y esa densidad inclina la probabilidad de que cada señal que llega al planeta actúe. El público no escribe: solo inclina dónde prende lo que ya llega. Es el componente `presencia` de la **Especificación TouchDesigner: casilla probable**, dentro de FASE1.
+Una cámara de profundidad en el techo (Orbbec Femto Bolt, o una Kinect v2 para probar: `Sensor`) mide cuánta gente hay en cada casilla del suelo, y esa densidad inclina la probabilidad de que cada señal que llega al planeta actúe. El público no escribe: solo inclina dónde prende lo que ya llega. Es el componente `presencia` de la **Especificación TouchDesigner: casilla probable**, dentro de FASE1.
 
 - **La fórmula.** `P(c) = C + (1 − C) k d(c)`: `C` = `Cuanto` (la probabilidad con la sala vacía, 0,5 como mucho, también en el código), `k` = `Pesocrear` o `Pesoerosion`, `d(c)` la densidad (0–1) de la casilla a la que mira el centro de la celda. Con `Activo` apagado, P = 1 y el mundo se comporta como antes.
 - **El sorteo.** Cada nota constructora del SEQ1 o del SEQ2 (`crear`) y cada golpe de erosión u onset del micrófono (`erosionar`) pasa por un sorteo, una vez por evento y en su centro (un corte no sale agujereado). Si no sale, el evento se pierde: la leyenda `ULTIMA` y `midi_log` dicen `no prende`. No hay azar de software: sale del mapa logístico a r = 4 (pasado a uniforme), sembrado con la celda, el tipo y el contador de señales, así que la misma sala da el mismo resultado. El bombo y el tom (impulso) no se sortean: es una decisión abierta de la especificación.
@@ -185,15 +185,19 @@ Una cámara de profundidad en el techo (Orbbec Femto Bolt) mide cuánta gente ha
 ### Operadores (en `/project1/FASE1`)
 
 ```
-orbbec1 ─► cornerpin1 ─┬─► altura_cam ─┐
-              fondo ───┘               ├─► fuente ─► alturas_sala ─► motor ─► densidad
-     sala_personas ─► sala_sim ────────┘
+orbbec1 ───────────────────┐
+kinect1 ─► kinect_metros ──┴─► sensor_cam ─► cornerpin1 ─┬─► altura_cam ─┐
+                                                 fondo ───┘               ├─► fuente ─► alturas_sala ─► motor ─► densidad
+                                        sala_personas ─► sala_sim ────────┘
 ```
 
 | Operador | Qué es |
 |---|---|
-| `orbbec1` | Orbbec TOP: la Femto Bolt. Imagen de profundidad (32-bit float, en metros), NFOV binned 320 × 288, 30 fps |
-| `cornerpin1` | Corner Pin TOP: endereza y recorta el suelo cubierto, con la pared de la pantalla arriba. Sus esquinas se ponen a mano en la calibración |
+| `orbbec1` | Orbbec TOP: la Femto Bolt. Imagen de profundidad (32-bit float, en metros), NFOV binned 320 × 288, 30 fps. Activo solo con `Sensor` = Femto Bolt |
+| `kinect1` | Kinect TOP: la Kinect v2. *Image* = Depth Point Cloud, sin remapear a color (512 × 424, XYZ en metros, 30 fps). Activo solo con `Sensor` = Kinect v2 |
+| `kinect_metros` | GLSL TOP (`kinect_metros_pixel`): la Z de la nube de puntos (la distancia en metros) en el canal rojo, como la profundidad de la Femto; sin dato, 0 |
+| `sensor_cam` | Switch TOP: `orbbec1` o `kinect_metros`, según `Sensor` |
+| `cornerpin1` | Corner Pin TOP (de `sensor_cam`): endereza y recorta el suelo cubierto, con la pared de la pantalla arriba. Sus esquinas se ponen a mano en la calibración |
 | `fondo` | Movie File In TOP: el suelo vacío (`Archivofondo`), que `Capturarfondo` graba de la salida de `cornerpin1` (con `TOP.save()`) |
 | `altura_cam` | GLSL TOP (`altura_cam_pixel`): altura de cada píxel = suelo vacío − profundidad; los píxeles sin dato, 0 |
 | `sala_personas`, `sala_sim` | La sala simulada: una tabla editable (x, y, altura en metros; x desde la izquierda, y desde la pantalla) y el Script TOP que dibuja cada persona como un disco de 25 cm de radio en la misma imagen de alturas |
@@ -205,7 +209,7 @@ orbbec1 ─► cornerpin1 ─┬─► altura_cam ─┐
 
 ### Parámetros (página Fase22)
 
-`Activo` · `Cuanto` 0,5 (tope 0,5) · `Pesocrear` 1 · `Pesoerosion` 1 · `Reiniciarcuentas` · `Fuente` (cámara / simulada) · `Alturamin` 0,8 · `Alturamax` 2,2 · `Capturarfondo` · `Archivofondo` (`fondo_suelo.exr`) · `Anchosala` 5,4 · `Fondosala` 4,5 · `Tamcasilla` 0,5 · `Desenfoque` 1 · `Ocupacionllena` 0,6 · `Subida` 2 · `Bajada` 5 · `Loncentral` (expresión: el giro) · `Anchoangular` 180 · `Latnorte` 90 · `Latsur` −90 · `Espejo` · `Simcasilla` · `Simponer` · `Simquitar` · `Simvaciar`
+`Activo` · `Cuanto` 0,5 (tope 0,5) · `Pesocrear` 1 · `Pesoerosion` 1 · `Reiniciarcuentas` · `Fuente` (cámara / simulada) · `Sensor` (Femto Bolt / Kinect v2) · `Alturamin` 0,8 · `Alturamax` 2,2 · `Capturarfondo` · `Archivofondo` (`fondo_suelo.exr`) · `Anchosala` 5,4 · `Fondosala` 4,5 · `Tamcasilla` 0,5 · `Desenfoque` 1 · `Ocupacionllena` 0,6 · `Subida` 2 · `Bajada` 5 · `Loncentral` (expresión: el giro) · `Anchoangular` 180 · `Latnorte` 90 · `Latsur` −90 · `Espejo` · `Simcasilla` · `Simponer` · `Simquitar` · `Simvaciar`
 
 Ojo: con `Activo` encendido y la sala vacía (o sin cámara) prende la mitad de las notas, también las de `Sembrar`. Para ensayar sin público como antes, `Activo` apagado. **Las autopruebas de todas las fases corren con `Activo` apagado** (comun v65) y devuelven tu valor al terminar.
 
@@ -214,8 +218,11 @@ Ojo: con `Activo` encendido y la sala vacía (o sin cámara) prende la mitad de 
 ```
 CAMARA   femto 30 fps   casillas 4/99   densidad max 0.82 (casilla 17 -> celda 40)   prendidas 312/598
 CAMARA   femto (sin camara)   casillas 0/99   densidad max 0.00   prendidas 0/0
+CAMARA   kinect 30 fps   casillas 2/99   densidad max 0.31 (casilla 27 -> celda 52)   prendidas 40/71
 CAMARA   simulada   casillas 12/99   densidad max 0.09 (casilla 44 -> celda 37)   prendidas 5/9
 ```
+
+Sin cámara quiere decir que el TOP del `Sensor` (`orbbec1` o `kinect1`) tiene un error o un aviso, o no da imagen: entonces el motor no lee `alturas_sala` (daría una imagen negra o la última), la densidad es 0 y la leyenda dice `(sin camara)`. El informe de la fase 22 copia la primera línea del error.
 
 Las casillas se numeran por filas desde la pantalla: la 0 es la de la izquierda junto a la pantalla y la 98 la de la derecha al fondo.
 
@@ -226,6 +233,14 @@ Las casillas se numeran por filas desde la pantalla: la 0 es la de la izquierda 
 3. `Cuanto` 0 y `Sembrar` varias veces en una nota cuya celda no mira a nadie: `no prende` nunca; `Activo` apagado: prende siempre.
 4. Teclea 0,8 en `Cuanto`: se queda en 0,5.
 5. `Simquitar` y `Simvaciar`: la densidad baja en unos 5 s.
+
+### Probar con una Kinect v2
+
+1. Windows, el adaptador de la Kinect v2 a USB 3 y el **Kinect for Windows SDK 2.0**. Antes de abrir TouchDesigner, comprueba con *Kinect Studio* (o el *SDK Browser*) que da profundidad.
+2. Relanza `fase22_camara.py`. En la página Fase22, `Sensor` = Kinect v2 y `Fuente` = Cámara. La leyenda debe decir `kinect 30 fps`; si dice `kinect (sin camara)`, mira el error de `kinect1`.
+3. En `kinect1`: *Hardware Version* = Kinect 2 e *Image* = Depth Point Cloud, sin *Camera Remap* a color. Si el script no encuentra esos nombres lo dice con `..` y hay que ponerlos a mano. Mira `kinect_metros` con el visor: el suelo debe dar la altura de la cámara en metros, y una persona, en torno a 1,7 m menos.
+4. **Lo que ve:** unos 70° × 60° y de 0,5 a 4,5 m. Colgada a 3 m del suelo cubre unos 4,2 × 3,5 m, así que baja `Anchosala` y `Fondosala` a lo que cubra de verdad (por ejemplo 4 × 3,5 m: 8 × 7 casillas).
+5. Después, `cornerpin1` y `Capturarfondo` como con la Femto (abajo).
 
 ### Montaje y calibración
 
@@ -243,7 +258,8 @@ Las casillas se numeran por filas desde la pantalla: la 0 es la de la izquierda 
 - 600 señales con la sala vacía: prenden entre el 45 y el 55 %, y la misma sala da lo mismo; con `Cuanto` 0,2, en torno al 20 %; con `Activo` apagado, todas; `Reiniciarcuentas`;
 - una persona que entra: su casilla sube en torno a `Subida`; al irse, baja en torno a `Bajada`; una mochila (0,6 m) y una lámpara (2,6 m) no cuentan;
 - las notas y los golpes de erosión pasan por el sorteo (una vez cada uno; el que no prende no quita nada); el bombo no;
-- un onset cae en la celda de la casilla más densa; sin cámara, densidad 0 y la leyenda lo dice; la línea `CAMARA`.
+- un onset cae en la celda de la casilla más densa; la línea `CAMARA`;
+- `Fuente` = cámara con cada `Sensor`: sin aparato, densidad 0 y `femto (sin camara)` o `kinect (sin camara)`; con el aparato enchufado, la leyenda dice `femto 30 fps` o `kinect 30 fps`.
 
 ### Decisiones tomadas en la fase 22
 
@@ -258,7 +274,7 @@ Las casillas se numeran por filas desde la pantalla: la 0 es la de la izquierda 
 
 ### Pruebas pendientes con el aparato
 
-1. Los nombres de los parámetros del Orbbec TOP, el Corner Pin TOP y el GLSL TOP (el simulador usa los que conocemos; lo que no entre, el informe lo dice con `..`).
+1. Los nombres de los parámetros del Orbbec TOP, el Kinect TOP, el Corner Pin TOP y el GLSL TOP (el simulador usa los que conocemos; lo que no entre, el informe lo dice con `..`).
 2. Que `alturas_sala` da la altura en metros (míralo con el visor: una persona, en torno a 1,7).
 3. Las pruebas «en sala» de la especificación: con el estroboscopio disparando y la sala vacía la densidad sigue a cero, y la cadena no baja los fotogramas del render.
 4. `Subida`, `Bajada` y `Cuanto`, para que la presencia se note sin parpadear.
