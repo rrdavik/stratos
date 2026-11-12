@@ -748,7 +748,10 @@ class OP(object):
                 k = 0
                 if self.OPType == 'switchTOP':
                     k = max(0, min(len(ins) - 1, int(float(self.par.index.eval()))))
-                return ins[k].numpyArray()
+                a = ins[k].numpyArray()
+                if delayed:             # como en TouchDesigner: la imagen de la llamada anterior
+                    a, self._np_previa = getattr(self, '_np_previa', None), a
+                return a
             return getattr(self, '_np', None)
         import numpy
         if self.OPType == 'switchCHOP':

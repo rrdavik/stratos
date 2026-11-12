@@ -89,6 +89,10 @@
 #                 Motor v90, fase 31: las escisiones en el historico: el
 #                 testigo (la seccion por el origen, dibujada con numpy), la
 #                 columna resumen de la jornada y el registro.
+#                 Motor v91: la sala simulada se lee al momento y la primera
+#                 lectura diferida de la camara tras sala_reset o un cambio de
+#                 Fuente se tira (era la imagen de antes: una sala vacia
+#                 heredaba la densidad de la ultima persona).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -101,7 +105,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v90'
+MOTOR_VERSION = 'motor v91'
 
 import math
 
@@ -10755,7 +10759,8 @@ def _sala_nueva():
     return dict(dens=None, t=None, t_img=-99.0, alt=None, hay=False, fps=0.0, senales=0,
                 cuentas=dict(crear=[0, 0], erosionar=[0, 0]), ultima=None,
                 pistas=[], casillas={}, nuevas=0, id=0, ultimas=[], t_personas=None,    # fase 24
-                filas=[], fila_id=0, fila_sim=[])       # fase 29
+                filas=[], fila_id=0, fila_sim=[],       # fase 29
+                purgar=True, fuente=None)       # v91: la lectura diferida pendiente es de antes
 
 
 _SALA = _sala_nueva()
@@ -13616,13 +13621,15 @@ def lon_central(frame=None):
     return (90.0 + ry + 180.0) % 360.0 - 180.0
 
 
-def _top_array(o):
+def _top_array(o, diferida=True):
     """La imagen de un TOP como (filas x columnas) del canal rojo, con la fila 0
-    arriba; None si no hay imagen. numpyArray() entrega primero la fila de abajo."""
+    arriba; None si no hay imagen. numpyArray() entrega primero la fila de abajo.
+    diferida: la descarga no espera a la GPU, pero entrega la imagen que habia en
+    la llamada ANTERIOR (va una imagen por detras)."""
     if o is None:
         return None
     try:
-        a = o.numpyArray(delayed=True)
+        a = o.numpyArray(delayed=True) if diferida else o.numpyArray()
     except TypeError:
         a = o.numpyArray()
     except Exception:
@@ -13674,12 +13681,20 @@ def sala_tick(W, c, now):
                 o.cook(force=True)
             except Exception as e:
                 _say('sala_sim', 'AVISO  sala_sim: %s' % e)
+    # La sala simulada se lee al momento (110 x 90 pixeles recien cocinados): lo que
+    # dice la tabla sala_personas es lo que ve esta imagen. La camara, en diferido
+    # (una imagen por detras, sin parar la GPU); tras sala_reset o un cambio de
+    # Fuente la primera lectura diferida se tira: es de antes.
+    sim = c['fuente_sala'] == FUENTE_SIMULADA
     alt = None
     try:
-        alt = _top_array(parent().op('alturas_sala'))
+        o = parent().op('alturas_sala')
+        if not sim and (_SALA.get('purgar', True) or _SALA.get('fuente') != c['fuente_sala']):
+            _top_array(o)
+        alt = _top_array(o, diferida=not sim)
     except Exception as e:
         _say('alturas_sala', 'AVISO  camara: %s' % e)
-    _SALA['alt'] = alt
+    _SALA.update(alt=alt, purgar=False, fuente=c['fuente_sala'])
     d = sala_bloque(W, c, alt, now)
     if c['nivel'] >= 24:                # fase 24: las personas de esta imagen
         try:
