@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v72'
+VERSION_COMUN = 'comun v73'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2036,6 +2036,7 @@ def install_core(base, carpeta, fase):
     fase7_al_dia(base)
     fase8_al_dia(base)
     fase11_al_dia(base)
+    ejemplares_al_dia(base)          # comun v73: las mallas, sin colgar de todos los parametros
     fase13_al_dia(base)
     fase21_al_dia(base)
     set_camera(base)
@@ -3793,6 +3794,10 @@ EJEMPLAR_CB = r'''# Script SOP de un ejemplar de la biblioteca (fase 11 v8): pid
 # (tubos de 4 o 5 lados) y hojas facetadas. Atributos: N y uv = (tipo,
 # profundidad en la copa, nivel de rama). Solo se recuece si cambia la
 # biblioteca (Variantes).
+# comun v73 (motor v93): pide cfg_malla() y no cfg(). Un Script SOP queda colgado
+# de cada parametro que lee al cocinarse; con cfg() entero se rehacia al cambiar
+# cualquiera, y Loncentral (fase 22) cambia en cada fotograma con el planeta
+# girando: las 160 mallas, 1 s por fotograma.
 
 def onSetupParameters(scriptOp):
     return
@@ -3802,7 +3807,8 @@ def onCook(scriptOp):
     scriptOp.clear()
     try:
         m = parent(2).op('motor').module
-        P, Nn, U, T = m.malla_ejemplar(scriptOp.parent().name, m.cfg())
+        c = m.cfg_malla() if hasattr(m, 'cfg_malla') else m.cfg()
+        P, Nn, U, T = m.malla_ejemplar(scriptOp.parent().name, c)
     except Exception as e:
         print('AVISO  %s: %s' % (scriptOp.parent().name, e))
         return
@@ -3828,6 +3834,19 @@ def onCook(scriptOp):
         poly[2].point = pts[c]
     return
 '''
+
+
+def ejemplares_al_dia(base):
+    """comun v73: el callback de las mallas de la biblioteca (modelos/ejemplar_callbacks)
+    al dia en un proyecto ya montado, lance la fase que lance. Devuelve si lo ha cambiado."""
+    mo = base.op('modelos')
+    cb = mo.op('ejemplar_callbacks') if mo is not None else None
+    if cb is None or cb.text == EJEMPLAR_CB:
+        return False
+    cb.text = EJEMPLAR_CB
+    ok('biblioteca: las mallas ya no dependen de todos los parametros (se rehacian en cada fotograma '
+       'con el planeta girando)')
+    return True
 
 
 def construir_ejemplar(modelos, nombre, x, y):

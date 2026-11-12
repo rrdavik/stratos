@@ -98,6 +98,12 @@
 #                 planeta, por el paralelo entre dos anillos. El motor entrega
 #                 el giro de la camara (cam('rot'), ya sin Look At) y su FOV
 #                 (cam('fovcam'); el del globo es el parametro Camfov).
+#                 Motor v93: cfg_malla(), la configuracion de las mallas de la
+#                 biblioteca con solo los parametros que las cambian. Sus
+#                 Script SOP pedian cfg() entero y quedaban colgados de todos
+#                 los parametros: Loncentral (fase 22) sigue al giro, y con el
+#                 planeta girando las 160 mallas se rehacian en cada fotograma
+#                 (1 s por fotograma en TouchDesigner).
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -110,7 +116,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v92'
+MOTOR_VERSION = 'motor v93'
 
 import math
 
@@ -12834,6 +12840,21 @@ def cfg():
 
 
 _CFG_FOTO = {}
+
+
+def cfg_malla():
+    """Motor v93: la configuracion para las mallas de la biblioteca (malla_ejemplar),
+    leyendo SOLO los parametros que las cambian. En TouchDesigner un Script SOP queda
+    colgado de cada parametro que lee al cocinarse: con cfg() entero (mas de 200) se
+    rehacia al cambiar cualquiera, y Loncentral (fase 22) cambia en cada fotograma con
+    el planeta girando. La vegetacion no depende de ningun parametro (Varangulo,
+    Cuantizar30 y Densidadhoja son fijos desde la fase 11 v9); la ciudad y la
+    industria, de Oblicuidad, Retranqueo y Torsionmax, con los limites de cfg()."""
+    c = DEFAULT_CFG
+    return dict(var_angulo=c['var_angulo'], cuantizar30=c['cuantizar30'], densidad_hoja=c['densidad_hoja'],
+                oblicuidad=max(0.0, min(30.0, _p('Oblicuidad', c['oblicuidad']))),
+                retranqueo=max(0.0, min(0.4, _p('Retranqueo', c['retranqueo']))),
+                torsion_max=max(0.0, min(360.0, _p('Torsionmax', c['torsion_max']))))
 
 
 def cfg_foto():
