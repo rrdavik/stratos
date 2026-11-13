@@ -116,6 +116,13 @@
 #                 Motor v96: cada camara con sus ajustes (CAMARAS): al elegir
 #                 Modocamara se ponen los de ese modo. Rasojo, apagado de fabrica.
 #                 No toca TouchDesigner.
+#                 Motor v97, fase 11 v14: el oceano (Oceano: las celdas vacias son mar
+#                 y cada celda ocupada una isla que crece con la ocupacion, se une a
+#                 sus vecinas por istmos y suelta islotes: archipielagos), los volcanes
+#                 (Volcanes: crater, lava en el canal a del mapa de alturas, penacho y
+#                 erupciones), ocho arboles y dos matorrales mas (23 plantas), cada
+#                 una con su verde, su corteza y sus flores, y Detalle: las hojas de
+#                 verdad tambien desde el globo, con el presupuesto a cargo de la GPU.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -127,7 +134,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v96'
+MOTOR_VERSION = 'motor v97'
 
 import math
 
@@ -298,6 +305,8 @@ DEFAULT_CFG = dict(
     ligero=1, refresco_nat=0.25,
     biomas=1, variantes=2, var_angulo=12.0, cuantizar30=0, inclinacion=8.0, densidad_hoja=6,
     traslucidez=0.35, timidez=0.12, emergentes=0.1, orla=1, mezcla=0.3, impostores=1,
+    # motor v97: el oceano (las celdas vacias son mar; las ocupadas, islas), los volcanes y el detalle
+    oceano=1, volcanes=0.2, detalle=1,
     terrazas_por_nota=1, max_terrazas=8, paso_terraza=0.12, muro_terraza=0.25, riego=1,
     color_cultivo=(0.66, 0.80, 0.22), altura_meseta=0.15, max_niveles=3, marco=1, setos=1,
     # fase 11 v10 (motor v67): la ciudad legible
@@ -3252,18 +3261,47 @@ ANCHO = dict((m, _ancho_natural(m)) for m in MODELOS)
 # instancia entera, con su version lejana de tarjetas de racimo (_lod).
 # Ejes del ejemplar: la base en el origen, Y arriba, alto 1.
 
-ARBOLES = ['conifera', 'pagoda', 'parasol', 'drago', 'frondosa', 'palmera', 'sauce']
-MATORRALES = ['retama', 'brezo', 'helecho', 'graminea', 'enebro', 'palmito']
-PLANTAS = ARBOLES + MATORRALES
+# Motor v97: ocho arboles mas (cipres, abedul, araucaria, olivo, baobab, mangle, bambu y
+# cardon) y dos matorrales (agave y junco). PLANTAS conserva el orden de la v52 y anade
+# los nuevos al final: la semilla de cada ejemplar sale de su indice, y los de antes no cambian.
+ARBOLES_V52 = ['conifera', 'pagoda', 'parasol', 'drago', 'frondosa', 'palmera', 'sauce']
+MATORRALES_V52 = ['retama', 'brezo', 'helecho', 'graminea', 'enebro', 'palmito']
+ARBOLES_V97 = ['cipres', 'abedul', 'araucaria', 'olivo', 'baobab', 'mangle', 'bambu', 'cardon']
+MATORRALES_V97 = ['agave', 'junco']
+ARBOLES = ARBOLES_V52 + ARBOLES_V97
+MATORRALES = MATORRALES_V52 + MATORRALES_V97
+PLANTAS = ARBOLES_V52 + MATORRALES_V52 + ARBOLES_V97 + MATORRALES_V97
+SIN_FUSTE = ('mangle', 'cardon')     # no se leen por el fuste: raices zancudas y columna entera
 HOJA_DE = dict(conifera='aguja', pagoda='ancha', parasol='ancha', drago='espada', frondosa='ancha',
                palmera='fronda', sauce='lanceolada', retama='lanceolada', brezo='menuda', helecho='fronda',
-               graminea='lamina', enebro='aguja', palmito='abanico')
+               graminea='lamina', enebro='aguja', palmito='abanico',
+               cipres='aguja', abedul='menuda', araucaria='aguja', olivo='lanceolada', baobab='ancha',
+               mangle='ancha', bambu='lanceolada', cardon='menuda', agave='espada', junco='lamina')
 TIPOS_HOJA = ['aguja', 'ancha', 'lanceolada', 'espada', 'fronda', 'abanico', 'lamina', 'menuda']
+# Motor v97: flores y frutos. Son hojas de un tipo aparte (uv.x = 4 + color / 10 en la
+# malla): el shader les da su color, sin tocar el verde de la instancia.
+FLORES = dict(flor_blanca=0, flor_rosa=1, flor_amarilla=2, flor_roja=3, flor_violeta=4, flor_naranja=5)
+# La corteza de cada modelo (uv.y de los tubos; el shader elige): 0 parda oscura, 0,25 gris,
+# 0,5 blanca (abedul), 0,75 verde (canas y cactus), 1 rojiza
+CORTEZA = dict(abedul=0.5, olivo=0.25, baobab=0.25, palmera=0.25, drago=0.25, bambu=0.75, cardon=0.75,
+               araucaria=1.0, mangle=1.0, sauce=0.25)
+# El verde de cada planta (motor v97): el albedo de la instancia es el piso de su altura
+# acercado a este tono (TONO_K). Todos con el verde por delante del rojo y del azul.
+TONO_PLANTA = dict(
+    conifera=(0.07, 0.24, 0.17), pagoda=(0.16, 0.38, 0.14), parasol=(0.25, 0.41, 0.12), drago=(0.20, 0.37, 0.25),
+    frondosa=(0.13, 0.36, 0.10), palmera=(0.22, 0.45, 0.14), sauce=(0.36, 0.52, 0.20), retama=(0.36, 0.45, 0.14),
+    brezo=(0.27, 0.35, 0.21), helecho=(0.16, 0.45, 0.14), graminea=(0.50, 0.57, 0.24), enebro=(0.10, 0.28, 0.20),
+    palmito=(0.24, 0.43, 0.16), cipres=(0.06, 0.21, 0.12), abedul=(0.43, 0.59, 0.18),
+    araucaria=(0.08, 0.27, 0.15), olivo=(0.38, 0.47, 0.35), baobab=(0.31, 0.43, 0.16), mangle=(0.10, 0.34, 0.16),
+    bambu=(0.41, 0.57, 0.16), cardon=(0.25, 0.43, 0.27), agave=(0.30, 0.47, 0.39), junco=(0.43, 0.51, 0.20))
+TONO_K = 0.6
 DERIVACIONES = 3             # el arbol: 1 brinzal, 2 joven, 3 adulto (derivacion completa)
 DERIVACION_JOVEN = 2
 ANGULO_PLANTA = dict(conifera=84.0, pagoda=88.0, parasol=45.0, drago=34.0, frondosa=36.0, palmera=12.0,
                      sauce=38.0, retama=22.0, brezo=40.0, helecho=55.0, graminea=50.0, enebro=80.0,
-                     palmito=45.0)   # angulo de rama con el eje del padre (grados), antes de Varangulo
+                     palmito=45.0, cipres=20.0, abedul=48.0, araucaria=86.0, olivo=58.0, baobab=62.0,
+                     mangle=60.0, bambu=6.0, cardon=90.0, agave=48.0,
+                     junco=8.0)      # angulo de rama con el eje del padre (grados), antes de Varangulo
 ANGULO_AUREO = 137.5         # las hojas, a lo largo de la ramilla con el angulo aureo
 R_PUNTA = 0.0035             # radio de una ramilla (alto 1); Leonardo da el resto
 SUBE = (0.0, 1.0, 0.0)
@@ -3274,8 +3312,10 @@ class _Planta(object):
 
     def __init__(self, modelo, var, deriv, cfg):
         import random
-        self.modelo, self.deriv = modelo, deriv
+        self.modelo, self.deriv, self.var = modelo, deriv, int(var)
         self.rng = random.Random(7919 * (PLANTAS.index(modelo) + 1) + 104729 * var + 17)
+        self.rng2 = random.Random(15485863 * (PLANTAS.index(modelo) + 1) + 32452843 * var + 5)   # las flores
+        self.r_punta = R_PUNTA
         self.var_ang = max(0.0, float(cfg.get('var_angulo', 12.0)))
         self.cuant = bool(cfg.get('cuantizar30', 0))
         self.dens = max(1, int(cfg.get('densidad_hoja', 6)))
@@ -3290,7 +3330,7 @@ class _Planta(object):
         return 30.0 * round(a / 30.0) if self.cuant else a
 
     def tramo(self, a, b, nivel, padre):
-        self.seg.append(dict(a=a, b=b, nivel=nivel, hijos=[], padre=padre, r=R_PUNTA))
+        self.seg.append(dict(a=a, b=b, nivel=nivel, hijos=[], padre=padre, r=self.r_punta))
         k = len(self.seg) - 1
         if padre is not None:
             self.seg[padre]['hijos'].append(k)
@@ -3349,6 +3389,23 @@ class _Planta(object):
             self.hojas.append([pos, nrm, ax, tam * self.u(0.75, 1.15) * HOJA_K[tipo], tipo, 0.0, nivel + 1])
         return k
 
+    def flor(self, p, d, tam, tipo, n, nivel):
+        """Motor v97: n flores (o frutos) del color 'tipo' (FLORES) alrededor de p,
+        abiertas en torno a d. Con su propio azar: no mueven el resto del ejemplar."""
+        r2 = self.rng2
+        ref = SUBE if abs(_dot(d, SUBE)) < 0.95 else (1.0, 0.0, 0.0)
+        lado0 = _norm(_cross(d, ref))
+        g0 = 360.0 * r2.random()
+        for j in range(int(n)):
+            lado = _girar_eje(lado0, d, g0 + ANGULO_AUREO * j)
+            e = math.radians(62.0 + r2.uniform(-18.0, 18.0))
+            ax = _norm(_add(_mul(d, math.cos(e)), lado, math.sin(e)))
+            nrm = _norm(_cross(ax, _cross(SUBE, ax))) if abs(_dot(ax, SUBE)) < 0.98 else _norm(lado)
+            if nrm[1] < 0:
+                nrm = _mul(nrm, -1.0)
+            self.hojas.append([_add(p, d, 0.3 * tam * r2.random()), nrm, ax, tam * r2.uniform(0.8, 1.2), tipo,
+                               0.0, nivel])
+
     def cerrar(self):
         """Leonardo, alto 1 y la profundidad de cada hoja en la copa."""
         for s in reversed(self.seg):            # los hijos siempre van despues del padre
@@ -3386,6 +3443,7 @@ class _Planta(object):
 
 HOJA_K = dict(aguja=0.95, ancha=0.75, lanceolada=0.62, espada=1.25, fronda=0.55, abanico=0.6, lamina=1.0,
               menuda=0.55)   # largo de la hoja, x el del racimo
+HOJA_K.update((f, 0.5) for f in FLORES)
 
 
 def _gen_conifera(P):
@@ -3446,6 +3504,8 @@ def _gen_parasol(P):
             t3, p3, _ = P.eje(p2[-1], _norm((dh[0], 0.06, dh[2])), 0.30 * P.u(0.8, 1.2), 2, 2, t2[-1])
             for r_ in range(1, len(p3)):
                 P.racimo(p3[r_], _norm((dh[0], 0.15, dh[2])), 0.16, 2, t3[r_ - 1], plano=True, n=P.dens + 3)
+                if P.var % 3 == 1:              # motor v97: una de cada tres variantes, en flor (flamboyan)
+                    P.flor(_add(p3[r_], SUBE, 0.02), SUBE, 0.07, 'flor_roja', 4, 2)
 
 
 def _gen_drago(P):
@@ -3486,6 +3546,10 @@ def _gen_frondosa(P):
             if nv == niveles - 1:
                 P.racimo(p2[-1], d2, 0.20, nv + 1, t2[-1], n=P.dens + 6)
                 P.racimo(p2[1], P.hijo(d2, 50.0, P.u(0, 360)), 0.14, nv + 1, t2[0], n=P.dens + 3)
+                if P.var % 4 == 2:              # motor v97: una de cada cuatro variantes, en flor (cerezo)
+                    P.flor(_add(p2[-1], d2, 0.12), d2, 0.06, 'flor_rosa', 5, nv + 1)
+                elif P.var % 4 == 3:            # y otra, con fruto (naranjo)
+                    P.flor(_add(p2[-1], d2, 0.08), d2, 0.035, 'flor_naranja', 2, nv + 1)
                 continue
             nh = 2 + (P.rng.random() < 0.35)
             gg = P.u(0, 360)
@@ -3541,6 +3605,8 @@ def _gen_retama(P):
         t2, p2, d2 = P.eje((P.u(-0.03, 0.03), 0.0, P.u(-0.03, 0.03)), d, P.u(0.7, 1.0), 3, 0, None,
                            tropismo=-0.04)
         P.racimo(p2[-1], d2, 0.16, 1, t2[-1], n=max(2, P.dens // 2), abre=20.0)
+        if j % 2 == 0:                          # motor v97: la retama, en flor
+            P.flor(_add(p2[-1], d2, 0.08), d2, 0.07, 'flor_amarilla', 4, 1)
 
 
 def _gen_brezo(P):
@@ -3552,6 +3618,8 @@ def _gen_brezo(P):
             dh = P.hijo(d2, P.u(20, 60), P.u(0, 360))
             t3, p3, d3 = P.eje(p2[-1 - (q % 2)], dh, P.u(0.25, 0.4), 2, 1, t2[-1 - (q % 2)])
             P.racimo(p3[-1], d3, 0.14, 2, t3[-1], n=P.dens + 4, abre=65.0)
+            if (j + q) % 2 == 0:                # motor v97: el brezo, en flor
+                P.flor(_add(p3[-1], d3, 0.10), d3, 0.06, 'flor_violeta', 4, 2)
 
 
 def _gen_helecho(P):
@@ -3599,10 +3667,204 @@ def _gen_palmito(P):
         P.racimos.append((p2[-1], 0.2, d2, False))
 
 
+# --- motor v97: ocho arboles y dos matorrales mas --------------------------------------
+
+def _gen_cipres(P):
+    """Fastigiado: un eje y ramas cortas casi verticales, pegadas a el. Llama estrecha
+    y oscura sobre un fuste corto."""
+    pisos = {1: 5, 2: 8, 3: 12}[P.deriv]
+    tr, pts, _ = P.eje((0, 0, 0), SUBE, 1.0, pisos + 2, 0, None)
+    g = P.u(0, 360)
+    for k in range(pisos):
+        y = 0.20 + 0.72 * k / max(1, pisos - 1)
+        idx = min(len(tr) - 1, int(y * len(tr)))
+        panza = math.sin(math.pi * min(1.0, (y - 0.12) / 0.92)) ** 0.6
+        l = 0.05 + 0.13 * panza
+        for j in range(3):
+            d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['cipres']), g + 120.0 * j + ANGULO_AUREO * k)
+            t2, p2, d2 = P.eje((0.0, y, 0.0), d, l, 2, 1, tr[idx], tropismo=0.5)
+            arriba = _norm(_add(d2, SUBE, 1.0))
+            P.racimo(p2[1], arriba, 0.75 * l, 1, t2[0], n=P.dens + 3, abre=24.0)
+            P.racimo(p2[-1], arriba, 0.9 * l, 1, t2[-1], n=P.dens + 4, abre=24.0)
+    P.racimo(pts[-1], SUBE, 0.10, 0, tr[-1], n=P.dens + 3, abre=20.0)
+
+
+def _gen_abedul(P):
+    """Fuste fino, blanco y algo sinuoso; copa alta y ligera, con ramillas que cuelgan."""
+    g0 = math.radians(P.u(0, 360))
+    curva = (0.018 * math.cos(g0), 0.0, 0.018 * math.sin(g0))
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.95, 8, 0, None, curva=curva)
+    n = {1: 4, 2: 7, 3: 11}[P.deriv]
+    g = P.u(0, 360)
+    for k in range(n):
+        idx = 3 + (k * (len(tr) - 3)) // n
+        p = pts[idx + 1]
+        dr = P.hijo(SUBE, P.ang(ANGULO_PLANTA['abedul']), g + ANGULO_AUREO * k)
+        l = 0.36 * (1.0 - 0.5 * k / float(n)) * P.u(0.85, 1.15)
+        t2, p2, d2 = P.eje(p, dr, l, 3, 1, tr[idx], tropismo=0.08)
+        for q in (2, 3):
+            cae = _norm(_add((d2[0], 0.0, d2[2]), SUBE, -1.6))
+            t3, p3, d3 = P.eje(p2[q], cae, 0.11 * P.u(0.8, 1.3), 2, 2, t2[q - 1], tropismo=-0.3)
+            P.racimo(p3[1], d3, 0.07, 2, t3[0], n=P.dens, abre=55.0)
+            P.racimo(p3[-1], d3, 0.07, 2, t3[-1], n=P.dens, abre=55.0)
+        P.racimo(p2[-1], d2, 0.08, 1, t2[-1], n=P.dens + 1, abre=50.0)
+    P.racimo(pts[-1], d, 0.10, 0, tr[-1], n=P.dens + 2, abre=45.0)
+
+
+def _gen_araucaria(P):
+    """Pisos de ramas horizontales muy separados, cada vez mas cortos, con la punta
+    vuelta hacia arriba y un penacho: una torre de platos con huecos, simetrica."""
+    pisos = {1: 3, 2: 4, 3: 6}[P.deriv]
+    tr, pts, _ = P.eje((0, 0, 0), SUBE, 1.0, 8, 0, None)
+    g = P.u(0, 360)
+    for k in range(pisos):
+        y = 0.24 + 0.68 * k / max(1, pisos - 1)
+        idx = min(len(tr) - 1, int(y * len(tr)))
+        l = 0.36 * (1.0 - 0.72 * k / float(pisos))
+        for j in range(5):
+            d = P.hijo(SUBE, ANGULO_PLANTA['araucaria'] + P.u(-4.0, 4.0), g + 72.0 * j + 36.0 * k)
+            t2, p2, d2 = P.eje((0.0, y, 0.0), d, l * P.u(0.92, 1.08), 3, 1, tr[idx], tropismo=0.05)
+            P.racimo(p2[-1], _norm(_add(d2, SUBE, 0.9)), 0.07, 1, t2[-1], roseta=True, abre=62.0, n=P.dens + 6)
+            P.racimo(p2[-2], _norm(_add(d2, SUBE, 0.25)), 0.06, 1, t2[-2], n=P.dens + 2, abre=40.0)
+    P.racimo(pts[-1], SUBE, 0.08, 0, tr[-1], roseta=True, abre=66.0, n=P.dens + 6)
+
+
+def _gen_olivo(P):
+    """Tronco corto, grueso y torcido que se abre muy abajo en 2 o 3 brazos; copa
+    baja, ancha y densa de hoja lanceolada gris."""
+    g0 = math.radians(P.u(0, 360))
+    curva = (0.10 * math.cos(g0), 0.0, 0.10 * math.sin(g0))
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.22, 3, 0, None, curva=curva)
+    nm = 2 + (P.rng.random() < 0.6)
+    niveles = {1: 2, 2: 3, 3: 3}[P.deriv]
+    g = P.u(0, 360)
+    frente = [(pts[-1], P.hijo(d, P.ang(ANGULO_PLANTA['olivo']), g + 360.0 * j / nm), tr[-1],
+               0.26 * P.u(0.85, 1.15)) for j in range(nm)]
+    for nv in range(niveles):
+        sig = []
+        for p, dd, pad, l in frente:
+            t2, p2, d2 = P.eje(p, dd, l, 2, nv + 1, pad, tropismo=0.04)
+            P.racimo(p2[-1], d2, 0.13, nv + 1, t2[-1], n=P.dens + 5)
+            if nv == niveles - 1:
+                P.racimo(p2[1], P.hijo(d2, 60.0, P.u(0, 360)), 0.11, nv + 1, t2[0], n=P.dens + 3)
+                continue
+            nh = 2 + (P.rng.random() < 0.5)
+            gg = P.u(0, 360)
+            for q in range(nh):
+                sig.append((p2[-1], P.hijo(d2, P.ang(42.0), gg + 360.0 * q / nh), t2[-1], l * P.u(0.6, 0.8)))
+        frente = sig
+
+
+def _gen_baobab(P):
+    """Tronco de botella, liso y muy grueso; arriba, un punado de ramas cortas y
+    torcidas como raices, con poca hoja."""
+    P.r_punta = 0.02                    # ramas gruesas: Leonardo engorda el tronco
+    tr, pts, d = P.eje((0, 0, 0), SUBE, 0.62, 4, 0, None)
+    nm = {1: 3, 2: 4, 3: 5}[P.deriv]
+    g = P.u(0, 360)
+    for j in range(nm):
+        dm = P.hijo(d, P.ang(ANGULO_PLANTA['baobab']), g + 360.0 * j / nm)
+        t2, p2, d2 = P.eje(pts[-1], dm, 0.24 * P.u(0.8, 1.2), 2, 1, tr[-1], tropismo=0.10)
+        for q in range(2 + (P.deriv >= 3)):
+            dh = P.hijo(d2, P.ang(45.0), P.u(0, 360))
+            t3, p3, d3 = P.eje(p2[-1], dh, 0.14 * P.u(0.7, 1.2), 2, 2, t2[-1], tropismo=0.05)
+            P.racimo(p3[-1], d3, 0.07, 2, t3[-1], n=P.dens)
+            if P.var % 2 == 0:
+                P.flor(p3[-1], _mul(SUBE, -1.0), 0.05, 'flor_blanca', 1, 2)
+
+
+def _gen_mangle(P):
+    """Raices zancudas en arco bajo un tronco corto; copa baja, ancha y densa. El
+    arbol de la orilla."""
+    y0 = 0.30
+    P.r_punta = 0.011
+    for j in range(6 + int(P.u(0, 3.99))):          # las raices: del tronco al agua
+        d = P.hijo(SUBE, 78.0 + P.u(-10.0, 10.0), ANGULO_AUREO * j)
+        P.eje((0.0, y0 * P.u(0.7, 1.05), 0.0), d, 0.42 * P.u(0.8, 1.2), 4, 0, None, tropismo=-0.42)
+    P.r_punta = R_PUNTA
+    tr, pts, d = P.eje((0, y0 * 0.6, 0), SUBE, 0.26, 2, 0, None)
+    nm = 3 + (P.rng.random() < 0.5)
+    niveles = {1: 1, 2: 2, 3: 2}[P.deriv]
+    g = P.u(0, 360)
+    frente = [(pts[-1], P.hijo(d, P.ang(ANGULO_PLANTA['mangle']), g + 360.0 * j / nm), tr[-1],
+               0.24 * P.u(0.85, 1.15)) for j in range(nm)]
+    for nv in range(niveles):
+        sig = []
+        for p, dd, pad, l in frente:
+            t2, p2, d2 = P.eje(p, dd, l, 2, nv + 1, pad, tropismo=0.12)
+            P.racimo(p2[-1], d2, 0.14, nv + 1, t2[-1], n=P.dens + 6)
+            P.racimo(p2[1], P.hijo(d2, 55.0, P.u(0, 360)), 0.12, nv + 1, t2[0], n=P.dens + 4)
+            if nv == niveles - 1:
+                continue
+            gg = P.u(0, 360)
+            for q in range(2):
+                sig.append((p2[-1], P.hijo(d2, P.ang(46.0), gg + 180.0 * q), t2[-1], l * P.u(0.6, 0.8)))
+        frente = sig
+
+
+def _gen_bambu(P):
+    """Mata de canas verdes, rectas, que se arquean arriba, con penachos de hoja fina
+    en los nudos altos."""
+    n = {1: 4, 2: 7, 3: 11}[P.deriv]
+    for j in range(n):
+        gj = math.radians(ANGULO_AUREO * j)
+        fuera = (math.cos(gj), 0.0, math.sin(gj))
+        base = _mul(fuera, P.u(0.0, 0.07))
+        d = _norm(_add(SUBE, fuera, math.tan(math.radians(abs(P.ang(ANGULO_PLANTA['bambu']) * P.u(0.3, 1.2))))))
+        P.r_punta = 0.006
+        t2, p2, d2 = P.eje(base, d, P.u(0.7, 1.0), 6, 0, None, curva=_mul(fuera, 0.045))
+        P.r_punta = R_PUNTA
+        for q in range(3, len(p2) - 1):
+            dl = P.hijo(d2, 60.0, P.u(0, 360))
+            P.racimo(p2[q], _norm((dl[0], 0.15, dl[2])), 0.09, 1, t2[q - 1], n=P.dens, abre=40.0)
+        P.racimo(p2[-1], d2, 0.10, 1, t2[-1], n=P.dens + 2, abre=35.0)
+
+
+def _gen_cardon(P):
+    """Cactus de candelabro: una columna gruesa con 2 a 4 brazos que suben; sin
+    hojas, con flores blancas en las puntas."""
+    P.r_punta = 0.034
+    tr, pts, _ = P.eje((0, 0, 0), SUBE, 1.0, 5, 0, None)
+    nb = {1: 1, 2: 2, 3: 3}[P.deriv] + (P.rng.random() < 0.5)
+    g = P.u(0, 360)
+    for j in range(nb):
+        idx = 1 + (j % 2)
+        d = P.hijo(SUBE, ANGULO_PLANTA['cardon'], g + 360.0 * j / nb + P.u(-25.0, 25.0))
+        t2, p2, d2 = P.eje(pts[idx + 1], d, 0.20 * P.u(0.9, 1.2), 1, 1, tr[idx])
+        t3, p3, d3 = P.eje(p2[-1], _norm(_add(SUBE, d, 0.08)), P.u(0.22, 0.42), 2, 1, t2[-1])
+        P.flor(p3[-1], SUBE, 0.05, 'flor_blanca', 5, 1)
+        P.racimos.append((p3[-1], 0.12, SUBE, False))
+    P.flor(pts[-1], SUBE, 0.05, 'flor_blanca' if P.var % 2 == 0 else 'flor_roja', 6, 0)
+    P.racimos.append((pts[-1], 0.12, SUBE, False))
+
+
+def _gen_agave(P):
+    """Roseta de hojas de espada, gruesas, desde el suelo."""
+    for j in range(14 + int(P.u(0, 6.99))):
+        d = P.hijo(SUBE, P.ang(ANGULO_PLANTA['agave'] * P.u(0.25, 1.5)), ANGULO_AUREO * j)
+        t2, p2, _ = P.eje((0, 0, 0), d, 0.05, 1, 0, None)
+        P.hojas.append([p2[-1], _norm(_cross(d, _cross(SUBE, d))) if abs(d[1]) < 0.98 else (1.0, 0.0, 0.0),
+                        _norm(_add(d, SUBE, 0.15)), P.u(0.7, 1.0), 'espada', 0.0, 1])
+        P.racimos.append((_add(p2[-1], d, 0.4), 0.35, d, False))
+
+
+def _gen_junco(P):
+    """Haz de tallos finos y rectos, cada uno con su lamina: el carrizal de la orilla."""
+    for j in range(22 + int(P.u(0, 10.99))):
+        d = P.hijo(SUBE, abs(P.ang(ANGULO_PLANTA['junco'] * P.u(0.2, 1.6))), ANGULO_AUREO * j)
+        t2, p2, d2 = P.eje((P.u(-0.06, 0.06), 0.0, P.u(-0.06, 0.06)), d, P.u(0.45, 0.8), 2, 0, None)
+        P.hojas.append([p2[-1], _norm(_cross(d2, _cross(SUBE, d2))) if abs(d2[1]) < 0.98 else (1.0, 0.0, 0.0),
+                        _norm(_add(d2, SUBE, 0.6)), P.u(0.25, 0.4), 'lamina', 0.0, 1])
+        if j % 3 == 0:
+            P.racimos.append((p2[-1], 0.25, d2, False))
+
+
 _GEN = dict(conifera=_gen_conifera, pagoda=_gen_pagoda, parasol=_gen_parasol, drago=_gen_drago,
             frondosa=_gen_frondosa, palmera=_gen_palmera, sauce=_gen_sauce, retama=_gen_retama,
             brezo=_gen_brezo, helecho=_gen_helecho, graminea=_gen_graminea, enebro=_gen_enebro,
-            palmito=_gen_palmito)
+            palmito=_gen_palmito, cipres=_gen_cipres, abedul=_gen_abedul, araucaria=_gen_araucaria,
+            olivo=_gen_olivo, baobab=_gen_baobab, mangle=_gen_mangle, bambu=_gen_bambu, cardon=_gen_cardon,
+            agave=_gen_agave, junco=_gen_junco)
 _BIBLIO = {}
 
 
@@ -3692,21 +3954,43 @@ def parte_ejemplar(nombre):
 # --- la malla de un ejemplar ---------------------------------------------------------
 # Hoja facetada low-poly de dos caras, 4 a 6 triangulos con pliegue central. En el
 # eje local: X a lo largo de la hoja (0 a 1), Y su normal, Z de lado.
+def _plantilla_fronda(pares=7):
+    """Motor v97: la fronda (palmera, helecho) es pinnada de verdad: un raquis que
+    se arquea y 'pares' de foliolos que cuelgan a los lados (antes, 6 triangulos)."""
+    P, T = [], []
+    for k in range(pares):
+        u = k / float(pares - 1)
+        x = 0.10 + 0.84 * u
+        y = -0.08 * x
+        w = 0.36 * math.sin(math.pi * (0.12 + 0.80 * u)) ** 0.7
+        for s_ in (-1.0, 1.0):
+            i0 = len(P)
+            P += [(x - 0.04, y, 0.0), (x + 0.04, y, 0.0), (x + 0.10, y - 0.16 * w, s_ * w)]
+            T.append((i0, i0 + 1, i0 + 2) if s_ > 0 else (i0 + 1, i0, i0 + 2))
+    i0 = len(P)
+    P += [(0.0, 0.0, -0.014), (0.0, 0.0, 0.014), (1.0, -0.08, 0.0)]
+    T.append((i0, i0 + 1, i0 + 2))
+    return P, T
+
+
 _PLANTILLAS = dict(
-    ancha=([(0, 0, 0), (0.45, -0.06, -0.32), (1, 0, 0), (0.45, -0.06, 0.32), (0.5, 0.06, 0)],
-           [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
+    # motor v97: la hoja ancha y la lanceolada, en dos tramos (el limbo se comba hacia la punta)
+    ancha=([(0, 0, 0), (0.30, -0.05, -0.30), (0.68, -0.08, -0.26), (1, -0.07, 0), (0.68, -0.08, 0.26),
+            (0.30, -0.05, 0.30), (0.33, 0.06, 0), (0.68, 0.03, 0)],
+           [(0, 6, 1), (1, 6, 7), (1, 7, 2), (2, 7, 3), (0, 5, 6), (5, 7, 6), (5, 4, 7), (4, 3, 7)]),
+    flor=([(0, 0, 0), (0.5, -0.05, -0.42), (1, 0, 0), (0.5, -0.05, 0.42), (0.5, 0.09, 0)],
+          [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
     menuda=([(0, 0, 0), (0.5, -0.05, -0.3), (1, 0, 0), (0.5, -0.05, 0.3), (0.5, 0.05, 0)],
             [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
-    lanceolada=([(0, 0, 0), (0.4, -0.04, -0.14), (1, 0, 0), (0.4, -0.04, 0.14), (0.45, 0.04, 0)],
-                [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
+    lanceolada=([(0, 0, 0), (0.28, -0.03, -0.13), (0.65, -0.06, -0.11), (1, -0.08, 0), (0.65, -0.06, 0.11),
+                 (0.28, -0.03, 0.13), (0.30, 0.04, 0), (0.65, 0.0, 0)],
+                [(0, 6, 1), (1, 6, 7), (1, 7, 2), (2, 7, 3), (0, 5, 6), (5, 7, 6), (5, 4, 7), (4, 3, 7)]),
     espada=([(0, 0, 0), (0.5, -0.03, -0.07), (1, 0.05, 0), (0.5, -0.03, 0.07), (0.5, 0.03, 0)],
             [(0, 4, 1), (1, 4, 2), (0, 3, 4), (3, 2, 4)]),
     aguja=([(0, 0, 0), (1, 0.08, -0.34), (0.9, 0.14, -0.26), (1, 0.12, 0.0), (0.9, 0.2, 0.06),
             (1, 0.08, 0.34), (0.9, 0.14, 0.26)],
            [(0, 1, 2), (0, 2, 1), (0, 3, 4), (0, 4, 3), (0, 5, 6), (0, 6, 5)]),
-    fronda=([(0, 0, 0), (1, -0.08, 0), (0.25, 0.0, -0.35), (0.55, -0.03, -0.32), (0.85, -0.06, -0.22),
-             (0.25, 0.0, 0.35), (0.55, -0.03, 0.32), (0.85, -0.06, 0.22), (0.5, 0.03, 0)],
-            [(0, 2, 8), (8, 3, 1), (8, 4, 1), (0, 8, 5), (8, 6, 1), (8, 1, 7)]),
+    fronda=_plantilla_fronda(),
     abanico=([(0, 0, 0)] + [(0.9 * math.cos(math.radians(a)), 0.05 * (k % 2), 0.9 * math.sin(math.radians(a)))
                             for k, a in enumerate(range(-70, 80, 14))],
              [(0, 1 + 2 * k, 2 + 2 * k) for k in range(5)]),
@@ -3738,10 +4022,12 @@ def malla_ejemplar(nombre, cfg=None):
     rng = random.Random(sum((k + 1) * ord(ch) for k, ch in enumerate(nombre)))
     P, Nn, U, T = [], [], [], []
     nmax = float(max(1, e['nmax']))
+    tono = CORTEZA.get(mo, 0.0)             # motor v97: la corteza de cada modelo
     for (a, b, nivel), (r0, r1, _) in zip([(s[0], s[1], s[3]) for s in e['ramas']], e['radios']):
         if lejos and (nivel > 1 or r0 < 0.004):
             continue
-        lados = 5 if nivel == 0 else 4
+        # motor v97: tubos mas redondos (antes 5 y 4 lados): el fuste, 8; las ramas madre, 6
+        lados = (5 if nivel == 0 else 4) if lejos else (8 if nivel == 0 else (6 if nivel == 1 else 4))
         dv = _norm(_add(b, a, -1.0))
         ref = SUBE if abs(dv[1]) < 0.95 else (1.0, 0.0, 0.0)
         x = _norm(_cross(dv, ref))
@@ -3753,7 +4039,7 @@ def malla_ejemplar(nombre, cfg=None):
             for c_, r_ in ((a, r0), (b, max(r1, 0.6 * r0))):
                 P.append(_add(c_, o, r_))
                 Nn.append(o)
-                U.append((1.0, 0.0, nivel / nmax))
+                U.append((1.0, tono, nivel / nmax))
         for q in range(lados):
             i0, i1 = k0 + 2 * q, k0 + 2 * ((q + 1) % lados)
             T += [(i0, i1, i1 + 1), (i0, i1 + 1, i0 + 1)]
@@ -3778,15 +4064,17 @@ def malla_ejemplar(nombre, cfg=None):
                 T += [(k0 + a_, k0 + b_, k0 + c_) for a_, b_, c_ in _TARJETA[1]]
     else:
         for pos, nrm, ax, tam, tipo, prof, nivel in e['hojas']:
-            pv, tv = _PLANTILLAS[tipo]
+            flor = FLORES.get(tipo)
+            pv, tv = _PLANTILLAS['flor' if flor is not None else tipo]
             z = _norm(_cross(ax, nrm))
             y = _cross(z, ax)
             vv = 0.9 * rng.random()
+            ux = 2.0 + vv if flor is None else 4.0 + 0.1 * flor + 0.05     # la flor: 4 + color / 10
             k0 = len(P)
             for px, py, pz in pv:
                 P.append(_add(pos, _add(_add(_mul(ax, px * tam), y, py * tam), z, pz * tam)))
                 Nn.append(y)
-                U.append((2.0 + vv, prof, min(1.0, nivel / nmax)))
+                U.append((ux, prof, min(1.0, nivel / nmax)))
             T += [(k0 + a_, k0 + b_, k0 + c_) for a_, b_, c_ in tv]
     v = _MALLAS[clave] = (P, Nn, U, T)
     if len(_MALLAS) > 600:
@@ -5543,7 +5831,7 @@ def build_piel(W, cfg, now, out):
         cult = cultivos(W, cfg, ter, por_celda, now, paso)     # fase 11 v8: bancales, riego y acequias
         ctx = dict(cl=cl, ter=ter, bases=suelos, cauces=por_celda,
                    sway=(lambda i: balanceo_filas(W, cfg, i, bq)) if tiempo else (lambda i: (0.0, 0.0)),
-                   cerca=lambda i: (cfg.get('superficie') if cfg.get('ligero', 1) else lod_cerca(W, cfg, i))
+                   cerca=lambda i: cerca_de(W, cfg, i)
                    and not (cfg.get('impostores', 1) and _PRESUPUESTO['lleno']),
                    rio_cerca=lambda i: any(c in por_celda for c in [i] + list(NEIGH[i])),
                    res=dict(hojas=0, todas=0, ejemplares=0, emergentes=0, frutales={},
@@ -5588,6 +5876,9 @@ def build_piel(W, cfg, now, out):
                                             now, paso, not doce)
             continue
     bomba.cerrar()
+    erupciones = 0
+    if natural and ter.get('volcanes'):     # motor v97: el penacho y la erupcion de cada volcan
+        erupciones = _volcanes_filas(W, cfg, ter, out, now, paso)
     # resumen para la leyenda
     obras = medias = 0
     compas = paso * max(1, int(cfg['steps_per_beat'])) * max(1, int(cfg['beats_per_bar']))
@@ -5615,16 +5906,45 @@ def build_piel(W, cfg, now, out):
     if natural:
         _, ln = _limites_pisos(cfg)
         r_ = ctx['res']
-        _PRESUPUESTO['lleno'] = r_['todas'] > (HOJAS_LIGERO if cfg.get('ligero', 1) else HOJAS_TOPE)
+        _PRESUPUESTO['lleno'] = r_['todas'] > presupuesto_hojas(cfg)
         res.update(ejemplares=r_['ejemplares'], hojas=r_['hojas'], emergentes=r_['emergentes'],
                    biomas=dict(r_['biomas']), frutales=r_['frutales'], hibridos=ter.get('hibridos', {}),
                    inundados=cult['inundados'], parcelas=cult['parcelas'])
+        res.update(islas=ter.get('islas', 0), archipielagos=ter.get('archipielagos', 0),
+                   volcanes=len(ter.get('volcanes', [])), erupciones=erupciones)
         res.update(copas=nat_copas, montes=ter['montes'], cordilleras=ter['cordilleras'],
                    nevadas=sum(1 for c in range(N) if ter['centro'][c] >= ln * ter['hmax']),
                    cerca=sum(1 for c in range(N) if W['occ'][c] > 0 and lod_cerca(W, cfg, c)))
     return res
 
 
+
+
+def _volcanes_filas(W, cfg, ter, out, now, paso):
+    """Motor v97: el penacho de cada volcan (bocanadas de la geometria 'humo', que
+    anima la GPU) y, en erupcion, brasas y ceniza. Devuelve los que estan en erupcion."""
+    hum = out.setdefault('humo', [])
+    lim = limit(cfg)
+    n_er = 0
+    for c, alto in ter['volcanes']:
+        n = NORMALS[c]
+        S = suelo(W, cfg, c)
+        cw, cl_ = _cell_sizes(S, c)
+        m_ = min(cw, cl_)
+        p = _mul(n, S + ter['centro'][c] + 0.5 * CRATER_HONDO * alto)
+        er = erupcion(cfg, c, now, paso)
+        nb = 3 if er <= 0.0 else 8
+        col = COL_HUMO['gris'] if er <= 0.0 else _mix(COL_HUMO['gris'], COL_HUMO['negro'], 0.7)
+        for q in range(nb):
+            hum.append(fila_humo(p, (0.07 if er <= 0.0 else 0.13) * m_, (0.9 if er <= 0.0 else 1.8) * lim,
+                                 0.35 * m_, col, (q + _hash01(c, 721)) / float(nb), er <= 0.0))
+        if er > 0.0:
+            n_er += 1
+            parts = out.setdefault('particulas', [])
+            _particulas(parts, n, p, 0.5 * cw, 0.5 * cl_, 0.8 * lim * er, semilla_caos(c, 23), 10, COL_BRASA,
+                        now, paso, 'brasas')
+            _particulas(parts, n, p, cw, cl_, 0.9 * lim, semilla_caos(c, 29), 6, COL_CENIZA, now, paso, 'ceniza')
+    return n_er
 
 
 # --- la ciudad: lenguaje, tipo y obra de cada celda ---------------------------------
@@ -7096,6 +7416,7 @@ RAMPA_COLS = ['pos', 'r', 'g', 'b', 'a']
 # colores de los pisos (cartografia de montana): verde profundo, verde azulado
 # de coniferas, verde y ocre del limite, gris calido facetado y nieve
 PISO_BASAL = ((0.11, 0.29, 0.11), (0.15, 0.34, 0.13))
+PISO_PRADO, PISO_UMBRIA, PISO_LOMA = (0.21, 0.40, 0.13), (0.10, 0.28, 0.11), (0.20, 0.36, 0.12)   # motor v97
 PISO_MONTANO = ((0.07, 0.23, 0.18), (0.10, 0.25, 0.20))
 PISO_LIMITE = (0.38, 0.37, 0.21)
 PISO_ROCA = ((0.50, 0.46, 0.40), (0.31, 0.29, 0.27))
@@ -7127,7 +7448,9 @@ def _limites_pisos(cfg):
 def rampa_hipso(cfg):
     """[(posicion 0-1, (r, g, b))]: la rampa de los pisos (la del Ramp TOP)."""
     lb, ln = _limites_pisos(cfg)
-    return [(0.0, PISO_BASAL[0]), (0.35, PISO_BASAL[1]), (0.36, PISO_MONTANO[0]),
+    # motor v97: el piso basal, con mas paleta (pradera clara de la costa, umbria, loma seca)
+    return [(0.0, PISO_BASAL[0]), (0.05, PISO_PRADO), (0.14, PISO_UMBRIA), (0.26, PISO_LOMA),
+            (0.35, PISO_BASAL[1]), (0.36, PISO_MONTANO[0]),
             (lb - 0.05, PISO_MONTANO[1]), (lb, PISO_LIMITE), (lb + 0.05, PISO_ROCA[0]),
             (ln - 0.01, PISO_ROCA[1]), (ln, PISO_NIEVE[0]), (1.0, PISO_NIEVE[1])]
 
@@ -7235,6 +7558,10 @@ def _rejilla(np):
     for r0 in range(0, H, 32):                 # por bandas: la matriz entera no cabe comoda
         celda[r0:r0 + 32] = np.argmax(D[r0:r0 + 32] @ Nn.T, axis=-1)
     rej = dict(D=D, celda=celda, ruido=_ruido_crestas(np, D), lat=lat, lon=lon)
+    for nm, f0 in (('costa', 6.0), ('islotes', 21.0)):     # motor v97: la costa y los islotes
+        v_ = _valor3(np, D * f0 + 31.7) * 0.65 + _valor3(np, D * (2.3 * f0) + 11.1) * 0.35
+        lo_, hi_ = float(v_.min()), float(v_.max())
+        rej[nm] = ((v_ - lo_) / max(1e-6, hi_ - lo_)).astype(np.float32)
     _TERRENO['rejilla'] = (clave, rej)
     return rej
 
@@ -7297,9 +7624,10 @@ def rasgos_terreno(W, cfg, cl=None):
     capitales). Alturas sobre el suelo local, de la ocupacion (no del stop-motion:
     el mapa solo se rehace cuando cambia la ocupacion)."""
     if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza':
-        return [], dict(cordilleras=0, montes=0, ejes=[])
+        return [], dict(cordilleras=0, montes=0, ejes=[], volcanes=[], islas=0, archipielagos=0)
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), GRID['lo'], GRID['hi'],
-             cfg['umbral_vecindad'], cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], cfg['th_branch'],
+             cfg.get('oceano', 0), cfg.get('volcanes', 0.0), cfg['caos'],
+             tuple(W['vel']) if cfg.get('volcanes', 0.0) > 0 else None, cfg['umbral_vecindad'], cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], cfg['th_branch'],
              cfg['sat_size'], cfg['umbral_monte'], cfg['altura_monte'], limit(cfg), cfg['seed_frac'],
              cfg['grow_frac'])
     v = _TERRENO.get('rasgos')
@@ -7336,8 +7664,41 @@ def _rasgos_terreno(W, cfg, cl=None):
                     continue
                 silla = 0.85 if (a, b) in en_eje else (0.35 if len(cs) >= 3 else 0.5)
                 rasgos.append(('cresta', a, b, round(alto[a], 3), round(alto[b], 3), silla))
+    caps_rel = set(cl['capital'][k_] for k_, cs in cl['celdas'].items() if W['own'][cs[0]] == ARQ)
+    volcanes = []
     for c in rel:
-        rasgos.append(('cono', c, round(alto[c], 3), 1.1))
+        # motor v97: de cuando en cuando el cono es un volcan (crater, lava y penacho)
+        if es_volcan(W, cfg, c) and (cl['de'][c] < 0 or c in caps_rel):
+            rasgos.append(('volcan', c, round(alto[c], 3), 1.1))
+            volcanes.append((c, round(alto[c], 3)))
+        else:
+            rasgos.append(('cono', c, round(alto[c], 3), 1.1))
+    islas = archis = 0
+    if cfg.get('oceano'):                   # motor v97: cada celda ocupada es una isla sobre el mar
+        tierra = [c for c in range(N) if W['occ'][c] > 0 and W['own'][c]]
+        ts = set(tierra)
+        for c in tierra:
+            sat = W['par'][c] >= 0
+            rasgos.append(('isla', c, round(isla_alto(W['occ'][c]), 3),
+                           round(isla_k(W['occ'][c]) * (0.75 if sat else 1.0), 3),
+                           round(max(0.0, min(1.0, (W['occ'][c] - 2) / 4.0)), 2)))
+            for b in NEIGH[c]:              # dos islas vecinas que crecen se unen por un istmo
+                if b > c and b in ts and min(W['occ'][c], W['occ'][b]) >= ISTMO_DESDE:
+                    rasgos.append(('istmo', c, b, round(min(isla_alto(W['occ'][c]), isla_alto(W['occ'][b])), 3)))
+        vistos = set()                      # islas: grupos de celdas ocupadas vecinas; archipielago: 3 o mas
+        for c in tierra:
+            if c in vistos:
+                continue
+            grupo, frente = set([c]), [c]
+            while frente:
+                x = frente.pop()
+                for j in NEIGH[x]:
+                    if j in ts and j not in grupo:
+                        grupo.add(j)
+                        frente.append(j)
+            vistos |= grupo
+            islas += 1
+            archis += len(grupo) >= 3
     montes = 0
     for c in range(N):
         if W['occ'][c] > 0 and W['own'][c] == GEO:
@@ -7345,7 +7706,123 @@ def _rasgos_terreno(W, cfg, cl=None):
             if m_ > 1e-6:
                 rasgos.append(('domo', c, round(m_, 3)))
                 montes += 1
-    return rasgos, dict(cordilleras=cords, montes=montes, ejes=ejes)
+    return rasgos, dict(cordilleras=cords, montes=montes, ejes=ejes, volcanes=volcanes, islas=islas,
+                        archipielagos=archis)
+
+
+# --- motor v97: el oceano, las islas y los volcanes ----------------------------------------
+# OCEANO     con Oceano (naturaleza), la malla del terreno ya no se hunde bajo las losetas
+#            donde no hay relieve: flota OCEANO_LIFT por encima y el shader la pinta de mar
+#            (hondo lejos de la costa, turquesa y espuma junto a ella). Cada celda ocupada
+#            levanta una ISLA: una meseta baja con playa, de costa irregular (ruido), que
+#            se ensancha y sube con la ocupacion hasta salirse de su celda. Dos islas
+#            vecinas con ISTMO_DESDE o mas se unen por un istmo: islas grandes; desde 3 de
+#            ocupacion, islotes sueltos alrededor: archipielagos. El relieve y los montes
+#            van encima de la isla. Las plantas no crecen en el agua (salvo el mangle y
+#            el junco) y la costa calida trae palmeras y manglares.
+# VOLCANES   una celda de relieve suelta, o la capital de una cordillera, con Umbralram o
+#            mas, es un volcan con probabilidad Volcanes (lo decide su semilla: la velocidad
+#            fundadora y la celda, por el mapa logistico). Cono concavo con crater; el canal
+#            a del mapa de alturas lleva la lava (el crater y 3 coladas), que el shader
+#            enciende; un penacho de humo (la geometria 'humo') y, cada ERUPCION_CADA
+#            compases, una erupcion de ERUPCION_DURA: brasas, ceniza y la lava al rojo.
+OCEANO_LIFT = 0.012          # el mar, sobre la loseta (por debajo de la luz de la celda, LUZ_LIFT)
+ISLA_ALTO = (0.055, 0.008)   # alto de la meseta de la isla: base + por ocupacion (hasta 8)
+ISLA_K = (0.62, 0.085, 1.3)  # su radio, x media celda: base + por ocupacion, tope
+ISTMO_DESDE = 2
+CRATER_Q = 0.22              # radio del crater, x el del cono
+CRATER_HONDO = 0.16          # lo que se hunde, x la altura del cono
+ERUPCION_CADA = (12, 28)     # compases entre dos erupciones de un volcan (segun la celda)
+ERUPCION_DURA = 2.0          # compases que dura
+
+
+def isla_alto(occ):
+    return ISLA_ALTO[0] + ISLA_ALTO[1] * min(8, max(1, int(occ)))
+
+
+def isla_k(occ):
+    return min(ISLA_K[2], ISLA_K[0] + ISLA_K[1] * max(1, int(occ)))
+
+
+def es_volcan(W, cfg, c):
+    """La celda de relieve c es un volcan: lo decide su semilla, con probabilidad Volcanes."""
+    p = float(cfg.get('volcanes', 0.0))
+    if p <= 0.0 or W['own'][c] != ARQ or W['par'][c] >= 0 or W['occ'][c] < int(cfg['th_branch']):
+        return False
+    return logistica(semilla_caos(W['vel'][c], c + 531), cfg['caos'], 2)[1] < p
+
+
+def erupcion(cfg, c, now, paso):
+    """0-1: la erupcion del volcan de la celda c en el instante now (0, dormido)."""
+    compas = max(1e-6, paso * max(1, int(cfg['steps_per_beat'])) * max(1, int(cfg['beats_per_bar'])))
+    P = ERUPCION_CADA[0] + int(_hash01(c, 613) * (ERUPCION_CADA[1] - ERUPCION_CADA[0] + 1))
+    f = (now / compas + _hash01(c, 617) * P) % P
+    if f >= ERUPCION_DURA:
+        return 0.0
+    return math.sqrt(max(0.0, math.sin(math.pi * f / ERUPCION_DURA)))
+
+
+def _isla(np, rej, c, H, k, islotes):
+    """El parche de la isla de la celda c: meseta de alto H con playa; la costa la
+    ondula el ruido y, con 'islotes', hay islotes en el anillo de alrededor."""
+    n = NORMALS[c]
+    e, t = tangents(n)
+    hx, hz = _semiejes(c, k)
+    filas, cols = _ventana(np, n, 1.75 * max(hx, hz))
+    ix = np.ix_(filas, cols)
+    D = rej['D'][ix]
+    x = D @ np.array(e) / hx
+    z = D @ np.array(t) / hz
+    q = np.sqrt(x * x + z * z)
+    q = np.where(D @ np.array(n) > 0.0, q, 9.0)
+    f = _smooth(np, 1.0, 0.70, q + 0.62 * (rej['costa'][ix] - 0.5))
+    if islotes > 0:
+        anillo = _smooth(np, 0.95, 1.12, q) * _smooth(np, 1.7, 1.45, q)
+        f = np.maximum(f, 0.6 * anillo * _smooth(np, 0.84 - 0.12 * islotes, 0.92 - 0.12 * islotes,
+                                                 rej['islotes'][ix]))
+    return filas, cols, H * f, np.full(f.shape, float(H))
+
+
+def _istmo(np, rej, a, b, H):
+    """El parche del istmo que une las islas de a y b."""
+    na, nb = np.array(NORMALS[a]), np.array(NORMALS[b])
+    mid = _norm(tuple((na + nb) / 2.0))
+    medio = 0.5 * (min(SIZE_EW[a], SIZE_NS[a]) + min(SIZE_EW[b], SIZE_NS[b]))
+    filas, cols = _ventana(np, mid, 0.5 * float(np.linalg.norm(na - nb)) + 0.5 * medio)
+    ix = np.ix_(filas, cols)
+    D = rej['D'][ix]
+    ab = nb - na
+    u = np.clip(((D - na) @ ab) / max(1e-9, float(ab @ ab)), 0.0, 1.0)
+    cpt = na + u[..., None] * ab
+    cpt /= np.linalg.norm(cpt, axis=-1, keepdims=True)
+    dist = np.linalg.norm(D - cpt, axis=-1) / (0.30 * medio) + 0.5 * (rej['costa'][ix] - 0.5)
+    f = _smooth(np, 1.0, 0.55, dist)
+    return filas, cols, H * f, np.full(f.shape, float(H))
+
+
+def _lava(np, rej, c, k):
+    """(filas, columnas, lava 0-1) del volcan de la celda c: 1 en el crater y unas
+    coladas que bajan por la ladera (0,6), cada volcan las suyas."""
+    n = NORMALS[c]
+    e, t = tangents(n)
+    hx, hz = _semiejes(c, k)
+    filas, cols = _ventana(np, n, 1.1 * max(hx, hz))
+    ix = np.ix_(filas, cols)
+    D = rej['D'][ix]
+    x = D @ np.array(e) / hx
+    z = D @ np.array(t) / hz
+    q = np.sqrt(x * x + z * z)
+    q = np.where(D @ np.array(n) > 0.0, q, 9.0)
+    L = _smooth(np, 0.85 * CRATER_Q, 0.55 * CRATER_Q, q)
+    th = np.arctan2(z, x)
+    for j in range(3):
+        a0 = 2.0 * math.pi * (_hash01(c, 701 + j) + j / 3.0)
+        largo = 0.45 + 0.4 * _hash01(c, 711 + j)
+        da = np.abs(np.angle(np.exp(1j * (th - a0 - 0.6 * np.sin(5.0 * q + j)))))
+        colada = np.exp(-(da * q / 0.045) ** 2) * _smooth(np, 0.6 * CRATER_Q, CRATER_Q, q) \
+            * _smooth(np, largo, 0.7 * largo, q)
+        L = np.maximum(L, 0.6 * colada)
+    return filas, cols, L
 
 
 def _pintar(np, rej, n, e, t, hx, hz, H, perfil):
@@ -7360,6 +7837,10 @@ def _pintar(np, rej, n, e, t, hx, hz, H, perfil):
     q = np.where(D @ np.array(n) > 0.0, q, 9.0)
     if perfil == 'domo':
         f = np.clip(1.0 - q * q, 0.0, 1.0) ** 2
+    elif perfil == 'volcan':                # motor v97: ladera concava y crater
+        f = np.clip(1.0 - q, 0.0, 1.0) ** 1.35
+        fc = (1.0 - CRATER_Q) ** 1.35
+        f = np.where(q < CRATER_Q, fc - CRATER_HONDO * (1.0 - (q / CRATER_Q) ** 2), f)
     else:
         f = np.clip(1.0 - q, 0.0, 1.0) ** 1.1
     return filas, cols, H * f, np.full(f.shape, float(H))
@@ -7393,10 +7874,14 @@ def _parche(np, rej, r):
         return v
     if r[0] == 'cresta':
         v = _cresta(np, rej, *r[1:])
+    elif r[0] == 'isla':
+        v = _isla(np, rej, *r[1:])
+    elif r[0] == 'istmo':
+        v = _istmo(np, rej, *r[1:])
     else:
         c = r[1]
         e_, t_ = tangents(NORMALS[c])
-        hx, hz = _semiejes(c, r[3] if r[0] == 'cono' else 1.1)
+        hx, hz = _semiejes(c, r[3] if r[0] in ('cono', 'volcan') else 1.1)
         v = _pintar(np, rej, NORMALS[c], e_, t_, hx, hz, r[2], r[0])
     if len(cache) > 3000:
         cache.clear()
@@ -7442,6 +7927,7 @@ def terreno(W, cfg, cl=None):
         Hrel = np.zeros_like(Erel)
         Edom = np.zeros_like(Erel)
         Hdom = np.zeros_like(Erel)
+        Eis = His = Lv = None               # motor v97: las islas y la lava de los volcanes
         r0, r1 = TERRENO_H, 0               # solo las filas con relieve (lo demas es 0)
         for r in rasgos:                    # conos y crestas (relieve), domos (montes)
             pa = _parche(np, rej, r)
@@ -7449,8 +7935,21 @@ def terreno(W, cfg, cl=None):
                 r0, r1 = min(r0, int(pa[0][0])), max(r1, int(pa[0][-1]) + 1)
             if r[0] == 'domo':
                 _sobre(np, Edom, Hdom, pa)
+            elif r[0] in ('isla', 'istmo'):
+                if Eis is None:
+                    Eis, His = np.zeros_like(Erel), np.zeros_like(Erel)
+                _sobre(np, Eis, His, pa)
             else:
                 _sobre(np, Erel, Hrel, pa)
+            if r[0] == 'volcan':
+                if Lv is None:
+                    Lv = np.zeros((TERRENO_H, TERRENO_W), dtype=np.float32)
+                cache = _TERRENO.setdefault('parches', {})
+                lv = cache.get(('lava', r[1], r[3]))
+                if lv is None:
+                    lv = cache[('lava', r[1], r[3])] = _lava(np, rej, r[1], r[3])
+                ixl = np.ix_(lv[0], lv[1])
+                Lv[ixl] = np.maximum(Lv[ixl], lv[2])
         E = np.zeros((TERRENO_H, TERRENO_W), dtype=np.float32)
         hib_t = None
         if r1 > r0:
@@ -7467,6 +7966,10 @@ def terreno(W, cfg, cl=None):
                 Ez = (Ez + np.roll(Ez, 1, 0) + np.roll(Ez, -1, 0) + np.roll(Ez, 1, 1) + np.roll(Ez, -1, 1)) / 5.0
                 er = (er + np.roll(er, 1, 0) + np.roll(er, -1, 0) + np.roll(er, 1, 1) + np.roll(er, -1, 1)) / 5.0
                 ed = (ed + np.roll(ed, 1, 0) + np.roll(ed, -1, 0) + np.roll(ed, 1, 1) + np.roll(ed, -1, 1)) / 5.0
+            if Eis is not None:             # motor v97: el relieve, encima de la isla
+                ei = Eis[r0:r1]
+                ei = (ei + np.roll(ei, 1, 0) + np.roll(ei, -1, 0) + np.roll(ei, 1, 1) + np.roll(ei, -1, 1)) / 5.0
+                Ez = Ez + ei
             E[r0:r1] = Ez
             R[r0:r1] = np.where(ed > er, 0.0, 1.0)      # motor v80: lo que gana tras suavizar
         if hib[0] or hib[1]:                # fase 11 v8: bancales y mesetas, en el mismo mapa
@@ -7477,7 +7980,7 @@ def terreno(W, cfg, cl=None):
         El = [cero] * r0 + E[r0:r1].tolist() + [cero] * (TERRENO_H - max(r0, r1)) if r1 > r0 \
             else [cero] * TERRENO_H
         Sa = _suelo_mapa(np, rej, S)
-    t = dict(E=E, S=Sa, El=El, R=R, centro=centro, hmax=alto_hipso(cfg),
+    t = dict(E=E, S=Sa, El=El, R=R, L=Lv if np is not None else None, centro=centro, hmax=alto_hipso(cfg),
              version=_TERRENO.get('version', 0) + 1, rasgos=len(rasgos), **res)
     t['hib'] = hib_t if np is not None else None
     t['hibridos'] = dict(arrozales=dict((i, nb) for i, nb in hib[0]), mesetas=dict(hib[1]))
@@ -7641,6 +8144,27 @@ _PRESUPUESTO = dict(lleno=False)
 HOJAS_LIGERO = 100000       # con Ligero, el presupuesto baja
 LIGERO_ARBOLES = 6          # con Ligero, arboles como mucho por celda de bosque
 RUTA_HOJAS = 'SOP'          # las hojas van en la malla de cada ejemplar (Script SOP), no en POPs
+# Motor v97 (Detalle): la tarjeta grafica lleva las hojas de verdad tambien desde el globo (antes,
+# con Ligero, todo eran tarjetas de racimo salvo a ras de suelo) y el presupuesto sube: son
+# triangulos en la GPU, no filas que calcule el motor.
+HOJAS_DETALLE = 3000000
+DETALLE_ARBOLES = 10        # con Detalle y Ligero, arboles como mucho por celda de bosque
+
+
+def presupuesto_hojas(cfg):
+    if cfg.get('detalle', 1):
+        return HOJAS_DETALLE
+    return HOJAS_LIGERO if cfg.get('ligero', 1) else HOJAS_TOPE
+
+
+def cerca_de(W, cfg, i):
+    """La celda i se dibuja con las hojas de verdad (no con tarjetas de racimo): siempre
+    con Detalle; sin el, con la camara de superficie (Ligero) o por Lodnat."""
+    if cfg.get('detalle', 1):
+        return True
+    return bool(cfg.get('superficie')) if cfg.get('ligero', 1) else lod_cerca(W, cfg, i)
+
+
 PARCELA_TEX = 16            # una parcela de la meseta: 16 x 16 texeles del mapa (los setos, en el shader)
 
 
@@ -7707,7 +8231,8 @@ def alto_en(t, d):
 def alturas_array():
     """El mapa para el Script TOP 'alturas' (TERRENO_H x TERRENO_W x 4, float32):
     r el relieve, g el radio del suelo (erosionado), b de quien es el relieve (motor
-    v80: 1 el SEQ2, 0 los montes boscosos del SEQ1; para los bocetos), a 1. None sin numpy."""
+    v80: 1 el SEQ2, 0 los montes boscosos del SEQ1; para los bocetos), a la lava de los
+    volcanes (motor v97: 1 el crater, 0,6 las coladas; hasta la v96, 1 fijo). None sin numpy."""
     t = _TERRENO.get('t')
     np = _np()
     if t is None or np is None or t['E'] is None:
@@ -7715,7 +8240,6 @@ def alturas_array():
             return None
         a = np.zeros((TERRENO_H, TERRENO_W, 4), dtype=np.float32)
         a[..., 1] = DEFAULT_CFG['core_radius']
-        a[..., 3] = 1.0
         return a
     a = _TERRENO.get('array')
     if a is None:
@@ -7723,7 +8247,8 @@ def alturas_array():
         a[..., 0] = t['E']
         a[..., 1] = t['S']
         a[..., 2] = t['R'] if t.get('R') is not None else 1.0
-        a[..., 3] = 1.0
+        if t.get('L') is not None:
+            a[..., 3] = t['L']
         _TERRENO['array'] = a
     return a
 
@@ -7787,14 +8312,20 @@ _SITIOS = {}
 # piso montano fuerza la conifera; el rio de la fase 13 (en la celda o en una
 # vecina), el sauce en lo templado.
 BIOMAS = ['frio', 'templado', 'calido']
-BIOMA_PLANTAS = dict(frio=(['graminea', 'enebro'], ['conifera']),
-                     templado=(['retama', 'brezo'], ['frondosa', 'pagoda']),
-                     calido=(['helecho', 'palmito'], ['parasol', 'drago', 'palmera']))
+BIOMA_PLANTAS = dict(frio=(['graminea', 'enebro'], ['conifera', 'abedul', 'araucaria']),
+                     templado=(['retama', 'brezo', 'junco'], ['frondosa', 'pagoda', 'cipres', 'olivo']),
+                     calido=(['helecho', 'palmito', 'agave'],
+                             ['parasol', 'drago', 'palmera', 'baobab', 'bambu', 'cardon']))
+# motor v97: con Oceano, la celda de costa (alguna vecina es mar) suma las plantas de la orilla
+BIOMA_COSTA = dict(frio=([], []), templado=(['junco'], []), calido=([], ['palmera', 'mangle']))
+ORILLA_PLANTA = 0.022                       # con Oceano, nada crece por debajo de esta altura (la playa)
+ANFIBIAS = ('mangle', 'junco')              # salvo el mangle y el junco, que pisan el agua
 BIOMA_FRIO, BIOMA_CALIDO = 0.6, 0.25        # latitud relativa (0 ecuador, 1 polo)
 MONTANO = 0.35                              # el piso montano (v5): de aqui a Limitebosque, conifera
 SOTOBOSQUE_K = 0.6                          # el matorral al pie del arbol joven
 MATORRAL_K = 0.45                           # el matorral, de la altura de la formacion
 MESETA_K = 0.55                             # cada nivel de la meseta, 0,55 del de abajo hacia la capital
+COPA_MIN = 0.25                             # la copa que cuenta, como poco, al repartir el bosque (x el alto)
 EMERGE = (1.3, 1.6)                         # el emergente sobresale del dosel
 FRUTAL_K = 0.55                             # los frutales de la meseta, de la altura de la formacion
 
@@ -7812,6 +8343,8 @@ def planta_de(W, cfg, i, arbol=True, hg=0.0, rio=False, k=0):
     else:
         b = bioma_de(i)
         lista = BIOMA_PLANTAS[b][1 if arbol else 0]
+        if cfg.get('oceano') and any(W['occ'][j] <= 0 for j in NEIGH[i]):
+            lista = BIOMA_COSTA[b][1 if arbol else 0] + lista
         if arbol:
             lb, _ = _limites_pisos(cfg)
             if MONTANO <= hg < lb:
@@ -8069,6 +8602,8 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         hg = E / hmax
         if hg > lb:
             return None
+        if cfg.get('oceano') and E < (0.004 if modelo in ANFIBIAS else ORILLA_PLANTA):
+            return None                     # motor v97: en el mar no crece nada
         if cauce and not _lejos_del_rio(cauce, d, 0.06 * min(cw, cl_) / max(1e-6, S)):
             return None
         nvar = variantes(cfg)
@@ -8089,7 +8624,8 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
             g = 30 * int(g // 30)
         fr = _marco(i, float(g), incl + sway, rumbo if incl > 0 else rumbo_sw)
         ctx['mc'] = (float(g), incl, rumbo, recto)     # para la memoria: balanceo y vigor, al copiar la fila
-        col = pintar(color_natural(cfg, hg, rug))
+        # motor v97: cada planta, con su verde (el piso de su altura acercado a su tono)
+        col = pintar(_mix(color_natural(cfg, hg, rug), TONO_PLANTA.get(modelo, (0.15, 0.36, 0.13)), TONO_K))
         emit(nombre_ejemplar(modelo, var, deriv, lejos), pulido, pb, fr,
              (h * anch * esc_sat, h, h * anch * esc_sat), col, rug)
         cuenta[0] += 1
@@ -8155,12 +8691,14 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         h = vh * esc0
         # el disco se mide con la altura de la ocupacion, no con la visible: el latido
         # y el stop-motion no mueven los arboles de sitio
-        r = max(0.08 * min(cw, cl_), h_ref * esc0 * ej['copa'] * (1.0 + cfg['timidez']))
+        # motor v97: los arboles estrechos (cipres, cardon, abedul) no se apinan: COPA_MIN
+        r = max(0.08 * min(cw, cl_), h_ref * esc0 * max(ej['copa'], COPA_MIN) * (1.0 + cfg['timidez']))
         otra = otra_planta(cfg, i, arbol_mo)
         rq = math.exp(round(math.log(r / S) / 0.04) * 0.04)          # a saltos del 4 %: el disco se guarda
         pts = _poisson(i, cw / S, cl_ / S, rq, round(0.75 + 0.25 * kp, 1), int(cfg.get('variantes', 4)))
-        if cfg.get('ligero', 1) and len(pts) > LIGERO_ARBOLES:     # Ligero: 6 del disco (siempre los mismos)
-            pts = sorted(pts, key=lambda p: _hash01(i, int(1e4 * p[0]), int(1e4 * p[1]), 47))[:LIGERO_ARBOLES]
+        tope_a = DETALLE_ARBOLES if cfg.get('detalle', 1) else LIGERO_ARBOLES
+        if cfg.get('ligero', 1) and len(pts) > tope_a:     # Ligero: 6 del disco (siempre los mismos); Detalle: 10
+            pts = sorted(pts, key=lambda p: _hash01(i, int(1e4 * p[0]), int(1e4 * p[1]), 47))[:tope_a]
         for q, (x, z) in enumerate((x * S, z * S) for x, z in pts):     # en unidades de la celda: no se rehace al crecer
             u = _hash01(i, q, 41)
             mo = otra if otra and _hash01(i, q, 42) < cfg['mezcla'] else arbol_mo
@@ -8255,7 +8793,7 @@ def iou(a, b):
 _NAT_CACHE = {}
 NAT_MEMO = 48                # estados guardados por celda
 VH_SALTO = 0.02              # la altura de la vegetacion va a saltos del 2 % del limite
-NAT_CFG = ('nivel', 'caos', 'ligero', 'max_caos_nat', 'th_branch', 'th_fusion', 'th_crown', 'limite_bosque', 'biomas',
+NAT_CFG = ('nivel', 'caos', 'ligero', 'oceano', 'volcanes', 'detalle', 'max_caos_nat', 'th_branch', 'th_fusion', 'th_crown', 'limite_bosque', 'biomas',
            'variantes', 'var_angulo', 'cuantizar30', 'inclinacion', 'densidad_hoja', 'timidez', 'emergentes',
            'orla', 'mezcla', 'impostores', 'marco', 'sat_size', 'avance', 'pasos_etapa', 'max_niveles',
            'rug_min', 'rug_max', 'limite_nieve', 'respaldo', 'lod_nat', 'superficie')
@@ -8284,6 +8822,7 @@ def piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde
              min(DOSEL_MIN, len(ctx['cl']['celdas'][k_])) if k_ >= 0 else 1,
              W['vel'][cap] if cap >= 0 else 0, W['own'][cap] if cap >= 0 else 0, round(kp, 3), W['et_f'][i],
              tuple((W['occ'][j] > 0) * W['own'][j] for j in NEIGH[i]), _terreno_local(ctx['ter'], i),
+             tuple(W['occ'][j] for j in NEIGH[i]) if cfg.get('oceano') else None,   # v97: la isla vecina crece
              tuple(ctx['cauces'].get(i, ())), ctx['rio_cerca'](i), ctx['cerca'](i),
              derivacion(W, cfg, i, now, paso), notas_colonas(W, i), ctx['bases'][i],
              tuple(cfg.get(x) for x in NAT_CFG), _clave_biblio(cfg), GRID['lo'], GRID['hi'])
@@ -8589,7 +9128,7 @@ def build_rios(W, cfg):
         return filas, res
     res['px'] = max(w for lista in ca['muestras'] for _, _, w in lista) * px_unidad(W, cfg) \
         if ca['muestras'] else 0.0
-    clave = (id(ca), _CAUCES.get('clave'), cfg.get('respaldo', 0), color_rio(cfg))
+    clave = (id(ca), _CAUCES.get('clave'), cfg.get('respaldo', 0), color_rio(cfg), cfg.get('oceano', 0))
     if _CAUCES.get('filas_clave') == clave:         # las cintas no se mueven: se guardan (sin copiar:
         return _CAUCES['filas'], res                # nadie las modifica despues)
     ter = terreno(W, cfg)
@@ -8598,10 +9137,16 @@ def build_rios(W, cfg):
     rug = 1.0 if cfg.get('respaldo', 0) else RUG_RIO
     for lista in ca['muestras']:
         pts = []
+        tierra = []
         for d, c, w in lista:
             E = alto_en(ter, d)
             pts.append((_mul(d, suelo(W, cfg, c) + E + RIO_LIFT + 0.03 * E / hmax), w))
-        for (p, w), (q, w2) in zip(pts, pts[1:]):
+            tierra.append(E >= ORILLA_PLANTA or not cfg.get('oceano'))
+        for k_, ((p, w), (q, w2)) in enumerate(zip(pts, pts[1:])):
+            if not tierra[k_ + 1] and any(tierra[:k_ + 1]):
+                break                       # motor v97: el rio acaba en el mar (no cruza el oceano)
+            if not tierra[k_]:
+                continue
             dv = _add(q, p, -1.0)
             L = _len(dv)
             if L < 1e-6:
@@ -12671,6 +13216,9 @@ def cfg():
                  superficie=int(str(_p('Modocamara', 'globo')) in ('superficie', 'rasante')),   # v92: tambien a ras de suelo
                  # fase 11 v8: brotes, arboles y terrazas
                  ligero=int(bool(_p('Ligero', True))),
+                 oceano=int(bool(_p('Oceano', True))),                          # motor v97
+                 volcanes=max(0.0, min(1.0, _p('Volcanes', c['volcanes']))),
+                 detalle=int(bool(_p('Detalle', True))),
                  refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
                  biomas=int(bool(_p('Biomas', True))),
                  variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
@@ -13268,7 +13816,25 @@ def uniformes_piel(W, c, now):
     u = {}
     nat = c['nivel'] >= 11 and tema_de(c) == 'naturaleza'
     lb, ln = _limites_pisos(c) if c['nivel'] >= 11 else (0.65, 0.9)
-    u['uTerreno'] = (0.0, alto_hipso(c) if c['nivel'] >= 11 else 1.0, HUNDIDO, 0.0)
+    mar = nat and bool(c.get('oceano'))     # motor v97: el mar flota sobre las losetas (z < 0)
+    u['uTerreno'] = (0.0, alto_hipso(c) if c['nivel'] >= 11 else 1.0, -OCEANO_LIFT if mar else HUNDIDO, 0.0)
+    u['uOceano'] = (1.0 if mar else 0.0, now % 3600.0, isla_alto(1) / alto_hipso(c) if c['nivel'] >= 11 else 0.0,
+                    1.0 if nat else 0.0)
+    erup = []
+    if nat and c.get('volcanes', 0.0) > 0:
+        try:
+            paso_ = step_dur(c, tempo())
+        except Exception:
+            paso_ = 0.125
+        for cel, _ in rasgos_terreno(W, c)[1].get('volcanes', []):
+            erup.append((erupcion(c, cel, now, paso_), cel))
+        erup.sort(key=lambda x: (-x[0], x[1]))
+    for k in range(3):                      # los tres volcanes mas activos: direccion y erupcion
+        if k < len(erup):
+            n = normal_i(erup[k][1])
+            u['uVolcan%d' % k] = (n[0], n[1], n[2], erup[k][0])
+        else:
+            u['uVolcan%d' % k] = (0.0, 1.0, 0.0, 0.0)
     u['uPisos'] = (lb, ln, 0.65 if nat else 0.0, 0.0)
     u['uBorde'] = (c.get('tinte_borde_nat', 0.0) if nat else 0.0, 0.0, 0.0, 0.0)
     u['uAgua'] = (c.get('emisivo_rio', 0.25), 0.0, 0.0, 0.0)
@@ -15472,7 +16038,11 @@ def _legend():
             b = pz.get('biomas', {})            # fase 11 v8: la biblioteca de ejemplares
             lines.append('  NATURALEZA  biomas F/T/C %d/%d/%d   ejemplares %d   %s hojas %s/%s'
                          % (b.get('frio', 0), b.get('templado', 0), b.get('calido', 0), pz.get('ejemplares', 0),
-                            RUTA_HOJAS, _miles(pz.get('hojas', 0)), _miles(HOJAS_TOPE)))
+                            RUTA_HOJAS, _miles(pz.get('hojas', 0)), _miles(presupuesto_hojas(c))))
+            if pz.get('islas') or pz.get('volcanes'):       # motor v97
+                lines.append('  MAR      islas %d   archipielagos %d   volcanes %d (en erupcion %d)'
+                             % (pz.get('islas', 0), pz.get('archipielagos', 0), pz.get('volcanes', 0),
+                                pz.get('erupciones', 0)))
             lines.append('  NATURA   montes %d   cordilleras %d   cumbres nevadas %d   emergentes %d   detalle %s'
                          % (pz['montes'], pz['cordilleras'], pz['nevadas'], pz.get('emergentes', 0),
                             'cerca (%d celdas)' % pz['cerca'] if pz['cerca'] else 'globo (impostores)'

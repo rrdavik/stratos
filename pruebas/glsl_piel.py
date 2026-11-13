@@ -350,7 +350,7 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
             prog['sRampa'].value = 1
         prog['uTerreno'].value = (1.0, float(uni['uTerreno'][1]), float(uni['uTerreno'][2]), 1.0)
         prog['uFamilia'].value = (3.0, 0, 0, 0)
-        esf = esfera()
+        esf = esfera(512, 1024)             # comun v75: la malla, el doble de fina que el mapa
         vbo = ctx.buffer(esf.tobytes())
         ibo = ctx.buffer(np.array([[0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]], dtype='f4').tobytes())
         cd = ctx.buffer(np.ones((len(esf), 4), dtype='f4').tobytes())

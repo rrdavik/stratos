@@ -16,7 +16,10 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
     porosa; fase 12: una por modelo con el shader de la piel)
   - terreno_al_dia(): la malla del relieve (fase 11 v5): la esfera 'terreno'
     que el shader desplaza con el mapa de alturas del motor (Script TOP
-    'alturas') y colorea con los pisos (Ramp TOP 'rampa_hipso')
+    'alturas') y colorea con los pisos (Ramp TOP 'rampa_hipso'). comun v75
+    (motor v97): la malla es de 512 x 1024 y el shader le suma el relieve
+    fino; con Oceano flota sobre las losetas y es el mar. calidad_al_dia():
+    antialiasing 16x y el menu Resolucion del render
   - set_render(), set_legend(), autoprueba
 =============================================================================
 """
@@ -26,7 +29,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v74'
+VERSION_COMUN = 'comun v75'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -743,6 +746,7 @@ uniform vec4 uTerreno;      // x: 1 la malla del terreno, y: altura de los pisos
 uniform sampler2D sAlturas; // r: relieve sobre el suelo local, g: radio del suelo (lat/lon, fila 0 = polo sur)
 uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
 uniform vec4 uViento;       // motor v77: x Swaymax, y el viento del LFO (grados), z el pulso a saltos, w beats por vaiven
+uniform vec4 uOceano;       // motor v97: x 1 con mar, y tiempo (s), z alto de una isla / el de los pisos, w 1 naturaleza
 
 out Vertex {
     vec4 color;
@@ -768,10 +772,47 @@ vec3 rotar(vec3 v, vec3 k, float a)
     return v * cos(a) + cross(k, v) * sin(a) + k * dot(k, v) * (1.0 - cos(a));
 }
 
+
+// comun v75 (motor v97): el relieve fino lo pone la tarjeta grafica. El mapa de alturas del
+// motor (512 x 256) da la forma; aqui se le suma ruido: la costa de las islas se recorta
+// (solo en la franja de la playa: el mar abierto y las mesetas no se mueven) y las laderas
+// ganan crestas finas, proporcionales a su altura. Lo usan el vertex (la malla) y el pixel
+// (la linea de costa, pixel a pixel) con la misma cuenta.
+float fh13(vec3 p)
+{
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
+
+float fruido(vec3 x)
+{
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = mix(fh13(i), fh13(i + vec3(1.0, 0.0, 0.0)), f.x);
+    float b = mix(fh13(i + vec3(0.0, 1.0, 0.0)), fh13(i + vec3(1.0, 1.0, 0.0)), f.x);
+    float c = mix(fh13(i + vec3(0.0, 0.0, 1.0)), fh13(i + vec3(1.0, 0.0, 1.0)), f.x);
+    float d = mix(fh13(i + vec3(0.0, 1.0, 1.0)), fh13(i + vec3(1.0, 1.0, 1.0)), f.x);
+    return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
+}
+
+float relieveFino(vec3 d, float e)
+{
+    if (uOceano.w < 0.5 || e <= 0.0)
+        return max(e, 0.0);
+    float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
+    float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
+    float costa = uOceano.x * smoothstep(0.0, 0.012, e) * (1.0 - smoothstep(0.04, 0.10, e));
+    return max(e + 0.034 * (n1 - 0.5) * costa + 0.035 * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
+}
+
 vec3 sobre(vec3 d)
 {
+    // uTerreno.z > 0: sin relieve la malla se hunde bajo las losetas; < 0 (Oceano): flota
+    // sobre ellas, y es el mar
     vec2 a = textureLod(sAlturas, uvDe(d), 0.0).rg;
-    float e = max(a.r, 0.0);
+    float e = relieveFino(d, max(a.r, 0.0));
     return d * (a.g + e - uTerreno.z * (1.0 - smoothstep(0.0, 0.08, e)));
 }
 
@@ -786,12 +827,12 @@ void main()
         vec3 e = normalize(cross(vec3(0.0, 1.0, 0.0), d) + vec3(1e-4, 0.0, 0.0));
         vec3 t = cross(d, e);
         p = sobre(d);
-        vec3 pe = sobre(normalize(d + e * 0.004));
-        vec3 pn = sobre(normalize(d + t * 0.004));
+        vec3 pe = sobre(normalize(d + e * 0.003));
+        vec3 pn = sobre(normalize(d + t * 0.003));
         nrm = normalize(cross(pe - p, pn - p));
         if (dot(nrm, d) < 0.0)
             nrm = -nrm;
-        h = max(textureLod(sAlturas, uvDe(d), 0.0).r, 0.0) / max(1e-4, uTerreno.y);
+        h = relieveFino(d, max(textureLod(sAlturas, uvDe(d), 0.0).r, 0.0)) / max(1e-4, uTerreno.y);
     }
     vec4 wPos = TDDeform(p);
     vec3 wN = TDDeformNorm(nrm);
@@ -879,6 +920,10 @@ uniform vec4 uBoceto;       // comun v62: x Bocetoseq1, y Bocetoseq2, z Bocetoco
 uniform vec4 uBocetoCol;    // rgb Colorboceto
 uniform sampler2D sAlturas; // comun v63: b de quien es el relieve (1 SEQ2, 0 los montes del SEQ1)
 uniform vec4 uNoche;        // fase 28: x la noche de enterramiento (0-1)
+uniform vec4 uOceano;       // motor v97: x 1 con mar, y tiempo (s), z alto de una isla / el de los pisos, w 1 naturaleza
+uniform vec4 uVolcan0;      // motor v97: los tres volcanes mas activos: xyz direccion (planeta), w erupcion 0-1
+uniform vec4 uVolcan1;
+uniform vec4 uVolcan2;
 
 in Vertex {
     vec4 color;
@@ -915,6 +960,47 @@ float ruido(vec3 x)
     return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
+// comun v75 (motor v97): el relieve fino lo pone la tarjeta grafica. El mapa de alturas del
+// motor (512 x 256) da la forma; aqui se le suma ruido: la costa de las islas se recorta
+// (solo en la franja de la playa: el mar abierto y las mesetas no se mueven) y las laderas
+// ganan crestas finas, proporcionales a su altura. Lo usan el vertex (la malla) y el pixel
+// (la linea de costa, pixel a pixel) con la misma cuenta.
+float fh13(vec3 p)
+{
+    p = fract(p * 0.1031);
+    p += dot(p, p.zyx + 31.32);
+    return fract((p.x + p.y) * p.z);
+}
+
+float fruido(vec3 x)
+{
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = mix(fh13(i), fh13(i + vec3(1.0, 0.0, 0.0)), f.x);
+    float b = mix(fh13(i + vec3(0.0, 1.0, 0.0)), fh13(i + vec3(1.0, 1.0, 0.0)), f.x);
+    float c = mix(fh13(i + vec3(0.0, 0.0, 1.0)), fh13(i + vec3(1.0, 0.0, 1.0)), f.x);
+    float d = mix(fh13(i + vec3(0.0, 1.0, 1.0)), fh13(i + vec3(1.0, 1.0, 1.0)), f.x);
+    return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
+}
+
+float relieveFino(vec3 d, float e)
+{
+    if (uOceano.w < 0.5 || e <= 0.0)
+        return max(e, 0.0);
+    float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
+    float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
+    float costa = uOceano.x * smoothstep(0.0, 0.012, e) * (1.0 - smoothstep(0.04, 0.10, e));
+    return max(e + 0.034 * (n1 - 0.5) * costa + 0.035 * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
+}
+
+// motor v97: la corteza de cada arbol (uv.y de sus tubos x 4): parda, gris, blanca
+// (abedul), verde (canas y cactus) y rojiza; y las flores y frutos (uv.x = 4 + color / 10)
+const vec3 CORTEZA[5] = vec3[5](vec3(0.17, 0.12, 0.08), vec3(0.36, 0.34, 0.31), vec3(0.80, 0.79, 0.74),
+                                vec3(0.22, 0.36, 0.14), vec3(0.32, 0.15, 0.10));
+const vec3 FLOR[6] = vec3[6](vec3(0.96, 0.95, 0.90), vec3(0.95, 0.62, 0.72), vec3(0.96, 0.82, 0.18),
+                             vec3(0.86, 0.16, 0.12), vec3(0.62, 0.36, 0.78), vec3(0.95, 0.52, 0.12));
+
 vec3 luz(vec3 pos, vec3 col, vec3 p, vec3 n, vec3 v, vec3 base, float expo, float ks, float wrap,
          inout vec3 spec)
 {
@@ -944,6 +1030,11 @@ vec3 rampa(float h)
 vec2 uvMapa(vec3 d)
 {
     return vec2(atan(d.z, d.x) * 0.15915494 + 0.5, asin(clamp(d.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+}
+
+float cercaDe(vec4 vol, vec3 d)
+{
+    return vol.w * smoothstep(0.945, 0.975, dot(d, vol.xyz));
 }
 
 vec3 foco(vec4 t, vec4 c, vec3 d)
@@ -1021,6 +1112,7 @@ void main()
     vec3 emis = vec3(0.0);
     float humano = 0.0;         // fase 27: cuanto de este pixel es una inclusion horneada
     float sombra = uPisos.z;
+    bool mar = false;
     if (tierra && (uBoceto.x > 0.5 || uBoceto.y > 0.5 || uBoceto.z > 0.5)) {
         // comun v62: el boceto del terreno, en alambre aqui mismo (con un Wireframe MAT
         // la esfera saldria lisa, sin las montanas): una reticula de meridianos y
@@ -1056,7 +1148,13 @@ void main()
     if (tierra) {
         // los pisos por la altura sobre el suelo local: verde mate y granulado
         // abajo, roca facetada en medio, nieve brillante arriba
-        float h = clamp(iVert.hrel, 0.0, 1.0);
+        vec3 dT = normalize(iVert.oPos);
+        vec2 tuv = uvMapa(dT);
+        vec4 mapa = texture(sAlturas, tuv);
+        // motor v97: la altura, pixel a pixel (el mapa mas el relieve fino): la costa no
+        // depende de los vertices de la malla
+        float eAbs = uOceano.w > 0.5 ? relieveFino(dT, max(mapa.r, 0.0)) : iVert.hrel * uTerreno.y;
+        float h = clamp(eAbs / max(1e-4, uTerreno.y), 0.0, 1.0);
         base = uTerreno.w > 0.5 ? texture(sRampa, vec2(h, 0.5)).rgb : rampa(h);
         float roca = smoothstep(uPisos.x, uPisos.x + 0.05, h) * (1.0 - step(uPisos.y, h));
         float nieve = step(uPisos.y, h);
@@ -1071,12 +1169,89 @@ void main()
         ks = mix(0.30, 0.02, rug);
         amb = 1.15;
         sombra = max(sombra, 0.65);
+        if (uOceano.w > 0.5) {
+            // motor v97: el detalle del suelo vegetal. Claros de pasto seco y manchas de
+            // umbria (dos escalas), flores sueltas de cerca, y la roca que asoma donde la
+            // ladera se empina, a cualquier altura
+            float veg = 1.0 - max(roca, nieve);
+            float claro = smoothstep(0.52, 0.78, ruido(iVert.pPos * 2.3) * 0.6 + ruido(iVert.pPos * 6.1) * 0.4);
+            float umbria = smoothstep(0.55, 0.85, ruido(iVert.pPos * 4.7 + vec3(7.3)));
+            base = mix(base, base * vec3(1.42, 1.20, 0.62), 0.55 * claro * veg);
+            base = mix(base, base * vec3(0.62, 0.80, 0.78), 0.60 * umbria * (1.0 - claro) * veg);
+            vec3 gf = iVert.pPos * 260.0;
+            float flor = step(0.992, hash13(floor(gf))) * (1.0 - smoothstep(0.25, 0.45, length(fract(gf) - 0.5)));
+            flor *= veg * claro * (1.0 - clamp(fwidth(gf.x) * 1.5, 0.0, 1.0));
+            base = mix(base, FLOR[int(hash13(floor(gf) + 3.7) * 5.99)], flor);
+            float pend = 1.0 - abs(dot(nf, normalize(iVert.wPos)));
+            float cantil = smoothstep(0.55, 0.78, pend) * smoothstep(0.02, 0.08, h) * (1.0 - nieve)
+                           * mix(0.25, 1.0, mapa.b);        // los montes boscosos siguen verdes
+            base = mix(base, vec3(0.40, 0.36, 0.31) * (0.80 + 0.40 * ruido(iVert.pPos * 34.0)), cantil * veg);
+            n = normalize(mix(n, nf, 0.35 * cantil));
+            // la lava de los volcanes (sAlturas.a): basalto negro; el crater y las coladas
+            // brillan, y al rojo vivo cuando su volcan entra en erupcion
+            float lava = mapa.a;
+            if (lava > 0.02) {
+                vec3 dP = normalize(iVert.pPos);
+                float er = clamp(cercaDe(uVolcan0, dP) + cercaDe(uVolcan1, dP) + cercaDe(uVolcan2, dP), 0.0, 1.0);
+                float veta = ruido(iVert.pPos * 46.0 + vec3(0.0, -0.35 * uOceano.y, 0.0)) * 0.6
+                             + ruido(iVert.pPos * 110.0) * 0.4;
+                float crater = smoothstep(0.62, 0.95, lava);
+                float calor = max(crater * (0.50 + 0.50 * veta), smoothstep(0.12, 0.5, lava) * veta
+                                  * (0.30 + 0.70 * er)) * (0.75 + 0.5 * er);
+                base = mix(base, vec3(0.07, 0.06, 0.06) * (0.7 + 0.6 * veta), smoothstep(0.04, 0.3, lava));
+                emis += vec3(1.0, 0.30, 0.04) * 1.7 * calor + vec3(1.0, 0.85, 0.35) * pow(calor, 3.0);
+                rug = mix(rug, 0.55, smoothstep(0.04, 0.3, lava));
+            }
+        }
+        if (uOceano.x > 0.5) {
+            // motor v97: el oceano. La malla flota sobre las losetas donde no hay isla: es el
+            // mar. Hondo y oscuro lejos de la costa, turquesa junto a ella (muestras del mapa
+            // alrededor), con rompiente de espuma y olas que mueven la normal. La playa, arena.
+            mar = eAbs < 0.006;
+            vec3 e1 = normalize(cross(vec3(0.0, 1.0, 0.0), dT) + vec3(1e-4, 0.0, 0.0));
+            vec3 e2 = cross(dT, e1);
+            float tiempo = uOceano.y;
+            if (mar) {
+                float costa = 0.0;
+                for (int k = 0; k < 8; k++) {
+                    float g = 0.7853982 * float(k);
+                    vec3 o = e1 * cos(g) + e2 * sin(g);
+                    costa += 0.075 * smoothstep(0.0, 0.03, texture(sAlturas, uvMapa(normalize(dT + o * 0.022))).r);
+                    costa += 0.050 * smoothstep(0.0, 0.03, texture(sAlturas, uvMapa(normalize(dT + o * 0.055))).r);
+                }
+                costa = clamp(max(costa, eAbs / 0.006), 0.0, 1.0);
+                vec3 pw = iVert.pPos * 11.0;
+                float o1 = ruido(pw + vec3(0.31, 0.17, 0.0) * tiempo);
+                float o2 = ruido(pw * 2.9 - vec3(0.0, 0.43, 0.29) * tiempo);
+                float o3 = ruido(pw * 7.3 + vec3(0.6, 0.0, 0.5) * tiempo);
+                base = mix(vec3(0.015, 0.085, 0.215), vec3(0.03, 0.24, 0.40), smoothstep(0.0, 0.30, costa));
+                base = mix(base, vec3(0.13, 0.60, 0.61), smoothstep(0.30, 0.95, costa));
+                base *= 0.86 + 0.28 * (o1 * 0.6 + o2 * 0.4);
+                float rompe = smoothstep(0.80, 0.97, costa + 0.10 * (o2 - 0.5) + 0.05 * sin(costa * 34.0 - 2.0 * tiempo));
+                float cresta = smoothstep(0.80, 0.92, o1 * 0.5 + o2 * 0.3 + o3 * 0.2) * 0.35;
+                base = mix(base, vec3(0.93, 0.96, 0.97), clamp(rompe + cresta, 0.0, 1.0));
+                n = normalize(normalize(iVert.wPos) + 0.16 * (vec3(o1, o2, o3) - 0.5) + 0.10 * (n - normalize(iVert.wPos)));
+                rug = mix(0.10, 0.6, rompe);
+                expo = mix(110.0, 12.0, rompe);
+                ks = mix(1.3, 0.1, rompe);
+                sombra = 0.0;
+                amb = 1.0;
+                emis = base * 0.16;
+            } else {
+                float arena = (1.0 - smoothstep(0.016, 0.034, eAbs)) * (1.0 - smoothstep(0.02, 0.2, mapa.a));
+                vec3 playa = vec3(0.80, 0.72, 0.52) * (0.86 + 0.24 * ruido(iVert.pPos * 70.0));
+                playa = mix(playa * vec3(0.62, 0.64, 0.66), playa, smoothstep(0.006, 0.013, eAbs));    // mojada
+                base = mix(base, playa, arena);
+                rug = mix(rug, 0.8, arena);
+            }
+        }
         // fase 11 v8: los hibridos son mesetas construidas
-        vec2 tuv = uvMapa(normalize(iVert.oPos));
         vec4 cu = texture(sCultivo, tuv);
         float muro = 1.0 - smoothstep(0.55, 0.80, abs(dot(nf, normalize(iVert.wPos))));
         float lejos = clamp(fwidth(cu.r) / max(1e-4, uCultivo.w) * 1.5, 0.0, 1.0);
-        if (cu.g > 1e-4 && cu.r < cu.g && uCultivo.w > 1e-5) {
+        if (mar) {
+            // el mar no se cultiva
+        } else if (cu.g > 1e-4 && cu.r < cu.g && uCultivo.w > 1e-5) {
             // ARROZAL: bancales por la curva de nivel (la huella verde arroz, la
             // contrahuella de piedra seca), surcos de cerca, lamina de agua si se riega
             float fr = fract(cu.r / uCultivo.w);
@@ -1120,17 +1295,34 @@ void main()
         if (dot(nf, v) < 0.0)
             nf = -nf;
         if (iVert.hoja.x < 1.5) {
+            // motor v97: cada arbol, con su corteza (el abedul, blanca con lenticelas)
             float fibra = ruido(vec3(q.x * 3.0, q.y * 0.35, q.z * 3.0));
-            base = mix(vec3(0.17, 0.12, 0.08), base, 0.15) * mix(0.75, 1.1, fibra);
+            int ct = int(clamp(iVert.hoja.y, 0.0, 1.0) * 4.0 + 0.5);
+            base = mix(CORTEZA[ct], base, ct == 3 ? 0.45 : 0.15) * mix(0.75, 1.1, fibra);
+            if (ct == 2)
+                base *= 1.0 - 0.6 * step(0.74, ruido(vec3(iVert.oPos.x * 30.0, iVert.oPos.y * 90.0, iVert.oPos.z * 30.0)));
             rug = 1.0;
             expo = 8.0;
             ks = 0.02;
             wrap = 0.2;
+        } else if (iVert.hoja.x > 3.95) {
+            // motor v97: flores y frutos, con su color (no el verde de la instancia)
+            base = FLOR[int(clamp(fract(iVert.hoja.x) * 10.0, 0.0, 5.0))]
+                   * (0.88 + 0.24 * hash13(vec3(float(iVert.inst) * 0.61, floor(iVert.oPos * 40.0).xy)));
+            n = normalize(mix(n, nf, 0.5));
+            expo = 20.0;
+            ks = 0.08;
+            wrap = 0.6;
         } else {
             float var = fract(iVert.hoja.x);
             float prof = clamp(iVert.hoja.y, 0.0, 1.0);
             base *= (0.88 + 0.27 * var) * (1.0 - 0.38 * prof) * (0.90 + 0.22 * clamp(iVert.oPos.y, 0.0, 1.0));
             base = mix(base, base.gbr * vec3(1.0, 0.96, 1.0), 0.04 * (var - 0.45));
+            // motor v97: mas paleta dentro de cada copa. El brote nuevo, claro y amarillo,
+            // arriba y fuera; alguna hoja seca; el envés azulado en lo hondo
+            base = mix(base, base * vec3(1.30, 1.18, 0.66), 0.55 * smoothstep(0.62, 0.9, var) * (1.0 - prof));
+            base = mix(base, base * vec3(1.55, 0.95, 0.42), step(0.875, var) * step(var, 0.9) * 0.8);
+            base = mix(base, base * vec3(0.78, 0.92, 1.06), 0.6 * prof * smoothstep(0.3, 0.0, var));
             n = normalize(mix(n, nf, 0.6));
             expo = mix(36.0, 8.0, rug);
             ks = mix(0.30, 0.02, rug);
@@ -1372,7 +1564,7 @@ void main()
         // agua: el azul se lee tambien en la cara de sombra (emisivo) y brilla en el
         // borde y con la luz (comun v35: mas vivo)
         col += base * uAgua.x + fres * vec3(0.25, 0.35, 0.45) + spec * 0.5;
-    } else if (vegetal && iVert.hoja.x > 1.5) {
+    } else if (vegetal && iVert.hoja.x > 1.5 && iVert.hoja.x < 3.95) {
         // fase 11 v8: a contraluz el borde de la copa se vuelve traslucido y calido
         // (amarillo verdoso, Traslucidez); dentro de la copa, no
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
@@ -1412,6 +1604,9 @@ void main()
     } else if (!tierra) {
         // mineral: la obsidiana pulida tiene un reflejo de borde frio
         col += fres * (1.0 - rug) * vec3(0.20, 0.22, 0.26);
+    } else {
+        // motor v97: la lava emite; el mar se lee tambien en la cara de sombra y brilla en el borde
+        col += emis + (mar ? fres * vec3(0.20, 0.30, 0.38) + spec * 0.5 : vec3(0.0));
     }
     if (uBorde.x > 0.001 && !agua && (fam < 1.5 || tierra)) {
         // fase 11 v5: el tinte del secuenciador y de los pads, al borde (fresnel)
@@ -3449,7 +3644,9 @@ PIEL_UNIFORMES = [
                  'parent().par.Bocetoreticula')),
     ('uBocetoCol', ('parent().par.Colorbocetor', 'parent().par.Colorbocetog', 'parent().par.Colorbocetob', '0')),
     ('uNoche', (PIEL_U % ('uNoche', 0), '0', '0', '0')),      # fase 28: la noche de enterramiento
-]
+    # comun v75 (motor v97): el oceano y los volcanes (solo mat_piel_tierra; a 0 en las demas)
+    ('uOceano', tuple(PIEL_U % ('uOceano', q) for q in range(4))),
+] + [('uVolcan%d' % k, tuple(PIEL_U % ('uVolcan%d' % k, q) for q in range(4))) for k in range(3)]
 # comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio']
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
@@ -3633,6 +3830,8 @@ def materiales_piel(base):
             elif fam in SIN_TINTE and (nombre.startswith('uTinte') or nombre in ('uPisos', 'uBorde')):
                 vals = ('0', '0', '0', '0')
             elif nombre.startswith('uBoceto') and fam != 'tierra':     # comun v62
+                vals = ('0', '0', '0', '0')
+            elif (nombre == 'uOceano' or nombre.startswith('uVolcan')) and fam != 'tierra':     # comun v75
                 vals = ('0', '0', '0', '0')
             bien = _uniforme(mat, q, nombre, vals) and bien
         if not bien:
@@ -3988,7 +4187,39 @@ def instanciar_modelos(base, m):
     return geos
 
 
-TERRENO_FILAS, TERRENO_COLS = 256, 512      # la malla, del tamano del mapa de alturas
+# comun v75: la malla, el doble de fina que el mapa de alturas (antes 256 x 512, un vertice
+# por texel): el mapa da la forma y el shader le suma el relieve fino (relieveFino), que
+# necesita vertices donde ponerse. Medio millon de vertices: nada para la tarjeta grafica.
+TERRENO_FILAS, TERRENO_COLS = 512, 1024
+
+
+RESOLUCIONES = ['720p', '1080p', '1440p', '2160p']
+RES_ANCHO = "(1280, 1920, 2560, 3840)[int(parent().par.Resolucion.menuIndex)]"
+RES_ALTO = "(720, 1080, 1440, 2160)[int(parent().par.Resolucion.menuIndex)]"
+
+
+def calidad_al_dia(base):
+    """comun v75 (motor v97): mas resolucion, a cargo de la tarjeta grafica. El Render
+    TOP sube el antialiasing a 16x (cada pixel se muestrea 16 veces: bordes de hojas y
+    costas limpios con el mismo tamano de imagen) y su tamano sale del menu Resolucion
+    (pagina Fase11; 720p por defecto: es el limite de la licencia no comercial, que
+    recorta lo que pase de 1280 pixeles). El rotulo sigue al render."""
+    add_par(base, get_page(base, 'Fase11'), 'menu', 'Resolucion', 'Resolucion del render', '720p',
+            menu=RESOLUCIONES, menu_labels=['1280 x 720 (licencia no comercial)', '1920 x 1080 (comercial o pro)',
+                                            '2560 x 1440 (comercial o pro)', '3840 x 2160 (comercial o pro)'])
+    r = base.op('render')
+    if r is None:
+        return False
+    bien = setmenu(r, ['antialias'], ['aa16xlow', 'aa16low', 'aa16x', 'aa8xhigh', 'aa8high', 'aa8xmid', 'aa8mid'])
+    for o in (r, base.op('rotulo')):
+        if o is not None:
+            setexpr(o, 'resolutionw', RES_ANCHO)
+            setexpr(o, 'resolutionh', RES_ALTO)
+    if bien:
+        ok('render: antialiasing 16x y tamano por el menu Resolucion (720p; mas, con licencia comercial o pro)')
+    else:
+        info('render: no pude subir el antialiasing; ponlo a mano en render -> Anti-Alias (16x o el mayor que haya)')
+    return bien
 
 
 def terreno_al_dia(base, m=None):
@@ -4017,6 +4248,7 @@ def terreno_al_dia(base, m=None):
         except Exception:
             pass
     set_spin(geo)
+    calidad_al_dia(base)             # comun v75: antialiasing y Resolucion
     setexpr(geo, 'material', con_boceto(base, 'terreno', "'mat_piel_tierra'"))
     if not bien:
         info('terreno: pon a mano Rows %d y Columns %d en terreno/esfera (Sphere SOP, Polygon Mesh)'

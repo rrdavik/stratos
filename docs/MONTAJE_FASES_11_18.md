@@ -1613,3 +1613,25 @@ Página **Bocetos** de FASE1, tres interruptores apagados por defecto y un color
 - **En alambre no hay shader de la piel** (menos en el terreno y, desde la v64, el vaivén del dosel): no se ven el vaivén del dosel ni la rugosidad, y el humo y las motas se quedan quietos.
 - **DIAGNOSTICO DE LOS BOCETOS**, al final del informe de cada fase: cada geometría del render con su grupo y el material que lleva ahora; FALLO si su interruptor está encendido y no va en `mat_boceto`, o si le falta la expresión. El terreno sale aparte, `terreno (shader)`, con lo que lee su `uBoceto`; FALLO si aún lleva la envoltura de `mat_boceto` o si a `mat_piel_tierra` le falta el uniforme (relanzar la fase lo arregla).
 - **Las autopruebas** que miran el material (fases 12 y 13) cuentan con los bocetos apagados.
+
+## Océano, islas, volcanes y más detalle (motor v97, comun v75, fase11 v14, fase13 v8)
+
+Basta con relanzar `recargar_todo.py` (o `fase11_piel.py` y `fase13_tejido.py`). No hay nodos nuevos que montar a mano: cambian el motor, el shader de la piel, la malla `terreno/esfera` (ahora 512 × 1024) y la biblioteca de ejemplares (se regenera: 23 plantas).
+
+**Parámetros nuevos (página Fase11)**
+
+| Parámetro | Por defecto | Qué hace |
+|---|---|---|
+| `Oceano` | encendido | En la naturaleza, las celdas vacías son mar y cada celda ocupada, una isla con playa. La isla crece con la ocupación, se une a sus vecinas por istmos (desde ocupación 2) y suelta islotes (desde 3): archipiélagos. Apagado, el terreno vuelve a hundirse bajo las losetas, como antes. |
+| `Volcanes` | 0,2 | Parte de los conos de relieve (sueltos o capital de cordillera, desde Umbralram) que son volcanes: cráter, coladas de lava, penacho y una erupción de 2 compases cada 12 a 28. Con 0, ninguno. |
+| `Detalle` | encendido | Hojas de verdad también desde el globo, presupuesto de 3 millones de hojas y hasta 10 árboles por celda de bosque. Es trabajo de la tarjeta gráfica; si la máquina no puede, apagarlo. |
+| `Resolucion` | 720p | Tamaño del render. Por encima de 720p hace falta licencia comercial o pro (la no comercial recorta a 1280 píxeles). |
+
+**Qué mirar**
+
+- Con el mundo vacío, el planeta es todo mar. Cada nota del SEQ1 o del SEQ2 levanta una isla; al insistir, la isla crece.
+- Leyenda: la línea `MAR` cuenta islas, archipiélagos y volcanes (y los que están en erupción).
+- Para ver un volcán enseguida: `Volcanes` a 1 y `Sembrarzona2`.
+- El render lleva antialiasing 16x. Si el script avisa de que no pudo ponerlo, elegirlo a mano en `render` → Anti-Alias.
+
+**Plantas nuevas**: ciprés, abedul, araucaria, olivo, baobab, mangle, bambú y cardón (árboles); agave y junco (matorrales). La lámina `pruebas/lamina_naturaleza.png` las enseña todas con su silueta a 18 px (`python3 pruebas/vista_previa.py lamina`).

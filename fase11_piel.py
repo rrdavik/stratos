@@ -91,6 +91,37 @@ CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
                edificio con el color de su secuenciador (Tinteventanas,
                Pasostinte). De lejos (Lodciudad), sin los remates pequenos.
 
+OCEANO, ISLAS, VOLCANES Y DETALLE (v14, motor v97)
+--------------------------------------------------
+  OCEANO     (Oceano, encendido) en la naturaleza las celdas vacias son mar: la
+             malla del terreno flota sobre las losetas y el shader la pinta de
+             agua (honda lejos de la costa, turquesa y espuma junto a ella, con
+             olas). Cada celda ocupada es una ISLA con playa: crece y sube con
+             la ocupacion hasta salirse de su celda; dos vecinas con 2 o mas se
+             unen por un istmo (islas grandes) y desde 3 sueltan islotes
+             (archipielagos). El relieve y los montes van encima. En el agua no
+             crece nada, salvo el mangle y el junco; los rios acaban en el mar.
+             Apagado, todo vuelve a ser como en la v13.
+  VOLCANES   (Volcanes 0,2) un cono de relieve suelto, o la capital de una
+             cordillera, desde Umbralram, es un volcan con esa probabilidad
+             (lo decide su semilla): crater, coladas de lava que brillan,
+             penacho de humo y, cada 12 a 28 compases, una erupcion de 2:
+             brasas, ceniza y la lava al rojo. Con 0, ninguno.
+  PLANTAS    ocho arboles mas (cipres, abedul, araucaria, olivo, baobab, mangle,
+             bambu y cardon) y dos matorrales (agave y junco): 23 plantas.
+             Frio: conifera, abedul, araucaria. Templado: frondosa, pagoda,
+             cipres, olivo (y el sauce junto al rio). Calido: parasol, drago,
+             palmera, baobab, bambu, cardon; en la costa, palmera y mangle.
+             Cada planta tiene su verde, su corteza (el abedul, blanca; el
+             bambu y el cardon, verdes) y algunas, flores o fruto.
+  DETALLE    (Detalle, encendido) lo lleva la tarjeta grafica: hojas de verdad
+             tambien desde el globo (antes, tarjetas de racimo), presupuesto de
+             3 millones de hojas, hasta 10 arboles por celda de bosque, frondas
+             pinnadas, troncos de 8 lados, malla del terreno de 512 x 1024 con
+             relieve fino en el shader y antialiasing 16x. Resolucion: el
+             tamano del render (720p; mas, con licencia comercial o pro).
+             Si la maquina no puede, apagar Detalle.
+
 BROTES, ARBOLES Y TERRAZAS (v8)
 -------------------------------
   Ninguna planta es una primitiva (ni conos, ni bolas, ni prismas como copa):
@@ -205,7 +236,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v13  (las mallas de la biblioteca ya no se rehacen en cada fotograma: no leen cfg() entero)'
+VERSION = 'fase11 v14  (oceano con islas y archipielagos, volcanes, 23 plantas con su verde, detalle en la GPU)'
 banner(VERSION)
 
 base = require_base(11)
@@ -260,6 +291,10 @@ add_par(base, page, 'int', 'Maxniveles', 'Niveles maximos de la meseta', 3, 1, 6
 add_par(base, page, 'menu', 'Marco', 'Marco de los frutales', 'tresbolillo', menu=m.MARCOS,
         menu_labels=['Marco real', 'Tresbolillo'])
 add_par(base, page, 'toggle', 'Setos', 'Setos entre las parcelas de la meseta', True)
+# v14 (motor v97): el oceano, los volcanes y el detalle que lleva la tarjeta grafica
+add_par(base, page, 'toggle', 'Oceano', 'Oceano: las celdas vacias son mar; las ocupadas, islas', True)
+add_par(base, page, 'float', 'Volcanes', 'Volcanes: parte de los conos de relieve que lo son', 0.2, 0.0, 1.0)
+add_par(base, page, 'toggle', 'Detalle', 'Detalle alto: hojas de verdad desde el globo (tarjeta grafica)', True)
 # v10: la ciudad legible
 add_par(base, page, 'menu', 'Lenguaje', 'Lenguaje de la ciudad', 'latitud', menu=m.LENGUAJE_MODOS,
         menu_labels=['Por latitud (como los biomas)', 'Frio: hormigon y chapa', 'Templado: ladrillo y vidrio',
@@ -310,7 +345,7 @@ ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Minclust
    'Modulomarco 0,25, Maxmarco 3, Capsulas 0,4, Mutacion 0,5, Mutacionfuente (manual), Obra, '
    'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60; v11: Tema + industria, '
    'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
-   'Maxhumo 6000, Lodind 60')
+   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p)')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -664,8 +699,147 @@ def _prueba(t, m):
 
 
 def _prueba_natural(t, m):
-    """Las pruebas de la naturaleza: la v5 (naturaleza legible) y la v8 (brotes,
-    arboles y terrazas)."""
+    """Las pruebas de la naturaleza: la v5 (naturaleza legible), la v8 (brotes,
+    arboles y terrazas) y la v14 (oceano, islas, volcanes y detalle). Las de la v5 y
+    la v8 se hacen sin oceano, sin volcanes y sin Detalle (miden el relieve y los
+    impostores tal como eran); las de la v14, con ellos."""
+    guarda = {}
+    for nm in ('Oceano', 'Volcanes', 'Detalle'):
+        try:
+            guarda[nm] = getattr(base.par, nm).eval()
+        except Exception:
+            pass
+    try:
+        base.par.Oceano, base.par.Volcanes, base.par.Detalle = False, 0.0, False
+        _prueba_natural_(t, m)
+        base.par.Oceano, base.par.Volcanes, base.par.Detalle = True, 1.0, True
+        _prueba_oceano(t, m)
+    finally:
+        for nm, v in guarda.items():
+            try:
+                getattr(base.par, nm).val = v
+            except Exception:
+                pass
+
+
+def _prueba_oceano(t, m):
+    """v14 (motor v97): oceano con islas que crecen y se unen, volcanes y Detalle."""
+    import numpy as np
+    base.par.Tema = 'naturaleza'
+    c = m.cfg()
+    i = m.note_cell(int(base.par.Nota))
+    rej = m._rejilla(np)
+
+    def mundo(celdas, own, occ, vel=100):
+        W = m.new_world()
+        for x in celdas:
+            W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, vel
+            W['h'][x] = W['vh'][x] = m.height_for(c, occ)
+        return W
+
+    def tierra(W):
+        return m.terreno(W, c)['E'] > m.ORILLA_PLANTA
+
+    # 1. el mar: sin nada ocupado, todo agua; la malla flota sobre las losetas
+    W0 = m.new_world()
+    u = m.uniformes_piel(W0, c, 10.0)
+    t.check('oceano: sin celdas ocupadas todo es mar (la malla del terreno flota %.3f sobre las losetas; '
+            'sin Oceano se hunde %.2f)' % (m.OCEANO_LIFT, m.HUNDIDO),
+            not tierra(W0).any() and u['uOceano'][0] == 1.0 and abs(u['uTerreno'][2] + m.OCEANO_LIFT) < 1e-9
+            and m.uniformes_piel(W0, dict(c, oceano=0), 10.0)['uTerreno'][2] == m.HUNDIDO)
+    # 2. una isla que crece con la ocupacion
+    areas = []
+    for o in (1, 3, 6, 9):
+        areas.append(int((tierra(mundo([i], m.GEO, o)) & (rej['celda'] >= 0)).sum()))
+    W1 = mundo([i], m.GEO, 1)
+    ter1 = m.terreno(W1, c)
+    t.check('isla: una celda ocupada es una isla (el centro a %.3f sobre el mar) que crece con la ocupacion '
+            '(%s texeles de tierra con 1, 3, 6 y 9) hasta salirse de su celda'
+            % (ter1['centro'][i], ' < '.join(str(a) for a in areas)),
+            ter1['centro'][i] > m.ORILLA_PLANTA and all(b > a for a, b in zip(areas, areas[1:]))
+            and (tierra(mundo([i], m.GEO, 9)) & (rej['celda'] != i)).any() and ter1['islas'] == 1)
+    # 3. dos islas vecinas se unen por un istmo; tres o mas, un archipielago
+    j = m.NEIGH[i][0]
+    medio = m._norm(m._add(m.NORMALS[i], m.NORMALS[j]))
+    sueltas = m.alto_en(m.terreno(mundo([i, j], m.GEO, 1), c), medio)
+    Wu = mundo([i, j] + [x for x in m.NEIGH[i][1:3]], m.GEO, 4)
+    teru = m.terreno(Wu, c)
+    t.check('islas vecinas: con ocupacion 1 hay mar entre ellas (%.3f); al crecer se unen por un istmo (%.3f) '
+            'y son un archipielago (%d isla, %d archipielago)' % (sueltas, m.alto_en(teru, medio), teru['islas'],
+                                                                 teru['archipielagos']),
+            sueltas < m.ORILLA_PLANTA < m.alto_en(teru, medio) and teru['islas'] == 1
+            and teru['archipielagos'] == 1)
+    # 4. nada crece en el mar; la costa calida trae palmeras y manglares
+    Wb = mundo([i], m.GEO, int(c['th_fusion']))
+    instb = m.build_instances(Wb, c, absTime.seconds + 10.0)
+    terb = m.terreno(Wb, c)
+    mods = dict((g, mo) for g, mo, _ in m.geometrias_piel(c))
+    pies = [(mods[g], f) for g, fs in instb.items() if g in mods and m.es_ejemplar(mods[g]) for f in fs]
+    secos = all(m.alto_en(terb, m._norm(tuple(f[:3]))) >= 0.004 for _, f in pies)
+    calida = [x for x in range(m.N) if m.bioma_de(x) == 'calido' and not m.is_pole(x)]
+    costa = set(m.planta_de(mundo([x], m.GEO, 3, v), c, x, True) for x in calida for v in (40, 70, 100, 127))
+    t.check('en el mar no crece nada (%d ejemplares, todos en tierra) y la costa calida trae palmera y mangle'
+            % len(pies), pies and secos and 'mangle' in costa and 'palmera' in costa, 'costa: %s' % sorted(costa))
+    # 5. volcanes: con Volcanes 1, el cono suelto es un volcan con crater, lava y penacho
+    Wv = mundo([i], m.ARQ, int(c['th_crown']), 110)
+    instv = m.build_instances(Wv, c, absTime.seconds + 10.0)
+    terv = m.terreno(Wv, c)
+    sel = rej['celda'] == i
+    L = terv['L'] if terv['L'] is not None else np.zeros_like(terv['E'])
+    borde = float(terv['E'][sel].max())
+    t.check('volcan: el cono es un volcan (crater %.2f por debajo del borde), con lava en el mapa (crater y '
+            'coladas) y penacho de %d bocanadas; con Volcanes 0, ninguno'
+            % (borde - terv['centro'][i], len(instv.get('humo', []))),
+            [v[0] for v in terv['volcanes']] == [i] and terv['centro'][i] < borde - 0.02 * terv['hmax']
+            and L[sel].max() > 0.9 and ((L > 0.2) & (L < 0.7)).any() and len(instv.get('humo', [])) >= 3
+            and not m.rasgos_terreno(Wv, dict(c, volcanes=0.0))[1]['volcanes'])
+    paso = m.step_dur(c, 120.0)
+    compas = paso * int(c['steps_per_beat']) * int(c['beats_per_bar'])
+    serie = [m.erupcion(c, i, k * 0.25 * compas, paso) for k in range(4 * (m.ERUPCION_CADA[1] + 2))]
+    activos = sum(1 for v in serie if v > 0)
+    t0 = next(k for k, v in enumerate(serie) if v > 0) * 0.25 * compas
+    inste = m.build_instances(Wv, c, t0 + 0.3 * compas)
+    ue = m.uniformes_piel(Wv, c, t0 + 0.3 * compas)
+    t.check('erupcion: de cuando en cuando (%d de %d cuartos de compas), con mas humo (%d bocanadas), brasas y '
+            'ceniza, y la lava al rojo (uVolcan0 %.2f)' % (activos, len(serie), len(inste.get('humo', [])),
+                                                         ue['uVolcan0'][3]),
+            0 < activos <= 0.25 * len(serie) and len(inste.get('humo', [])) > len(instv.get('humo', []))
+            and len(inste.get('particulas', [])) >= 10 and ue['uVolcan0'][3] > 0.2
+            and abs(sum(ue['uVolcan0'][q] * m.NORMALS[i][q] for q in range(3)) - 1.0) < 1e-6
+            and Wv['piel']['volcanes'] == 1)
+    # 6. Detalle: hojas de verdad desde el globo, y mas presupuesto
+    Wd = mundo([i] + list(m.NEIGH[i]), m.GEO, int(c['th_fusion']))
+    instd = m.build_instances(Wd, c, absTime.seconds + 10.0)
+    lod = [g for g in instd if g in mods and mods[g].endswith('_lod') and instd[g]]
+    hojas_d = Wd['piel']['hojas']
+    cl = dict(c, detalle=0)
+    m.build_instances(Wd, cl, absTime.seconds + 10.0)
+    t.check('Detalle: desde el globo, hojas de verdad (%d hojas, sin tarjetas de racimo; sin Detalle, %d) y '
+            'presupuesto de %d' % (hojas_d, Wd['piel']['hojas'], m.presupuesto_hojas(c)),
+            not lod and hojas_d > 2 * Wd['piel']['hojas'] and m.presupuesto_hojas(c) == m.HOJAS_DETALLE
+            and m.cerca_de(Wd, c, i) and not m.cerca_de(Wd, dict(cl, superficie=0), i))
+    # 7. cada planta, su verde; la malla del terreno, el doble de fina; el shader
+    verdes = set(m.TONO_PLANTA[mo] for mo in m.PLANTAS)
+    sh = base.op('piel_pixel').text if base.op('piel_pixel') is not None else ''
+    esf = base.op('terreno').op('esfera') if base.op('terreno') is not None else None
+    t.check('paleta: %d plantas, %d verdes distintos (todos con el verde por delante); corteza y flores en la '
+            'malla; el shader pinta mar, playa, lava y relieve fino; malla del terreno de %d x %d'
+            % (len(m.PLANTAS), len(verdes), TERRENO_FILAS, TERRENO_COLS),
+            len(verdes) == len(m.PLANTAS) and all(v[1] > v[0] and v[1] > v[2] for v in verdes)
+            and all(k in sh for k in ('uOceano', 'uVolcan0', 'relieveFino', 'CORTEZA', 'FLOR'))
+            and esf is not None and int(esf.par.rows) == TERRENO_FILAS and int(esf.par.cols) == TERRENO_COLS
+            and any(u_[0] > 3.95 for u_ in m.malla_ejemplar(m.nombre_ejemplar('retama', 0, 1), c)[2])
+            and any(abs(u_[1] - 0.5) < 1e-9 for u_ in m.malla_ejemplar(m.nombre_ejemplar('abedul', 0, 3), c)[2]))
+    m.reset_world()
+    m.on_pulse('Sembrarzona2')
+    W = m.world()
+    W['vh'] = list(W['h'])
+    m.build_instances(W, m.cfg(), absTime.seconds + 10.0)
+    t.check('leyenda MAR (islas, archipielagos, volcanes)', '  MAR ' in m.legend())
+    m.reset_world()
+
+
+def _prueba_natural_(t, m):
     import math
     import time
     base.par.Tema = 'naturaleza'
@@ -713,7 +887,7 @@ def _prueba_natural(t, m):
             'Leonardo, racimos desiguales (%.2f), sin modelos vegetales de piezas'
             % (n_bib, len(m.PLANTAS), m.variantes(c), cv),
             n_bib == sum(len(m.etapas_de(mo)) for mo in m.PLANTAS) * m.variantes(c) and not leo
-            and not prim and cv > 0.6 and len(m.ARBOLES) == 7 and len(m.MATORRALES) == 6,
+            and not prim and cv > 0.6 and len(m.ARBOLES) == 15 and len(m.MATORRALES) == 8,
             'Leonardo falla en %s; piezas: %s' % (leo, prim))
     sube = m.ejemplar(c, 'conifera', 0, 3)['ramas']
     cuelga = m.ejemplar(c, 'sauce', 0, 3)['ramas']
@@ -770,7 +944,7 @@ def _prueba_natural(t, m):
     pares = [(p, q, m.iou(sil[p], sil[q])) for k, p in enumerate(m.ARBOLES) for q in m.ARBOLES[k + 1:]]
     peor = max(pares, key=lambda x: x[2])
     tronco = []
-    for mo in m.ARBOLES:
+    for mo in [x for x in m.ARBOLES if x not in m.SIN_FUSTE]:     # v14: el mangle y el cardon no tienen fuste
         filas = {}
         for x, y in sil[mo]:
             filas.setdefault(y, []).append(x)
@@ -778,8 +952,9 @@ def _prueba_natural(t, m):
         if min(ancho(0), ancho(1)) > 0.35 * max(ancho(y) for y in filas):
             tronco.append(mo)
     mat_arb = max(m.iou(sil[p], sil[q]) for p in m.ARBOLES for q in m.MATORRALES)
-    t.check('a 18 px los siete arboles se distinguen (el par mas parecido, %s y %s, %.2f), todos con el tronco '
-            'visible, y ninguno se confunde con un matorral (%.2f)' % (peor[0], peor[1], peor[2], mat_arb),
+    t.check('a 18 px los %d arboles se distinguen (el par mas parecido, %s y %s, %.2f), todos con el tronco '
+            'visible, y ninguno se confunde con un matorral (%.2f)' % (len(m.ARBOLES), peor[0], peor[1], peor[2],
+                                                                       mat_arb),
             peor[2] < 0.75 and not tronco and mat_arb < 0.75, 'sin tronco: %s' % tronco)
     # 6. prueba 4: bosque de 5 celdas (troncos en el borde, huecos entre copas, emergentes)
     zona = [i] + list(m.NEIGH[i])[:4]
@@ -901,7 +1076,7 @@ def _prueba_natural(t, m):
     t.check('el arbol se inclina hacia el lado sin vecinas (%.1f grados, <= %.0f); de lejos, '
             'tarjetas de racimo si Impostores (%d)' % (ang, c['inclinacion'], len(lejos)),
             0.5 < ang <= c['inclinacion'] + c.get('sway_max', 0.0) + 0.6
-            and (bool(lejos) != bool(c.get('superficie') if c['ligero'] else m.lod_cerca(Wi, c, i))
+            and (bool(lejos) != bool(m.cerca_de(Wi, c, i))
                  or not c['impostores']))
     # 13. la erosion sobre un monte baja el terreno y el bosque baja con el
     W = mundo([i], m.GEO, 12)
@@ -941,8 +1116,9 @@ def _prueba_natural(t, m):
     por_foto = 1000 * tiempos['naturaleza'] * (min(1.0, 1.0 / (30.0 * ref)) if ref > 0 else 1.0)
     t.check('rendimiento: %d celdas en bosque maximo, hojas %d (presupuesto %d); naturaleza %.1f ms por calculo '
             '(cada %.2f s: unos %.1f ms por fotograma a 30 fps), ciudad %.1f ms (solo se informa)'
-            % (m.N, hojas, m.HOJAS_TOPE, 1000 * tiempos['naturaleza'], ref, por_foto, 1000 * tiempos['ciudad']),
-            hojas <= m.HOJAS_TOPE)
+            % (m.N, hojas, m.presupuesto_hojas(cc), 1000 * tiempos['naturaleza'], ref, por_foto,
+               1000 * tiempos['ciudad']),
+            hojas <= m.presupuesto_hojas(cc))
     # 15. Refresconat: entre dos refrescos las filas de la vegetacion no cambian (los CHOP no se recuecen)
     cq = m.cfg()
     cq['refresco_nat'] = 0.25
