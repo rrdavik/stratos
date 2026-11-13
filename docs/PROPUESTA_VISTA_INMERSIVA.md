@@ -216,3 +216,39 @@ Queda por hacer el paso 0 (mirar la piel de cerca con los parámetros de hoy) y 
 
 **Palancas mientras tanto:** `Rasmirada` 50–70 mete más formación y menos cielo; `Rasaltura` más alta despega de las paredes; `Rasfov` hasta 160.
 
+## 10. Ojo de pez (13 de noviembre de 2026)
+
+`motor v95`, `fase10 v14`.
+
+**Cómo está hecho.** El Render TOP de TouchDesigner tiene un modo propio, *Fish-Eye (180)* (`rendermode` = `fisheye180`): un solo render que cubre 180° alrededor de adonde mira la cámara. No hace falta el cubemap de seis vistas del apartado 9, así que el coste debería ser el de un render normal. Los shaders de la piel ya proyectan con `TDWorldToProj`, que es lo que ese modo necesita.
+
+- Parámetro nuevo `Rasojo` (encendido por defecto). Con `Modocamara` = `rasante`, el motor pone el render en ojo de pez; al salir, vuelve al 2D. Lo cambia solo cuando toca, no en cada fotograma.
+- Mirando al cenit (`Rasmirada` 90), el horizonte entero queda en el borde del círculo y las formaciones fugan hacia el centro.
+- `Rasfov` no cuenta con el ojo de pez: son siempre 180°.
+- La leyenda dice `ojo de pez 180` en la línea `RASANTE`.
+
+**Lo que no sé sin verlo en TouchDesigner**
+
+1. **Cómo encaja el círculo en 1280 × 720**: si sale un círculo centrado con negro a los lados, una elipse estirada o recortado arriba y abajo. Según lo que salga, se ajusta la resolución del render en ese modo.
+2. **Las caras grandes cerca de la cámara.** Ese modo dobla los vértices, no las caras: una loseta o una pared grande junto a la cámara sale con los bordes rectos y puede verse rota. Si pasa, hay dos salidas: subdividir las piezas grandes o pasar al cubemap con reproyección (más caro, pero exacto).
+3. **El cambio de modo es un corte** a mitad de la transición de 20 s, no un fundido.
+4. Que los materiales que no son de la piel (Phong y constantes: núcleo, retícula, luz de celda) se dibujen bien en ese modo.
+
+Si TouchDesigner no acepta el modo, el Textport dice `AVISO  ojo de pez: …` y el render se queda en 2D.
+
+Fuentes de los nombres del modo: [Render TOP](https://derivative.ca/UserGuide/Render_TOP) y [Projection TOP](https://derivative.ca/UserGuide/Projection_TOP), vistos solo a través de un buscador: desde aquí no se puede abrir la documentación de Derivative.
+
+## 11. Cada cámara con sus ajustes (13 de noviembre de 2026)
+
+`motor v96`, `comun v74`, `fase10 v15`. Al elegir `Modocamara` se ponen los ajustes de ese modo (en el motor, `CAMARAS`). Lo que se toque después vale hasta que se vuelva a elegir el modo.
+
+| Modo | Ajustes que pone |
+|---|---|
+| `globo` y `superficie` | `Camfov` 45, `Encuadre` 0,85, `Camsuave` 3, `Camaltura` 1,7, `Camvel` 0,6 |
+| `rasante` | `Rasaltura` 0,77, `Rasfov` 120, `Rasmirada` −13,6, `Rasvel` 3,52, `Rasanillo` 6 |
+
+- Los de globo y superficie salen de la hoja `Estratos_parametros`: `Camaltura` 1,7 es la de la captura del 21 de octubre; los demás, los de fábrica. `Camfov` no está en la hoja (es nuevo): 45, el angular que tenía la cámara.
+- Los de rasante son los de la prueba en TouchDesigner. `Rasanillo` estaba en 8, que con 7 anillos ya se quedaba en el último límite: se guarda 6, que es lo mismo.
+- `Rasojo` (ojo de pez) queda **apagado de fábrica**: esos ajustes se afinaron sin él. Se enciende a mano para probarlo.
+- La autoprueba de la fase 10 cambia de cámara sin tocar los ajustes que haya.
+

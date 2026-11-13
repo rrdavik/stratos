@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v73'
+VERSION_COMUN = 'comun v74'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -631,7 +631,7 @@ def onPulse(par):
 
 
 def onValueChange(par, prev):
-    if par.name in ('Modoactuacion', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
+    if par.name in ('Modoactuacion', 'Modocamara', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
                     'Torsionmax', 'Variantesind', 'Interfazdmx'):
         op('motor').module.on_value(par.name, par.eval())
     return
