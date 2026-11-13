@@ -238,3 +238,17 @@ Si TouchDesigner no acepta el modo, el Textport dice `AVISO  ojo de pez: …` y 
 
 Fuentes de los nombres del modo: [Render TOP](https://derivative.ca/UserGuide/Render_TOP) y [Projection TOP](https://derivative.ca/UserGuide/Projection_TOP), vistos solo a través de un buscador: desde aquí no se puede abrir la documentación de Derivative.
 
+## 11. Cada cámara con sus ajustes (13 de noviembre de 2026)
+
+`motor v96`, `comun v74`, `fase10 v15`. Al elegir `Modocamara` se ponen los ajustes de ese modo (en el motor, `CAMARAS`). Lo que se toque después vale hasta que se vuelva a elegir el modo.
+
+| Modo | Ajustes que pone |
+|---|---|
+| `globo` y `superficie` | `Camfov` 45, `Encuadre` 0,85, `Camsuave` 3, `Camaltura` 1,7, `Camvel` 0,6 |
+| `rasante` | `Rasaltura` 0,77, `Rasfov` 120, `Rasmirada` −13,6, `Rasvel` 3,52, `Rasanillo` 6 |
+
+- Los de globo y superficie salen de la hoja `Estratos_parametros`: `Camaltura` 1,7 es la de la captura del 21 de octubre; los demás, los de fábrica. `Camfov` no está en la hoja (es nuevo): 45, el angular que tenía la cámara.
+- Los de rasante son los de la prueba en TouchDesigner. `Rasanillo` estaba en 8, que con 7 anillos ya se quedaba en el último límite: se guarda 6, que es lo mismo.
+- `Rasojo` (ojo de pez) queda **apagado de fábrica**: esos ajustes se afinaron sin él. Se enciende a mano para probarlo.
+- La autoprueba de la fase 10 cambia de cámara sin tocar los ajustes que haya.
+

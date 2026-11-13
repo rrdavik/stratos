@@ -23,6 +23,13 @@ QUE HACE
                  planeta ensenan todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
+               (v15, motor v96) CADA CAMARA CON SUS AJUSTES: al elegir
+               Modocamara se ponen los de ese modo (motor: CAMARAS). Globo y
+               superficie: Camfov 45, Encuadre 0,85, Camsuave 3, Camaltura
+               1,7 y Camvel 0,6. Rasante: Rasaltura 0,77, Rasfov 120,
+               Rasmirada -13,6, Rasvel 3,52 y Rasanillo 6. Lo que se toque
+               despues vale hasta que se vuelva a elegir el modo. Rasojo
+               (ojo de pez) queda apagado de fabrica.
      rasante     (v14, motor v95: OJO DE PEZ. Con Rasojo, en rasante el Render
                  TOP pasa a su modo Fish-Eye (180): un solo render con 180
                  grados alrededor de adonde mira la camara. Mirando al cenit,
@@ -64,7 +71,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v14  (ojo de pez con la camara rasante: Rasojo pone el render en Fish-Eye de 180 grados)'
+VERSION = 'fase10 v15  (cada camara con sus ajustes: al elegir Modocamara se ponen los de ese modo; ojo de pez con Rasojo)'
 banner(VERSION)
 
 base = require_base(10)
@@ -129,7 +136,7 @@ def rasante_al_dia(base):
 
 # v14: ojo de pez. Con la camara rasante el Render TOP pasa a Fish-Eye (180): un solo
 # render con 180 grados alrededor de adonde mira la camara
-add_par(base, page, 'toggle', 'Rasojo', 'Rasante: ojo de pez (180 grados; Rasfov no cuenta)', True)
+add_par(base, page, 'toggle', 'Rasojo', 'Rasante: ojo de pez (180 grados; Rasfov no cuenta)', False)
 _mov = rasante_al_dia(base)
 if _mov:
     info('rasante: %s pasan a los valores de la v13 (tumbada, mirando al cenit)' % ', '.join(_mov))
@@ -238,6 +245,7 @@ def prueba(t):
     t.check('Encuadre: el planeta ocupa esa fraccion del lado mas estrecho (16:9, 4:3, 1:1, 9:16)', all(enc))
     t.check('altura maxima de las formaciones', m.altura_max(c) > m.limit(c), '%.3f' % m.altura_max(c))
     # camara de globo por el camino real
+    m._CACHE['sin_ajustes'] = True         # v15: la autoprueba cambia de camara sin tocar tus ajustes
     m.cam_reset()
     m._CACHE.pop('cam_w', None)
     modo0 = str(base.par.Modocamara.eval())
@@ -273,6 +281,7 @@ def prueba(t):
     m._CACHE.pop('cam_w', None)
     m._CACHE.pop('cam_frame', None)
     _rasante(t, m)
+    m._CACHE.pop('sin_ajustes', None)
     t.check('leyenda CAMARA', 'CAMARA' in m.legend())
     before = bool(base.par.Modoactuacion)
     base.par.Modoactuacion = True
@@ -305,6 +314,7 @@ def _rasante(t, m):
         bien = bien and m._dot(f_, m._norm(de)) > 1 - 1e-9 and m._dot(a_, ar_o) > 1 - 1e-9
     t.check('v12: el giro de la camara (rx ry rz, orden xyz) mira adonde se le pide con su arriba', bien)
     modo0 = str(base.par.Modocamara.eval())
+    m._CACHE['sin_ajustes'] = True         # v15: aqui se mide con los valores que hay, no con los de cada camara
     vals0 = dict((n, float(getattr(base.par, n))) for n in ('Rasaltura', 'Rasfov', 'Rasmirada', 'Rasvel',
                                                             'Rasanillo', 'Camfov'))
 
@@ -404,6 +414,26 @@ def _rasante(t, m):
     t.check('rasante: transicion de %d s desde el globo, sin saltos; el angular se abre con ella' % m.CAM_TRANS,
             st['wr'] == 1.0 and salto < 0.08 * d_globo and all(b >= a - 1e-9 for a, b in zip(fovs_, fovs_[1:]))
             and abs(fovs_[-1] - vals0['Rasfov']) < 1e-9, 'paso mayor %.2f' % salto)
+    # v15: cada camara con sus ajustes
+    m._CACHE.pop('sin_ajustes', None)
+    cla0 = dict((n, float(getattr(base.par, n))) for n, _ in m.CAMARAS['globo'])
+    base.par.Modocamara = 'rasante'
+    m.on_value('Modocamara', 'rasante')
+    ras_ = dict((n, float(getattr(base.par, n))) for n, _ in m.CAMARAS['rasante'])
+    base.par.Camfov, base.par.Encuadre, base.par.Camaltura = 120.0, 1.0, 24.0
+    base.par.Modocamara = 'globo'
+    m.on_value('Modocamara', 'globo')
+    cla_ = dict((n, float(getattr(base.par, n))) for n, _ in m.CAMARAS['globo'])
+    t.check('v15: al elegir Modocamara se ponen los ajustes de ese modo (rasante: los de la prueba; globo y '
+            'superficie: los de antes)',
+            ras_ == dict(Rasaltura=0.77, Rasfov=120.0, Rasmirada=-13.6, Rasvel=3.52, Rasanillo=6.0)
+            and cla_ == dict(Camfov=45.0, Encuadre=0.85, Camsuave=3.0, Camaltura=1.7, Camvel=0.6)
+            and m.CAMARAS['superficie'] == m.CAMARAS['globo']
+            and all(abs(float(getattr(base.par, n)) - v) < 1e-9 for n, v in ras_.items())
+            and "'Modocamara'" in base.op('pulsos').text, '%s  %s' % (ras_, cla_))
+    m._CACHE['sin_ajustes'] = True
+    for n, v in cla0.items():
+        setattr(base.par, n, v)
     # v14: ojo de pez
     r = base.op('render')
     ojo0 = bool(base.par.Rasojo)

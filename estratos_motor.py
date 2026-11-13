@@ -113,6 +113,8 @@
 #                 Render TOP pasa a su modo Fish-Eye (180): un solo render con
 #                 180 grados alrededor de adonde mira la camara (al cenit: el
 #                 horizonte entero en el borde del circulo). Rasfov no cuenta.
+#                 Motor v96: cada camara con sus ajustes (CAMARAS): al elegir
+#                 Modocamara se ponen los de ese modo. Rasojo, apagado de fabrica.
 #                 No toca TouchDesigner.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
@@ -125,7 +127,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v95'
+MOTOR_VERSION = 'motor v96'
 
 import math
 
@@ -14387,8 +14389,43 @@ def _legend_borrado(W, c):
     return '  BORRADO  vivas %d   borradas %d (%s)' % (n_inclusiones(W), sum(b.values()), ', '.join(partes))
 
 
+# --- cada camara con sus ajustes (motor v96) ---------------------------------------
+# Al elegir Modocamara se ponen los ajustes de ese modo (los que se toquen despues
+# valen hasta que se vuelva a elegir). Globo y superficie: los de la hoja
+# Estratos_parametros (Camaltura 1,7 es la de la captura del 21 de octubre; el
+# resto, de fabrica). Rasante: los de la prueba en TouchDesigner del 13 de noviembre
+# (Rasanillo 8 pedia el ultimo limite entre anillos: con 7 anillos es el 6).
+_CLASICA = (('Camfov', 45.0), ('Encuadre', 0.85), ('Camsuave', 3.0), ('Camaltura', 1.7), ('Camvel', 0.6))
+CAMARAS = dict(
+    globo=_CLASICA,
+    superficie=_CLASICA,
+    rasante=(('Rasaltura', 0.77), ('Rasfov', 120.0), ('Rasmirada', -13.6), ('Rasvel', 3.52), ('Rasanillo', 6)),
+)
+
+
+def ajustes_camara(modo):
+    """Pone los ajustes de la camara 'modo' (CAMARAS). Devuelve los que ha cambiado."""
+    puestos = []
+    for nombre, valor in CAMARAS.get(str(modo), ()):
+        try:
+            p = getattr(parent().par, nombre, None)
+            if p is None:
+                continue
+            if abs(float(p.eval()) - float(valor)) > 1e-9:
+                p.val = valor
+                puestos.append(nombre)
+        except Exception:
+            pass
+    return puestos
+
+
 def on_value(name, val):
-    if name == 'Modoactuacion':
+    if name == 'Modocamara':            # motor v96: cada camara con sus ajustes
+        puestos = [] if _CACHE.get('sin_ajustes') else ajustes_camara(val)   # las autopruebas los apartan
+        if puestos:
+            print('CAMARA  %s: %s' % (val, ', '.join('%s %g' % (n, float(getattr(parent().par, n).eval()))
+                                                    for n in puestos)))
+    elif name == 'Modoactuacion':
         try:
             parent().par.Showgrid = not bool(val)
         except Exception:
