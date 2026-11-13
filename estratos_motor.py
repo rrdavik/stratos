@@ -127,6 +127,12 @@
 #                 (con el mundo lleno seguia sin verse el mar) y los istmos son mas
 #                 estrechos y desde 3; el abedul, con mas hoja y la corteza blanca solo
 #                 en el fuste y las ramas madre.
+#                 Motor v99, fase 11 v16: el planeta, el doble de grande (el nucleo de 6 a
+#                 12: las celdas el doble de anchas, con las formaciones del mismo tamano:
+#                 sitio para el detalle); el mapa de alturas se compone por capas guardadas
+#                 (solo se rehace lo que cambia: de mas de 100 ms por nota a unos 15); la
+#                 PRADERA, cientos de miles de matas que coloca la tarjeta grafica (el motor
+#                 no calcula ninguna), y hasta 24 arboles por celda de bosque.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -138,7 +144,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v98'
+MOTOR_VERSION = 'motor v99'
 
 import math
 
@@ -266,7 +272,7 @@ def pads_corte(cfg):
 COL_RED_DEF = (0.60, 0.36, 0.92)           # el violeta electrico de la red (OKLCH 0,62 0,21 300; reservado)
 DEFAULT_CFG = dict(
     nivel=3,
-    core_radius=6.0,
+    core_radius=12.0,           # motor v99: el doble (6 hasta la v98): las celdas, el doble de anchas
     # fase 3
     shell_thick=0.5, height_factor=3.75, seed_frac=0.20, grow_frac=0.20,
     gate_mode=1, gate_max=1.25, vel_umbral=64, steps_per_beat=4, cost_max=5,
@@ -311,6 +317,7 @@ DEFAULT_CFG = dict(
     traslucidez=0.35, timidez=0.12, emergentes=0.1, orla=1, mezcla=0.3, impostores=1,
     # motor v97: el oceano (las celdas vacias son mar; las ocupadas, islas), los volcanes y el detalle
     oceano=1, volcanes=0.2, detalle=1,
+    pradera=300000, mata=0.16,          # motor v99: las matas de la pradera (GPU) y su tamano
     terrazas_por_nota=1, max_terrazas=8, paso_terraza=0.12, muro_terraza=0.25, riego=1,
     color_cultivo=(0.66, 0.80, 0.22), altura_meseta=0.15, max_niveles=3, marco=1, setos=1,
     # fase 11 v10 (motor v67): la ciudad legible
@@ -7715,6 +7722,51 @@ def _rasgos_terreno(W, cfg, cl=None):
                         archipielagos=archis)
 
 
+# --- motor v99: la pradera, en la tarjeta grafica -------------------------------------------
+# Hasta aqui cada planta era una fila que calculaba el motor (Python) y subia por un CHOP.
+# La pradera no: es UNA geometria ('pradera': una mata de hojas de pocas decenas de
+# triangulos) que TouchDesigner instancia Pradera veces sin datos por instancia. El vertex
+# shader de la piel (uFamilia 7) saca de su numero de instancia donde va (una espiral de
+# Fibonacci sobre la esfera, con azar), lee el mapa de alturas y la deja en el suelo: solo
+# en tierra firme, por encima de la playa, bajo el limite del bosque y fuera de la lava,
+# mas espesa en unas manchas que en otras; la que no toca se descarta. Tamano, giro, color
+# (el piso de su altura, aclarado) y vaiven con el viento, tambien alli. El motor solo dice
+# cuantas (uPradera.x) y de que tamano (Mata).
+
+def malla_pradera():
+    """(puntos, normales, uv, triangulos) de la mata de la pradera: 7 hojas en abanico,
+    de 3 tramos, que se arquean hacia fuera. Alto 1, radio 0,5. uv = (2 + variacion,
+    profundidad, altura): hoja, como las de los ejemplares."""
+    v = _MALLAS.get('pradera')
+    if v is not None:
+        return v
+    import random
+    rng = random.Random(977)
+    P, Nn, U, T = [], [], [], []
+    for j in range(7):
+        g = math.radians(ANGULO_AUREO * j)
+        fuera = (math.cos(g), 0.0, math.sin(g))
+        lado = (-math.sin(g), 0.0, math.cos(g))
+        alto, vuelo, ancho = rng.uniform(0.6, 1.0), rng.uniform(0.15, 0.5), rng.uniform(0.07, 0.11)
+        vv = 0.9 * rng.random()
+        k0 = len(P)
+        nrm = _norm(_add(fuera, SUBE, 0.6))
+        for q in range(4):
+            t = q / 3.0
+            c_ = _add(_add(_mul(fuera, 0.06 + vuelo * t * t), SUBE, alto * t), lado, 0.0)
+            w = ancho * (1.0 - t) ** 0.7
+            for s_ in ((-1.0, 1.0) if q < 3 else (0.0,)):
+                P.append(_add(c_, lado, s_ * w))
+                Nn.append(nrm)
+                U.append((2.0 + vv, 0.5 * (1.0 - t), t))
+        for q in range(2):
+            a, b = k0 + 2 * q, k0 + 2 * q + 2
+            T += [(a, a + 1, b + 1), (a, b + 1, b)]
+        T.append((k0 + 4, k0 + 5, k0 + 6))
+    v = _MALLAS['pradera'] = (P, Nn, U, T)
+    return v
+
+
 # --- motor v97: el oceano, las islas y los volcanes ----------------------------------------
 # OCEANO     con Oceano (naturaleza), la malla del terreno ya no se hunde bajo las losetas
 #            donde no hay relieve: flota OCEANO_LIFT por encima y el shader la pinta de mar
@@ -7904,6 +7956,59 @@ def _sobre(np, dst, hloc, parche):
     hloc[ix] = np.where(gana, H, hloc[ix])
 
 
+def _capa_de(r):
+    return 'dom' if r[0] == 'domo' else ('isla' if r[0] in ('isla', 'istmo') else 'rel')
+
+
+def _capas(np, rej, rasgos):
+    """Motor v99: las tres capas del mapa (relieve, montes e islas; cada una, su
+    altura y el alto del rasgo que gana), guardadas entre llamadas. Solo se borra
+    la ventana de los rasgos que cambian (los que salen y los que entran) y se
+    vuelven a pintar los que la tocan: una nota cambia unos pocos, no los 450.
+    No se pueden modificar las matrices que devuelve."""
+    clave = (GRID['lo'], GRID['hi'], TERRENO_W, TERRENO_H)
+    cp = _TERRENO.get('capas')
+    nuevos = set(rasgos)
+    if cp is None or cp['clave'] != clave:
+        cp = _TERRENO['capas'] = dict(clave=clave, rasgos=set(), parches={})
+        for nm in ('rel', 'dom', 'isla'):
+            cp[nm] = (np.zeros((TERRENO_H, TERRENO_W)), np.zeros((TERRENO_H, TERRENO_W)))
+    cambian = cp['rasgos'] ^ nuevos
+    if cambian:
+        todo = len(cambian) > 0.5 * len(nuevos) + 8
+        for nm in ('rel', 'dom', 'isla'):
+            E, H = cp[nm]
+            ch = [r for r in cambian if _capa_de(r) == nm]
+            if not ch:
+                continue
+            if todo:
+                E[:] = 0.0
+                H[:] = 0.0
+                for r in rasgos:
+                    if _capa_de(r) == nm:
+                        _sobre(np, E, H, _parche(np, rej, r))
+                continue
+            fr = np.zeros(TERRENO_H, dtype=bool)
+            fc = np.zeros(TERRENO_W, dtype=bool)
+            for r in ch:                    # la ventana de lo que cambia, a cero
+                pa = cp['parches'].get(r) or _parche(np, rej, r)
+                ix = np.ix_(pa[0], pa[1])
+                E[ix] = 0.0
+                H[ix] = 0.0
+                fr[pa[0]] = True
+                fc[pa[1]] = True
+            for r in rasgos:                # y encima, lo que la toca
+                if _capa_de(r) != nm:
+                    continue
+                pa = _parche(np, rej, r)
+                if len(pa[0]) and fr[pa[0]].any() and fc[pa[1]].any():
+                    _sobre(np, E, H, pa)
+        # la ventana de cada rasgo pintado, para borrarlo luego aunque se vacie la cache de parches
+        cp['parches'] = dict((r, _parche(np, rej, r)[:2]) for r in nuevos)
+        cp['rasgos'] = nuevos
+    return cp['rel'], cp['dom'], cp['isla']
+
+
 def terreno(W, cfg, cl=None):
     """El mapa de alturas de la naturaleza (se guarda: solo se rehace si cambian
     los rasgos o el suelo). dict(E, S: arrays TERRENO_H x TERRENO_W o None sin
@@ -7928,24 +8033,17 @@ def terreno(W, cfg, cl=None):
         # motor v80: de quien es el relieve (los bocetos): 1 el del SEQ2 (conos y crestas),
         # 0 los montes boscosos del SEQ1 (domos)
         R = np.ones((TERRENO_H, TERRENO_W), dtype=np.float32)
-        Erel = np.zeros((TERRENO_H, TERRENO_W))
-        Hrel = np.zeros_like(Erel)
-        Edom = np.zeros_like(Erel)
-        Hdom = np.zeros_like(Erel)
-        Eis = His = Lv = None               # motor v97: las islas y la lava de los volcanes
+        # motor v99: las capas (relieve, montes, islas) se guardan y solo se rehace lo que
+        # cambia. Con el oceano hay unos 450 rasgos y volver a pintarlos todos a cada nota
+        # costaba mas de 100 ms: el fotograma entero a 20 fps son 50.
+        (Erel, Hrel), (Edom, Hdom), isl = _capas(np, rej, rasgos)
+        Eis, His = isl if any(r[0] in ('isla', 'istmo') for r in rasgos) else (None, None)
+        Lv = None
         r0, r1 = TERRENO_H, 0               # solo las filas con relieve (lo demas es 0)
-        for r in rasgos:                    # conos y crestas (relieve), domos (montes)
+        for r in rasgos:
             pa = _parche(np, rej, r)
             if len(pa[0]):
                 r0, r1 = min(r0, int(pa[0][0])), max(r1, int(pa[0][-1]) + 1)
-            if r[0] == 'domo':
-                _sobre(np, Edom, Hdom, pa)
-            elif r[0] in ('isla', 'istmo'):
-                if Eis is None:
-                    Eis, His = np.zeros_like(Erel), np.zeros_like(Erel)
-                _sobre(np, Eis, His, pa)
-            else:
-                _sobre(np, Erel, Hrel, pa)
             if r[0] == 'volcan':
                 if Lv is None:
                     Lv = np.zeros((TERRENO_H, TERRENO_W), dtype=np.float32)
@@ -8160,7 +8258,7 @@ RUTA_HOJAS = 'SOP'          # las hojas van en la malla de cada ejemplar (Script
 # con Ligero, todo eran tarjetas de racimo salvo a ras de suelo) y el presupuesto sube: son
 # triangulos en la GPU, no filas que calcule el motor.
 HOJAS_DETALLE = 3000000
-DETALLE_ARBOLES = 10        # con Detalle y Ligero, arboles como mucho por celda de bosque
+DETALLE_ARBOLES = 24        # con Detalle y Ligero, arboles como mucho por celda de bosque (v99: celdas el doble de anchas)
 
 
 def presupuesto_hojas(cfg):
@@ -13231,6 +13329,8 @@ def cfg():
                  oceano=int(bool(_p('Oceano', True))),                          # motor v97
                  volcanes=max(0.0, min(1.0, _p('Volcanes', c['volcanes']))),
                  detalle=int(bool(_p('Detalle', True))),
+                 pradera=max(0, min(2000000, int(_p('Pradera', c['pradera'])))),          # motor v99
+                 mata=max(0.01, min(1.0, _p('Mata', c['mata']))),
                  refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
                  biomas=int(bool(_p('Biomas', True))),
                  variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
@@ -13832,6 +13932,8 @@ def uniformes_piel(W, c, now):
     u['uTerreno'] = (0.0, alto_hipso(c) if c['nivel'] >= 11 else 1.0, -OCEANO_LIFT if mar else HUNDIDO, 0.0)
     u['uOceano'] = (1.0 if mar else 0.0, now % 3600.0, isla_alto(1) / alto_hipso(c) if c['nivel'] >= 11 else 0.0,
                     1.0 if nat else 0.0)
+    # motor v99: la pradera (GPU): cuantas matas reparte el shader por el planeta y su tamano
+    u['uPradera'] = (float(c.get('pradera', 0)) if nat and c.get('detalle', 1) else 0.0, c.get('mata', 0.16), 0.0, 0.0)
     erup = []
     if nat and c.get('volcanes', 0.0) > 0:
         try:
@@ -15201,7 +15303,7 @@ def temas_de_modelo(mo):
 # diseno. Lo que no es de ningun modelo, o lo piden las dos, es de los dos.
 GEO_SEQ = {GEO: 1, ARQ: 2}
 BOCETO_SEQ2 = ('coronas',)                  # las coronas son del SEQ2 (fase 4)
-BOCETO_SEQ1 = ('vagones',)                  # los vagones salen de las minas (SEQ1)
+BOCETO_SEQ1 = ('vagones', 'pradera')        # los vagones salen de las minas (SEQ1); la pradera es vegetacion
 
 
 def seqs_de_modelo(mo, cfg=None):

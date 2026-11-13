@@ -49,7 +49,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase16 v3  (industria: galerias entibadas, vagonetas fosiles y pozos; las epocas antiguas, abajo)'
+VERSION = 'fase16 v4  (autoprueba: las piezas del corte, medidas sobre la normal de su celda)'
 banner(VERSION)
 
 base = require_base(16)
@@ -190,7 +190,12 @@ def _prueba(t, m):
             r = math.sqrt(f[0] ** 2 + f[1] ** 2 + f[2] ** 2)
             u = (f[0] / r, f[1] / r, f[2] / r)
             cerca = max(range(m.N), key=lambda x: sum(u[k] * m.normal_i(x)[k] for k in range(3)))
-            if r > R + 1e-6 or not (cerca in en_corte or any(j in en_corte for j in m.NEIGH[cerca])):
+            # motor v99: la altura se mide sobre la normal de la celda del corte (la pieza de una
+            # pared va en el plano de la loseta, que en su borde queda mas lejos del centro que
+            # el radio de la celda; con el planeta el doble de grande, mas)
+            cand = [x for x in [cerca] + list(m.NEIGH[cerca]) if x in en_corte]
+            alto = min([sum(f[k] * m.normal_i(x)[k] for k in range(3)) for x in cand] or [r])
+            if alto > R + 1e-6 or not cand:
                 dentro = False
     t.check('las piezas solo estan dentro del corte, por debajo de la superficie', dentro)
     # 4. Detalleexpuesto

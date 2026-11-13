@@ -357,6 +357,19 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
         vao = ctx.vertex_array(prog, [(vbo, '3f 3f 3f', 'P', 'N', 'uv0'), (cd, '4f', 'Cd'),
                                       (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
         vao.render(instances=1)
+        nmatas = int(uni.get('uPradera', (0,))[0]) if hasattr(m, 'malla_pradera') else 0
+        if nmatas > 0 and 'uPradera' in prog:      # motor v99: la pradera, que coloca el vertex shader
+            prog['uTerreno'].value = (0.0, float(uni['uTerreno'][1]), float(uni['uTerreno'][2]), 1.0)
+            prog['uFamilia'].value = (7.0, 0, 0, 0)
+            Pm, Nm, Um, Tm = m.malla_pradera()
+            mata = np.array([list(Pm[k]) + list(Nm[k]) + list(Um[k]) for t_ in Tm for k in t_], dtype='f4')
+            vbo = ctx.buffer(mata.tobytes())
+            unas = np.tile(np.array([[0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]], dtype='f4'), (nmatas, 1))
+            ibo = ctx.buffer(unas.tobytes())
+            cd = ctx.buffer(np.ones((len(mata), 4), dtype='f4').tobytes())
+            vao = ctx.vertex_array(prog, [(vbo, '3f 3f 3f', 'P', 'N', 'uv0'), (cd, '4f', 'Cd'),
+                                          (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
+            vao.render(instances=nmatas)
         prog['uTerreno'].value = (0.0, 1.0, 0.0, 1.0)
     for g, fam in (('rios', 4.0), ('tejido', 0.0)):    # fase 11 v5: rios y lagos (agua)
         filas = inst.get(g) or []
