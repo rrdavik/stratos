@@ -1635,3 +1635,12 @@ Basta con relanzar `recargar_todo.py` (o `fase11_piel.py` y `fase13_tejido.py`).
 - El render lleva antialiasing 16x. Si el script avisa de que no pudo ponerlo, elegirlo a mano en `render` → Anti-Alias.
 
 **Plantas nuevas**: ciprés, abedul, araucaria, olivo, baobab, mangle, bambú y cardón (árboles); agave y junco (matorrales). La lámina `pruebas/lamina_naturaleza.png` las enseña todas con su silueta a 18 px (`python3 pruebas/vista_previa.py lamina`).
+
+### Ajustes tras verlo en TouchDesigner (motor v98, comun v76, fase11 v15, fase13 v9)
+
+- **El mar no desaparece.** Las islas ya no pasan de su celda y el relieve y los montes acaban en la costa de su isla (antes ocupaban la celda entera: con el mundo lleno no quedaba agua). Con todas las celdas ocupadas quedan lagunas y brazos de mar. Los istmos son más estrechos y salen desde ocupación 3.
+- **El mar se lee con poca luz**: azul más claro y más emisivo.
+- **Montes lisos**: el relieve fino del shader solo arruga el relieve del SEQ2; en los montes boscosos parecía una pelota de golf.
+- **Pisos de color de borde irregular** (antes, anillos perfectos en cada monte).
+- **Abedul**: más hoja, y la corteza blanca solo en el fuste y las ramas madre. Cortezas blanca y rojiza, menos claras.
+

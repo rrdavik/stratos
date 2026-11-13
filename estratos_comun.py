@@ -29,7 +29,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v75'
+VERSION_COMUN = 'comun v76'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -797,22 +797,24 @@ float fruido(vec3 x)
     return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
-float relieveFino(vec3 d, float e)
+float relieveFino(vec3 d, float e, float rel)
 {
+    // rel: 1 el relieve del SEQ2 (crestas finas), 0 los montes boscosos (comun v76: lisos; con
+    // las crestas parecian una pelota de golf)
     if (uOceano.w < 0.5 || e <= 0.0)
         return max(e, 0.0);
     float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
     float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
     float costa = uOceano.x * smoothstep(0.0, 0.012, e) * (1.0 - smoothstep(0.04, 0.10, e));
-    return max(e + 0.034 * (n1 - 0.5) * costa + 0.035 * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
+    return max(e + 0.034 * (n1 - 0.5) * costa + 0.022 * rel * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
 }
 
 vec3 sobre(vec3 d)
 {
     // uTerreno.z > 0: sin relieve la malla se hunde bajo las losetas; < 0 (Oceano): flota
     // sobre ellas, y es el mar
-    vec2 a = textureLod(sAlturas, uvDe(d), 0.0).rg;
-    float e = relieveFino(d, max(a.r, 0.0));
+    vec3 a = textureLod(sAlturas, uvDe(d), 0.0).rgb;
+    float e = relieveFino(d, max(a.r, 0.0), a.b);
     return d * (a.g + e - uTerreno.z * (1.0 - smoothstep(0.0, 0.08, e)));
 }
 
@@ -832,7 +834,8 @@ void main()
         nrm = normalize(cross(pe - p, pn - p));
         if (dot(nrm, d) < 0.0)
             nrm = -nrm;
-        h = relieveFino(d, max(textureLod(sAlturas, uvDe(d), 0.0).r, 0.0)) / max(1e-4, uTerreno.y);
+        vec3 ah = textureLod(sAlturas, uvDe(d), 0.0).rgb;
+        h = relieveFino(d, max(ah.r, 0.0), ah.b) / max(1e-4, uTerreno.y);
     }
     vec4 wPos = TDDeform(p);
     vec3 wN = TDDeformNorm(nrm);
@@ -984,20 +987,22 @@ float fruido(vec3 x)
     return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
-float relieveFino(vec3 d, float e)
+float relieveFino(vec3 d, float e, float rel)
 {
+    // rel: 1 el relieve del SEQ2 (crestas finas), 0 los montes boscosos (comun v76: lisos; con
+    // las crestas parecian una pelota de golf)
     if (uOceano.w < 0.5 || e <= 0.0)
         return max(e, 0.0);
     float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
     float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
     float costa = uOceano.x * smoothstep(0.0, 0.012, e) * (1.0 - smoothstep(0.04, 0.10, e));
-    return max(e + 0.034 * (n1 - 0.5) * costa + 0.035 * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
+    return max(e + 0.034 * (n1 - 0.5) * costa + 0.022 * rel * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
 }
 
 // motor v97: la corteza de cada arbol (uv.y de sus tubos x 4): parda, gris, blanca
 // (abedul), verde (canas y cactus) y rojiza; y las flores y frutos (uv.x = 4 + color / 10)
-const vec3 CORTEZA[5] = vec3[5](vec3(0.17, 0.12, 0.08), vec3(0.36, 0.34, 0.31), vec3(0.80, 0.79, 0.74),
-                                vec3(0.22, 0.36, 0.14), vec3(0.32, 0.15, 0.10));
+const vec3 CORTEZA[5] = vec3[5](vec3(0.17, 0.12, 0.08), vec3(0.30, 0.28, 0.26), vec3(0.66, 0.65, 0.60),
+                                vec3(0.22, 0.36, 0.14), vec3(0.24, 0.13, 0.09));
 const vec3 FLOR[6] = vec3[6](vec3(0.96, 0.95, 0.90), vec3(0.95, 0.62, 0.72), vec3(0.96, 0.82, 0.18),
                              vec3(0.86, 0.16, 0.12), vec3(0.62, 0.36, 0.78), vec3(0.95, 0.52, 0.12));
 
@@ -1153,9 +1158,12 @@ void main()
         vec4 mapa = texture(sAlturas, tuv);
         // motor v97: la altura, pixel a pixel (el mapa mas el relieve fino): la costa no
         // depende de los vertices de la malla
-        float eAbs = uOceano.w > 0.5 ? relieveFino(dT, max(mapa.r, 0.0)) : iVert.hrel * uTerreno.y;
+        float eAbs = uOceano.w > 0.5 ? relieveFino(dT, max(mapa.r, 0.0), mapa.b) : iVert.hrel * uTerreno.y;
         float h = clamp(eAbs / max(1e-4, uTerreno.y), 0.0, 1.0);
-        base = uTerreno.w > 0.5 ? texture(sRampa, vec2(h, 0.5)).rgb : rampa(h);
+        // comun v76: el borde de cada piso, irregular (antes, anillos perfectos en los montes)
+        float hp = uOceano.w > 0.5 ? clamp(h + smoothstep(0.03, 0.12, h) * (0.07 * (ruido(iVert.pPos * 2.9) - 0.5)
+                                                 + 0.035 * (ruido(iVert.pPos * 8.3) - 0.5)), 0.0, 1.0) : h;
+        base = uTerreno.w > 0.5 ? texture(sRampa, vec2(hp, 0.5)).rgb : rampa(hp);
         float roca = smoothstep(uPisos.x, uPisos.x + 0.05, h) * (1.0 - step(uPisos.y, h));
         float nieve = step(uPisos.y, h);
         vec3 nf = normalize(cross(dFdx(iVert.wPos), dFdy(iVert.wPos)));
@@ -1224,7 +1232,7 @@ void main()
                 float o1 = ruido(pw + vec3(0.31, 0.17, 0.0) * tiempo);
                 float o2 = ruido(pw * 2.9 - vec3(0.0, 0.43, 0.29) * tiempo);
                 float o3 = ruido(pw * 7.3 + vec3(0.6, 0.0, 0.5) * tiempo);
-                base = mix(vec3(0.015, 0.085, 0.215), vec3(0.03, 0.24, 0.40), smoothstep(0.0, 0.30, costa));
+                base = mix(vec3(0.03, 0.15, 0.36), vec3(0.04, 0.29, 0.47), smoothstep(0.0, 0.30, costa));
                 base = mix(base, vec3(0.13, 0.60, 0.61), smoothstep(0.30, 0.95, costa));
                 base *= 0.86 + 0.28 * (o1 * 0.6 + o2 * 0.4);
                 float rompe = smoothstep(0.80, 0.97, costa + 0.10 * (o2 - 0.5) + 0.05 * sin(costa * 34.0 - 2.0 * tiempo));
@@ -1236,7 +1244,7 @@ void main()
                 ks = mix(1.3, 0.1, rompe);
                 sombra = 0.0;
                 amb = 1.0;
-                emis = base * 0.16;
+                emis = base * 0.38;     // comun v76: el mar se lee tambien con poca luz
             } else {
                 float arena = (1.0 - smoothstep(0.016, 0.034, eAbs)) * (1.0 - smoothstep(0.02, 0.2, mapa.a));
                 vec3 playa = vec3(0.80, 0.72, 0.52) * (0.86 + 0.24 * ruido(iVert.pPos * 70.0));

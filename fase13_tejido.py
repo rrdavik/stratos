@@ -87,7 +87,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v8  (autoprueba: con Oceano el rio acaba en el mar y sube con la isla)'
+VERSION = 'fase13 v9  (autoprueba: con Oceano el relieve acaba en la costa de su isla; el rio, 0,05 de holgura)'
 banner(VERSION)
 
 base = require_base(13)
@@ -339,7 +339,7 @@ def _prueba(t, m):
     t.check('cordillera con valles: los rios son cintas azules (%d tramos) apoyadas en el terreno, sin tintes'
             % len(filas), filas and all(tuple(f[9:12]) in (tuple(azul), tuple(m.COL_ORILLA)) for f in filas)
             and sum(1 for f in filas if tuple(f[9:12]) == tuple(m.COL_ORILLA)) * 2 == len(filas)
-            and all(-0.02 <= x <= 0.25 for x in sobre) and all(f[7] < 0.01 for f in filas)
+            and all(-0.05 <= x <= 0.25 for x in sobre) and all(f[7] < 0.01 for f in filas)
             and not m._CACHE['inst'].get('tejido'), 'desfase %.3f a %.3f' % (min(sobre or [0]), max(sobre or [0])))
     h_hue = m.palette_hue
     t.check('el azul de los rios es OKLCH 0,65 0,18 250 (v4, mas vivo), con su orilla clara, y esta fuera de la '

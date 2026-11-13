@@ -123,6 +123,10 @@
 #                 erupciones), ocho arboles y dos matorrales mas (23 plantas), cada
 #                 una con su verde, su corteza y sus flores, y Detalle: las hojas de
 #                 verdad tambien desde el globo, con el presupuesto a cargo de la GPU.
+#                 Motor v98 (visto en TouchDesigner): las islas no pasan de su celda
+#                 (con el mundo lleno seguia sin verse el mar) y los istmos son mas
+#                 estrechos y desde 3; el abedul, con mas hoja y la corteza blanca solo
+#                 en el fuste y las ramas madre.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -134,7 +138,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v97'
+MOTOR_VERSION = 'motor v98'
 
 import math
 
@@ -3705,9 +3709,10 @@ def _gen_abedul(P):
         for q in (2, 3):
             cae = _norm(_add((d2[0], 0.0, d2[2]), SUBE, -1.6))
             t3, p3, d3 = P.eje(p2[q], cae, 0.11 * P.u(0.8, 1.3), 2, 2, t2[q - 1], tropismo=-0.3)
-            P.racimo(p3[1], d3, 0.07, 2, t3[0], n=P.dens, abre=55.0)
-            P.racimo(p3[-1], d3, 0.07, 2, t3[-1], n=P.dens, abre=55.0)
-        P.racimo(p2[-1], d2, 0.08, 1, t2[-1], n=P.dens + 1, abre=50.0)
+            P.racimo(p3[1], d3, 0.11, 2, t3[0], n=P.dens + 3, abre=55.0)
+            P.racimo(p3[-1], d3, 0.11, 2, t3[-1], n=P.dens + 3, abre=55.0)
+        P.racimo(p2[1], P.hijo(d2, 50.0, P.u(0, 360)), 0.11, 1, t2[0], n=P.dens + 3, abre=55.0)
+        P.racimo(p2[-1], d2, 0.12, 1, t2[-1], n=P.dens + 4, abre=50.0)
     P.racimo(pts[-1], d, 0.10, 0, tr[-1], n=P.dens + 2, abre=45.0)
 
 
@@ -4022,7 +4027,7 @@ def malla_ejemplar(nombre, cfg=None):
     rng = random.Random(sum((k + 1) * ord(ch) for k, ch in enumerate(nombre)))
     P, Nn, U, T = [], [], [], []
     nmax = float(max(1, e['nmax']))
-    tono = CORTEZA.get(mo, 0.0)             # motor v97: la corteza de cada modelo
+    tono = CORTEZA.get(mo, 0.0)             # motor v97: la corteza de cada modelo (v98: fuste y ramas madre)
     for (a, b, nivel), (r0, r1, _) in zip([(s[0], s[1], s[3]) for s in e['ramas']], e['radios']):
         if lejos and (nivel > 1 or r0 < 0.004):
             continue
@@ -4039,7 +4044,7 @@ def malla_ejemplar(nombre, cfg=None):
             for c_, r_ in ((a, r0), (b, max(r1, 0.6 * r0))):
                 P.append(_add(c_, o, r_))
                 Nn.append(o)
-                U.append((1.0, tono, nivel / nmax))
+                U.append((1.0, tono if nivel <= 1 else 0.0, nivel / nmax))
         for q in range(lados):
             i0, i1 = k0 + 2 * q, k0 + 2 * ((q + 1) % lados)
             T += [(i0, i1, i1 + 1), (i0, i1 + 1, i0 + 1)]
@@ -7728,8 +7733,8 @@ def _rasgos_terreno(W, cfg, cl=None):
 #            compases, una erupcion de ERUPCION_DURA: brasas, ceniza y la lava al rojo.
 OCEANO_LIFT = 0.012          # el mar, sobre la loseta (por debajo de la luz de la celda, LUZ_LIFT)
 ISLA_ALTO = (0.055, 0.008)   # alto de la meseta de la isla: base + por ocupacion (hasta 8)
-ISLA_K = (0.62, 0.085, 1.3)  # su radio, x media celda: base + por ocupacion, tope
-ISTMO_DESDE = 2
+ISLA_K = (0.60, 0.06, 0.9)   # su radio, x media celda: base + por ocupacion, tope (v98: no se traga el mar)
+ISTMO_DESDE = 3
 CRATER_Q = 0.22              # radio del crater, x el del cono
 CRATER_HONDO = 0.16          # lo que se hunde, x la altura del cono
 ERUPCION_CADA = (12, 28)     # compases entre dos erupciones de un volcan (segun la celda)
@@ -7795,7 +7800,7 @@ def _istmo(np, rej, a, b, H):
     u = np.clip(((D - na) @ ab) / max(1e-9, float(ab @ ab)), 0.0, 1.0)
     cpt = na + u[..., None] * ab
     cpt /= np.linalg.norm(cpt, axis=-1, keepdims=True)
-    dist = np.linalg.norm(D - cpt, axis=-1) / (0.30 * medio) + 0.5 * (rej['costa'][ix] - 0.5)
+    dist = np.linalg.norm(D - cpt, axis=-1) / (0.22 * medio) + 0.5 * (rej['costa'][ix] - 0.5)
     f = _smooth(np, 1.0, 0.55, dist)
     return filas, cols, H * f, np.full(f.shape, float(H))
 
@@ -7969,7 +7974,14 @@ def terreno(W, cfg, cl=None):
             if Eis is not None:             # motor v97: el relieve, encima de la isla
                 ei = Eis[r0:r1]
                 ei = (ei + np.roll(ei, 1, 0) + np.roll(ei, -1, 0) + np.roll(ei, 1, 1) + np.roll(ei, -1, 1)) / 5.0
-                Ez = Ez + ei
+                # motor v98: el relieve y los montes no pasan de la costa de su isla (ocupaban la
+                # celda entera: con el mundo lleno no quedaba mar)
+                hi = His[r0:r1]
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    mk = _smooth(np, 0.0, 1.0, np.where(hi > 1e-9, ei / np.maximum(hi, 1e-9), 0.0))
+                Ez = Ez * mk + ei
+                if Lv is not None:
+                    Lv[r0:r1] = (Lv[r0:r1] * mk).astype(np.float32)
             E[r0:r1] = Ez
             R[r0:r1] = np.where(ed > er, 0.0, 1.0)      # motor v80: lo que gana tras suavizar
         if hib[0] or hib[1]:                # fase 11 v8: bancales y mesetas, en el mismo mapa

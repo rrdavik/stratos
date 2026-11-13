@@ -236,7 +236,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v14  (oceano con islas y archipielagos, volcanes, 23 plantas con su verde, detalle en la GPU)'
+VERSION = 'fase11 v15  (el mar no desaparece con el mundo lleno; montes lisos, pisos de borde irregular, abedul con hoja)'
 banner(VERSION)
 
 base = require_base(11)
@@ -754,10 +754,10 @@ def _prueba_oceano(t, m):
     W1 = mundo([i], m.GEO, 1)
     ter1 = m.terreno(W1, c)
     t.check('isla: una celda ocupada es una isla (el centro a %.3f sobre el mar) que crece con la ocupacion '
-            '(%s texeles de tierra con 1, 3, 6 y 9) hasta salirse de su celda'
+            '(%s texeles de tierra con 1, 3, 6 y 9)'
             % (ter1['centro'][i], ' < '.join(str(a) for a in areas)),
             ter1['centro'][i] > m.ORILLA_PLANTA and all(b > a for a, b in zip(areas, areas[1:]))
-            and (tierra(mundo([i], m.GEO, 9)) & (rej['celda'] != i)).any() and ter1['islas'] == 1)
+            and ter1['islas'] == 1)
     # 3. dos islas vecinas se unen por un istmo; tres o mas, un archipielago
     j = m.NEIGH[i][0]
     medio = m._norm(m._add(m.NORMALS[i], m.NORMALS[j]))
@@ -836,6 +836,11 @@ def _prueba_oceano(t, m):
     W['vh'] = list(W['h'])
     m.build_instances(W, m.cfg(), absTime.seconds + 10.0)
     t.check('leyenda MAR (islas, archipielagos, volcanes)', '  MAR ' in m.legend())
+    # v15: con las 85 celdas ocupadas sigue habiendo mar
+    Wll = mundo(range(m.N), m.GEO, 12)
+    agua = float((~tierra(Wll)).mean())
+    t.check('con todas las celdas ocupadas sigue habiendo mar (%d %% del mapa)' % int(100 * agua),
+            0.08 < agua < 0.6)
     m.reset_world()
 
 
