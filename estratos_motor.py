@@ -136,6 +136,12 @@
 #                 (solo se rehace lo que cambia: de mas de 100 ms por nota a unos 15); la
 #                 PRADERA, cientos de miles de matas que coloca la tarjeta grafica (el motor
 #                 no calcula ninguna), y hasta 24 arboles por celda de bosque.
+#                 Motor v100, comun v78, fase 11 v17: tierra en vez de losetas. Con Oceano
+#                 la sedimentacion solo cubre lo que se creo o se desbordo en ese mundo: el
+#                 mar no se entierra, y la tierra sube era a era sobre el. El nivel del mar es
+#                 el del suelo mas bajo (nivel_mar): una celda con sedimento y sin nada encima
+#                 es tierra desnuda, no agua. Las conchas se dibujan como capas de tierra
+#                 (Tierra: mat_piel_estrato) y la celda que suena ilumina su suelo.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -147,7 +153,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v99'
+MOTOR_VERSION = 'motor v100'
 
 import math
 
@@ -320,6 +326,7 @@ DEFAULT_CFG = dict(
     traslucidez=0.35, timidez=0.12, emergentes=0.1, orla=1, mezcla=0.3, impostores=1,
     # motor v97: el oceano (las celdas vacias son mar; las ocupadas, islas), los volcanes y el detalle
     oceano=1, volcanes=0.2, detalle=1,
+    tierra=0.75,                        # motor v100: cuanto se ven las conchas como capas de tierra
     pradera=300000, mata=0.16,          # motor v99: las matas de la pradera (GPU) y su tamano
     terrazas_por_nota=1, max_terrazas=8, paso_terraza=0.12, muro_terraza=0.25, riego=1,
     color_cultivo=(0.66, 0.80, 0.22), altura_meseta=0.15, max_niveles=3, marco=1, setos=1,
@@ -2058,6 +2065,30 @@ def compactar(W, cfg, g):
     return k
 
 
+def sedimenta(W, cfg):
+    """[bool por celda]: donde deja su loseta la concha que entierra este mundo. Siempre,
+    salvo en la naturaleza con Oceano: alli solo donde se creo algo o llego un desborde
+    en este mundo (ocupada, con carga, nacida en el o erosionada en el) y donde las
+    personas dejaron su huella (inclusiones, fase 25) o abrieron una escision (fase 29).
+    Motor v100."""
+    if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza' or not cfg.get('oceano'):
+        return [True] * N
+    t0 = W.get('ciclo_t0')
+    quit_ = W.get('quitadas') or [0] * N
+    incl = W.get('incl') if cfg['nivel'] >= 25 and len(W.get('incl', ())) == N else None
+    esc = W.get('esc_celdas', {}) if cfg['nivel'] >= 29 else {}
+    return [bool(W['occ'][c] > 0 or W['carga'][c] > 0 or quit_[c] > 0
+                 or (t0 is not None and W['t_nac'][c] >= t0 and W['own'][c])
+                 or (incl is not None and incl[c]) or c in esc)
+            for c in range(N)]
+
+
+def nivel_mar(W, cfg):
+    """El radio del mar: el suelo mas bajo del planeta (motor v100). Una celda cuyo suelo
+    queda por encima es tierra, tenga o no algo encima."""
+    return min(suelos_fotograma(W, cfg))
+
+
 def end_cycle(W, cfg, now, bars=None, motivo=None):
     """Entierra el mundo (desde el nivel 8). bars: compases que duro; sin
     ellos, la concha tiene Shellthick. motivo: el del fin de ciclo (fase 27: la
@@ -2081,12 +2112,17 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
     colm = cfg.get('colmatacion', 0.0)
     s_new = len(W['shells'])
     huecos = W.get('esc_celdas', {}) if cfg['nivel'] >= 29 else {}
+    # motor v100: con Oceano (naturaleza) solo sedimenta lo que se creo o se desbordo en este
+    # mundo; el mar no se entierra. Esas celdas quedan sin loseta de esta concha (rm = 1).
+    seca = sedimenta(W, cfg)
     for c in range(N):
+        if not seca[c]:
+            continue
         lg = max(0.0, r_in - suelo(W, cfg, c))
         # fase 29: en la celda de una escision la concha tapiza el hueco sin cerrarlo (sin Colmatacion)
         W['cols'][c].append([s_new, g + (0.0 if c in huecos else colm * lg)])
     W['shells'].append(dict(gen=W['gen'], col=list(shell_color(W['gen'])),
-                            occ=list(W['occ']), sp=list(W['sp']), rm=[0] * N,
+                            occ=list(W['occ']), sp=list(W['sp']), rm=[0 if x else 1 for x in seca],
                             grosor=g, r_in=r_in, r_out=r_in + g))
     if reg:                             # fase 15: el registro de la concha
         W['shells'][-1].update(reg)
@@ -7959,6 +7995,18 @@ def _sobre(np, dst, hloc, parche):
     hloc[ix] = np.where(gana, H, hloc[ix])
 
 
+def _suave5(np, A):
+    """La media de cada texel con sus cuatro vecinos. Las columnas dan la vuelta (la
+    longitud); las filas no: la de arriba y la de abajo se repiten (motor v100: antes
+    daban la vuelta y una isla en el polo dejaba una linea de tierra en la otra punta
+    del bloque)."""
+    up = np.roll(A, 1, 0)
+    up[0] = A[0]
+    dn = np.roll(A, -1, 0)
+    dn[-1] = A[-1]
+    return (A + up + dn + np.roll(A, 1, 1) + np.roll(A, -1, 1)) / 5.0
+
+
 def _capa_de(r):
     return 'dom' if r[0] == 'domo' else ('isla' if r[0] in ('isla', 'istmo') else 'rel')
 
@@ -8069,12 +8117,12 @@ def terreno(W, cfg, cl=None):
             ed = ed * (1.0 - 0.15 * (1.0 - Nz) * (1.0 - fd * fd))
             Ez = np.maximum(er, ed)
             for _ in range(2):              # suavizado 3x3: la malla (un vertice por texel) sin dientes
-                Ez = (Ez + np.roll(Ez, 1, 0) + np.roll(Ez, -1, 0) + np.roll(Ez, 1, 1) + np.roll(Ez, -1, 1)) / 5.0
-                er = (er + np.roll(er, 1, 0) + np.roll(er, -1, 0) + np.roll(er, 1, 1) + np.roll(er, -1, 1)) / 5.0
-                ed = (ed + np.roll(ed, 1, 0) + np.roll(ed, -1, 0) + np.roll(ed, 1, 1) + np.roll(ed, -1, 1)) / 5.0
+                Ez = _suave5(np, Ez)
+                er = _suave5(np, er)
+                ed = _suave5(np, ed)
             if Eis is not None:             # motor v97: el relieve, encima de la isla
                 ei = Eis[r0:r1]
-                ei = (ei + np.roll(ei, 1, 0) + np.roll(ei, -1, 0) + np.roll(ei, 1, 1) + np.roll(ei, -1, 1)) / 5.0
+                ei = _suave5(np, ei)
                 # motor v98: el relieve y los montes no pasan de la costa de su isla (ocupaban la
                 # celda entera: con el mundo lleno no quedaba mar)
                 hi = His[r0:r1]
@@ -9210,6 +9258,7 @@ def cauces(W, cfg, cl=None, ter=None):
                                 1.0 if k % 2 else -1.0)
                     recodos[c] = q
                     if cfg.get('lagos', 1) and laguna(W, cfg, c) > 0.02 \
+                            and not (cfg.get('oceano') and suelo(W, cfg, c) - nivel_mar(W, cfg) < 0.02) \
                             and not (cfg['nivel'] >= 29 and es_escision(W, c)):    # fase 29: un rio no la llena
                         lagos.append(c)
                 arista.append((c_ant, c))
@@ -13336,6 +13385,7 @@ def cfg():
                  detalle=int(bool(_p('Detalle', True))),
                  pradera=max(0, min(2000000, int(_p('Pradera', c['pradera'])))),          # motor v99
                  mata=max(0.01, min(1.0, _p('Mata', c['mata']))),
+                 tierra=max(0.0, min(1.0, _p('Tierra', c['tierra']))),                    # motor v100
                  refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
                  biomas=int(bool(_p('Biomas', True))),
                  variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
@@ -13936,8 +13986,8 @@ def uniformes_piel(W, c, now):
     lb, ln = _limites_pisos(c) if c['nivel'] >= 11 else (0.65, 0.9)
     mar = nat and bool(c.get('oceano'))     # motor v97: el mar flota sobre las losetas (z < 0)
     u['uTerreno'] = (0.0, alto_hipso(c) if c['nivel'] >= 11 else 1.0, -OCEANO_LIFT if mar else HUNDIDO, 0.0)
-    u['uOceano'] = (1.0 if mar else 0.0, now % 3600.0, isla_alto(1) / alto_hipso(c) if c['nivel'] >= 11 else 0.0,
-                    1.0 if nat else 0.0)
+    u['uOceano'] = (1.0 if mar else 0.0, now % 3600.0, nivel_mar(W, c) if mar else 0.0, 1.0 if nat else 0.0)
+    u['uTierra'] = (c.get('tierra', 0.0) if nat else 0.0, 0.0, 0.0, 0.0)     # motor v100: las conchas, de tierra
     # motor v99: la pradera (GPU): cuantas matas reparte el shader por el planeta y su tamano
     u['uPradera'] = (float(c.get('pradera', 0)) if nat and c.get('detalle', 1) else 0.0, c.get('mata', 0.16), 0.0, 0.0)
     erup = []

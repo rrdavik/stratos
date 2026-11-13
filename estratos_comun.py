@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v77'
+VERSION_COMUN = 'comun v78'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -752,6 +752,7 @@ uniform vec4 uOceano;       // motor v97: x 1 con mar, y tiempo (s), z alto de u
 uniform vec4 uPradera;      // motor v99: x cuantas matas reparte la pradera (uFamilia 7), y su tamano
 uniform vec4 uPisos;        // x Limitebosque (la pradera no pasa de el)
 uniform sampler2D sRampa;   // los pisos de color (la pradera toma el de su altura)
+uniform vec4 uTierra;       // motor v100: x > 0, las conchas son capas de tierra (uFamilia 8)
 
 out Vertex {
     vec4 color;
@@ -836,7 +837,7 @@ void main()
     vec3 p = P;
     vec3 nrm = N;
     float h = -1.0;
-    bool pradera = uFamilia.x > 6.5;
+    bool pradera = uFamilia.x > 6.5 && uFamilia.x < 7.5;
     vec4 colPradera = vec4(1.0);
     vec3 hojaPradera = vec3(0.0);
     if (pradera) {
@@ -905,6 +906,14 @@ void main()
     }
     vec4 wPos = TDDeform(p);
     vec3 wN = TDDeformNorm(nrm);
+    if (uFamilia.x > 7.5 && uTierra.x > 0.001) {
+        // motor v100: una loseta es una caja plana y su tapa sobresale de la esfera hacia los
+        // bordes (por eso se leia como loseta). Aqui se lee el suelo de su celda (el mapa, en
+        // la direccion del centro de la caja) y el pixel descarta lo que quede por encima: la
+        // columna acaba en la esfera y arriba solo se ve la tierra del terreno
+        vec3 oC = (uTDMats[TDCameraIndex()].worldInverse * vec4(TDDeform(vec3(0.0)).xyz, 1.0)).xyz;
+        h = textureLod(sAlturas, uvDe(normalize(oC)), 0.0).g;
+    }
     // motor v77: el vaiven del dosel (Swaymax, en fase con el beat, con una onda por
     // longitud) y el viento del LFO, en la GPU: cada ejemplar de la biblioteca (uv.x 1-3)
     // se inclina entero sobre su base, como hacia antes el motor en sus filas
@@ -997,6 +1006,7 @@ uniform vec4 uOceano;       // motor v97: x 1 con mar, y tiempo (s), z alto de u
 uniform vec4 uVolcan0;      // motor v97: los tres volcanes mas activos: xyz direccion (planeta), w erupcion 0-1
 uniform vec4 uVolcan1;
 uniform vec4 uVolcan2;
+uniform vec4 uTierra;       // motor v100: x cuanto se ven las conchas como capas de tierra (mat_piel_estrato)
 
 in Vertex {
     vec4 color;
@@ -1176,7 +1186,8 @@ void main()
     float ks = mix(1.2, 0.03, rug);
     float wrap = 0.0;
     float amb = 1.0;
-    bool vegetal = (fam > 0.5 && fam < 1.5) || fam > 6.5;      // motor v99: 7, la pradera
+    bool vegetal = (fam > 0.5 && fam < 1.5) || (fam > 6.5 && fam < 7.5);      // motor v99: 7, la pradera
+    bool estrato = fam > 7.5;                   // motor v100: 8, las conchas (capas de tierra)
     bool tierra = fam > 2.5 && fam < 3.5;
     bool agua = fam > 3.5 && fam < 4.5;
     bool plastico = fam > 4.5 && fam < 5.5;     // fase 25: las inclusiones de las personas
@@ -1285,7 +1296,10 @@ void main()
             // motor v97: el oceano. La malla flota sobre las losetas donde no hay isla: es el
             // mar. Hondo y oscuro lejos de la costa, turquesa junto a ella (muestras del mapa
             // alrededor), con rompiente de espuma y olas que mueven la normal. La playa, arena.
-            mar = eAbs < 0.006;
+            // motor v100: el nivel del mar es el del suelo mas bajo (uOceano.z): la celda con
+            // sedimento por encima es tierra aunque no tenga nada: suelo desnudo, no agua
+            float sobreMar = max(mapa.g - uOceano.z, 0.0);
+            mar = sobreMar + eAbs < 0.006;
             vec3 e1 = normalize(cross(vec3(0.0, 1.0, 0.0), dT) + vec3(1e-4, 0.0, 0.0));
             vec3 e2 = cross(dT, e1);
             float tiempo = uOceano.y;
@@ -1294,10 +1308,12 @@ void main()
                 for (int k = 0; k < 8; k++) {
                     float g = 0.7853982 * float(k);
                     vec3 o = e1 * cos(g) + e2 * sin(g);
-                    costa += 0.075 * smoothstep(0.0, 0.03, texture(sAlturas, uvMapa(normalize(dT + o * 0.022))).r);
-                    costa += 0.050 * smoothstep(0.0, 0.03, texture(sAlturas, uvMapa(normalize(dT + o * 0.055))).r);
+                    vec2 m1 = texture(sAlturas, uvMapa(normalize(dT + o * 0.022))).rg;
+                    vec2 m2 = texture(sAlturas, uvMapa(normalize(dT + o * 0.055))).rg;
+                    costa += 0.075 * smoothstep(0.0, 0.03, m1.r + max(m1.g - uOceano.z, 0.0));
+                    costa += 0.050 * smoothstep(0.0, 0.03, m2.r + max(m2.g - uOceano.z, 0.0));
                 }
-                costa = clamp(max(costa, eAbs / 0.006), 0.0, 1.0);
+                costa = clamp(max(costa, (sobreMar + eAbs) / 0.006), 0.0, 1.0);
                 vec3 pw = iVert.pPos * 11.0;
                 float o1 = ruido(pw + vec3(0.31, 0.17, 0.0) * tiempo);
                 float o2 = ruido(pw * 2.9 - vec3(0.0, 0.43, 0.29) * tiempo);
@@ -1318,7 +1334,15 @@ void main()
             } else {
                 float arena = (1.0 - smoothstep(0.016, 0.034, eAbs)) * (1.0 - smoothstep(0.02, 0.2, mapa.a));
                 vec3 playa = vec3(0.80, 0.72, 0.52) * (0.86 + 0.24 * ruido(iVert.pPos * 70.0));
-                playa = mix(playa * vec3(0.62, 0.64, 0.66), playa, smoothstep(0.006, 0.013, eAbs));    // mojada
+                playa = mix(playa * vec3(0.62, 0.64, 0.66), playa, smoothstep(0.006, 0.013, sobreMar + eAbs));    // mojada
+                // sobre el sedimento, lejos del agua, no hay playa: tierra desnuda, parda y
+                // agrietada, con piedras
+                float gr = ruido(iVert.pPos * 5.0) * 0.5 + ruido(iVert.pPos * 19.0) * 0.3 + ruido(iVert.pPos * 71.0) * 0.2;
+                vec3 suelo = mix(vec3(0.31, 0.21, 0.13), vec3(0.60, 0.46, 0.31), gr);
+                float grieta = 1.0 - smoothstep(0.0, 0.035, abs(ruido(iVert.pPos * 9.0 + vec3(4.1)) - 0.5));
+                suelo *= 1.0 - 0.45 * grieta;
+                suelo = mix(suelo, vec3(0.52, 0.50, 0.46), step(0.93, ruido(iVert.pPos * 37.0)) * 0.7);
+                playa = mix(playa, suelo, smoothstep(0.012, 0.05, sobreMar));
                 base = mix(base, playa, arena);
                 rug = mix(rug, 0.8, arena);
             }
@@ -1603,9 +1627,30 @@ void main()
         ks = mix(1.2, 0.03, rug);
         sombra = 0.0;
     } else {
+        if (estrato && uTierra.x > 0.001 && iVert.hrel > 0.0 && length(iVert.pPos) > iVert.hrel + 0.004)
+            discard;                    // la tapa plana, recortada a la esfera del suelo de su celda
+        if (estrato && uTierra.x > 0.001) {
+            // motor v100: las conchas, capas de tierra. El color de su generacion se queda en
+            // un matiz sobre pardos de tierra (la cicatriz, de color vivo, no se toca); laminas
+            // finas de sedimento por el radio, onduladas, grano y cantos
+            float sat = (max(base.r, max(base.g, base.b)) - min(base.r, min(base.g, base.b)))
+                        / max(1e-4, max(base.r, max(base.g, base.b)));
+            float tt = clamp(uTierra.x, 0.0, 1.0) * (1.0 - smoothstep(0.62, 0.85, sat));
+            float lum = dot(base, vec3(0.30, 0.59, 0.11));
+            vec3 tierraC = mix(vec3(0.30, 0.21, 0.14), vec3(0.72, 0.59, 0.42), smoothstep(0.02, 0.40, lum));
+            base = mix(base, mix(tierraC, base, 0.25), tt);
+            float rr = length(iVert.pPos) * 26.0 + 1.6 * ruido(iVert.pPos * 0.8);
+            float lamina = ruido(vec3(rr, 3.1, 7.7)) * 0.6 + ruido(vec3(rr * 3.7, 1.3, 2.9)) * 0.4;
+            base *= mix(1.0, 0.70 + 0.55 * lamina, tt);
+            float canto = step(0.94, ruido(iVert.pPos * 23.0));
+            base = mix(base, base * 1.3 + vec3(0.03), canto * tt * 0.6);
+            rug = mix(rug, 0.95, tt);
+            expo = mix(120.0, 6.0, rug);
+            ks = mix(1.2, 0.03, rug);
+        }
         // poros: lo rugoso se mancha (pomez, hormigon); lo pulido queda limpio
         base *= 1.0 - 0.45 * rug * smoothstep(0.35, 0.75, poro);
-        if (fam < 0.5 && nivelv > 0.5) {
+        if ((fam < 0.5 || estrato) && nivelv > 0.5) {
             // fase 27: estrato humano. Las inclusiones que sobrevivieron al mundo, horneadas
             // en su loseta: motas de la paleta humana en la cara y los flancos. El alfa trae
             // rugosidad + 2 x cobertura (en veinteavos); las motas van fijas al planeta
@@ -1686,11 +1731,12 @@ void main()
         // motor v97: la lava emite; el mar se lee tambien en la cara de sombra y brilla en el borde
         col += emis + (mar ? fres * vec3(0.20, 0.30, 0.38) + spec * 0.5 : vec3(0.0));
     }
-    if (uBorde.x > 0.001 && !agua && (fam < 1.5 || tierra)) {
+    if (uBorde.x > 0.001 && !agua && (fam < 1.5 || tierra || estrato)) {
         // fase 11 v5: el tinte del secuenciador y de los pads, al borde (fresnel)
         vec3 d = normalize(iVert.pPos);
         vec3 tin = foco(uTinte0, uTinteCol0, d) + foco(uTinte1, uTinteCol1, d) + foco(uTinte2, uTinteCol2, d);
-        float borde = 0.15 + 0.85 * pow(1.0 - max(dot(n, v), 0.0), 2.0);
+        // motor v100: el suelo de la celda que suena se enciende entero, no solo su borde
+        float borde = (tierra ? 0.55 : 0.15) + (tierra ? 0.45 : 0.85) * pow(1.0 - max(dot(n, v), 0.0), 2.0);
         col += uBorde.x * borde * tin;
     }
     if (uNoche.x > 0.001) {
@@ -3012,8 +3058,11 @@ def conchas_al_dia(base, m):
         if geo is None or base.op('mat_piel_mineral') is None:
             return False
         bien = bool(setp_any(geo, ['instancea'], 'a'))
+        # comun v78: su propio material (mat_piel_estrato, la familia 8): el mismo shader, que en
+        # la naturaleza las pinta como capas de tierra (Tierra); hasta que exista, el mineral
+        mat = 'mat_piel_estrato' if base.op('mat_piel_estrato') is not None else 'mat_piel_mineral'
         setexpr(geo, 'material', con_boceto(base, 'estratos',
-                                            "'mat_respaldo' if parent().par.Materialrespaldo else 'mat_piel_mineral'"))
+                                            "'mat_respaldo' if parent().par.Materialrespaldo else '%s'" % mat))
         if bien:
             ok('conchas: shader de la piel (carbon brillante, basalto, hormigon mate; rugosidad en a)')
         else:
@@ -3726,9 +3775,12 @@ PIEL_UNIFORMES = [
     ('uOceano', tuple(PIEL_U % ('uOceano', q) for q in range(4))),
     # comun v77 (motor v99): la pradera (solo mat_piel_pradera): cuantas matas y su tamano
     ('uPradera', (PIEL_U % ('uPradera', 0), PIEL_U % ('uPradera', 1), '0', '0')),
+    # comun v78 (motor v100): cuanto se ven las conchas como tierra (solo mat_piel_estrato)
+    ('uTierra', (PIEL_U % ('uTierra', 0), '0', '0', '0')),
 ] + [('uVolcan%d' % k, tuple(PIEL_U % ('uVolcan%d' % k, q) for q in range(4))) for k in range(3)]
 # comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
-FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio', 'pradera']     # comun v77: 7, la pradera
+FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio', 'pradera',     # comun v77: 7, la pradera
+                 'estrato']                         # comun v78: 8, las conchas como capas de tierra
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
 SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio')
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
@@ -3914,6 +3966,8 @@ def materiales_piel(base):
             elif nombre.startswith('uVolcan') and fam != 'tierra':     # comun v75
                 vals = ('0', '0', '0', '0')
             elif nombre in ('uOceano', 'uPradera') and fam not in ('tierra', 'pradera'):     # comun v77
+                vals = ('0', '0', '0', '0')
+            elif nombre == 'uTierra' and fam != 'estrato':                                   # comun v78
                 vals = ('0', '0', '0', '0')
             bien = _uniforme(mat, q, nombre, vals) and bien
         if not bien:
@@ -4746,11 +4800,28 @@ def devolver_sala(base, m, guarda, filas):
 
 
 def run_test(base, fn):
+    """comun v78 (motor v100): las autopruebas corren sin Oceano. Con el, la sedimentacion
+    solo cubre lo creado, y casi todas (cortes, eras, huella, escisiones) entierran mundos
+    vacios para apilar conchas en todas las celdas. Lo del oceano lo prueba la fase 11, que
+    lo enciende ella misma. Al acabar, Oceano vuelve a como estaba."""
     t = Prueba(base)
+    oce = None
+    try:
+        if has_par(base, 'Oceano'):
+            oce = bool(base.par.Oceano.eval())
+            base.par.Oceano = False
+    except Exception:
+        oce = None
     try:
         fn(t)
     except Exception as e:
         import traceback
         t.check('la prueba se ejecuto entera', False, '%s' % e)
         traceback.print_exc()
+    finally:
+        if oce is not None:
+            try:
+                base.par.Oceano = oce
+            except Exception:
+                pass
     return t.finish()
