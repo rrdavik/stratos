@@ -91,6 +91,24 @@ CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
                edificio con el color de su secuenciador (Tinteventanas,
                Pasostinte). De lejos (Lodciudad), sin los remates pequenos.
 
+EL DOBLE DE GRANDE, CON LA TARJETA GRAFICA (v16, motor v99)
+-----------------------------------------------------------
+  ESCALA     el nucleo pasa de radio 6 a 12. Las formaciones (arboles, montes,
+             conchas) miden lo mismo: las celdas son el doble de anchas (cuatro
+             veces la superficie) y cada isla tiene sitio para un bosque, playas
+             y lagunas. La camara se encuadra sola y las dos luces fijas se
+             alejan al doble (una vez). Hasta 24 arboles por celda de bosque.
+  PRADERA    (Pradera 300000, Mata 0,16) una sola mata de hierba que la tarjeta
+             grafica instancia Pradera veces y coloca ella misma: el vertex
+             shader saca de cada numero de instancia un sitio de la esfera, lee
+             el mapa de alturas y la planta solo en tierra firme (ni playa, ni
+             roca, ni lava), mas espesa en unas manchas que en otras, con su
+             tamano, su color y su vaiven. El motor no calcula ninguna: no
+             cuesta CPU. Pradera 0 (o Detalle apagado) la quita.
+  MAPA       el mapa de alturas se guarda por capas (relieve, montes, islas) y
+             a cada nota solo se rehace lo que cambia: con el oceano costaba
+             mas de 100 ms por nota (con el mundo lleno); ahora, unos 15.
+
 OCEANO, ISLAS, VOLCANES Y DETALLE (v14, motor v97)
 --------------------------------------------------
   OCEANO     (Oceano, encendido) en la naturaleza las celdas vacias son mar: la
@@ -236,7 +254,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v14  (oceano con islas y archipielagos, volcanes, 23 plantas con su verde, detalle en la GPU)'
+VERSION = 'fase11 v16  (planeta el doble de grande, pradera en la GPU, mapa de alturas por capas)'
 banner(VERSION)
 
 base = require_base(11)
@@ -345,7 +363,7 @@ ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Minclust
    'Modulomarco 0,25, Maxmarco 3, Capsulas 0,4, Mutacion 0,5, Mutacionfuente (manual), Obra, '
    'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60; v11: Tema + industria, '
    'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
-   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p)')
+   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -754,10 +772,10 @@ def _prueba_oceano(t, m):
     W1 = mundo([i], m.GEO, 1)
     ter1 = m.terreno(W1, c)
     t.check('isla: una celda ocupada es una isla (el centro a %.3f sobre el mar) que crece con la ocupacion '
-            '(%s texeles de tierra con 1, 3, 6 y 9) hasta salirse de su celda'
+            '(%s texeles de tierra con 1, 3, 6 y 9)'
             % (ter1['centro'][i], ' < '.join(str(a) for a in areas)),
             ter1['centro'][i] > m.ORILLA_PLANTA and all(b > a for a, b in zip(areas, areas[1:]))
-            and (tierra(mundo([i], m.GEO, 9)) & (rej['celda'] != i)).any() and ter1['islas'] == 1)
+            and ter1['islas'] == 1)
     # 3. dos islas vecinas se unen por un istmo; tres o mas, un archipielago
     j = m.NEIGH[i][0]
     medio = m._norm(m._add(m.NORMALS[i], m.NORMALS[j]))
@@ -836,6 +854,52 @@ def _prueba_oceano(t, m):
     W['vh'] = list(W['h'])
     m.build_instances(W, m.cfg(), absTime.seconds + 10.0)
     t.check('leyenda MAR (islas, archipielagos, volcanes)', '  MAR ' in m.legend())
+    # v16 (motor v99): el doble de grande, la pradera en la GPU y el mapa por capas
+    import time
+    cw, cl_ = m._cell_sizes(c['core_radius'], i)
+    t.check('escala: nucleo de radio %g; la celda de Nota mide %.1f x %.1f, %.1f veces el limite de altura '
+            '(antes 1,2); las luces fijas, al doble (una sola vez)' % (c['core_radius'], cw, cl_,
+                                                                       min(cw, cl_) / m.limit(c)),
+            c['core_radius'] == 12.0 and min(cw, cl_) > 2.0 * m.limit(c)
+            and 'escala:nucleo12' in (base.fetch('migraciones', [], search=False) or []))
+    pr = base.op('pradera')
+    vsh = base.op('piel_vertex').text if base.op('piel_vertex') is not None else ''
+    Pm, _, Um, Tm = m.malla_pradera()
+    un = m.uniformes_piel(m.new_world(), c, 10.0)
+    t.check('pradera: una mata de %d triangulos instanciada Pradera veces (%d) sin datos por instancia; la coloca '
+            'el vertex shader (uFamilia 7) sobre el mapa de alturas; en la ciudad, ninguna'
+            % (len(Tm), int(un['uPradera'][0])),
+            pr is not None and pr.op('mata') is not None and base.op('n_pradera') is not None
+            and base.op('mat_piel_pradera') is not None and 'mat_piel_pradera' in (pr.par.material.expr or '')
+            and str(pr.par.instanceop.eval() or '').endswith('n_pradera')
+            and all(k in vsh for k in ('uPradera', 'TDInstanceID', 'azar('))
+            and int(un['uPradera'][0]) == int(base.par.Pradera) > 0 and 20 <= len(Tm) <= 80
+            and all(2.0 <= u_[0] < 3.0 for u_ in Um)
+            and m.uniformes_piel(m.new_world(), dict(c, tema=1), 10.0)['uPradera'][0] == 0.0
+            and 'pradera' in str(base.op('render').par.geometry.val).split())
+    Wc = mundo(range(m.N), m.GEO, 9)
+    for x in range(0, m.N, 3):
+        Wc['own'][x] = Wc['sp'][x] = m.ARQ
+    m.terreno(Wc, c)
+    ts = []
+    for k in range(5):
+        Wc['occ'][(11 * k + 5) % m.N] += 1
+        t0 = time.time()
+        Ei = m.terreno(Wc, c)['E'].copy()
+        ts.append(time.time() - t0)
+    m._TERRENO.pop('capas', None)
+    m._TERRENO['clave'] = m._TERRENO['sello_t'] = None
+    t0 = time.time()
+    Ef = m.terreno(Wc, c)['E']
+    entero = time.time() - t0
+    t.check('mapa de alturas por capas: una nota rehace solo lo que cambia (%.0f ms; entero, %.0f ms) y da '
+            'exactamente el mismo mapa' % (1000 * min(ts), 1000 * entero),
+            float(np.abs(Ei - Ef).max()) == 0.0 and min(ts) < 0.6 * entero)
+    # v15: con las 85 celdas ocupadas sigue habiendo mar
+    Wll = mundo(range(m.N), m.GEO, 12)
+    agua = float((~tierra(Wll)).mean())
+    t.check('con todas las celdas ocupadas sigue habiendo mar (%d %% del mapa)' % int(100 * agua),
+            0.08 < agua < 0.6)
     m.reset_world()
 
 

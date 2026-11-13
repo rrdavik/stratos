@@ -1635,3 +1635,21 @@ Basta con relanzar `recargar_todo.py` (o `fase11_piel.py` y `fase13_tejido.py`).
 - El render lleva antialiasing 16x. Si el script avisa de que no pudo ponerlo, elegirlo a mano en `render` → Anti-Alias.
 
 **Plantas nuevas**: ciprés, abedul, araucaria, olivo, baobab, mangle, bambú y cardón (árboles); agave y junco (matorrales). La lámina `pruebas/lamina_naturaleza.png` las enseña todas con su silueta a 18 px (`python3 pruebas/vista_previa.py lamina`).
+
+### Ajustes tras verlo en TouchDesigner (motor v98, comun v76, fase11 v15, fase13 v9)
+
+- **El mar no desaparece.** Las islas ya no pasan de su celda y el relieve y los montes acaban en la costa de su isla (antes ocupaban la celda entera: con el mundo lleno no quedaba agua). Con todas las celdas ocupadas quedan lagunas y brazos de mar. Los istmos son más estrechos y salen desde ocupación 3.
+- **El mar se lee con poca luz**: azul más claro y más emisivo.
+- **Montes lisos**: el relieve fino del shader solo arruga el relieve del SEQ2; en los montes boscosos parecía una pelota de golf.
+- **Pisos de color de borde irregular** (antes, anillos perfectos en cada monte).
+- **Abedul**: más hoja, y la corteza blanca solo en el fuste y las ramas madre. Cortezas blanca y rojiza, menos claras.
+
+## El doble de grande, con la tarjeta gráfica (motor v99, comun v77, fase11 v16, fase16 v4)
+
+Relanzar `recargar_todo.py`. Aparecen solos una geometría (`pradera`), un Pattern CHOP (`n_pradera`), un DAT (`pradera_callbacks`) y un material (`mat_piel_pradera`).
+
+- **Escala.** El núcleo pasa de radio 6 a 12. Árboles, montes y conchas miden lo mismo, así que las celdas son el doble de anchas (cuatro veces la superficie): cada isla tiene sitio para un bosque, playas y lagunas, y desde el globo las formaciones se leen a la mitad de tamaño relativo. La cámara se encuadra sola. Las luces `luz_principal` y `luz_relleno` se alejan al doble **una sola vez** (se apunta en `migraciones`); si las tenías colocadas a mano, revísalas. El mundo guardado se conserva. Hasta 24 árboles por celda de bosque (antes 10).
+- **Pradera, en la GPU.** `Pradera` (300 000) matas de hierba y `Mata` (0,16) su tamaño. Es una sola malla de 35 triángulos instanciada sin datos por instancia: el vertex shader de la piel saca de cada número de instancia un sitio de la esfera, lee el mapa de alturas y planta la mata solo en tierra firme (ni playa, ni roca, ni lava), con su tamaño, color y vaivén. El motor no calcula ninguna y `n_pradera` no se recuece, así que no cuesta CPU; el coste es de vértices en la tarjeta gráfica. `Pradera` a 0 (o `Detalle` apagado) la quita. Si la geometría no se ve, comprobar en `pradera` → Instance que Default Instance OP sea `n_pradera`.
+- **Mapa de alturas por capas.** Con el océano el mapa tenía unos 450 rasgos y rehacerlo entero a cada nota costaba más de 100 ms con el mundo lleno (el fotograma a 20 fps son 50). Ahora las capas (relieve, montes, islas) se guardan y solo se repinta la ventana de lo que cambia: unos 15 ms, con el mismo resultado exacto.
+- **Para medir en TouchDesigner:** `diagnostico_fps.py` antes y después. Si no llega a 20 fps, bajar por este orden: `Pradera`, `Detalle`, `Variantes`.
+

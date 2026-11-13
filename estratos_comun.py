@@ -16,7 +16,9 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
     porosa; fase 12: una por modelo con el shader de la piel)
   - terreno_al_dia(): la malla del relieve (fase 11 v5): la esfera 'terreno'
     que el shader desplaza con el mapa de alturas del motor (Script TOP
-    'alturas') y colorea con los pisos (Ramp TOP 'rampa_hipso'). comun v75
+    'alturas') y colorea con los pisos (Ramp TOP 'rampa_hipso'). comun v77
+    (motor v99): pradera_al_dia(), la geometria 'pradera' (una mata que la
+    tarjeta grafica instancia y coloca sola), y escala_al_dia(). comun v75
     (motor v97): la malla es de 512 x 1024 y el shader le suma el relieve
     fino; con Oceano flota sobre las losetas y es el mar. calidad_al_dia():
     antialiasing 16x y el menu Resolucion del render
@@ -29,10 +31,10 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v75'
+VERSION_COMUN = 'comun v77'
 COMP_PATH = '/project1/FASE1'
 
-RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
+RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
                 'coronas', 'inclusiones', 'fulguritas', 'vagones', 'diagnostico', 'particulas', 'humo',
                 'luz_celda', 'luz_conchas',
                 'luz_local']                    # lo transparente (motas, humo) y las capas aditivas, al final
@@ -747,6 +749,9 @@ uniform sampler2D sAlturas; // r: relieve sobre el suelo local, g: radio del sue
 uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
 uniform vec4 uViento;       // motor v77: x Swaymax, y el viento del LFO (grados), z el pulso a saltos, w beats por vaiven
 uniform vec4 uOceano;       // motor v97: x 1 con mar, y tiempo (s), z alto de una isla / el de los pisos, w 1 naturaleza
+uniform vec4 uPradera;      // motor v99: x cuantas matas reparte la pradera (uFamilia 7), y su tamano
+uniform vec4 uPisos;        // x Limitebosque (la pradera no pasa de el)
+uniform sampler2D sRampa;   // los pisos de color (la pradera toma el de su altura)
 
 out Vertex {
     vec4 color;
@@ -797,22 +802,32 @@ float fruido(vec3 x)
     return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
-float relieveFino(vec3 d, float e)
+float relieveFino(vec3 d, float e, float rel)
 {
+    // rel: 1 el relieve del SEQ2 (crestas finas), 0 los montes boscosos (comun v76: lisos; con
+    // las crestas parecian una pelota de golf)
     if (uOceano.w < 0.5 || e <= 0.0)
         return max(e, 0.0);
     float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
     float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
     float costa = uOceano.x * smoothstep(0.0, 0.012, e) * (1.0 - smoothstep(0.04, 0.10, e));
-    return max(e + 0.034 * (n1 - 0.5) * costa + 0.035 * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
+    return max(e + 0.034 * (n1 - 0.5) * costa + 0.022 * rel * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
+}
+
+float azar(uint v)
+{
+    // 0-1 de un entero (PCG): el azar de cada mata de la pradera
+    v = v * 747796405u + 2891336453u;
+    uint w = ((v >> ((v >> 28u) + 4u)) ^ v) * 277803737u;
+    return float(((w >> 22u) ^ w) >> 8) / 16777216.0;
 }
 
 vec3 sobre(vec3 d)
 {
     // uTerreno.z > 0: sin relieve la malla se hunde bajo las losetas; < 0 (Oceano): flota
     // sobre ellas, y es el mar
-    vec2 a = textureLod(sAlturas, uvDe(d), 0.0).rg;
-    float e = relieveFino(d, max(a.r, 0.0));
+    vec3 a = textureLod(sAlturas, uvDe(d), 0.0).rgb;
+    float e = relieveFino(d, max(a.r, 0.0), a.b);
     return d * (a.g + e - uTerreno.z * (1.0 - smoothstep(0.0, 0.08, e)));
 }
 
@@ -821,6 +836,59 @@ void main()
     vec3 p = P;
     vec3 nrm = N;
     float h = -1.0;
+    bool pradera = uFamilia.x > 6.5;
+    vec4 colPradera = vec4(1.0);
+    vec3 hojaPradera = vec3(0.0);
+    if (pradera) {
+        // motor v99: la pradera. Esta instancia es una mata; su sitio sale de su numero (espiral
+        // de Fibonacci sobre la esfera, con azar) y del mapa de alturas. Nada de esto pasa por
+        // el motor: lo hace la tarjeta grafica para cada mata, en cada fotograma.
+        float total = max(uPradera.x, 1.0);
+        // con enteros: en coma flotante, con cientos de miles de matas, el angulo aureo pierde
+        // precision y las matas salen en rayas por los meridianos
+        uint ni = uint(TDInstanceID());
+        float id = float(ni);
+        float h1 = azar(ni);
+        float h2 = azar(ni + 7919u * 65537u);
+        float h3 = azar(ni * 3u + 104729u);
+        float y = 1.0 - 2.0 * (id + 0.5) / total;
+        float rr = sqrt(max(0.0, 1.0 - y * y));
+        float ph = 6.2831853 * float((ni * 2654435769u) >> 8) / 16777216.0;     // 2^32 / phi
+        vec3 d = vec3(rr * cos(ph), y, rr * sin(ph));
+        vec3 e1 = normalize(cross(vec3(0.0, 1.0, 0.0), d) + vec3(1e-4, 0.0, 0.0));
+        vec3 e2 = cross(d, e1);
+        d = normalize(d + (e1 * (h1 - 0.5) + e2 * (h2 - 0.5)) * (3.0 / sqrt(total)));
+        e1 = normalize(cross(vec3(0.0, 1.0, 0.0), d) + vec3(1e-4, 0.0, 0.0));
+        e2 = cross(d, e1);
+        vec4 a = textureLod(sAlturas, uvDe(d), 0.0);
+        float e = relieveFino(d, max(a.r, 0.0), a.b);
+        float hr = e / max(1e-4, uTerreno.y);
+        float mancha = fruido(d * 21.0) * 0.6 + fruido(d * 57.0) * 0.4;      // espesa aqui, rala alli
+        bool vive = uOceano.w > 0.5 && id < uPradera.x && e > 0.035 && hr < uPisos.x - 0.03 && a.a < 0.05
+                    && h3 < 1.9 * mancha - 0.35;
+        if (!vive) {
+            gl_Position = vec4(0.0, 0.0, 2.0, 1.0);     // fuera del volumen de recorte: no se dibuja
+            return;
+        }
+        // matas bajas en lo ralo, mas altas (matorral) en lo espeso; mas pequenas hacia el limite del bosque
+        float tam = uPradera.y * (0.55 + 0.9 * h1) * mix(1.0, 0.55, smoothstep(0.3, uPisos.x, hr));
+        float alto = mix(0.7, 1.7, smoothstep(0.55, 0.85, mancha) * h2);
+        float g = 6.2831853 * h2;
+        vec2 xz = vec2(P.x * cos(g) - P.z * sin(g), P.x * sin(g) + P.z * cos(g));
+        float lon = atan(d.z, d.x);
+        float sw = radians(uViento.x * sin(6.2831853 * uViento.z / max(uViento.w, 1e-3) + 0.5 * lon + 6.0 * h3)
+                           + uViento.y);
+        vec3 pie = d * (a.g + e - uTerreno.z * (1.0 - smoothstep(0.0, 0.08, e)));
+        p = pie + (e1 * xz.x + e2 * xz.y) * tam + d * (P.y * tam * alto) + e1 * (sw * P.y * P.y * tam * alto);
+        vec2 nxz = vec2(N.x * cos(g) - N.z * sin(g), N.x * sin(g) + N.z * cos(g));
+        nrm = normalize(d * (0.5 + N.y) + e1 * nxz.x + e2 * nxz.y);
+        // el color: el piso de su altura, mas claro que el suelo; alguna, seca
+        vec3 cp = textureLod(sRampa, vec2(clamp(hr, 0.0, 1.0), 0.5), 0.0).rgb;
+        cp *= mix(vec3(1.25, 1.35, 0.95), vec3(1.75, 1.55, 0.80), h1);
+        cp = mix(cp, cp * vec3(1.5, 1.15, 0.55), step(0.86, h3));
+        colPradera = vec4(cp, 0.85);
+        hojaPradera = vec3(2.0 + 0.9 * h2, uv[0].y, 1.0);
+    }
     if (uTerreno.x > 0.5) {
         // la esfera unidad, desplazada: el suelo de la celda mas el relieve
         vec3 d = normalize(P);
@@ -832,7 +900,8 @@ void main()
         nrm = normalize(cross(pe - p, pn - p));
         if (dot(nrm, d) < 0.0)
             nrm = -nrm;
-        h = relieveFino(d, max(textureLod(sAlturas, uvDe(d), 0.0).r, 0.0)) / max(1e-4, uTerreno.y);
+        vec3 ah = textureLod(sAlturas, uvDe(d), 0.0).rgb;
+        h = relieveFino(d, max(ah.r, 0.0), ah.b) / max(1e-4, uTerreno.y);
     }
     vec4 wPos = TDDeform(p);
     vec3 wN = TDDeformNorm(nrm);
@@ -860,7 +929,7 @@ void main()
     oVert.inst = TDInstanceID();
     oVert.wPos = wPos.xyz;
     oVert.wNorm = normalize(wN);
-    oVert.oPos = p;
+    oVert.oPos = pradera ? P : p;
     oVert.pPos = (uTDMats[TDCameraIndex()].worldInverse * wPos).xyz;
     oVert.hrel = h;
     // fase 11 v8: el uv de los ejemplares (tipo: 1 corteza, 2 hoja, 3 tarjeta de
@@ -878,6 +947,10 @@ void main()
         oVert.bPos = p * vec3(length(ex), length(ey), length(ez));
     }
     oVert.color = TDInstanceColor(Cd);
+    if (pradera) {
+        oVert.color = colPradera;
+        oVert.hoja = hojaPradera;
+    }
 #else
     TDWritePickingValues();
 #endif
@@ -984,20 +1057,22 @@ float fruido(vec3 x)
     return mix(mix(a, b, f.y), mix(c, d, f.y), f.z);
 }
 
-float relieveFino(vec3 d, float e)
+float relieveFino(vec3 d, float e, float rel)
 {
+    // rel: 1 el relieve del SEQ2 (crestas finas), 0 los montes boscosos (comun v76: lisos; con
+    // las crestas parecian una pelota de golf)
     if (uOceano.w < 0.5 || e <= 0.0)
         return max(e, 0.0);
     float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
     float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
     float costa = uOceano.x * smoothstep(0.0, 0.012, e) * (1.0 - smoothstep(0.04, 0.10, e));
-    return max(e + 0.034 * (n1 - 0.5) * costa + 0.035 * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
+    return max(e + 0.034 * (n1 - 0.5) * costa + 0.022 * rel * e * (n2 - 0.5) * smoothstep(0.08, 0.30, e), 0.0);
 }
 
 // motor v97: la corteza de cada arbol (uv.y de sus tubos x 4): parda, gris, blanca
 // (abedul), verde (canas y cactus) y rojiza; y las flores y frutos (uv.x = 4 + color / 10)
-const vec3 CORTEZA[5] = vec3[5](vec3(0.17, 0.12, 0.08), vec3(0.36, 0.34, 0.31), vec3(0.80, 0.79, 0.74),
-                                vec3(0.22, 0.36, 0.14), vec3(0.32, 0.15, 0.10));
+const vec3 CORTEZA[5] = vec3[5](vec3(0.17, 0.12, 0.08), vec3(0.30, 0.28, 0.26), vec3(0.66, 0.65, 0.60),
+                                vec3(0.22, 0.36, 0.14), vec3(0.24, 0.13, 0.09));
 const vec3 FLOR[6] = vec3[6](vec3(0.96, 0.95, 0.90), vec3(0.95, 0.62, 0.72), vec3(0.96, 0.82, 0.18),
                              vec3(0.86, 0.16, 0.12), vec3(0.62, 0.36, 0.78), vec3(0.95, 0.52, 0.12));
 
@@ -1101,11 +1176,11 @@ void main()
     float ks = mix(1.2, 0.03, rug);
     float wrap = 0.0;
     float amb = 1.0;
-    bool vegetal = fam > 0.5 && fam < 1.5;
+    bool vegetal = (fam > 0.5 && fam < 1.5) || fam > 6.5;      // motor v99: 7, la pradera
     bool tierra = fam > 2.5 && fam < 3.5;
     bool agua = fam > 3.5 && fam < 4.5;
     bool plastico = fam > 4.5 && fam < 5.5;     // fase 25: las inclusiones de las personas
-    bool vidrio = fam > 5.5;                    // fase 29: la fulgurita de una escision
+    bool vidrio = fam > 5.5 && fam < 6.5;       // fase 29: la fulgurita de una escision
     float parte = 0.0;                          // 0 pared de arena fundida, 1 vidrio, 2 nucleo
     // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
@@ -1153,9 +1228,12 @@ void main()
         vec4 mapa = texture(sAlturas, tuv);
         // motor v97: la altura, pixel a pixel (el mapa mas el relieve fino): la costa no
         // depende de los vertices de la malla
-        float eAbs = uOceano.w > 0.5 ? relieveFino(dT, max(mapa.r, 0.0)) : iVert.hrel * uTerreno.y;
+        float eAbs = uOceano.w > 0.5 ? relieveFino(dT, max(mapa.r, 0.0), mapa.b) : iVert.hrel * uTerreno.y;
         float h = clamp(eAbs / max(1e-4, uTerreno.y), 0.0, 1.0);
-        base = uTerreno.w > 0.5 ? texture(sRampa, vec2(h, 0.5)).rgb : rampa(h);
+        // comun v76: el borde de cada piso, irregular (antes, anillos perfectos en los montes)
+        float hp = uOceano.w > 0.5 ? clamp(h + smoothstep(0.03, 0.12, h) * (0.07 * (ruido(iVert.pPos * 2.9) - 0.5)
+                                                 + 0.035 * (ruido(iVert.pPos * 8.3) - 0.5)), 0.0, 1.0) : h;
+        base = uTerreno.w > 0.5 ? texture(sRampa, vec2(hp, 0.5)).rgb : rampa(hp);
         float roca = smoothstep(uPisos.x, uPisos.x + 0.05, h) * (1.0 - step(uPisos.y, h));
         float nieve = step(uPisos.y, h);
         vec3 nf = normalize(cross(dFdx(iVert.wPos), dFdy(iVert.wPos)));
@@ -1224,7 +1302,7 @@ void main()
                 float o1 = ruido(pw + vec3(0.31, 0.17, 0.0) * tiempo);
                 float o2 = ruido(pw * 2.9 - vec3(0.0, 0.43, 0.29) * tiempo);
                 float o3 = ruido(pw * 7.3 + vec3(0.6, 0.0, 0.5) * tiempo);
-                base = mix(vec3(0.015, 0.085, 0.215), vec3(0.03, 0.24, 0.40), smoothstep(0.0, 0.30, costa));
+                base = mix(vec3(0.03, 0.15, 0.36), vec3(0.04, 0.29, 0.47), smoothstep(0.0, 0.30, costa));
                 base = mix(base, vec3(0.13, 0.60, 0.61), smoothstep(0.30, 0.95, costa));
                 base *= 0.86 + 0.28 * (o1 * 0.6 + o2 * 0.4);
                 float rompe = smoothstep(0.80, 0.97, costa + 0.10 * (o2 - 0.5) + 0.05 * sin(costa * 34.0 - 2.0 * tiempo));
@@ -1236,7 +1314,7 @@ void main()
                 ks = mix(1.3, 0.1, rompe);
                 sombra = 0.0;
                 amb = 1.0;
-                emis = base * 0.16;
+                emis = base * 0.38;     // comun v76: el mar se lee tambien con poca luz
             } else {
                 float arena = (1.0 - smoothstep(0.016, 0.034, eAbs)) * (1.0 - smoothstep(0.02, 0.2, mapa.a));
                 vec3 playa = vec3(0.80, 0.72, 0.52) * (0.86 + 0.24 * ruido(iVert.pPos * 70.0));
@@ -3646,9 +3724,11 @@ PIEL_UNIFORMES = [
     ('uNoche', (PIEL_U % ('uNoche', 0), '0', '0', '0')),      # fase 28: la noche de enterramiento
     # comun v75 (motor v97): el oceano y los volcanes (solo mat_piel_tierra; a 0 en las demas)
     ('uOceano', tuple(PIEL_U % ('uOceano', q) for q in range(4))),
+    # comun v77 (motor v99): la pradera (solo mat_piel_pradera): cuantas matas y su tamano
+    ('uPradera', (PIEL_U % ('uPradera', 0), PIEL_U % ('uPradera', 1), '0', '0')),
 ] + [('uVolcan%d' % k, tuple(PIEL_U % ('uVolcan%d' % k, q) for q in range(4))) for k in range(3)]
 # comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
-FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio']
+FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio', 'pradera']     # comun v77: 7, la pradera
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
 SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio')
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
@@ -3831,7 +3911,9 @@ def materiales_piel(base):
                 vals = ('0', '0', '0', '0')
             elif nombre.startswith('uBoceto') and fam != 'tierra':     # comun v62
                 vals = ('0', '0', '0', '0')
-            elif (nombre == 'uOceano' or nombre.startswith('uVolcan')) and fam != 'tierra':     # comun v75
+            elif nombre.startswith('uVolcan') and fam != 'tierra':     # comun v75
+                vals = ('0', '0', '0', '0')
+            elif nombre in ('uOceano', 'uPradera') and fam not in ('tierra', 'pradera'):     # comun v77
                 vals = ('0', '0', '0', '0')
             bien = _uniforme(mat, q, nombre, vals) and bien
         if not bien:
@@ -4198,6 +4280,130 @@ RES_ANCHO = "(1280, 1920, 2560, 3840)[int(parent().par.Resolucion.menuIndex)]"
 RES_ALTO = "(720, 1080, 1440, 2160)[int(parent().par.Resolucion.menuIndex)]"
 
 
+PRADERA_CB = r"""# Script SOP de la mata de la pradera (comun v77, motor v99): la malla que pide al motor
+# (malla_pradera), una vez. La geometria 'pradera' la instancia Pradera veces y el vertex
+# shader de la piel coloca cada una. Atributos: N y uv, como los ejemplares.
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def onCook(scriptOp):
+    scriptOp.clear()
+    try:
+        P, Nn, U, T = parent(2).op('motor').module.malla_pradera()
+    except Exception as e:
+        print('AVISO  pradera: %s' % e)
+        return
+    for nm in ('N', 'uv'):
+        try:
+            scriptOp.pointAttribs.create(nm, (0.0, 0.0, 0.0))
+        except Exception:
+            pass
+    pts = []
+    for k in range(len(P)):
+        p = scriptOp.appendPoint()
+        p.P = P[k]
+        try:
+            p.N = Nn[k]
+            p.uv = U[k]
+        except Exception:
+            pass
+        pts.append(p)
+    for a, b, c in T:
+        poly = scriptOp.appendPoly(3, closed=True, addPoints=False)
+        poly[0].point = pts[a]
+        poly[1].point = pts[b]
+        poly[2].point = pts[c]
+    return
+"""
+PRADERA_N = "max(1, int(parent().par.Pradera)) if parent().par.Detalle and str(parent().par.Tema) == 'naturaleza' else 1"
+
+
+def pradera_al_dia(base):
+    """comun v77 (motor v99): la pradera, a cargo de la tarjeta grafica. La geometria
+    'pradera' es una mata (Script SOP 'mata', la malla del motor) instanciada Pradera
+    veces SIN datos por instancia: el Pattern CHOP 'n_pradera' solo da el numero (no se
+    recuece: no depende del mundo) y el vertex shader de la piel (mat_piel_pradera,
+    uFamilia 7) coloca cada mata sobre el mapa de alturas. Parametros: Pradera (cuantas;
+    0 la apaga) y Mata (tamano), pagina Fase11. Devuelve la geometria."""
+    page = get_page(base, 'Fase11')
+    add_par(base, page, 'int', 'Pradera', 'Pradera: matas que reparte la tarjeta grafica (0: sin pradera)',
+            300000, 0, 1000000)
+    add_par(base, page, 'float', 'Mata', 'Tamano de una mata de la pradera', 0.16, 0.02, 0.6)
+    cb = get_or_make(base, 'textDAT', 'pradera_callbacks', 300, 1180)
+    cb.text = PRADERA_CB
+    pat = get_or_make(base, 'patternCHOP', 'n_pradera', 300, 1100)
+    setmenu(pat, ['type', 'wavetype'], ['constant', 'const'])
+    bien = setexpr(pat, 'length', PRADERA_N)
+    geo = base.op('pradera')
+    if geo is None or str(getattr(geo, 'OPType', '')) != 'geometryCOMP':
+        geo = fresh(base, 'geometryCOMP', 'pradera', 520, 1100)
+        for k in list(geo.children):
+            try:
+                k.destroy()
+            except Exception:
+                pass
+    s = geo.op('mata') or mk(geo, 'scriptSOP', 'mata', 0, 0)
+    setp_any(s, ['callbacks', 'callbackdat', 'dat'], '../pradera_callbacks')
+    for attr in ('render', 'display'):
+        try:
+            setattr(s, attr, True)
+        except Exception:
+            pass
+    try:
+        s.cook(force=True)
+    except Exception:
+        pass
+    bien = bool(setp(geo, 'instanceop', 'n_pradera')) and bien
+    setp_any(geo, ['instancing', 'instance'], True)
+    # si esta version de TouchDesigner deja fijar el numero de instancias a mano, tambien
+    if setmenu(geo, ['instancecountmode'], ['manual']):
+        setexpr(geo, 'numinstances', PRADERA_N)
+    set_spin(geo)
+    setexpr(geo, 'material', con_boceto(base, 'pradera', "'mat_piel_pradera'"))
+    if bien:
+        ok('pradera: una mata instanciada Pradera veces; cada una la coloca el shader (mat_piel_pradera) '
+           'sobre el mapa de alturas: el motor no calcula ninguna')
+    else:
+        info('pradera: no pude enlazar n_pradera (Pattern CHOP, Length = Pradera) como Default Instance OP '
+             'de la geometria pradera; ponlo a mano o deja Pradera a 0')
+    return geo
+
+
+def escala_al_dia(base):
+    """comun v77 (motor v99): el planeta es el doble de grande (nucleo 12). Las dos luces
+    fijas se alejan al doble, una sola vez por proyecto (se apunta en 'migraciones'): si
+    no, quedarian casi dentro del planeta. La camara y el destello ya siguen al motor."""
+    clave = 'escala:nucleo12'
+    try:
+        hechas = set(base.fetch('migraciones', [], search=False) or [])
+    except Exception:
+        hechas = set()
+    if clave in hechas:
+        return False
+    movidas = []
+    for nm in ('luz_principal', 'luz_relleno'):
+        luz = base.op(nm)
+        if luz is None:
+            continue
+        for ax in ('tx', 'ty', 'tz'):
+            try:
+                p = getattr(luz.par, ax)
+                if not (getattr(p, 'expr', '') or ''):
+                    p.val = 2.0 * float(p.eval())
+            except Exception:
+                pass
+        movidas.append(nm)
+    try:
+        base.store('migraciones', sorted(hechas | {clave}))
+    except Exception:
+        pass
+    if movidas:
+        ok('escala: el planeta es el doble de grande; %s, al doble de distancia' % ' y '.join(movidas))
+    return bool(movidas)
+
+
 def calidad_al_dia(base):
     """comun v75 (motor v97): mas resolucion, a cargo de la tarjeta grafica. El Render
     TOP sube el antialiasing a 16x (cada pixel se muestrea 16 veces: bordes de hojas y
@@ -4249,6 +4455,8 @@ def terreno_al_dia(base, m=None):
             pass
     set_spin(geo)
     calidad_al_dia(base)             # comun v75: antialiasing y Resolucion
+    escala_al_dia(base)              # comun v77: las luces, al doble de distancia (una vez)
+    pradera_al_dia(base)             # comun v77: la pradera en la GPU
     setexpr(geo, 'material', con_boceto(base, 'terreno', "'mat_piel_tierra'"))
     if not bien:
         info('terreno: pon a mano Rows %d y Columns %d en terreno/esfera (Sphere SOP, Polygon Mesh)'
