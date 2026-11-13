@@ -8,13 +8,14 @@ storage, el modulo de los Text DAT, Script CHOP y TOP, Table DAT, absTime y el
 componente de tiempo del proyecto (/local/time).
 
 Los COMP (base, geometry, camera, light, null) y los operadores de sala de
-las fases 21 a 23 (Audio Device In CHOP, Switch CHOP y TOP, Orbbec TOP, Corner
+las fases 21 a 23 (Audio Device In CHOP, Switch CHOP y TOP, Orbbec TOP, Kinect TOP, Corner
 Pin TOP, Resolution TOP, GLSL TOP, Movie File In TOP y DMX Out CHOP) solo
 aceptan los parametros que tienen en TouchDesigner: un nombre equivocado
 devuelve None, como alli, y el script lo avisa con '..'. Los demas SOP, MAT,
 TOP, CHOP y DAT aceptan cualquier nombre (no comprobamos sus parametros).
 
-Camara (fase 22): el Orbbec TOP no tiene camara (sin imagen), y un GLSL TOP no
+Camara (fase 22): el Orbbec TOP y el Kinect TOP no tienen aparato (un error,
+como en un ordenador sin camara; Sim.camaras = True lo quita), y un GLSL TOP no
 calcula nada. Un Script TOP guarda lo que le copian (copyNumpyArray), y
 Resolution, Null y Switch TOP dejan pasar la imagen de su entrada, asi que la
 sala simulada (un Script TOP) llega al motor por el mismo camino que la camara.
@@ -80,6 +81,8 @@ STRICT = {
     # fase 22 (camara)
     'orbbecTOP': ['active', 'sensor', 'image', 'colorres', 'depthres', 'fps', 'aligntoother', 'mirrorimage']
     + _TOP_COMUN,
+    # los nombres del Kinect TOP no estan comprobados en TouchDesigner (el script avisa con '..')
+    'kinectTOP': ['active', 'hwversion', 'sensor', 'image', 'remap', 'mirrorimage'] + _TOP_COMUN,
     'cornerpinTOP': ['extractp1x', 'extractp1y', 'extractp2x', 'extractp2y', 'extractp3x', 'extractp3y',
                      'extractp4x', 'extractp4y', 'pinp1x', 'pinp1y', 'pinp2x', 'pinp2y', 'pinp3x', 'pinp3y',
                      'pinp4x', 'pinp4y'] + _TOP_COMUN,
@@ -97,6 +100,8 @@ _TOP_DEF = dict(outputresolution='useinput', resolutionw=256, resolutionh=256, r
 _SALA = {'audiodeviceinCHOP': dict(active=True, driver='default', device='', rate=44100.0, bufferlength=0.1),
          'switchCHOP': dict(index=0.0), 'switchTOP': dict(index=0.0, blend=False),
          'orbbecTOP': dict(_TOP_DEF, active=True, sensor='', image='color', fps=30.0),
+         'kinectTOP': dict(_TOP_DEF, active=True, hwversion='version2', sensor='', image='color', remap=False,
+                           mirrorimage=False),
          'cornerpinTOP': dict(_TOP_DEF), 'resolutionTOP': dict(_TOP_DEF),
          'glslTOP': dict(_TOP_DEF, pixeldat='', vertexdat='', computedat='', mode='vertexpixel',
                          **dict(('vec%dname' % k, '') for k in range(8))),
@@ -111,6 +116,11 @@ _MENUS_SALA = dict(driver=['default', 'asio'],
                            'mono32float'],
                    image=['color', 'depth', 'ir', 'pointcloud'],
                    interface=['usbpro', 'artnet', 'sacn', 'kinet'])
+# los menus que cambian de un operador a otro (tipo, parametro)
+_MENUS_TIPO = {('kinectTOP', 'image'): ['color', 'depth', 'infrared', 'playerindex', 'colorpointcloud',
+                                        'depthpointcloud'],
+               ('kinectTOP', 'hwversion'): ['version1', 'version2']}
+_CAMARAS = ('orbbecTOP', 'kinectTOP')
 
 
 class AbsTime(object):
@@ -240,12 +250,13 @@ class ParCollection(object):
                     kind = 'toggle'
                 elif owner.OPType in _SALA and isinstance(defs.get(n), str):
                     kind = 'str'
-                if n in _MENUS_SALA:
+                menu = _MENUS_TIPO.get((owner.OPType, n), _MENUS_SALA.get(n))
+                if menu is not None:
                     kind = 'menu'
                 self._pars[n] = Par(owner, n, defs.get(n, '' if kind == 'str' else 0.0), kind=kind)
-                if n in _MENUS_SALA:
-                    self._pars[n].menuNames = list(_MENUS_SALA[n])
-                    self._pars[n].menuLabels = list(_MENUS_SALA[n])
+                if menu is not None:
+                    self._pars[n].menuNames = list(menu)
+                    self._pars[n].menuLabels = list(menu)
 
     def __getattr__(self, name):
         if name.startswith('__'):
@@ -591,7 +602,10 @@ class OP(object):
 
     # errores
     def errors(self, recurse=False):
-        return '\n'.join(self._errors[-3:])
+        err = list(self._errors[-3:])
+        if self.OPType in _CAMARAS and not getattr(self.sim, 'camaras', False):
+            err.insert(0, '%s: no encuentro el aparato (simulado)' % self.OPType)
+        return '\n'.join(err)
 
     def scriptErrors(self, recurse=False):
         return ''

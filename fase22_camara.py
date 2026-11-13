@@ -2,8 +2,8 @@
 =============================================================================
 ESTRATOS - FASE 22: LA CAMARA CENITAL (CASILLA PROBABLE)
 =============================================================================
-Requiere la fase 21. Una camara de profundidad en el techo (Orbbec Femto Bolt)
-mide cuanta gente hay en cada casilla del suelo, y esa densidad inclina la
+Requiere la fase 21. Una camara de profundidad en el techo (Orbbec Femto Bolt,
+o una Kinect v2 para probar: Sensor) mide cuanta gente hay en cada casilla del suelo, y esa densidad inclina la
 probabilidad de que cada senal que llega al planeta actue. El publico no
 escribe: solo inclina donde prende lo que ya llega. Es el componente
 'presencia' de la "Especificacion TouchDesigner: casilla probable", dentro de
@@ -43,7 +43,14 @@ OPERADORES (en /project1/FASE1)
 -------------------------------
   orbbec1      Orbbec TOP: la Femto Bolt (profundidad en metros, NFOV binned
                320 x 288, 30 fps).
-  cornerpin1   Corner Pin TOP: endereza y recorta el suelo cubierto, con la
+  kinect1      Kinect TOP: la Kinect v2 (nube de puntos de la profundidad,
+               512 x 424, 30 fps; XYZ en metros).
+  kinect_metros
+               GLSL TOP: la Z de la nube de puntos (la distancia en metros),
+               en el canal rojo, como da la Femto.
+  sensor_cam   Switch TOP: la Femto o la Kinect (Sensor). Solo esta activo el
+               TOP del aparato elegido.
+  cornerpin1   Corner Pin TOP (de sensor_cam): endereza y recorta el suelo cubierto, con la
                pared de la pantalla arriba. Sus esquinas se fijan a mano en la
                calibracion (cuatro marcas en el suelo).
   fondo        Movie File In TOP: el suelo vacio (Archivofondo), que graba
@@ -60,6 +67,15 @@ OPERADORES (en /project1/FASE1)
                numpy (asi se prueban fuera de TouchDesigner, y la fase 24 lee
                las cabezas de la misma imagen sin una segunda lectura).
   densidad     Script TOP: la densidad de cada casilla (11 x 9), para mirarla.
+
+PROBAR CON UNA KINECT V2
+------------------------
+  Windows, el adaptador USB 3 de la Kinect v2 y el Kinect for Windows SDK 2.0
+  (comprueba con su Kinect Studio o SDK Browser que da profundidad). Sensor =
+  Kinect y Fuente = Camara; la leyenda dice 'kinect 30 fps' (o 'kinect (sin
+  camara)' y el primer error de kinect1). Cuelgala mirando al suelo: a 3 m ve
+  unos 4,2 x 3,5 m (70 x 60 grados) y mide de 0,5 a 4,5 m, asi que baja
+  Anchosala y Fondosala a lo que cubra. Luego cornerpin1 y Capturarfondo.
 
 PROBAR SIN CAMARA
 -----------------
@@ -78,7 +94,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase22 v1  (camara cenital: densidad por casilla y sorteo de cada senal)'
+VERSION = 'fase22 v2  (camara cenital: Femto o Kinect v2, densidad por casilla y sorteo de cada senal)'
 banner(VERSION)
 
 base = require_base(22)
@@ -99,6 +115,8 @@ add_par(base, page, 'pulse', 'Reiniciarcuentas', 'Reiniciar contadores')
 # captacion
 add_par(base, page, 'menu', 'Fuente', 'De donde llega la sala', 'camara',
         menu=list(m.FUENTES_SALA), menu_labels=['Camara', 'Simulada'])
+add_par(base, page, 'menu', 'Sensor', 'Camara del techo', 'femto',
+        menu=list(m.SENSORES_SALA), menu_labels=['Femto Bolt', 'Kinect v2'])
 add_par(base, page, 'float', 'Alturamin', 'Altura minima de un cuerpo (m)', 0.8, 0.0, 2.0, clamp=True)
 add_par(base, page, 'float', 'Alturamax', 'Altura maxima de un cuerpo (m)', 2.2, 1.0, 3.0, clamp=True)
 add_par(base, page, 'pulse', 'Capturarfondo', 'Capturar el suelo vacio')
@@ -129,13 +147,26 @@ add_par(base, page, 'pulse', 'Simponer', 'Probar: poner una persona')
 add_par(base, page, 'pulse', 'Simquitar', 'Probar: quitarla')
 add_par(base, page, 'pulse', 'Simvaciar', 'Probar: vaciar la sala')
 ok('pagina Fase22: Activo, Cuanto 0,5 (tope 0,5), Pesocrear 1, Pesoerosion 1, Reiniciarcuentas; '
-   'Fuente (camara), Alturamin 0,8, Alturamax 2,2, Capturarfondo, Archivofondo; Anchosala 5,4, '
+   'Fuente (camara), Sensor (femto o kinect), Alturamin 0,8, Alturamax 2,2, Capturarfondo, Archivofondo; Anchosala 5,4, '
    'Fondosala 4,5, Tamcasilla 0,5, Desenfoque 1, Ocupacionllena 0,6, Subida 2, Bajada 5; Loncentral '
    '(giro), Anchoangular 180, Latnorte 90, Latsur -90, Espejo; Simcasilla, Simponer, Simquitar, Simvaciar')
 
 # -----------------------------------------------------------------------------
 # OPERADORES
 # -----------------------------------------------------------------------------
+
+KINECT_PIXEL = r'''// GLSL TOP 'kinect_metros' (fase 22): la distancia en metros de la Kinect v2.
+// Entrada 0: kinect1 en nube de puntos (XYZ en metros, la camara mirando a +Z).
+// Sale la Z en el canal rojo, como la profundidad de la Femto; sin dato, 0.
+out vec4 fragColor;
+void main()
+{
+    float z = texture(sTD2DInputs[0], vUV.st).b;
+    if (!(z > 0.0 && z < 20.0))
+        z = 0.0;
+    fragColor = TDOutputSwizzle(vec4(z, z, z, 1.0));
+}
+'''
 
 ALTURA_PIXEL = r'''// GLSL TOP 'altura_cam' (fase 22): la altura sobre el suelo de cada pixel.
 // Entrada 0: la profundidad enderezada (cornerpin1, en metros). Entrada 1: el
@@ -200,17 +231,50 @@ if orbbec is not None:
                    ['nfov2x2binned', 'nfov_2x2binned', 'nfovbinned', '320x288']):
         info('orbbec1: elige a mano la profundidad NFOV binned (320 x 288)')
     setp_any(orbbec, ['fps'], 30)
-pin = intenta('cornerpinTOP', 'cornerpin1', X0 + 220, Y0)
+    setexpr(orbbec, 'active', "parent().par.Sensor == 'femto'")
+
+# la Kinect v2: nube de puntos (metros) -> kinect_metros (la Z en el canal rojo)
+kinect = intenta('kinectTOP', 'kinect1', X0, Y0 + 300)
+if kinect is not None:
+    setp_any(kinect, ['active'], True)
+    setexpr(kinect, 'active', "parent().par.Sensor == 'kinect'")
+    if not setmenu(kinect, ['hwversion', 'hardwareversion', 'version'],
+                   ['version2', 'kinect2', 'v2', 'kinectv2', '2']):
+        info('kinect1: elige a mano Hardware Version = Kinect 2')
+    if not setmenu(kinect, ['image'], ['depthpointcloud', 'pointclouddepth', 'pointcloud']):
+        info('kinect1: no pude elegir la nube de puntos; pon Image = Depth Point Cloud (sin remapear a color)')
+    setp_any(kinect, ['remap', 'remapimage', 'cameraremap', 'cameraremapdepth'], False)
+    setmenu(kinect, ['format'], FORMATOS_FLOAT[::-1])
+kpx = get_or_make(base, 'textDAT', 'kinect_metros_pixel', X0 + 220, Y0 + 440)
+kpx.text = KINECT_PIXEL
+kmet = intenta('glslTOP', 'kinect_metros', X0 + 220, Y0 + 300)
+if kmet is not None:
+    setp_any(kmet, ['pixeldat'], 'kinect_metros_pixel')
+    setmenu(kmet, ['format'], FORMATOS_FLOAT)
+    if kinect is not None:
+        connect(kmet, kinect, 0)
+
+# sensor_cam: la Femto (0) o la Kinect (1), segun Sensor
+scam = get_or_make(base, 'switchTOP', 'sensor_cam', X0 + 220, Y0 + 150)
+if orbbec is not None:
+    connect(scam, orbbec, 0)
+if kmet is not None:
+    connect(scam, kmet, 1 if orbbec is not None else 0)
+if orbbec is not None and kmet is not None:
+    setexpr(scam, 'index', "parent().par.Sensor.menuIndex")
+elif kmet is not None:
+    info('sin orbbec1: sensor_cam solo tiene la Kinect')
+
+pin = intenta('cornerpinTOP', 'cornerpin1', X0 + 440, Y0 + 150)
 if pin is not None:
-    if orbbec is not None:
-        connect(pin, orbbec, 0)
+    connect(pin, scam, 0)
     setmenu(pin, ['format'], FORMATOS_FLOAT)
-fondo = intenta('moviefileinTOP', 'fondo', X0 + 220, Y0 - 140)
+fondo = intenta('moviefileinTOP', 'fondo', X0 + 440, Y0)
 if fondo is not None:
     setexpr(fondo, 'file', "parent().par.Archivofondo")
-px = get_or_make(base, 'textDAT', 'altura_cam_pixel', X0 + 440, Y0 + 140)
+px = get_or_make(base, 'textDAT', 'altura_cam_pixel', X0 + 660, Y0 + 290)
 px.text = ALTURA_PIXEL
-alt = intenta('glslTOP', 'altura_cam', X0 + 440, Y0)
+alt = intenta('glslTOP', 'altura_cam', X0 + 660, Y0 + 150)
 if alt is not None:
     setp_any(alt, ['pixeldat'], 'altura_cam_pixel')
     setmenu(alt, ['format'], FORMATOS_FLOAT)
@@ -255,16 +319,17 @@ cb.text = DENSIDAD_CB
 dens = get_or_make(base, 'scriptTOP', 'densidad', X0 + 1100, Y0)
 setp_any(dens, ['callbacks', 'callbackdat', 'dat'], 'densidad_callbacks')
 setmenu(dens, ['format'], FORMATOS_FLOAT)
-ok('orbbec1 -> cornerpin1 -> altura_cam (con fondo) -> fuente (o sala_sim) -> alturas_sala: '
+ok('orbbec1 (o kinect1 -> kinect_metros) -> sensor_cam -> cornerpin1 -> altura_cam (con fondo) -> fuente (o sala_sim) -> alturas_sala: '
    'el motor lee la imagen de alturas 30 veces por segundo; densidad la ensena')
 
 cols, filas = m.rejilla_sala(m.cfg())
 hay, texto = m.camara_encontrada()
 if hay:
-    ok('camara: %s, %g fps; rejilla de %d x %d casillas' % (texto, m.CAM_FPS, cols, filas))
+    ok('camara (Sensor = %s): %s, %g fps; rejilla de %d x %d casillas' % (m.sensor_sala()[0], texto, m.CAM_FPS,
+                                                                       cols, filas))
 else:
-    info('camara: no encuentro ninguna (%s). Rejilla de %d x %d casillas. Sin camara: Fuente = '
-         'simulada y Simponer' % (texto, cols, filas))
+    info('camara (Sensor = %s): no la encuentro (%s). Rejilla de %d x %d casillas. Sin camara: Fuente = '
+         'simulada y Simponer' % (m.sensor_sala()[0], texto, cols, filas))
 
 set_render(base)
 
@@ -273,8 +338,9 @@ leeme(base, 22, """FASE 22 - LA CAMARA CENITAL (CASILLA PROBABLE)
   que cada senal actue: P = Cuanto + (1 - Cuanto) x peso x densidad. Cada nota
   constructora y cada golpe de erosion u onset pasa por el sorteo (mapa
   logistico, sin azar); si no sale, se pierde. Activo apagado: todo prende.
-  orbbec1 -> cornerpin1 -> altura_cam (suelo vacio - profundidad) -> fuente
-  (o sala_sim) -> alturas_sala; el motor saca la densidad (Alturamin,
+  orbbec1 (Femto) o kinect1 -> kinect_metros (Kinect v2), segun Sensor ->
+  sensor_cam -> cornerpin1 -> altura_cam (suelo vacio - profundidad) ->
+  fuente (o sala_sim) -> alturas_sala; el motor saca la densidad (Alturamin,
   Alturamax, Desenfoque, Tamcasilla, Ocupacionllena, Subida, Bajada).
   Mapeo: pantalla = norte, fondo = sur, ancho = Anchoangular alrededor de
   Loncentral (sigue al giro); Espejo invierte izquierda y derecha.
@@ -288,7 +354,7 @@ print_report()
 # AUTOPRUEBA
 # -----------------------------------------------------------------------------
 
-PARS22 = ('Activo', 'Cuanto', 'Pesocrear', 'Pesoerosion', 'Fuente', 'Alturamin', 'Alturamax', 'Anchosala',
+PARS22 = ('Activo', 'Cuanto', 'Pesocrear', 'Pesoerosion', 'Fuente', 'Sensor', 'Alturamin', 'Alturamax', 'Anchosala',
           'Fondosala', 'Tamcasilla', 'Desenfoque', 'Ocupacionllena', 'Subida', 'Bajada', 'Anchoangular',
           'Latnorte', 'Latsur', 'Espejo', 'Simcasilla', 'Nota', 'Velprueba', 'Objetivo', 'Umbraldensidad')
 
@@ -528,15 +594,26 @@ def _prueba(t, m):
     leg = m.legend()
     t.check('leyenda CAMARA', 'CAMARA   simulada' in leg and 'densidad max' in leg and 'prendidas' in leg
             and 'casilla %d -> celda %d' % (kd, esperada) in leg)
+    # Fuente = camara: sin aparato, densidad 0 y 'sin camara'; con el aparato
+    # enchufado (la Femto o la Kinect de verdad), la leyenda dice el sensor y sus fps
     base.par.Fuente = 'camara'
-    W, c = nuevo()
-    d = imagenes(W, m.cfg(), 0.5)
-    t.check('sin camara (Fuente = camara y ningun aparato): densidad 0 y la leyenda lo dice',
-            d is not None and float(d.max()) == 0.0 and 'sin camara' in m.legend())
+    for sensor in m.SENSORES_SALA:
+        base.par.Sensor = sensor
+        W, c = nuevo()
+        hay, texto = m.camara_encontrada(m.cfg())
+        d = imagenes(W, m.cfg(), 0.5)
+        leg = m.legend()
+        if hay:
+            t.check('con camara (Sensor = %s, %s): la leyenda dice %s %g fps' % (sensor, texto, sensor, m.CAM_FPS),
+                    d is not None and '%s %g fps' % (sensor, m.CAM_FPS) in leg, texto)
+        else:
+            t.check('sin camara (Sensor = %s y ningun aparato): densidad 0 y la leyenda lo dice' % sensor,
+                    d is not None and float(d.max()) == 0.0 and '%s (sin camara)' % sensor in leg,
+                    'densidad max %s; %s' % (None if d is None else float(d.max()), texto))
     base.par.Fuente = 'simulada'
     m.on_pulse('Capturarfondo')
-    t.check('operadores: cornerpin1, fondo, altura_cam, sala_sim, fuente, alturas_sala y densidad',
-            all(base.op(nm) is not None for nm in ('sala_sim', 'fuente', 'alturas_sala', 'densidad',
+    t.check('operadores: sensor_cam, sala_sim, fuente, alturas_sala y densidad',
+            all(base.op(nm) is not None for nm in ('sensor_cam', 'sala_sim', 'fuente', 'alturas_sala', 'densidad',
                                                    'sala_personas')))
 
 
@@ -544,4 +621,5 @@ run_test(base, prueba)
 print('  Ahora: sin camara, Fuente = simulada, Simcasilla y Simponer (la leyenda CAMARA dice')
 print('  la casilla mas densa y su celda). Con la camara: ajusta las esquinas de cornerpin1')
 print('  sobre cuatro marcas del suelo y pulsa Capturarfondo con la sala vacia.')
+print('  Con la Kinect v2: Sensor = Kinect y Fuente = Camara (mira los .. de kinect1 arriba).')
 print('=' * 66)
