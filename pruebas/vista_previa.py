@@ -236,40 +236,57 @@ def escena(m, inst, salida, cam, foco, lado=900, escala=None, nucleo=None, cfg=N
     return salida
 
 
-def lamina(m, salida, lado=170, px=18):
-    """Fase 11 v8: la lamina de la naturaleza. Fila de arriba, los 13 ejemplares
-    de la biblioteca (variante 0, derivacion completa) de cerca; de abajo, su
-    silueta a 'px' pixeles de alto (la prueba a distancia), con la bola y el
-    cono de las versiones anteriores para comparar."""
+COL_FLOR = [(0.96, 0.95, 0.90), (0.95, 0.62, 0.72), (0.96, 0.82, 0.18), (0.86, 0.16, 0.12),
+            (0.62, 0.36, 0.78), (0.95, 0.52, 0.12)]             # como FLOR[] del shader de la piel
+COL_CORTEZA = [(0.30, 0.22, 0.14), (0.47, 0.44, 0.40), (0.86, 0.85, 0.80), (0.33, 0.47, 0.22),
+               (0.44, 0.24, 0.16)]                              # como CORTEZA[] del shader
+
+
+def lamina(m, salida, lado=170, px=18, por_fila=13):
+    """Fase 11 v8: la lamina de la naturaleza. Cada ejemplar de la biblioteca
+    (variante 0, derivacion completa) de cerca y, debajo, su silueta a 'px'
+    pixeles de alto (la prueba a distancia), con la bola y el cono de las
+    versiones anteriores para comparar. Motor v97: 23 plantas en dos bandas, cada
+    una con su verde (TONO_PLANTA), su corteza y sus flores."""
     c = dict(m.DEFAULT_CFG)
     nombres = [m.nombre_ejemplar(mo, 0, m.etapas_de(mo)[-1]) for mo in m.PLANTAS]
-    cols = len(nombres) + 2
-    lienzo = Image.new('RGB', (cols * lado, 2 * lado + 32), (236, 236, 230))
+    total = len(nombres) + 2
+    bandas = (total + por_fila - 1) // por_fila
+    alto_b = 2 * lado + 32
+    lienzo = Image.new('RGB', (por_fila * lado, bandas * alto_b), (236, 236, 230))
     dib = ImageDraw.Draw(lienzo)
-    for k, nm in enumerate(nombres):
-        img = np.zeros((lado, lado, 3)) + np.array([0.93, 0.93, 0.90])
-        zb = np.full((lado, lado), np.inf)
-        tris, uv = malla_ejemplar(m, nm, c)
-        hojas = uv[:, 0] >= 1.5
-        pintar(img, zb, tris[~hojas], (0.30, 0.22, 0.14), (0, 0.5, 3.4), (0, 0.5, 0), lado * 1.25,
-               (lado / 2, lado / 2))
-        pintar(img, zb, tris[hojas], (0.22, 0.48, 0.20), (0, 0.5, 3.4), (0, 0.5, 0), lado * 1.25,
-               (lado / 2, lado / 2))
-        lienzo.paste(Image.fromarray((np.clip(img, 0, 1) * 255).astype('uint8')), (k * lado, 0))
-        dib.text((k * lado + 4, lado + 2), nm[4:], fill=(40, 40, 40))
     sil = [m.silueta(c, nm, px) for nm in nombres]
     r = px // 2
     sil.append(set((x, y) for x in range(-r, r + 1) for y in range(px) if x * x + (y - r + 0.5) ** 2 <= r * r))
     sil.append(set((x, y) for y in range(px) for x in range(-r, r + 1) if abs(x) <= r * (1 - y / (px - 1.0))))
-    for k, s in enumerate(sil):
+    rotulos = [nm[4:] for nm in nombres] + ['bola (v5)', 'cono (v5)']
+    for k in range(total):
+        x0, y0 = (k % por_fila) * lado, (k // por_fila) * alto_b
+        if k < len(nombres):
+            nm = nombres[k]
+            mo = m.parte_ejemplar(nm)[0]
+            img = np.zeros((lado, lado, 3)) + np.array([0.93, 0.93, 0.90])
+            zb = np.full((lado, lado), np.inf)
+            tris, uv = malla_ejemplar(m, nm, c)
+            tono = getattr(m, 'TONO_PLANTA', {}).get(mo, (0.22, 0.48, 0.20))
+            verde = tuple(min(1.0, 1.25 * v) for v in tono)
+            cam = ((0, 0.5, 3.4), (0, 0.5, 0), lado * 1.25, (lado / 2, lado / 2))
+            corteza = uv[:, 0] < 1.5
+            ct = COL_CORTEZA[int(round(4 * getattr(m, 'CORTEZA', {}).get(mo, 0.0)))]
+            pintar(img, zb, tris[corteza], ct, *cam)
+            pintar(img, zb, tris[(uv[:, 0] >= 1.5) & (uv[:, 0] < 3.95)], verde, *cam)
+            for f, cf in enumerate(COL_FLOR):
+                sel = (uv[:, 0] >= 4.0 + 0.1 * f) & (uv[:, 0] < 4.1 + 0.1 * f)
+                if sel.any():
+                    pintar(img, zb, tris[sel], cf, *cam)
+            lienzo.paste(Image.fromarray((np.clip(img, 0, 1) * 255).astype('uint8')), (x0, y0))
+        dib.text((x0 + 4, y0 + lado + 2), rotulos[k], fill=(40, 40, 40))
         chico = Image.new('RGB', (2 * px, px), (236, 236, 230))
-        for x, y in s:
+        for x, y in sil[k]:
             if 0 <= x + px < 2 * px and 0 <= y < px:
                 chico.putpixel((x + px, px - 1 - y), (34, 70, 32))
         grande = chico.resize((lado, lado // 2), Image.NEAREST)
-        lienzo.paste(grande, (k * lado, lado + 16 + lado // 4))
-    dib.text((len(nombres) * lado + 4, lado + 2), 'bola (v5)', fill=(40, 40, 40))
-    dib.text(((len(nombres) + 1) * lado + 4, lado + 2), 'cono (v5)', fill=(40, 40, 40))
+        lienzo.paste(grande, (x0, y0 + lado + 16 + lado // 4))
     lienzo.save(salida)
     return salida
 

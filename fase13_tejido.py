@@ -87,7 +87,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v7  (industria: el ferrocarril como los rios y la red electrica como un rio al reves)'
+VERSION = 'fase13 v8  (autoprueba: con Oceano el rio acaba en el mar y sube con la isla)'
 banner(VERSION)
 
 base = require_base(13)
@@ -359,7 +359,11 @@ def _prueba(t, m):
     lejos = min([math.acos(max(-1.0, min(1.0, sum(d[q] * m.NORMALS[cel][q] for q in range(3)))))
                  for d, _ in ca['por_celda'].get(cel, [])] or [0.0])
     t.check('nota del SEQ1 sobre una celda con rio: la loseta se ilumina y el rio sigue azul, sin pasar por ella',
-            cel >= 0 and luz and [list(f) for f in inst.get('rios', [])] == antes and lejos > 0.5 * lado,
+            # motor v97: con Oceano la nota hace crecer la isla y el cauce sube con ella (y la
+            # desembocadura se mueve): se comprueba que las cintas siguen ahi y con su color
+            cel >= 0 and luz and inst.get('rios')
+            and set(tuple(f[9:12]) for f in inst.get('rios', [])) == set(tuple(f[9:12]) for f in antes)
+            and lejos > 0.5 * lado,
             'celda %d, rio a %.3f rad del centro, loseta %.3f' % (cel, lejos, 0.5 * lado))
     # 5. veinte conchas apiladas: ninguna del azul de los rios
     t.check('veinte conchas apiladas: ningun tono de concha en la banda del azul de los rios (235-275)',
