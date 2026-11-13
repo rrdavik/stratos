@@ -26,7 +26,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v71'
+VERSION_COMUN = 'comun v74'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -631,7 +631,7 @@ def onPulse(par):
 
 
 def onValueChange(par, prev):
-    if par.name in ('Modoactuacion', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
+    if par.name in ('Modoactuacion', 'Modocamara', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
                     'Torsionmax', 'Variantesind', 'Interfazdmx'):
         op('motor').module.on_value(par.name, par.eval())
     return
@@ -2036,6 +2036,7 @@ def install_core(base, carpeta, fase):
     fase7_al_dia(base)
     fase8_al_dia(base)
     fase11_al_dia(base)
+    ejemplares_al_dia(base)          # comun v73: las mallas, sin colgar de todos los parametros
     fase13_al_dia(base)
     fase21_al_dia(base)
     set_camera(base)
@@ -2915,6 +2916,11 @@ def camara_neutra(cam):
         if p is None:
             continue
         try:
+            if ax in ('rx', 'ry', 'rz') and "cam('rot'" in (p.expr or ''):
+                continue                # comun v72: el giro lo da el motor (camara_del_motor)
+        except Exception:
+            pass
+        try:
             if abs(float(p.eval()) - v) > 1e-6:
                 movidos.append(ax)
         except Exception:
@@ -2935,7 +2941,9 @@ def set_camera(base):
     """Camara de globo (motor v24): el planeta entero, centrado y tan cerca
     como permite el cuadro. Posicion y planos de recorte los da el motor.
     Si existe 'objetivo' (fase 10) mira a el; si no, mira al centro desde +Z.
-    Giro, pivote y escala vuelven a su valor neutro (camara_neutra)."""
+    Giro, pivote y escala vuelven a su valor neutro (camara_neutra).
+    comun v72: si el proyecto tiene Camfov (fase 10 v12, motor v92), el giro y
+    el FOV de la camara los da el motor y no hay Look At (camara_del_motor)."""
     cam = base.op('camara')
     if cam is None:
         fail('no encuentro la camara')
@@ -2950,11 +2958,30 @@ def set_camera(base):
              'el planeta usa el visor del render, no el de la camara' % ' '.join(movidos))
     setexpr(cam, 'near', CAM_EXPR % ('near', 0))
     setexpr(cam, 'far', CAM_EXPR % ('far', 0))
+    if has_par(base, 'Camfov'):
+        good = camara_del_motor(base) and good
     if good:
         ok('camara: el globo entero y centrado; retrocede a cada enterramiento')
     else:
         fail('no pude enlazar la camara al motor')
     return good
+
+
+def camara_del_motor(base):
+    """comun v72 (fase 10 v12, motor v92): el giro (rx ry rz, orden xyz) y el FOV
+    de la camara los entrega el motor, y la camara deja el Look At. Hace falta
+    para la camara rasante: su arriba es la vertical del sitio, no el +Y del
+    mundo, y su angular no es el del globo. En globo y superficie el motor da
+    el mismo giro que daba el Look At a 'objetivo'."""
+    cam = base.op('camara')
+    if cam is None:
+        return False
+    bien = all(setexpr(cam, ax, CAM_EXPR % ('rot', k)) for k, ax in enumerate(('rx', 'ry', 'rz')))
+    setmenu(cam, ['rord'], ['xyz'])
+    bien = setexpr(cam, 'fov', CAM_EXPR % ('fovcam', 0)) and bien
+    if bien:
+        setp(cam, 'lookat', '')        # solo si el motor ya da el giro
+    return bien
 
 
 def remove_par(base, name):
@@ -3767,6 +3794,10 @@ EJEMPLAR_CB = r'''# Script SOP de un ejemplar de la biblioteca (fase 11 v8): pid
 # (tubos de 4 o 5 lados) y hojas facetadas. Atributos: N y uv = (tipo,
 # profundidad en la copa, nivel de rama). Solo se recuece si cambia la
 # biblioteca (Variantes).
+# comun v73 (motor v93): pide cfg_malla() y no cfg(). Un Script SOP queda colgado
+# de cada parametro que lee al cocinarse; con cfg() entero se rehacia al cambiar
+# cualquiera, y Loncentral (fase 22) cambia en cada fotograma con el planeta
+# girando: las 160 mallas, 1 s por fotograma.
 
 def onSetupParameters(scriptOp):
     return
@@ -3776,7 +3807,8 @@ def onCook(scriptOp):
     scriptOp.clear()
     try:
         m = parent(2).op('motor').module
-        P, Nn, U, T = m.malla_ejemplar(scriptOp.parent().name, m.cfg())
+        c = m.cfg_malla() if hasattr(m, 'cfg_malla') else m.cfg()
+        P, Nn, U, T = m.malla_ejemplar(scriptOp.parent().name, c)
     except Exception as e:
         print('AVISO  %s: %s' % (scriptOp.parent().name, e))
         return
@@ -3802,6 +3834,19 @@ def onCook(scriptOp):
         poly[2].point = pts[c]
     return
 '''
+
+
+def ejemplares_al_dia(base):
+    """comun v73: el callback de las mallas de la biblioteca (modelos/ejemplar_callbacks)
+    al dia en un proyecto ya montado, lance la fase que lance. Devuelve si lo ha cambiado."""
+    mo = base.op('modelos')
+    cb = mo.op('ejemplar_callbacks') if mo is not None else None
+    if cb is None or cb.text == EJEMPLAR_CB:
+        return False
+    cb.text = EJEMPLAR_CB
+    ok('biblioteca: las mallas ya no dependen de todos los parametros (se rehacian en cada fotograma '
+       'con el planeta girando)')
+    return True
 
 
 def construir_ejemplar(modelos, nombre, x, y):

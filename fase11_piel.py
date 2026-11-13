@@ -205,7 +205,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v12  (rendimiento en TD: giro y uniformes una vez por fotograma; el render, solo el tema activo)'
+VERSION = 'fase11 v13  (las mallas de la biblioteca ya no se rehacen en cada fotograma: no leen cfg() entero)'
 banner(VERSION)
 
 base = require_base(11)
@@ -1686,9 +1686,40 @@ def _prueba_industria_(t, m):
             nh <= int(c['max_humo']))
 
 
+def _prueba_mallas_sin_cfg(t, m):
+    """comun v73 (motor v93): las mallas de la biblioteca no leen cfg() entero."""
+    leidos = []
+    p0 = m._p
+
+    def espia(nombre, defecto):
+        leidos.append(nombre)
+        return p0(nombre, defecto)
+
+    m._p = espia
+    try:
+        cm = m.cfg_malla()
+        de_malla = set(leidos)
+        del leidos[:]
+        c = m.cfg()
+        de_cfg = set(leidos)
+    finally:
+        m._p = p0
+    con_expr = sorted(n for n in de_cfg if getattr(getattr(base.par, n, None), 'expr', ''))
+    t.check('las mallas de la biblioteca leen 3 parametros (cfg() lee %d, y %s cambia en cada fotograma)'
+            % (len(de_cfg), ', '.join(con_expr) or 'ninguno'),
+            de_malla == set(('Oblicuidad', 'Retranqueo', 'Torsionmax')) and not (de_malla & set(con_expr)),
+            ', '.join(sorted(de_malla)))
+    t.check('cfg_malla da las mismas mallas que cfg()',
+            m._clave_biblio(cm) == m._clave_biblio(c) and m._clave_ciudad(cm) == m._clave_ciudad(c))
+    cb = base.op('modelos').op('ejemplar_callbacks')
+    t.check('el callback de las mallas pide cfg_malla (y ejemplares_al_dia lo repone en un proyecto de antes)',
+            'cfg_malla()' in cb.text and not ejemplares_al_dia(base))
+
+
 def _prueba_rendimiento_td(t, m):
     """v12 (comun v49, motor v69): lo que se calcula una vez por fotograma y lo que
     no se dibuja."""
+    _prueba_mallas_sin_cfg(t, m)
     tema0 = str(base.par.Tema.eval())
     fu = base.op('frame_u')
     try:

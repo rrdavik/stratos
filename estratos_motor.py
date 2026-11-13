@@ -93,7 +93,29 @@
 #                 lectura diferida de la camara tras sala_reset o un cambio de
 #                 Fuente se tira (era la imagen de antes: una sala vacia
 #                 heredaba la densidad de la ultima persona).
-#                 Motor v92: Sensor = femto (orbbec1) o kinect (kinect1, la
+#                 Motor v92, fase 10 v12: la camara rasante (Modocamara =
+#                 rasante): a ras de suelo, con gran angular y anclada al
+#                 planeta, por el paralelo entre dos anillos. El motor entrega
+#                 el giro de la camara (cam('rot'), ya sin Look At) y su FOV
+#                 (cam('fovcam'); el del globo es el parametro Camfov).
+#                 Motor v93: cfg_malla(), la configuracion de las mallas de la
+#                 biblioteca con solo los parametros que las cambian. Sus
+#                 Script SOP pedian cfg() entero y quedaban colgados de todos
+#                 los parametros: Loncentral (fase 22) sigue al giro, y con el
+#                 planeta girando las 160 mallas se rehacian en cada fotograma
+#                 (1 s por fotograma en TouchDesigner).
+#                 Motor v94: la camara rasante, tumbada: por defecto mira al
+#                 cenit (Rasmirada 90) con 140 grados (Rasfov) y flota mas alta
+#                 (Rasaltura 0,6), sobre el suelo mas alto de las celdas de los
+#                 lados, de las de delante y de las de detras (antes solo las
+#                 dos de al lado: la pared de la celda siguiente tapaba el cuadro).
+#                 Motor v95: ojo de pez (Rasojo): con la camara rasante, el
+#                 Render TOP pasa a su modo Fish-Eye (180): un solo render con
+#                 180 grados alrededor de adonde mira la camara (al cenit: el
+#                 horizonte entero en el borde del circulo). Rasfov no cuenta.
+#                 Motor v96: cada camara con sus ajustes (CAMARAS): al elegir
+#                 Modocamara se ponen los de ese modo. Rasojo, apagado de fabrica.
+#                 Motor v97: Sensor = femto (orbbec1) o kinect (kinect1, la
 #                 Kinect v2); sin aparato (errores o avisos en su TOP, o sin
 #                 imagen) la camara no se lee: densidad 0 y 'sin camara'.
 #                 No toca TouchDesigner.
@@ -108,7 +130,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v92'
+MOTOR_VERSION = 'motor v97'
 
 import math
 
@@ -12651,7 +12673,7 @@ def cfg():
                  altura_monte=max(0.0, _p('Alturamonte', c['altura_monte'])),
                  lod_nat=max(0.0, _p('Lodnat', c['lod_nat'])),
                  tinte_borde_nat=max(0.0, _p('Tintebordenat', c['tinte_borde_nat'])),
-                 superficie=int(str(_p('Modocamara', 'globo')) == 'superficie'),
+                 superficie=int(str(_p('Modocamara', 'globo')) in ('superficie', 'rasante')),   # v92: tambien a ras de suelo
                  # fase 11 v8: brotes, arboles y terrazas
                  ligero=int(bool(_p('Ligero', True))),
                  refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
@@ -12835,6 +12857,21 @@ def cfg():
 
 
 _CFG_FOTO = {}
+
+
+def cfg_malla():
+    """Motor v93: la configuracion para las mallas de la biblioteca (malla_ejemplar),
+    leyendo SOLO los parametros que las cambian. En TouchDesigner un Script SOP queda
+    colgado de cada parametro que lee al cocinarse: con cfg() entero (mas de 200) se
+    rehacia al cambiar cualquiera, y Loncentral (fase 22) cambia en cada fotograma con
+    el planeta girando. La vegetacion no depende de ningun parametro (Varangulo,
+    Cuantizar30 y Densidadhoja son fijos desde la fase 11 v9); la ciudad y la
+    industria, de Oblicuidad, Retranqueo y Torsionmax, con los limites de cfg()."""
+    c = DEFAULT_CFG
+    return dict(var_angulo=c['var_angulo'], cuantizar30=c['cuantizar30'], densidad_hoja=c['densidad_hoja'],
+                oblicuidad=max(0.0, min(30.0, _p('Oblicuidad', c['oblicuidad']))),
+                retranqueo=max(0.0, min(0.4, _p('Retranqueo', c['retranqueo']))),
+                torsion_max=max(0.0, min(360.0, _p('Torsionmax', c['torsion_max']))))
 
 
 def cfg_foto():
@@ -13186,6 +13223,7 @@ def frame_tick():
         escisiones_tabla(W)
     terreno_al_dia_td(W, c)
     render_tema_al_dia(c)               # motor v69: el render, solo con el tema actual
+    render_modo_al_dia(c)               # motor v95: ojo de pez con la camara rasante
     fu = parent().op('frame_u')         # motor v69: giro y uniformes, una vez por fotograma
     if fu is not None:
         try:
@@ -14373,8 +14411,43 @@ def _legend_borrado(W, c):
     return '  BORRADO  vivas %d   borradas %d (%s)' % (n_inclusiones(W), sum(b.values()), ', '.join(partes))
 
 
+# --- cada camara con sus ajustes (motor v96) ---------------------------------------
+# Al elegir Modocamara se ponen los ajustes de ese modo (los que se toquen despues
+# valen hasta que se vuelva a elegir). Globo y superficie: los de la hoja
+# Estratos_parametros (Camaltura 1,7 es la de la captura del 21 de octubre; el
+# resto, de fabrica). Rasante: los de la prueba en TouchDesigner del 13 de noviembre
+# (Rasanillo 8 pedia el ultimo limite entre anillos: con 7 anillos es el 6).
+_CLASICA = (('Camfov', 45.0), ('Encuadre', 0.85), ('Camsuave', 3.0), ('Camaltura', 1.7), ('Camvel', 0.6))
+CAMARAS = dict(
+    globo=_CLASICA,
+    superficie=_CLASICA,
+    rasante=(('Rasaltura', 0.77), ('Rasfov', 120.0), ('Rasmirada', -13.6), ('Rasvel', 3.52), ('Rasanillo', 6)),
+)
+
+
+def ajustes_camara(modo):
+    """Pone los ajustes de la camara 'modo' (CAMARAS). Devuelve los que ha cambiado."""
+    puestos = []
+    for nombre, valor in CAMARAS.get(str(modo), ()):
+        try:
+            p = getattr(parent().par, nombre, None)
+            if p is None:
+                continue
+            if abs(float(p.eval()) - float(valor)) > 1e-9:
+                p.val = valor
+                puestos.append(nombre)
+        except Exception:
+            pass
+    return puestos
+
+
 def on_value(name, val):
-    if name == 'Modoactuacion':
+    if name == 'Modocamara':            # motor v96: cada camara con sus ajustes
+        puestos = [] if _CACHE.get('sin_ajustes') else ajustes_camara(val)   # las autopruebas los apartan
+        if puestos:
+            print('CAMARA  %s: %s' % (val, ', '.join('%s %g' % (n, float(getattr(parent().par, n).eval()))
+                                                    for n in puestos)))
+    elif name == 'Modoactuacion':
         try:
             parent().par.Showgrid = not bool(val)
         except Exception:
@@ -14625,6 +14698,43 @@ def geometrias_activas(cfg):
     """Las geometrias de los modelos que pueden tener instancias con el tema actual."""
     tema = tema_de(cfg)
     return [g for g, mo, _ in geometrias_piel(cfg) if tema in temas_de_modelo(mo)]
+
+
+RENDER_2D, RENDER_OJO = 'render2d', 'fisheye180'    # Render Mode del Render TOP: 2D y Fish-Eye (180)
+
+
+def modo_render(c):
+    """El Render Mode que toca: ojo de pez con la camara rasante (desde la mitad de
+    su transicion) y Rasojo; si no, el 2D de siempre."""
+    if c['nivel'] < 10 or not _p('Rasojo', False):
+        return RENDER_2D
+    try:
+        return RENDER_OJO if camera_state()['wr'] >= 0.5 else RENDER_2D
+    except Exception:
+        return RENDER_2D
+
+
+def render_modo_al_dia(c):
+    """Motor v95: pone el Render Mode del Render TOP cuando cambia (no en cada
+    fotograma). Devuelve si lo ha cambiado."""
+    quiere = modo_render(c)
+    if _CACHE.get('render_modo') == quiere:
+        return False
+    try:
+        r = parent().op('render')
+        if str(r.par.rendermode.eval()) != quiere:
+            r.par.rendermode = quiere
+        if str(r.par.rendermode.eval()) != quiere:
+            raise ValueError('el Render TOP no tiene el modo %s' % quiere)
+    except Exception as e:
+        if quiere == RENDER_OJO and not _CACHE.get('render_modo_aviso'):
+            _CACHE['render_modo_aviso'] = True
+            print('AVISO  ojo de pez: no pude poner Render Mode = Fish-Eye (180) en render (%s); '
+                  'ponlo a mano o apaga Rasojo' % e)
+        _CACHE['render_modo'] = quiere      # no se reintenta en cada fotograma
+        return False
+    _CACHE['render_modo'] = quiere
+    return True
 
 
 def render_tema_al_dia(c):
@@ -14915,19 +15025,25 @@ def smooth_damp(cur, vel, target, dt, t_suave):
 def _cam_optics():
     """(fov en grados, metodo, aspecto) de la camara y el render reales."""
     fov, metodo = 45.0, 'horzfov'
+    camfov = _p('Camfov', None)        # motor v92: el FOV lo gobierna el motor (la camara lo recibe de cam('fovcam'))
     try:
         cop = parent().op('camara')
-        fov = float(cop.par.fov.eval())
+        if camfov is None:              # proyecto sin Camfov (fase 10 v11 o anterior): el de la camara
+            fov = float(cop.par.fov.eval())
+        else:
+            fov = float(camfov)
         try:
             metodo = str(cop.par.viewanglemethod.eval())
         except Exception:
             pass
-        if 'focal' in metodo:
+        if 'focal' in metodo and camfov is None:
             fo = float(cop.par.focal.eval())
             ap = float(cop.par.aperture.eval())
             fov, metodo = math.degrees(2.0 * math.atan(ap / (2.0 * max(1e-3, fo)))), 'horzfov'
     except Exception:
         pass
+    if 'focal' in metodo and camfov is not None:
+        metodo = 'horzfov'
     if not 1.0 <= fov <= 179.0:            # camara sin FOV legible: el de TD por defecto
         fov = 45.0
     # El aspecto sale de los parametros de resolucion del render, nunca de
@@ -14954,6 +15070,125 @@ def _slerp_dir(a, b, t):
     so = math.sin(om)
     ka, kb = math.sin((1 - t) * om) / so, math.sin(t * om) / so
     return _norm((a[0] * ka + b[0] * kb, a[1] * ka + b[1] * kb, a[2] * ka + b[2] * kb))
+
+
+# --- camara rasante (motor v92) ----------------------------------------------------
+# Tercer modo (Modocamara = rasante): a ras de suelo y con gran angular. La
+# camara va ANCLADA al planeta (gira, se balancea y se inclina con el): se
+# calcula en coordenadas del planeta y se lleva al mundo con world_dir. Recorre
+# el paralelo que separa dos anillos de celdas (Rasanillo) a Rasvel grados/s,
+# a Rasaltura sobre el suelo real de las dos celdas que tiene a los lados, y
+# mira hacia delante, Rasmirada grados sobre la horizontal. Su arriba es la
+# vertical del sitio. El FOV (Rasfov) lo entrega el motor: cam('fovcam').
+
+RAS_SUAVE = 1.5                    # segundos con los que la altura sigue al suelo
+RAS_LEJOS = 5.0                    # distancia al punto al que mira
+RAS_VECINAS = (-15.0, 15.0, 30.0)  # grados de longitud, detras y delante, cuyo suelo tambien cuenta
+RAS_ALTURA, RAS_MIRADA, RAS_FOV = 0.6, 90.0, 140.0      # v94: tumbada, mirando al cenit (antes 0,35, 8 y 90)
+
+
+def paralelo_rasante(k):
+    """(latitud en grados, k valido) del limite entre los anillos k - 1 y k."""
+    R = max(1, len(RINGS))
+    band = 180.0 / (R + 0.5)
+    k = max(1, min(max(1, R - 1), int(k)))
+    return -90.0 + band * 0.25 + band * k, k
+
+
+def suelo_rasante(W, cfg, lat, lon):
+    """El suelo bajo la camara rasante: el mas alto de las dos celdas que tiene
+    a los lados del paralelo, con el relieve de la naturaleza si lo hay."""
+    a, b = celda_de_lonlat(lat - 1.0, lon), celda_de_lonlat(lat + 1.0, lon)
+    g = max(suelo(W, cfg, a), suelo(W, cfg, b))
+    for dl in RAS_VECINAS:              # v94: y las de delante y detras (sus paredes no tapan el cuadro)
+        g = max(g, suelo(W, cfg, celda_de_lonlat(lat - 1.0, lon + dl)),
+                suelo(W, cfg, celda_de_lonlat(lat + 1.0, lon + dl)))
+    try:
+        if cfg['nivel'] >= 11 and tema_de(cfg) == 'naturaleza':
+            la, lo = math.radians(lat), math.radians(lon)
+            d = (math.cos(la) * math.cos(lo), math.sin(la), math.cos(la) * math.sin(lo))
+            g += max(0.0, alto_en(terreno(W, cfg), d))
+    except Exception:
+        pass
+    return g, a, b
+
+
+def pose_rasante(lat, lon, radio, mirada):
+    """(posicion, delante, arriba) en coordenadas del PLANETA: sobre el paralelo
+    'lat' en la longitud 'lon', a 'radio' del centro, mirando en el sentido de la
+    marcha (longitud creciente) y 'mirada' grados sobre la horizontal."""
+    la, lo, mi = math.radians(lat), math.radians(lon), math.radians(mirada)
+    up = (math.cos(la) * math.cos(lo), math.sin(la), math.cos(la) * math.sin(lo))
+    fw = (-math.sin(lo), 0.0, math.cos(lo))
+    de = _norm(_add(_mul(fw, math.cos(mi)), up, math.sin(mi)))
+    ar = _norm(_add(_mul(up, math.cos(mi)), fw, -math.sin(mi)))
+    return _mul(up, radio), de, ar
+
+
+def giro_camara(delante, arriba):
+    """(rx, ry, rz) en grados, orden xyz (primero X: R = Rz Ry Rx, como las
+    instancias), de una camara que mira a 'delante' con 'arriba' hacia arriba.
+    La camara de TouchDesigner mira por su -Z y su arriba es +Y."""
+    f = _norm(delante)
+    r = _cross(f, arriba)
+    n = math.sqrt(_dot(r, r))
+    if n < 1e-9:                        # delante y arriba paralelos: cualquier lado vale
+        r = _cross(f, (1.0, 0.0, 0.0) if abs(f[0]) < 0.9 else (0.0, 0.0, 1.0))
+        n = math.sqrt(_dot(r, r))
+    r = _mul(r, 1.0 / n)
+    u = _cross(r, f)
+    # columnas de R: derecha, arriba, -delante
+    sb = max(-1.0, min(1.0, -r[2]))
+    b = math.asin(sb)
+    if abs(sb) < 1.0 - 1e-9:
+        a = math.atan2(u[2], -f[2])
+        c = math.atan2(r[1], r[0])
+    else:                               # mirando por el eje Y de la camara: rz = 0
+        a = math.atan2(u[0] * sb, u[1])
+        c = 0.0
+    return (math.degrees(a), math.degrees(b), math.degrees(c))
+
+
+def ejes_de_giro(rx, ry, rz):
+    """(derecha, arriba, delante) de una camara girada rx ry rz (orden xyz)."""
+    a, b, c = math.radians(rx), math.radians(ry), math.radians(rz)
+    sa, ca, sb, cb, sc, cc = math.sin(a), math.cos(a), math.sin(b), math.cos(b), math.sin(c), math.cos(c)
+    der = (cc * cb, sc * cb, -sb)
+    arr = (cc * sb * sa - sc * ca, sc * sb * sa + cc * ca, cb * sa)
+    z = (cc * sb * ca + sc * sa, sc * sb * ca - cc * sa, cb * ca)
+    return der, arr, (-z[0], -z[1], -z[2])
+
+
+def _giro_planeta():
+    """(giro, inclinacion, balanceo) del planeta en este fotograma, en grados."""
+    try:
+        return _ritmo().rotation(absTime.frame), float(parent().par.Tilt), wobble()
+    except Exception:
+        return 0.0, 0.0, 0.0
+
+
+def _rasante(W, c, dt, activo):
+    """La camara rasante de este fotograma, ya en el mundo: dict(pos, de, ar,
+    lat, lon, suelo, alt, celdas)."""
+    lat, k = paralelo_rasante(_p('Rasanillo', 4))
+    lon = _CACHE.get('ras_lon', 0.0)
+    if activo and not _p('Pausa', False):
+        lon = (lon + max(0.0, _p('Rasvel', 0.5)) * dt) % 360.0
+    _CACHE['ras_lon'] = lon
+    g_obj, ca, cb = suelo_rasante(W, c, lat, lon)
+    g = _CACHE.get('ras_g')
+    if g is None or not activo:
+        g, gv = g_obj, 0.0             # al entrar: sobre el suelo, sin transicion
+    else:
+        g, gv = smooth_damp(g, _CACHE.get('ras_gv', 0.0), g_obj, dt, RAS_SUAVE)
+    alt = max(0.05, _p('Rasaltura', RAS_ALTURA))
+    g = max(g, g_obj - 0.5 * alt)      # nunca bajo tierra, por brusco que sea el escalon
+    _CACHE['ras_g'], _CACHE['ras_gv'] = g, gv
+    pos, de, ar = pose_rasante(lat, lon, g + alt, max(-60.0, min(90.0, _p('Rasmirada', RAS_MIRADA))))
+    ang, tilt, wob = _giro_planeta()
+    return dict(pos=world_dir(pos, ang, tilt, wob), de=world_dir(de, ang, tilt, wob),
+                ar=world_dir(ar, ang, tilt, wob), lat=lat, lon=lon, anillo=k, suelo=g, alt=alt,
+                celdas=(ca, cb))
 
 
 def camera_state():
@@ -15007,12 +15242,41 @@ def camera_state():
         tgt = _mul(s_tgt, s)
     else:
         pos, tgt = g_pos, (0.0, 0.0, 0.0)
+    # orientacion (motor v92): la da el motor (cam('rot')), no el Look At de la
+    # camara. Globo y superficie miran a su objetivo con el +Y del mundo arriba
+    de = _norm((tgt[0] - pos[0], tgt[1] - pos[1], tgt[2] - pos[2]))
+    ar = (0.0, 1.0, 0.0)
+    fovcam = fov
+    # modo rasante: peso wr (0 nada, 1 a ras de suelo), con la misma transicion
+    ras = c['nivel'] >= 10 and str(_p('Modocamara', 'globo')) == 'rasante'
+    wr = _CACHE.get('cam_wr')
+    if wr is None:
+        wr = 1.0 if ras else 0.0
+    wr = max(0.0, min(1.0, wr + (1.0 if ras else -1.0) * dt / CAM_TRANS))
+    _CACHE['cam_wr'] = wr
+    sr = wr * wr * (3 - 2 * wr)
+    rs = None
+    if sr > 0.0:
+        rs = _rasante(W, c, dt, ras)
+        r0 = math.sqrt(pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2)
+        r1 = math.sqrt(_dot(rs['pos'], rs['pos']))
+        pos = _mul(_slerp_dir(pos, rs['pos'], sr), r0 + (r1 - r0) * sr)
+        de = _norm(_add(_mul(de, 1.0 - sr), rs['de'], sr)) if sr < 1.0 else rs['de']
+        ar = _norm(_add(_mul(ar, 1.0 - sr), rs['ar'], sr)) if sr < 1.0 else rs['ar']
+        tgt = _add(pos, de, RAS_LEJOS)
+        fovcam = fov + (max(20.0, min(160.0, _p('Rasfov', RAS_FOV))) - fov) * sr
+    else:
+        _CACHE.pop('ras_g', None)
+    rot = giro_camara(de, ar)
     dist = math.sqrt(pos[0] ** 2 + pos[1] ** 2 + pos[2] ** 2)
     near = max(0.05, min(5.0, 0.25 * (dist - Re)))
+    if rs is not None:                  # a ras de suelo: el plano cercano, por debajo de la altura de ojos
+        near = max(0.02, min(near + (0.15 * rs['alt'] - near) * sr, 5.0))
     far = dist + 2.0 * Re + 10.0
     st = dict(pos=pos, tgt=tgt, R=R, Re=Re, d=d, d_obj=d_obj, d_min=d_min, theta=th,
               fov=fov, metodo=metodo, aspect=aspect, encuadre=k, w=s, near=near, far=far,
-              salto=salto, modo='superficie' if s >= 0.5 else 'globo')
+              salto=salto, modo='rasante' if sr >= 0.5 else ('superficie' if s >= 0.5 else 'globo'),
+              rot=rot, de=de, ar=ar, fovcam=fovcam, wr=sr, ras=rs)
     _CACHE['cam'] = st
     _CACHE['cam_frame'] = absTime.frame
     return st
@@ -15025,7 +15289,7 @@ def cam(key, k=0, frame=None):
 
 def cam_reset():
     """La proxima lectura de la camara salta al encuadre (sin transicion)."""
-    for k in ('cam_d', 'cam_v', 'cam_R', 'cam_frame'):
+    for k in ('cam_d', 'cam_v', 'cam_R', 'cam_frame', 'ras_g', 'ras_gv'):
         _CACHE.pop(k, None)
 
 
@@ -15200,6 +15464,13 @@ def _legend():
                             'alto' if lado == 'vertical' else 'ancho', cs['encuadre'],
                             '%d%%' % int(round(alto_vis * 100)) if alto_vis < 9.99 else 'borde',
                             cs['fov'], 'vertical' if 'vert' in cs['metodo'] else 'horizontal'))
+            rs = cs.get('ras')
+            if rs:                      # motor v92: a ras de suelo
+                lines.append('  RASANTE  anillos %d-%d (lat %.0f)   lon %.0f   suelo %.2f   ojos a %.2f   '
+                             'fov %.0f   entre las celdas %d y %d   %d%%'
+                             % (rs['anillo'] - 1, rs['anillo'], rs['lat'], rs['lon'], rs['suelo'], rs['alt'],
+                                cs['fovcam'], rs['celdas'][0], rs['celdas'][1], int(round(cs['wr'] * 100)))
+                             + ('   ojo de pez 180' if _CACHE.get('render_modo') == RENDER_OJO else ''))
         except Exception:
             pass
     if lvl >= 9:
