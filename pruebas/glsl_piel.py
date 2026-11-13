@@ -371,7 +371,8 @@ def dibujar(ctx, prog, m, c, W, now, cam, foco, lado=700, terreno=None):
                                           (ibo, '3f 3f 3f 4f/i', 'iT', 'iR', 'iS', 'iC')])
             vao.render(instances=nmatas)
         prog['uTerreno'].value = (0.0, 1.0, 0.0, 1.0)
-    for g, fam in (('rios', 4.0), ('tejido', 0.0)):    # fase 11 v5: rios y lagos (agua)
+    # fase 11 v5: rios y lagos (agua); motor v100: las conchas (estratos, capas de tierra)
+    for g, fam in (('estratos', 8.0), ('rios', 4.0), ('tejido', 0.0)):
         filas = inst.get(g) or []
         if not filas or 'uFamilia' not in prog:
             continue

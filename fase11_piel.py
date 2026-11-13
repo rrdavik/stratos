@@ -91,6 +91,24 @@ CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
                edificio con el color de su secuenciador (Tinteventanas,
                Pasostinte). De lejos (Lodciudad), sin los remates pequenos.
 
+TIERRA EN VEZ DE LOSETAS (v17, motor v100)
+------------------------------------------
+  SEDIMENTO  con Oceano, la concha que entierra un mundo solo deja su capa donde
+             se creo algo o llego un desborde en ese mundo (y donde las personas
+             dejaron huella o abrieron una escision). El mar no se entierra: la
+             tierra sube era a era sobre el, y sus flancos ensenan las capas.
+  MAR        el nivel del mar es el del suelo mas bajo. Una celda con sedimento y
+             sin nada encima es tierra desnuda (parda, agrietada, con piedras),
+             no agua; alrededor de las islas que estan sobre sedimento no hay playa.
+  CONCHAS    (Tierra 0,75) las losetas se pintan como capas de tierra: el color
+             de su generacion queda en un matiz sobre pardos, con laminas finas
+             de sedimento, grano y cantos. Tierra 0: las losetas de color de antes.
+             La cicatriz (cian) se sigue viendo.
+  LUZ        la celda que suena sigue encendiendose: ademas de la loseta de luz,
+             su suelo entero se tine con el color de la senal (antes, solo el borde).
+  Las autopruebas de todas las fases corren sin Oceano (apilan conchas en mundos
+  vacios); la del oceano y la sedimentacion la hace esta fase.
+
 EL DOBLE DE GRANDE, CON LA TARJETA GRAFICA (v16, motor v99)
 -----------------------------------------------------------
   ESCALA     el nucleo pasa de radio 6 a 12. Las formaciones (arboles, montes,
@@ -254,7 +272,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v16  (planeta el doble de grande, pradera en la GPU, mapa de alturas por capas)'
+VERSION = 'fase11 v17  (tierra en vez de losetas: el mar no sedimenta, conchas como capas de tierra)'
 banner(VERSION)
 
 base = require_base(11)
@@ -313,6 +331,7 @@ add_par(base, page, 'toggle', 'Setos', 'Setos entre las parcelas de la meseta', 
 add_par(base, page, 'toggle', 'Oceano', 'Oceano: las celdas vacias son mar; las ocupadas, islas', True)
 add_par(base, page, 'float', 'Volcanes', 'Volcanes: parte de los conos de relieve que lo son', 0.2, 0.0, 1.0)
 add_par(base, page, 'toggle', 'Detalle', 'Detalle alto: hojas de verdad desde el globo (tarjeta grafica)', True)
+add_par(base, page, 'float', 'Tierra', 'Las conchas, como capas de tierra (0: losetas de color)', 0.75, 0.0, 1.0)
 # v10: la ciudad legible
 add_par(base, page, 'menu', 'Lenguaje', 'Lenguaje de la ciudad', 'latitud', menu=m.LENGUAJE_MODOS,
         menu_labels=['Por latitud (como los biomas)', 'Frio: hormigon y chapa', 'Templado: ladrillo y vidrio',
@@ -363,7 +382,7 @@ ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Minclust
    'Modulomarco 0,25, Maxmarco 3, Capsulas 0,4, Mutacion 0,5, Mutacionfuente (manual), Obra, '
    'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60; v11: Tema + industria, '
    'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
-   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16')
+   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16; v17: Tierra 0,75')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -895,6 +914,33 @@ def _prueba_oceano(t, m):
     t.check('mapa de alturas por capas: una nota rehace solo lo que cambia (%.0f ms; entero, %.0f ms) y da '
             'exactamente el mismo mapa' % (1000 * min(ts), 1000 * entero),
             float(np.abs(Ei - Ef).max()) == 0.0 and min(ts) < 0.6 * entero)
+    # v17 (motor v100): el mar no sedimenta; la tierra sube sobre el; las conchas, de tierra
+    c8 = dict(c, nivel=max(15, c['nivel']))
+    j = m.NEIGH[i][0]
+    lejos = max(range(m.N), key=lambda x: -sum(m.NORMALS[x][q] * m.NORMALS[i][q] for q in range(3)))
+    Ws = mundo([i, j], m.GEO, 3)
+    m.ensure(Ws)
+    Ws['ciclo_t0'] = 0.0
+    core = c8['core_radius']
+    m.end_cycle(Ws, c8, 10.0)
+    g1 = m.top_radius(Ws, c8) - core
+    solo = [x for x in range(m.N) if Ws['cols'][x]]
+    u8 = m.uniformes_piel(Ws, c8, 11.0)
+    t.check('sedimentacion: al enterrar un mundo con 2 celdas ocupadas, la concha (%.2f) solo deja loseta en '
+            'ellas (%d de %d); el mar sigue en el nucleo (nivel del mar %.2f) y la concha lo apunta (rm)'
+            % (g1, len(solo), m.N, m.nivel_mar(Ws, c8)),
+            sorted(solo) == sorted([i, j]) and g1 > 0 and abs(m.suelo(Ws, c8, i) - core - g1) < 1e-6
+            and abs(m.nivel_mar(Ws, c8) - core) < 1e-9 and abs(u8['uOceano'][2] - core) < 1e-6
+            and Ws['shells'][-1]['rm'][lejos] == 1 and Ws['shells'][-1]['rm'][i] == 0
+            and all(m.sedimenta(Ws, dict(c8, oceano=0))) and all(m.sedimenta(Ws, dict(c8, tema=1))))
+    est = base.op('estratos')
+    t.check('conchas como capas de tierra: estratos con mat_piel_estrato (uFamilia 8) y Tierra %.2f en la '
+            'naturaleza (0 en la ciudad); la celda que suena ilumina su suelo' % u8['uTierra'][0],
+            base.op('mat_piel_estrato') is not None and (est is None or c['nivel'] < 15
+                                                         or 'mat_piel_estrato' in (est.par.material.expr or ''))
+            and abs(u8['uTierra'][0] - float(base.par.Tierra)) < 1e-9
+            and m.uniformes_piel(Ws, dict(c8, tema=1), 11.0)['uTierra'][0] == 0.0
+            and all(k in sh for k in ('uTierra', 'sobreMar', 'estrato')))
     # v15: con las 85 celdas ocupadas sigue habiendo mar
     Wll = mundo(range(m.N), m.GEO, 12)
     agua = float((~tierra(Wll)).mean())

@@ -1653,3 +1653,14 @@ Relanzar `recargar_todo.py`. Aparecen solos una geometría (`pradera`), un Patte
 - **Mapa de alturas por capas.** Con el océano el mapa tenía unos 450 rasgos y rehacerlo entero a cada nota costaba más de 100 ms con el mundo lleno (el fotograma a 20 fps son 50). Ahora las capas (relieve, montes, islas) se guardan y solo se repinta la ventana de lo que cambia: unos 15 ms, con el mismo resultado exacto.
 - **Para medir en TouchDesigner:** `diagnostico_fps.py` antes y después. Si no llega a 20 fps, bajar por este orden: `Pradera`, `Detalle`, `Variantes`.
 
+## Tierra en vez de losetas (motor v100, comun v78, fase11 v17)
+
+Relanzar `recargar_todo.py`. Aparece un material más, `mat_piel_estrato`, que pasa a ser el de la geometría `estratos`.
+
+- **La sedimentación no cubre el mar.** Con `Oceano`, al enterrarse un mundo la concha nueva solo deja su capa en las celdas donde se creó algo o llegó un desborde en ese mundo (ocupadas, con carga, nacidas o erosionadas en él) y donde las personas dejaron huella o abrieron una escisión. El resto queda como estaba. Sin `Oceano`, o en ciudad e industria, todo sedimenta como antes.
+- **El nivel del mar** es el del suelo más bajo del planeta. La tierra sube era a era sobre él y sus flancos enseñan las capas. Una celda con sedimento y sin nada encima es tierra desnuda, no agua. Un mundo ya guardado, con las conchas iguales en todas las celdas, sigue siendo todo mar hasta el primer enterramiento.
+- **Las conchas, como capas de tierra** (`Tierra`, 0,75): el color de la generación queda en un matiz sobre pardos, con láminas de sedimento, grano y cantos. Con 0 vuelven las losetas de color. La cicatriz cian no se toca.
+- **La celda que suena** sigue encendiéndose: además de la loseta de luz, todo su suelo se tiñe con el color de la señal (antes, solo el borde). Depende de `Tintebordenat`.
+- **Autopruebas:** todas corren sin `Oceano` (apilan conchas enterrando mundos vacíos) y lo devuelven a como estaba; lo del océano y la sedimentación lo prueba la fase 11.
+- **A tener en cuenta:** las celdas de mar ya no acumulan conchas, así que un corte o una escisión sobre mar virgen no tiene nada que enseñar hasta que allí se cree algo.
+
