@@ -17,8 +17,15 @@ La primera hace la foto. La segunda escribe en el Textport:
   - los fotogramas por segundo reales entre las dos;
   - los operadores que mas tiempo se llevan por fotograma (veces que se han
     cocinado x lo que tardo la ultima), en CPU y en GPU;
-  - cuantos operadores de cada tipo se cocinan en todos los fotogramas.
+  - cuantos operadores de cada tipo se cocinan en todos los fotogramas;
+  - (motor v102) lo que tarda el latido del motor por partes, con media y
+    maximo de TODOS los fotogramas entre las dos pasadas (no solo el
+    ultimo), los Script CHOP recocidos por fotograma y la linea PIEL.
 Copia y pega esa salida entera.
+
+OJO con la columna "ms la ultima vez": es UN fotograma, el ultimo. Si ese
+fue un tiron (un fin de ciclo, por ejemplo), todo sale inflado; las medias
+del motor y los fps reales son lo que vale.
 
 Para comparar: hazlo una vez con Modocamara = globo y otra con rasante.
 =============================================================================
@@ -93,6 +100,14 @@ def _informe_diag(antes, ahora):
     print('  SE COCINAN EN TODOS LOS FOTOGRAMAS, POR TIPO (cuantos | CPU ms/fotograma | GPU ms/fotograma)')
     for tipo, (n, c, g) in sorted(por_tipo.items(), key=lambda kv: -(kv[1][1] + kv[1][2]))[:TOPE_DIAG]:
         print('  %-18s %5d | %9.2f | %9.2f' % (tipo, n, c, g))
+    print('')
+    print('  EL LATIDO DEL MOTOR, POR PARTES (todos los fotogramas entre las dos pasadas)')
+    try:
+        mod = op('/project1/FASE1').op('motor').module
+        for linea in mod.diag_texto():
+            print(linea)
+    except Exception as e:
+        print('  (el motor no lo cuenta: %s; hace falta el motor v102)' % e)
     print('=' * 100)
 
 
@@ -104,5 +119,9 @@ if _antes_diag and 1.0 <= _ahora_diag['t'] - _antes_diag['t'] <= 600.0 and _ahor
     _raiz_diag.unstore('diag_fps')
 else:
     _raiz_diag.store('diag_fps', _ahora_diag)
+    try:                                    # motor v102: las cuentas del latido, desde aqui
+        op('/project1/FASE1').op('motor').module.diag_reset()
+    except Exception:
+        pass
     print('DIAGNOSTICO DE FOTOGRAMAS: foto hecha (%d operadores). Espera unos 10 s y lanzalo otra vez.'
           % len(_ahora_diag['ops']))

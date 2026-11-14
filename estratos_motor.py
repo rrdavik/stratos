@@ -153,7 +153,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v101'
+MOTOR_VERSION = 'motor v102'
 
 import math
 import time as _time
@@ -14867,7 +14867,75 @@ def registrar_ciclo(W, c, ev):
 
 # --- fotograma ---------------------------------------------------------------
 
+DIAG = {}                    # motor v102: lo que tarda cada parte del fotograma (diagnostico_fps.py)
+DIAG_PARTES = ('mundo', 'instancias', 'chops', 'terreno', 'resto')
+
+
+def diag_reset():
+    """Pone a cero las cuentas del fotograma (la primera pasada de diagnostico_fps.py)."""
+    DIAG.clear()
+    DIAG.update(n=0, lentos=0, recocidos=0, total=[0.0, 0.0])
+    for k in DIAG_PARTES:
+        DIAG[k] = [0.0, 0.0]
+
+
+def _diag_suma(t, partes, chops):
+    if 'n' not in DIAG:
+        diag_reset()
+    DIAG['n'] += 1
+    DIAG['recocidos'] += chops
+    tot = sum(partes.values())
+    DIAG['lentos'] += tot > 1000.0 / 60.0
+    for k, v in list(partes.items()) + [('total', tot)]:
+        a = DIAG[k]
+        a[0] += v
+        a[1] = max(a[1], v)
+
+
+def diag_texto():
+    """Las lineas del motor para diagnostico_fps.py: ms de Python por fotograma
+    (media y maximo) en cada parte del latido, los Script CHOP recocidos y la PIEL."""
+    n = DIAG.get('n', 0)
+    if not n:
+        return ['  (el motor no ha contado fotogramas: lanza el diagnostico dos veces)']
+    nombres = dict(mundo='mundo (tick, sala, micro, modular)', instancias='instancias (build_instances)',
+                   chops='Script CHOP recocidos (cook)', terreno='terreno y texturas al dia',
+                   resto='resto (frame_u, render, reticula)', total='TOTAL del latido')
+    out = ['  %d fotogramas del motor: %.1f ms de media, %.1f de maximo; %d por encima de 16,7 ms; '
+           '%.1f Script CHOP recocidos por fotograma'
+           % (n, DIAG['total'][0] / n, DIAG['total'][1], DIAG['lentos'], DIAG['recocidos'] / float(n))]
+    for k in DIAG_PARTES + ('total',):
+        out.append('    %-38s media %7.2f ms   maximo %8.2f ms' % (nombres[k], DIAG[k][0] / n, DIAG[k][1]))
+    try:
+        c = cfg()
+        out.append('  ' + _legend_piel(c).strip())
+        nat = sum(1 for g, _, _ in geometrias_piel(c) if g.startswith('mod_veg_'))
+        out.append('  geometrias de la piel %d (vegetacion %d)   Variantes %d   Pradera %d   Refrescopiel %s s'
+                   % (len(geometrias_piel(c)), nat, variantes(c), int(c.get('pradera', 0)),
+                      _coma(c.get('refresco_piel', 0.0), 2)))
+    except Exception as e:
+        out.append('  (sin la linea PIEL: %s)' % e)
+    return out
+
+
+def _op_chop(name):
+    """El Script CHOP de instancias name, guardado (motor v102: con Variantes alto hay
+    cientos y buscarlos en cada fotograma costaba)."""
+    ops = _CACHE.setdefault('ops_chop', {})
+    o = ops.get(name)
+    if o is not None:
+        try:
+            if o.valid:
+                return o
+        except Exception:
+            pass
+    o = ops[name] = parent().op(name)
+    return o
+
+
 def frame_tick():
+    t0 = _time.perf_counter()
+    partes = {}
     W, c = world(), cfg()
     now = absTime.seconds
     if c['nivel'] >= 15 and (W.get('tema') is None or not c['tema_en_ciclo']):
@@ -14905,7 +14973,11 @@ def frame_tick():
     pk = palette_key(c)                 # cambiar la paleta recolorea todo lo enterrado
     dirty = W.get('dirty', True) or _CACHE.get('tiles') is None or _CACHE.get('pal') != pk
     _CACHE['pal'] = pk
+    t1 = _time.perf_counter()
+    partes['mundo'] = (t1 - t0) * 1000.0
     inst = build_instances(W, c, now, hide_beacons=performance(), tiles=dirty, refresco=True)
+    t2 = _time.perf_counter()
+    partes['instancias'] = (t2 - t1) * 1000.0
     if dirty:
         _CACHE['tiles'] = inst['estratos']
     else:
@@ -14913,18 +14985,26 @@ def frame_tick():
     _CACHE['inst'] = inst
     _CACHE['frame'] = absTime.frame
     hechas = _CACHE.setdefault('filas_chop', {})
+    recocidos = 0
     for name in chop_names(c):
-        o = parent().op(name)
-        if o is None:
-            continue
         if name == 'i_estratos' and not dirty:
             continue
         if name not in CHOP_NAMES:      # fase 11: solo los modelos que han cambiado
             filas = inst.get(name[2:], [])
             if hechas.get(name) == filas:
                 continue
+            o = _op_chop(name)
+            if o is None:
+                continue
             hechas[name] = filas
+        else:
+            o = _op_chop(name)
+            if o is None:
+                continue
         o.cook(force=True)
+        recocidos += 1
+    t3 = _time.perf_counter()
+    partes['chops'] = (t3 - t2) * 1000.0
     if dirty or _CACHE.get('ret_R') != top_radius(W, c):
         _CACHE['ret_R'] = top_radius(W, c)
         o = parent().op('reticula_chop')
@@ -14937,7 +15017,10 @@ def frame_tick():
             _say('historico_tick', 'AVISO  historico: %s' % e)
     if c['nivel'] >= 29:                # fase 29: la tabla de las escisiones
         escisiones_tabla(W)
+    t4 = _time.perf_counter()
     terreno_al_dia_td(W, c)
+    t5 = _time.perf_counter()
+    partes['terreno'] = (t5 - t4) * 1000.0
     render_tema_al_dia(c)               # motor v69: el render, solo con el tema actual
     render_modo_al_dia(c)               # motor v95: ojo de pez con la camara rasante
     fu = parent().op('frame_u')         # motor v69: giro y uniformes, una vez por fotograma
@@ -14947,6 +15030,8 @@ def frame_tick():
         except Exception:
             pass
     W['dirty'] = False
+    partes['resto'] = (_time.perf_counter() - t5 + t4 - t3) * 1000.0
+    _diag_suma(t0, partes, recocidos)
 
 
 def terreno_al_dia_td(W, c):
