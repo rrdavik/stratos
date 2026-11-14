@@ -16154,9 +16154,11 @@ def _legend_borrado(W, c):
 # resto, de fabrica). Rasante: los de la prueba en TouchDesigner del 13 de noviembre
 # (Rasanillo 8 pedia el ultimo limite entre anillos: con 7 anillos es el 6).
 _CLASICA = (('Camfov', 45.0), ('Encuadre', 0.85), ('Camsuave', 3.0), ('Camaltura', 1.7), ('Camvel', 0.6))
+# Superficie: los de la captura de la pagina Fase10 del 14 de noviembre
+_SUPERFICIE = (('Camfov', 89.5), ('Encuadre', 0.877), ('Camsuave', 3.0), ('Camaltura', 15.0), ('Camvel', 0.6))
 CAMARAS = dict(
     globo=_CLASICA,
-    superficie=_CLASICA,
+    superficie=_SUPERFICIE,
     rasante=(('Rasaltura', 0.77), ('Rasfov', 120.0), ('Rasmirada', -13.6), ('Rasvel', 3.52), ('Rasanillo', 6)),
 )
 
