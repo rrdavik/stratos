@@ -10,8 +10,11 @@ QUE HACE
   ESCENAS      paleta (Paleta, Paletatono, Paletacroma), umbrales
                (Umbralvecindad, Pesovecina, Mincluster, Umbraldensidad),
                Caos, Maxpiezas, material (Rugmin, Rugmax), pulso (Swaymax,
-               Trafico) y luz (Luzcalida y el dimmer de luz_principal y
-               luz_relleno), guardados por escena en la tabla 'escenas'.
+               Trafico), luz (Luzcalida y el dimmer de luz_principal y
+               luz_relleno) y, desde la v3, Refrescopiel (la piel por turnos
+               de la fase 11 v18, 0,25 s en las tres), guardados por escena en
+               la tabla 'escenas'. Una escena guardada con Refresconat lo
+               migra a Refrescopiel al cargarse.
                Escena los carga (tambien el Tema: con Temaenciclo, espera al
                fin de ciclo); Guardarescena guarda lo que haya en la escena
                elegida; Cargarescena vuelve a ella. Al instalar la fase no se
@@ -45,7 +48,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase18 v2  (la escena de la industria)'
+VERSION = 'fase18 v3  (Refrescopiel en las escenas: la piel por turnos de la fase 11 v18)'
 banner(VERSION)
 
 base = require_base(18)
@@ -81,8 +84,27 @@ else:
     for esc in nuevas:                      # v2: la escena de la industria, sin tocar las demas
         for k, v in m.escena_defecto(esc).items():
             tabla.appendRow([esc, k, str(v)])
-    ok('tabla escenas: se conserva la que habia (%d filas)%s'
-       % (tabla.numRows - 1, '; anadida %s' % ', '.join(nuevas) if nuevas else ''))
+    # v3: Refresconat (si alguna escena lo guardo) pasa a Refrescopiel, y los parametros nuevos
+    # de las escenas que ya estaban, con su valor por defecto
+    migradas = 0
+    for r in range(1, tabla.numRows):
+        nuevo = m.ESCENA_MIGRA.get(tabla[r, 1].val)
+        if nuevo:
+            tabla[r, 1].val = nuevo
+            migradas += 1
+    pares = set((tabla[r, 0].val, tabla[r, 1].val) for r in range(1, tabla.numRows))
+    anadidos = 0
+    for esc in m.ESCENAS:
+        if esc in nuevas:
+            continue
+        for k, v in m.escena_defecto(esc).items():
+            if (esc, k) not in pares:
+                tabla.appendRow([esc, k, str(v)])
+                anadidos += 1
+    ok('tabla escenas: se conserva la que habia (%d filas)%s%s%s'
+       % (tabla.numRows - 1, '; anadida %s' % ', '.join(nuevas) if nuevas else '',
+          '; v3: %d parametros nuevos (Refrescopiel)' % anadidos if anadidos else '',
+          '; Refresconat -> Refrescopiel en %d' % migradas if migradas else ''))
 
 # -----------------------------------------------------------------------------
 # GEOMETRIAS: luz local (aditiva) y diagnostico
@@ -107,6 +129,8 @@ leeme(base, 18, """FASE 18 - ESCENAS Y DIRECCION TEMATICA
   Maxpiezas, material, pulso y luz) de la tabla 'escenas'. Guardarescena
   guarda lo que hay en la escena elegida; Cargarescena vuelve a ella.
   Luz local sin luces: focos en las obras, brasas, polvo (luz_local).
+  v3: Refrescopiel (la piel por turnos, fase 11 v18) se guarda con cada
+  escena; las guardadas con Refresconat lo migran al cargarse.
   Diagnostico: puentes, rutas y presion; Modoactuacion lo oculta.
   Sesion de 20 minutos: pruebas/sesion_escena.py (fuera de TouchDesigner).""")
 
@@ -169,6 +193,29 @@ def _prueba(t, m):
     base.par.Maxpiezas = 6
     m.on_pulse('Cargarescena')
     t.check('Cargarescena vuelve a lo guardado', m.cfg()['max_piezas'] == 4)
+    # v3: Refrescopiel se guarda con la escena; una escena guardada con Refresconat lo migra
+    if has_par(base, 'Refrescopiel'):
+        base.par.Refrescopiel = 0.5
+        m.on_pulse('Guardarescena')
+        escena('naturaleza')
+        nat = abs(float(base.par.Refrescopiel.eval()) - 0.25) < 1e-6
+        escena('ciudad')
+        guardada = abs(float(base.par.Refrescopiel.eval()) - 0.5) < 1e-6
+        filas_t = [[tabla[r, k].val for k in range(3)] for r in range(tabla.numRows)]
+        tabla.clear()
+        for f in filas_t:
+            if not (f[0] == 'industria' and f[1] == 'Refrescopiel'):
+                tabla.appendRow(f)
+        tabla.appendRow(['industria', 'Refresconat', '0.4'])
+        migra = m.valores_escena('industria').get('Refrescopiel') == '0.4' and \
+            'Refresconat' not in m.valores_escena('industria')
+        tabla.clear()
+        for f in filas_t:
+            tabla.appendRow(f)
+        base.par.Refrescopiel = 0.25
+        m.on_pulse('Guardarescena')
+        t.check('v3: Refrescopiel se guarda con la escena (ciudad 0,5; naturaleza 0,25 por defecto) y una escena '
+                'guardada con Refresconat lo migra al cargarse', nat and guardada and migra)
     escena('industria')                             # v2: la escena de la industria
     c = m.cfg()
     t.check('Escena industria: Tema industria, paleta mineral calida, Caos 3,82, menos balanceo',

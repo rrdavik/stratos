@@ -29,6 +29,7 @@ Las formaciones dejan de ser cajas: cada una es un modelo del tema activo (natur
 | `modular/` | El conversor CV → OSC para la fase 19: circuito (`esquema.svg`), firmware para ESP32 o Arduino (`cv_osc/cv_osc.ino`) y puente USB → UDP (`puente_osc.py`); ver `modular/README.md` | — |
 | `ajuste_vista.py` | No es una fase: pone los valores calibrados de la vista también donde los has tocado a mano, y escribe la línea para volver atrás (ver *Calibración de la vista*) | `ajuste_vista v2` |
 | `pruebas/sesion_escena.py` | La sesión de 20 minutos por escena de la fase 18, sobre el motor: densidad, piezas, coste por fotograma y criterios de cierre | — |
+| `pruebas/perfil_piel.py` | Motor v101: el coste de la piel por tema (5 minutos de escena y 300 fotogramas seguidos): `build_instances`, piel, arqueología y geometrías `mod_` que cambian por fotograma; `--sin-turnos` para comparar | — |
 | `pruebas/` | TouchDesigner simulado (desde la fase 11 v5, también Script TOP y parámetros RGB), vista previa del catálogo (bolas y conos) y comprobación del shader con OpenGL, con el terreno y los ríos (solo para probar fuera de TouchDesigner; ver *Cómo se ha probado*) | — |
 
 ```python
@@ -1664,3 +1665,44 @@ Relanzar `recargar_todo.py`. Aparece un material más, `mat_piel_estrato`, que p
 - **Autopruebas:** todas corren sin `Oceano` (apilan conchas enterrando mundos vacíos) y lo devuelven a como estaba; lo del océano y la sedimentación lo prueba la fase 11.
 - **A tener en cuenta:** las celdas de mar ya no acumulan conchas, así que un corte o una escisión sobre mar virgen no tiene nada que enseñar hasta que allí se cree algo.
 
+
+## La piel por turnos (motor v101, comun v79, fase11 v18, fase18 v3)
+
+Relanzar `recargar_todo.py` (o la fase 11 y la 18). No aparece ningún operador nuevo. En la página Fase11, `Refresconat` se cambia por `Refrescopiel` (la migración copia su valor una sola vez y lo avisa en el informe) y aparecen `Turnos` y `Cachearq`. Son tres arreglos de rendimiento en Python que no cambian la lógica del mundo ni la imagen.
+
+- **Caché de la arqueología** (`Cachearq`, encendido). `build_arqueologia` guarda sus filas y solo las rehace cuando cambia lo que enseñan los cortes (la columna de cada celda, las conchas, las uniones, las escisiones y las cicatrices) o mientras alguna cicatriz se está fundiendo; cuando todas han terminado, una última vez con el color final. Con la firma igual copia las mismas filas y el Script CHOP no se recuece. Apagado da exactamente las mismas filas.
+- **Piel por turnos** (`Refrescopiel` 0,25 s, `Turnos` encendido). La piel de los tres temas se calcula por porciones, una por fotograma, en un búfer de trabajo agrupado por celda, y se publica de golpe cada `Refrescopiel` segundos. Todas las porciones de una vuelta se calculan en el mismo instante (el de publicación), así que el planeta entero está en el mismo momento. Entre publicaciones las filas de los modelos son las mismas listas: los Script CHOP de los modelos se recuecen unas 4 veces por segundo en vez de 30. Las piezas de cluster van con la capital; las grúas y los volcanes, al cerrar la vuelta.
+- **Camino inmediato.** Una celda que recibe nota, impulso, erosión o corte, o que cambia de ocupación, especie o dueño, se recalcula en ese mismo fotograma (si cambia la ocupación, la especie, el dueño o la columna, también sus vecinas y la capital de su cluster, antes y después) y sustituye sus filas en el publicado y en el de trabajo. Siguen sin retraso el brote, el tinte de las ventanas, el pumping del bombo y el destello; el fin del tinte (`Pasostinte`) y del pumping vuelve a marcar la celda.
+- **Lo que pasa a moverse a saltos de `Refrescopiel`:** el avance de la obra y las grúas, el balanceo de los árboles, los balancines de la mina y las ventanas que respiran con el LFO. El humo y el viento del dosel no cambian: los anima la GPU.
+- **Escape.** `Refrescopiel` 0: la piel entera en cada fotograma (como antes en la ciudad). `Turnos` apagado: la vuelta entera en el fotograma de publicación (como antes en la naturaleza). `Forzarciclo`, `Resetmundo`, el cambio de tema y el de cualquier parámetro de la página Fase11 vacían los búferes y publican una vuelta completa en ese fotograma.
+- **El mapa de alturas, por cajas.** Una nota cambia la isla de su celda, sus istmos y quizá un cono o una cresta. El mapa se rehace solo en las cajas de lo que cambia (juntas solo si se tocan) más un borde de suavizado de 4 texels, también con arrozales y mesetas, y la forma de cada parche se guarda aparte de su alto. Da exactamente el mismo mapa que rehacerlo entero (comprobado mapa a mapa durante sesiones de 6 minutos). Las cachés del mapa olvidan lo menos usado en vez de vaciarse de golpe (antes, al llenarse, obligaban a rehacerlo todo en un fotograma).
+- **Escenas** (fase 18 v3). `Refrescopiel` se guarda con cada escena (0,25 s en las tres); una escena guardada con `Refresconat` lo migra al cargarse.
+- **El catálogo** se relee cada medio segundo; si la tabla no ha cambiado, el motor sigue con el mismo objeto (antes era uno nuevo y vaciaba las cachés de los edificios cada medio segundo).
+- **Leyenda:** `PIEL     turno 3/8   celdas 6   inmediatas 2   publica 0,25 s   python 3,1 ms   arq cache` (turno de la vuelta, celdas calculadas en él, celdas del camino inmediato, cada cuánto se publica, lo que tarda `build_instances` en Python y si la arqueología sale de la caché).
+
+**Autopruebas** (fase 11, con mundos propios): equivalencia (una vuelta por turnos publica las mismas filas que la vuelta entera en el mismo instante, en los tres temas; la arqueología con y sin `Cachearq`), sin publicaciones a medias, camino inmediato (una nota cambia su celda en el acto y nada fuera de su vecindad y su cluster), cicatriz (las filas de la arqueología cambian hasta `Cicatriz` y luego se congelan), reinicio (`Resetmundo`, `Forzarciclo` y `Tema`) y contrato (`chop_names` sigue listando todas las geometrías). La fase 18 comprueba que `Refrescopiel` se guarda con la escena y que `Refresconat` se migra.
+
+**Medición fuera de TD** (`pruebas/perfil_piel.py`: 5 minutos de la escena de cada tema con los patterns de `sesion_escena.py` y 300 fotogramas seguidos a 30 fps con el secuenciador sonando). Esta máquina es unas 3,5 veces más rápida que aquella en la que se midió el encargo: lo que cuenta es la proporción.
+
+Antes (motor v100):
+
+| Tema | Celdas | `build_instances` media | p95 | máx | picos > 15 ms | piel | arqueología | fotogramas con `mod_` que cambian |
+|---|---|---|---|---|---|---|---|---|
+| naturaleza | 38 | 8,3 ms | 56,0 ms | 210,8 ms | 26 | 6,0 ms | 1,5 ms | 46 de 299 |
+| ciudad | 49 | 4,6 ms | 6,2 ms | 7,5 ms | 0 | 3,2 ms | 0,9 ms | 299 de 299 |
+| industria | 38 | 4,8 ms | 7,6 ms | 12,8 ms | 0 | 3,2 ms | 0,8 ms | 299 de 299 |
+
+Después (motor v101, valores de fábrica):
+
+| Tema | Celdas | `build_instances` media | p95 | máx | picos > 15 ms | piel | arqueología | fotogramas con `mod_` que cambian |
+|---|---|---|---|---|---|---|---|---|
+| naturaleza | 38 | 4,1 ms | 26,9 ms | 77,2 ms | 24 | 3,4 ms | 0,0 ms | 98 de 299 |
+| ciudad | 49 | 1,8 ms | 4,1 ms | 8,0 ms | 0 | 1,1 ms | 0,1 ms | 141 de 299 |
+| industria | 38 | 1,8 ms | 5,6 ms | 8,4 ms | 0 | 0,9 ms | 0,1 ms | 136 de 299 |
+
+En la ciudad y la industria los fotogramas con modelos que cambian son ya solo los de publicación y los de eventos (con el secuenciador en semicorcheas, un fotograma de cada dos). En la naturaleza suben porque ahora una nota se ve en el acto (antes esperaba al refresco si no cambiaba la ocupación). Lo que queda:
+
+- **Naturaleza, fotogramas con nota** (un cuarto de los fotogramas): unos 11 ms de media aquí, la mitad en el mapa de alturas y un tercio en rehacer los árboles de la celda y sus vecinas. Los picos que quedan por encima de 15 ms son cambios grandes del mapa: crestas cerca del polo (su caja ocupa media altura del mapa y todas las longitudes), cambios de los grupos de mesetas, ríos que cambian de cauce, y los fines de ciclo. Sin nota, 1,5 ms.
+- **El objetivo de 4 ms de media** en la máquina del encargo equivale a algo más de 1 ms aquí: la ciudad y la industria se quedan en 1,8 ms (unos 6 ms allí). Lo que queda en ellas es el camino inmediato de cada nota (unas 5 celdas y el contexto de la ciudad) y el resto del fotograma (tejido, luces, losetas), que este encargo no toca.
+
+**En TouchDesigner (prueba de Dave):** `diagnostico_fps.py` dos veces, con unos 10 s entre una y otra, antes y después, en los tres temas, con `Modocamara` en globo y en rasante. Mirar los fps reales y si los Script CHOP `i_mod_*` salen de la lista de los que más cuestan. Imagen: sesión de 5 minutos por tema con `Turnos` encendido y apagado; las capturas en el mismo instante de publicación tienen que coincidir. A ojo: la obra, las grúas y los balancines avanzan a saltos, y las notas siguen encendiendo su celda sin retraso.

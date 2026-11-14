@@ -153,9 +153,10 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v100'
+MOTOR_VERSION = 'motor v101'
 
 import math
+import time as _time
 
 # La reticula la decide el rango de notas (ver set_grid): N cambia.
 POLO_SUR_DEF, POLO_NORTE_DEF = 24, 108     # do1 y do8 (MIDI 60 = do4)
@@ -321,7 +322,7 @@ DEFAULT_CFG = dict(
     umbral_monte=8, max_caos_nat=5, limite_bosque=0.65, limite_nieve=0.90, altura_monte=1.0,
     lod_nat=80.0, tinte_borde_nat=0.8, superficie=0,
     # fase 11 v8 (motor v52): brotes, arboles y terrazas
-    ligero=1, refresco_nat=0.25,
+    ligero=1, refresco_piel=0.25, turnos=1, cache_arq=1,     # motor v101: la piel por turnos
     biomas=1, variantes=2, var_angulo=12.0, cuantizar30=0, inclinacion=8.0, densidad_hoja=6,
     traslucidez=0.35, timidez=0.12, emergentes=0.1, orla=1, mezcla=0.3, impostores=1,
     # motor v97: el oceano (las celdas vacias son mar; las ocupadas, islas), los volcanes y el detalle
@@ -2476,6 +2477,13 @@ def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True)
 
 
 def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False):
+    t_py = _time.perf_counter()
+    out = _build_instances(W, cfg, now, hide_beacons, tiles, refresco)
+    _TURNOS['ms_inst'] = (_time.perf_counter() - t_py) * 1000.0     # motor v101: para la leyenda PIEL
+    return out
+
+
+def _build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False):
     lvl = cfg['nivel']
     _TERRENO['sello'] = _TERRENO.get('sello', 0) + 1     # un fotograma: el terreno se mira una vez
     lim = limit(cfg)
@@ -5807,79 +5815,90 @@ def _particulas(out, n, p0, cw, cl, vh, semilla, k, col, now, paso, modo, escala
         out.append(_row(p, n, s_, s_ * (2.0 if modo == 'obreros' else 1.0), s_, col))
 
 
-_REFRESCO = {}
+# --- la piel por turnos (motor v101, fase 11 v18) ---------------------------------
+# La piel de los tres temas se calcula por porciones en varios fotogramas y se
+# publica de una vez cada Refrescopiel segundos: entre dos publicaciones las
+# filas de los modelos son las mismas (las mismas listas) y los Script CHOP no
+# se recuecen. Una vuelta empieza con su instante de publicacion t_pub = inicio
+# + Refrescopiel; todas sus porciones se calculan con now = t_pub (el planeta
+# entero en el mismo instante) en un bufer de trabajo agrupado por celda, y al
+# cerrarla el bufer pasa a ser el publicado de golpe. Las piezas de cluster van
+# con la capital; las globales (gruas, volcanes), al cerrar la vuelta.
+# CAMINO INMEDIATO: una celda que recibe nota, impulso, erosion o corte, o que
+# cambia de ocupacion, especie o dueno, se recalcula en ese mismo fotograma con
+# su vecindad y su cluster (antes y despues) y sustituye sus filas en el
+# publicado y en el de trabajo. El fin del tinte de las ventanas y del pumping la
+# vuelve a marcar.
+# Turnos apagado: la vuelta entera en el fotograma de publicacion. Refrescopiel 0:
+# la piel entera en cada fotograma (build_piel), como antes de la fase 11 v8.
+
+# los parametros de la pagina Fase11 (y los de la piel de otras paginas): si cambia
+# alguno, la piel vacia sus bufers y publica una vuelta completa (motor v101)
+PIEL_CFG = ('peso_vecina', 'umbral_vecindad', 'min_cluster', 'caos', 'max_piezas', 'avance', 'pasos_etapa',
+            'umbral_monte', 'limite_bosque', 'limite_nieve', 'altura_monte', 'lod_nat', 'tinte_borde_nat',
+            'superficie', 'ligero', 'oceano', 'volcanes', 'detalle', 'pradera', 'mata', 'tierra',
+            'refresco_piel', 'biomas', 'variantes', 'traslucidez', 'timidez', 'emergentes', 'orla', 'mezcla',
+            'impostores', 'terrazas_por_nota', 'max_terrazas', 'paso_terraza', 'riego', 'color_cultivo',
+            'altura_meseta', 'max_niveles', 'marco', 'setos', 'lenguaje', 'variantes_ciudad', 'fijar_tipo',
+            'oblicuidad', 'alto_planta', 'ancho_vano', 'retranqueo', 'torsion_max', 'parasitos_por_nota',
+            'max_parasitos', 'modulo_marco', 'max_marco', 'capsulas', 'mutacion', 'mutacion_fuente', 'obra',
+            'desfase_fachada', 'gruas', 'max_gruas', 'tinte_ventanas', 'pasos_tinte', 'lod_ciudad',
+            'recursos', 'epoca', 'variantes_ind', 'bancos_por_nota', 'max_bancos', 'max_bastidor',
+            'emisiones', 'max_humo', 'lod_ind', 'th_branch', 'th_fusion', 'th_crown', 'respaldo', 'rug_min',
+            'rug_max', 'sat_size', 'height_factor', 'shell_thick', 'core_radius')
 
 
-def build_piel_refresco(W, cfg, now, out):
-    """build_piel con la naturaleza a saltos (fase 11 v8, Refresconat): entre dos
-    refrescos se copian las mismas filas, asi que los Script CHOP de los modelos no
-    se recuecen. El balanceo, el latido, el stop-motion y el pumping avanzan a
-    saltos de Refresconat segundos; una celda que cambia de ocupacion, de especie o
-    de dueno refresca enseguida. Solo en el fotograma de TouchDesigner."""
-    dt = float(cfg.get('refresco_nat', 0.0))
-    if dt <= 0 or tema_de(cfg) != 'naturaleza' or cfg['nivel'] < 11:
-        return build_piel(W, cfg, now, out)
-    firma = (id(W), tuple(W['occ']), tuple(W['own']), tuple(W['sp']), tuple(W['par']), GRID['lo'], GRID['hi'],
-             tuple(cfg.get(x) for x in NAT_CFG), cfg.get('tema'), _clave_biblio(cfg))
-    v = _REFRESCO.get('v')
-    if v is not None and v['firma'] == firma and 0.0 <= now - v['t'] < dt:
-        for g, filas in v['filas'].items():
-            out.setdefault(g, []).extend([list(r) for r in filas])     # filas iguales: el CHOP no se recuece
-        return v['res']
-    marcas = dict((g, len(f)) for g, f in out.items() if isinstance(f, list))
-    res = build_piel(W, cfg, now, out)
-    filas = dict((g, f[marcas.get(g, 0):]) for g, f in out.items()
-                 if isinstance(f, list) and len(f) > marcas.get(g, 0) and g in _GEOS_PIEL(cfg))
-    _REFRESCO['v'] = dict(firma=firma, t=now, filas=filas, res=res)
-    return res
+_TURNOS = {}
+
+# lo que cambia una nota, un golpe o un corte en la celda (el camino inmediato). El
+# avance de las obras y de los transitos (obra, et_f, et_c) no: va a saltos de Refrescopiel.
+# EVENTO_LUZ solo cambia la celda (su latido, su tinte); lo demas, tambien a sus vecinas
+EVENTO_LUZ = ('t_gate', 'lat', 'lat_s')
+EVENTO_CAMPOS = ('occ', 'own', 'sp', 'par', 'vel', 't_nac', 'rebrote', 'ruina', 'derribo') + EVENTO_LUZ
 
 
-def _GEOS_PIEL(cfg):
-    """Las listas de out que escribe la piel (los modelos y las particulas)."""
-    clave = (cfg['nivel'], variantes(cfg))
-    v = _REFRESCO.get('geos')
-    if v is None or v[0] != clave:
-        v = _REFRESCO['geos'] = (clave, set(g for g, _, _ in geometrias_piel(cfg)) | {'particulas'})
-    return v[1]
+def _emisor_piel(P):
+    """La funcion emit de la piel: escribe en P['out'] (el cubo de la celda que se
+    esta calculando) y cuenta las piezas."""
+    doce, respaldo = P['doce'], P['respaldo']
+
+    def emit(modelo, pulido, p, marco, dims, col, rug=1.0, luces=0):
+        fila = _fila_m(p, marco, dims[0], dims[1], dims[2], col)
+        if doce:                    # las ventanas (0-4) van en el alfa: rugosidad + 2 x nivel
+            fila.append(1.0 if respaldo else rug + 2.0 * luces)
+        P['out'].setdefault(geometria_de(modelo, pulido, not doce), []).append(fila)
+        P['piezas'][0] += 1
+
+    def contar(k):                  # fase 11 v8: filas copiadas de la memoria de la celda
+        P['piezas'][0] += k
+    emit.contar = contar
+    return emit
 
 
-def build_piel(W, cfg, now, out):
-    """Las formaciones como modelos del tema: compuesto, puentes del cluster,
-    pieza protagonista, cadenas de transito y particulas. Devuelve el resumen
-    para la leyenda. La ciudad la dibuja build_ciudad (fase 11 v10)."""
+def _piel_ctx(W, cfg, now):
+    """Lo que la piel mira del planeta entero, una vez por calculo: clusters,
+    objetivos, suelos, fuego, pulso y, segun el tema, el mapa de alturas, los
+    cauces y los cultivos (naturaleza) o la informacion de cada edificio
+    (ciudad e industria). P['celdas']: las celdas que se dibujan, en orden."""
     tema = tema_de(cfg)
     paso = W.get('paso') or 0.125
     cl = clusters(W, cfg)
     tf, tc = objetivos(W, cfg, cl)
-    piezas = compuestos = 0
     suelos = [base_radius(W, cfg, i) for i in range(N)]
     bases = dict((i, _mul(normal_i(i), suelos[i])) for i in range(N))
-
     doce = cfg['nivel'] >= 12         # fase 12: una geometria por modelo, rugosidad en el alfa
-    respaldo = doce and cfg.get('respaldo', 0)
-    arde = celdas_ardiendo(W, cfg) if cfg['nivel'] >= 14 else {}
     tiempo = cfg['nivel'] >= 17       # fase 17: el pulso balancea el dosel y enciende ventanas
-    bq = beat_stop(W, cfg) if tiempo else 0.0
-
-    def emit(modelo, pulido, p, marco, dims, col, rug=1.0, luces=0):
-        nonlocal piezas
-        fila = _fila_m(p, marco, dims[0], dims[1], dims[2], col)
-        if doce:                    # las ventanas (0-4) van en el alfa: rugosidad + 2 x nivel
-            fila.append(1.0 if respaldo else rug + 2.0 * luces)
-        out.setdefault(geometria_de(modelo, pulido, not doce), []).append(fila)
-        piezas += 1
-
-    def contar(k):                  # fase 11 v8: filas copiadas de la memoria de la celda
-        nonlocal piezas
-        piezas += k
-    emit.contar = contar
-
-    natural = tema == 'naturaleza'      # fase 11 v5: la naturaleza legible (piel_natural)
-    nat_copas = 0
-    if natural:
+    P = dict(W=W, cfg=cfg, now=now, tema=tema, paso=paso, cl=cl, tf=tf, tc=tc, suelos=suelos, bases=bases,
+             doce=doce, respaldo=doce and cfg.get('respaldo', 0),
+             arde=celdas_ardiendo(W, cfg) if cfg['nivel'] >= 14 else {},
+             tiempo=tiempo, bq=beat_stop(W, cfg) if tiempo else 0.0, natural=tema == 'naturaleza',
+             out=None, piezas=[0], nat_copas=[0])
+    P['emit'] = _emisor_piel(P)
+    if P['natural']:                    # fase 11 v5: la naturaleza legible (piel_natural)
         ter = terreno(W, cfg, cl)
         por_celda = cauces(W, cfg, cl, ter)['por_celda'] if cfg['nivel'] >= 13 else {}
         cult = cultivos(W, cfg, ter, por_celda, now, paso)     # fase 11 v8: bancales, riego y acequias
+        bq = P['bq']
         ctx = dict(cl=cl, ter=ter, bases=suelos, cauces=por_celda,
                    sway=(lambda i: balanceo_filas(W, cfg, i, bq)) if tiempo else (lambda i: (0.0, 0.0)),
                    cerca=lambda i: cerca_de(W, cfg, i)
@@ -5887,50 +5906,81 @@ def build_piel(W, cfg, now, out):
                    rio_cerca=lambda i: any(c in por_celda for c in [i] + list(NEIGH[i])),
                    res=dict(hojas=0, todas=0, ejemplares=0, emergentes=0, frutales={},
                             biomas=dict((b, 0) for b in BIOMAS)))
+        P.update(ter=ter, cult=cult, ctx=ctx)
+        P['celdas'] = [i for i in range(N) if W['vh'][i] > 0.005 and W['own'][i]]
+    else:                               # fase 11 v10: la ciudad legible (build_ciudad)
+        P['ctx'] = _ciudad_ctx(W, cfg, now, cl, tf, bases, paso)
+        P['celdas'] = sorted(P['ctx']['info'])
+    P['dib'] = set(P['celdas'])
+    return P
+
+
+def _piel_celda(P, i, out):
+    """Dibuja la celda i en out (un dict {geometria: filas}). Las piezas de su
+    cluster, si es la capital, y sus puentes van con ella."""
+    W, cfg, now, paso = P['W'], P['cfg'], P['now'], P['paso']
+    P['out'] = out
     bomba = _Bomba(W, cfg, now, out)    # fase 7 v12: el pumping de los impulsos
-    res_ciudad = None
-    if not natural:                     # fase 11 v10: la ciudad legible (build_ciudad)
-        n_ciu, res_ciudad = build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba)
-        emit.contar(n_ciu)
-    for i in range(N if natural else 0):
-        bomba.cerrar()
-        vh = W['vh'][i]
-        own = W['own'][i]
-        if vh <= 0.005 or not own:
-            continue
+    if not P['natural']:
+        ctx = P['ctx']
         n = normal_i(i)
-        e, _, t, _ = _marco(i)
-        p0 = bases[i]
-        base = base_radius(W, cfg, i)
-        cw, cl_ = _cell_sizes(base, i)
-        bomba.abrir(i, p0, n, cw, cl_)
-        rb = W['rebrote'][i] if cfg['nivel'] >= 15 else 0
-        if rb == 1:                                 # fase 15: banco de semillas
-            _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, vh, semilla_caos(i, 21), 7,
-                        COL_SEMILLA, now, paso, 'semillas')
-            continue
-        if rb == 2:                                 # y brota, a saltos
-            vh *= 0.25 + 0.75 * _stop((now - W['t_rebrote'][i]) / max(1e-6, rebrote_dur(cfg, paso)))
-        sat = W['par'][i] >= 0
-        pulido = W['vel'][i] >= cfg['vel_umbral']
-        if doce:                                    # el material del tema, por la velocidad
-            rug = rugosidad(cfg, W['vel'][i])
-            ancho = W['vig'][i]
-        else:
-            rug, ancho = 1.0, 1.0
-        lt, sc, amp = _luz_formacion(W, cfg, i, now)
+        b = P['bases'][i]
+        cw, cl_ = _cell_sizes(_len(b), i)
+        bomba.abrir(i, b, n, cw, cl_)
+        rug = rugosidad(cfg, W['vel'][i]) if P['doce'] else 1.0
         kb, fl = rebote(cfg, W, i, now, paso)
-        if natural:                                 # el latido hincha; su color va al borde (uTinte)
-            if lt > 0:
-                vh *= 1.0 + amp * lt
-            nat_copas += piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit, out,
-                                            now, paso, not doce)
-            continue
+        P['piezas'][0] += piel_ciudad(W, cfg, ctx, i, rug, kb, fl, P['arde'], out, now, paso)
+        bomba.cerrar()
+        return
+    vh = W['vh'][i]
+    if vh <= 0.005 or not W['own'][i]:
+        return
+    n = normal_i(i)
+    p0 = P['bases'][i]
+    base = P['suelos'][i]
+    cw, cl_ = _cell_sizes(base, i)
+    bomba.abrir(i, p0, n, cw, cl_)
+    rb = W['rebrote'][i] if cfg['nivel'] >= 15 else 0
+    if rb == 1:                                 # fase 15: banco de semillas
+        _particulas(out.setdefault('particulas', []), n, p0, cw, cl_, vh, semilla_caos(i, 21), 7,
+                    COL_SEMILLA, now, paso, 'semillas')
+        bomba.cerrar()
+        return
+    if rb == 2:                                 # y brota, a saltos
+        vh *= 0.25 + 0.75 * _stop((now - W['t_rebrote'][i]) / max(1e-6, rebrote_dur(cfg, paso)))
+    sat = W['par'][i] >= 0
+    pulido = W['vel'][i] >= cfg['vel_umbral']
+    if P['doce']:                               # el material del tema, por la velocidad
+        rug = rugosidad(cfg, W['vel'][i])
+        ancho = W['vig'][i]
+    else:
+        rug, ancho = 1.0, 1.0
+    lt, sc, amp = _luz_formacion(W, cfg, i, now)
+    kb, fl = rebote(cfg, W, i, now, paso)
+    if lt > 0:                                  # el latido hincha; su color va al borde (uTinte)
+        vh *= 1.0 + amp * lt
+    P['nat_copas'][0] += piel_natural_cache(W, cfg, P['ctx'], i, vh, rug, ancho, kb, fl, sat, pulido, P['arde'],
+                                            P['emit'], out, now, paso, not P['doce'])
     bomba.cerrar()
-    erupciones = 0
-    if natural and ter.get('volcanes'):     # motor v97: el penacho y la erupcion de cada volcan
-        erupciones = _volcanes_filas(W, cfg, ter, out, now, paso)
-    # resumen para la leyenda
+
+
+def _piel_global(P, out):
+    """Lo que no es de ninguna celda: el penacho de los volcanes (naturaleza) o las
+    gruas (ciudad e industria, que se reparten entre las obras de todo el planeta)."""
+    W, cfg, now, paso = P['W'], P['cfg'], P['now'], P['paso']
+    P['out'] = out
+    P['erupciones'] = 0
+    if P['natural']:
+        if P['ter'].get('volcanes'):    # motor v97: el penacho y la erupcion de cada volcan
+            P['erupciones'] = _volcanes_filas(W, cfg, P['ter'], out, now, paso)
+    else:
+        P['piezas'][0] += emitir_gruas(W, cfg, P['ctx'], out, now, paso)
+
+
+def _piel_resumen(P):
+    """El resumen de la piel para la leyenda."""
+    W, cfg, now, paso = P['W'], P['cfg'], P['now'], P['paso']
+    cl, tf, tc = P['cl'], P['tf'], P['tc']
     obras = medias = 0
     compas = paso * max(1, int(cfg['steps_per_beat'])) * max(1, int(cfg['beats_per_bar']))
     vistos = set()
@@ -5950,23 +6000,306 @@ def build_piel(W, cfg, now, out):
             if now - ult > compas:
                 medias += 1
     tam = [len(v) for v in cl['celdas'].values()]
-    res = dict(tema=tema, clusters=len(tam), max=max(tam or [0]), compuestos=compuestos,
-               piezas=piezas, obras=obras, medias=medias)
-    if res_ciudad is not None:
-        res['ciudad'] = res_ciudad
-    if natural:
-        _, ln = _limites_pisos(cfg)
-        r_ = ctx['res']
-        _PRESUPUESTO['lleno'] = r_['todas'] > presupuesto_hojas(cfg)
-        res.update(ejemplares=r_['ejemplares'], hojas=r_['hojas'], emergentes=r_['emergentes'],
-                   biomas=dict(r_['biomas']), frutales=r_['frutales'], hibridos=ter.get('hibridos', {}),
-                   inundados=cult['inundados'], parcelas=cult['parcelas'])
-        res.update(islas=ter.get('islas', 0), archipielagos=ter.get('archipielagos', 0),
-                   volcanes=len(ter.get('volcanes', [])), erupciones=erupciones)
-        res.update(copas=nat_copas, montes=ter['montes'], cordilleras=ter['cordilleras'],
-                   nevadas=sum(1 for c in range(N) if ter['centro'][c] >= ln * ter['hmax']),
-                   cerca=sum(1 for c in range(N) if W['occ'][c] > 0 and lod_cerca(W, cfg, c)))
+    res = dict(tema=P['tema'], clusters=len(tam), max=max(tam or [0]), compuestos=0,
+               piezas=P['piezas'][0], obras=obras, medias=medias)
+    if not P['natural']:
+        res['ciudad'] = _ciudad_resumen(W, cfg, P['ctx'])
+        return res
+    ter, cult = P['ter'], P['cult']
+    _, ln = _limites_pisos(cfg)
+    r_ = P['ctx']['res']
+    _PRESUPUESTO['lleno'] = r_['todas'] > presupuesto_hojas(cfg)
+    res.update(ejemplares=r_['ejemplares'], hojas=r_['hojas'], emergentes=r_['emergentes'],
+               biomas=dict(r_['biomas']), frutales=r_['frutales'], hibridos=ter.get('hibridos', {}),
+               inundados=cult['inundados'], parcelas=cult['parcelas'])
+    res.update(islas=ter.get('islas', 0), archipielagos=ter.get('archipielagos', 0),
+               volcanes=len(ter.get('volcanes', [])), erupciones=P.get('erupciones', 0))
+    res.update(copas=P['nat_copas'][0], montes=ter['montes'], cordilleras=ter['cordilleras'],
+               nevadas=sum(1 for c in range(N) if ter['centro'][c] >= ln * ter['hmax']),
+               cerca=sum(1 for c in range(N) if W['occ'][c] > 0 and lod_cerca(W, cfg, c)))
     return res
+
+
+def build_piel(W, cfg, now, out):
+    """Las formaciones como modelos del tema: compuesto, puentes del cluster,
+    pieza protagonista, cadenas de transito y particulas. Devuelve el resumen
+    para la leyenda. La ciudad la dibuja piel_ciudad (fase 11 v10). La piel
+    entera en este fotograma (Refrescopiel 0, y las autopruebas)."""
+    P = _piel_ctx(W, cfg, now)
+    for i in P['celdas']:
+        _piel_celda(P, i, out)
+    _piel_global(P, out)
+    return _piel_resumen(P)
+
+
+# --- el bufer de una vuelta: un cubo por celda ---------------------------------------
+
+def _res_foto(r):
+    """Copia del resumen de la leyenda (dict, set, list y numeros) para restar."""
+    if isinstance(r, dict):
+        return dict((k, _res_foto(v)) for k, v in r.items())
+    if isinstance(r, (set, list)):
+        return type(r)(r)
+    return r
+
+
+def _res_delta(a, b):
+    """Lo que una celda anade al resumen: b - a (numeros, listas de numeros,
+    conjuntos y dicts, recursivamente); lo demas, el valor nuevo si cambia."""
+    if isinstance(b, dict):
+        a = a if isinstance(a, dict) else {}
+        d = {}
+        for k, v in b.items():
+            if k not in a:
+                d[k] = _res_foto(v)
+            elif a[k] != v:
+                d[k] = _res_delta(a[k], v)
+        return d
+    if isinstance(b, set):
+        return b - (a if isinstance(a, set) else set())
+    if isinstance(b, bool) or not isinstance(b, (int, float, list)):
+        return b
+    if isinstance(b, list):
+        if isinstance(a, list) and len(a) == len(b) and all(isinstance(x, (int, float)) for x in a + b):
+            return [y - x for x, y in zip(a, b)]
+        return list(b)
+    return b - a if isinstance(a, (int, float)) and not isinstance(a, bool) else b
+
+
+def _res_suma(acc, d):
+    """Suma al resumen acc lo que anade una celda (lo cambia y lo devuelve)."""
+    if isinstance(d, dict):
+        acc = acc if isinstance(acc, dict) else {}
+        for k, v in d.items():
+            acc[k] = _res_suma(acc.get(k), v)
+        return acc
+    if isinstance(d, set):
+        return (acc if isinstance(acc, set) else set()) | d
+    if isinstance(d, list):
+        if isinstance(acc, list) and len(acc) == len(d) and \
+                all(isinstance(x, (int, float)) for x in acc + d):
+            return [x + y for x, y in zip(acc, d)]
+        return list(d)
+    if isinstance(d, (int, float)) and not isinstance(d, bool) and isinstance(acc, (int, float)) \
+            and not isinstance(acc, bool):
+        return acc + d
+    return d
+
+
+def _piel_cubo(P, i):
+    """El cubo de la celda i: dict(filas {geometria: filas}, res lo que anade al
+    resumen, gruas las que pide, piezas, copas). None si la celda no se dibuja."""
+    if i not in P['dib']:
+        return None
+    ctx = P['ctx']
+    antes = _res_foto(ctx['res'])
+    g0 = len(ctx.get('gruas', ()))
+    p0, c0 = P['piezas'][0], P['nat_copas'][0]
+    filas = {}
+    _piel_celda(P, i, filas)
+    return dict(filas=filas, res=_res_delta(antes, ctx['res']), gruas=list(ctx.get('gruas', ())[g0:]),
+                piezas=P['piezas'][0] - p0, copas=P['nat_copas'][0] - c0)
+
+
+def _vuelta_cerrar(P, cubos):
+    """Cierra una vuelta: las piezas globales y el resumen, con lo que dicen los
+    cubos (calculados con P o con otro contexto, en el camino inmediato).
+    Devuelve dict(cubos, glob {geometria: filas}, res, t)."""
+    ctx = P['ctx']
+    res0 = _res_foto(ctx['res'])
+    plantilla = _piel_ctx_res(P)
+    ctx['res'] = plantilla
+    gruas = []
+    piezas = copas = 0
+    for i in sorted(cubos):
+        cu = cubos[i]
+        _res_suma(plantilla, cu['res'])
+        gruas.extend(cu['gruas'])
+        piezas += cu['piezas']
+        copas += cu['copas']
+    if 'gruas' in ctx:
+        ctx['gruas'] = gruas
+    P['piezas'][0], P['nat_copas'][0] = piezas, copas
+    glob = {}
+    _piel_global(P, glob)
+    res = _piel_resumen(P)
+    ctx['res'] = res0
+    return dict(cubos=cubos, glob=glob, res=res, t=P['now'])
+
+
+def _piel_ctx_res(P):
+    """El resumen de la leyenda vacio, como lo deja el contexto antes de la primera celda."""
+    if P['natural']:
+        return dict(hojas=0, todas=0, ejemplares=0, emergentes=0, frutales={},
+                    biomas=dict((b, 0) for b in BIOMAS))
+    return _ciudad_res_vacio(P['W'], P['cfg'])
+
+
+def _piel_montar(pub):
+    """Las filas publicadas por geometria: las celdas en orden y despues las
+    globales. Las listas se montan una vez por publicacion (y por camino
+    inmediato) y se reparten por referencia: filas iguales, CHOP sin recocer."""
+    mont = {}
+    for i in sorted(pub['cubos']):
+        for g, f in pub['cubos'][i]['filas'].items():
+            mont.setdefault(g, []).extend(f)
+    for g, f in pub['glob'].items():
+        mont.setdefault(g, []).extend(f)
+    pub['mont'] = mont
+    return mont
+
+
+def _firma_piel(W, cfg):
+    """Lo que, si cambia, vacia los bufers y publica una vuelta completa en el
+    fotograma: el mundo (Resetmundo), el fin de ciclo (Forzarciclo), el tema, la
+    reticula, la biblioteca y cualquier parametro de la pagina Fase11."""
+    f11 = tuple((k, cfg.get(k)) for k in PIEL_CFG)
+    return (id(W), W.get('gen'), len(W.get('shells', ())), GRID['lo'], GRID['hi'], cfg['nivel'], cfg.get('tema'),
+            id(cfg.get('catalogo')), _clave_biblio(cfg), f11, bool(cfg.get('turnos', 1)))
+
+
+def _eventos_piel(W, cfg, T, now):
+    """Las celdas que han recibido algo desde el fotograma anterior: (las que han
+    cambiado de ocupacion, especie, dueno o columna: tambien sus vecinas; las que
+    solo se encienden: nota, impulso, fin del tinte o del pumping)."""
+    k_luz = len(EVENTO_CAMPOS) - len(EVENTO_LUZ)
+    cols = [W[k] if k in W else [0] * N for k in EVENTO_CAMPOS]
+    claves = list(zip(*(cols + [[len(x) for x in W['cols']]])))
+    bomba = W.get('bomba') or {}
+    imp = W.get('imp_t') or {}
+    prev = T.get('claves')
+    T['claves'] = claves
+    est, luz = set(), set()
+    if prev is not None and len(prev) == len(claves):
+        for i, (a, b) in enumerate(zip(prev, claves)):
+            if a != b:
+                if a[:k_luz] != b[:k_luz] or a[-1] != b[-1]:
+                    est.add(i)
+                else:
+                    luz.add(i)
+    bp = T.get('bomba', set())
+    bn = set(bomba)
+    luz.update(bp ^ bn)
+    T['bomba'] = bn
+    ip = T.get('imp', {})
+    luz.update(i for i, t in imp.items() if ip.get(i) != t and 0 <= i < N)
+    T['imp'] = dict(imp)
+    fines = T.setdefault('fines', {})
+    for i, t in list(fines.items()):
+        if now >= t:
+            luz.add(i)
+            del fines[i]
+    return est, luz - est
+
+
+def _vecindad_piel(ev, cls, luz=()):
+    """Las celdas del camino inmediato: las que han cambiado, sus vecinas y la
+    capital de sus clusters (en cada reparto de clusters de cls: antes y despues;
+    la capital lleva las piezas del cluster), y las que solo se encienden (luz).
+    El resto del cluster, en la vuelta."""
+    d = set(ev) | set(luz)
+    for i in ev:
+        d.update(NEIGH[i])
+    for cl in cls:
+        if cl is None:
+            continue
+        for i in ev:
+            k = cl['de'][i]
+            if k >= 0:
+                d.add(cl['capital'][k])
+    return d
+
+
+def build_piel_refresco(W, cfg, now, out):
+    """build_piel por turnos (fase 11 v18, motor v101): ver la cabecera. Solo en el
+    fotograma de TouchDesigner (build_instances con refresco)."""
+    dt = float(cfg.get('refresco_piel', 0.0))
+    T = _TURNOS
+    if dt <= 0 or cfg['nivel'] < 11:
+        T.clear()
+        T['info'] = dict(modo='entera')
+        return build_piel(W, cfg, now, out)
+    t0 = _time.perf_counter()
+    turnos = bool(cfg.get('turnos', 1))
+    fdt = max(1e-3, float(W.get('foto_dt') or FOTO_DEF))
+    firma = _firma_piel(W, cfg)
+    ev, ev_luz = _eventos_piel(W, cfg, T, now)
+    info = dict(modo='turnos' if turnos else 'vuelta', inmediatas=0, celdas=0, turno=0, turnos=0)
+    if T.get('firma') != firma or T.get('pub') is None:
+        # reinicio: una vuelta completa, publicada en este fotograma
+        P = _piel_ctx(W, cfg, now)
+        cubos = dict((i, c) for i, c in ((i, _piel_cubo(P, i)) for i in P['celdas']) if c is not None)
+        T['pub'] = _vuelta_cerrar(P, cubos)
+        _piel_montar(T['pub'])
+        T.update(firma=firma, vuelta=None, cl=P['cl'], t_sig=now + dt, fines={})
+        info.update(celdas=len(P['celdas']), turno=1, turnos=1, reinicio=True)
+        ev, ev_luz = set(), set()
+    pub = T['pub']
+    V = T.get('vuelta')
+    if ev or ev_luz:                    # el camino inmediato, en este fotograma
+        Pn = _piel_ctx(W, cfg, now)
+        D = _vecindad_piel(ev, (T.get('cl'), Pn['cl']), ev_luz)
+        T['cl'] = Pn['cl']
+        pasos_t = float(cfg.get('pasos_tinte', 4)) * Pn['paso']
+        for i in sorted(D):
+            cu = _piel_cubo(Pn, i)
+            for dst in (pub['cubos'], V['cubos'] if V is not None else None):
+                if dst is None:
+                    continue
+                if cu is None:
+                    dst.pop(i, None)
+                else:
+                    dst[i] = cu
+            if V is not None:
+                V['hechas'].add(i)
+            if not Pn['natural'] and (i in ev or i in ev_luz) and cfg.get('tinte_ventanas', 1) and \
+                    W['lat_s'][i] in (1, 2):
+                fin = W['t_gate'][i] + pasos_t      # el fin del tinte la vuelve a marcar
+                if fin > now:
+                    T['fines'][i] = fin + 1e-6
+        _piel_montar(pub)
+        info['inmediatas'] = len(D)
+    if turnos:
+        if V is None:                   # una vuelta nueva: su instante de publicacion
+            t_pub = now + dt
+            V = T['vuelta'] = dict(t_pub=t_pub, P=None, cola=None, cubos={}, hechas=set(), k=0,
+                                   K=max(1, int(math.ceil(dt / fdt - 1e-6))))
+        if V['P'] is None:              # el contexto, una vez por vuelta (el primer turno)
+            V['P'] = _piel_ctx(W, cfg, V['t_pub'])
+            V['cola'] = list(V['P']['celdas'])
+            V['tam'] = max(1, int(math.ceil(len(V['cola']) / float(V['K']))))
+        P = V['P']
+        tarde = now >= V['t_pub'] - 1e-9
+        n = len(V['cola']) if tarde else V['tam']
+        hechas = 0
+        while V['cola'] and hechas < n:
+            i = V['cola'].pop(0)
+            if i in V['hechas']:
+                continue
+            cu = _piel_cubo(P, i)
+            if cu is not None:
+                V['cubos'][i] = cu
+            hechas += 1
+        V['k'] += 1
+        info.update(turno=min(V['k'], V['K']), turnos=V['K'], celdas=hechas)
+        if not V['cola'] and now + 0.5 * fdt >= V['t_pub']:
+            pub = T['pub'] = _vuelta_cerrar(P, V['cubos'])
+            _piel_montar(pub)
+            T['vuelta'] = None
+            info['publica'] = True
+    elif now >= T.get('t_sig', 0.0):    # Turnos apagado: la vuelta entera al publicar
+        P = _piel_ctx(W, cfg, now)
+        cubos = dict((i, c) for i, c in ((i, _piel_cubo(P, i)) for i in P['celdas']) if c is not None)
+        pub = T['pub'] = _vuelta_cerrar(P, cubos)
+        _piel_montar(pub)
+        T['cl'] = P['cl']
+        T['t_sig'] = now + dt
+        info.update(celdas=len(P['celdas']), turno=1, turnos=1, publica=True)
+    for g, f in pub['mont'].items():
+        out.setdefault(g, []).extend(f)
+    info.update(refresco=dt, ms=(_time.perf_counter() - t0) * 1000.0)
+    T['info'] = info
+    return pub['res']
 
 
 
@@ -7334,10 +7667,239 @@ def _torres_cluster(W, cfg, ctx, i, pc, out):
     return k
 
 
-def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
-    """La ciudad entera (fase 11 v10): una pasada para saber el edificio de cada
-    celda (el cluster mira a sus vecinas) y otra para dibujarlo. Devuelve
-    (piezas, resumen para la leyenda)."""
+# --- autopruebas de la piel por turnos (fase 11 v18) ----------------------------------
+
+PRUEBA_NOTAS = (60, 64, 67, 72, 67, 64, 62, 60, 55, 60, 64, 67, 69, 67, 64, 62)
+PRUEBA_NOTAS2 = (36, 43, 41, 39, 46)
+
+
+def _mundo_prueba_piel(cfg, segundos=20.0, eras=0, fps=30.0, tempo=120.0):
+    """Un mundo para las autopruebas: el SEQ1 en semicorcheas y el SEQ2 cada 3
+    pasos durante segundos, eras veces enterrado (fin de ciclo) y otra mas.
+    Devuelve (W, el ultimo instante)."""
+    W = new_world()
+    ensure(W)
+    W['tema'] = cfg.get('tema', 0)
+    paso = step_dur(cfg, tempo)
+    k, t, pend = -1, 0.0, []
+    for e in range(eras + 1):
+        for _ in range(int(segundos * fps)):
+            t += 1.0 / fps
+            p = int(t / paso)
+            if p != k:
+                k = p
+                for s, n in pend:
+                    note_off(W, cfg, s, n, t, tempo)
+                pend = [(GEO, PRUEBA_NOTAS[p % 16])]
+                if p % 3 == 0:
+                    pend.append((ARQ, PRUEBA_NOTAS2[(p // 3) % 5]))
+                for s, n in pend:
+                    note_on(W, cfg, s, n, 100, t, tempo)
+            tick(W, cfg, t, tempo, True)
+        if e < eras:
+            end_cycle(W, cfg, t)
+    W['foto_dt'] = 1.0 / fps
+    return W, t
+
+
+def _piel_foto(W, cfg, now):
+    """Un fotograma de la piel por turnos: (filas, informe del turno)."""
+    _TERRENO['sello'] = _TERRENO.get('sello', 0) + 1
+    out = {}
+    build_piel_refresco(W, cfg, now, out)
+    return out, dict(_TURNOS.get('info') or {})
+
+
+def _mods(out):
+    return dict((g, f) for g, f in out.items() if g.startswith('mod_'))
+
+
+def autoprueba_turnos(cfg, segundos=20.0):
+    """Las autopruebas de la piel por turnos y de la cache de la arqueologia (fase
+    11 v18, motor v101), con los valores de cfg y mundos propios: [(texto, bien,
+    detalle)]. No toca el mundo de la sesion; los bufers de la piel se vacian."""
+    res = []
+    fps = 30.0
+    cfg = dict(cfg, refresco_piel=0.25, turnos=1, cache_arq=1)
+    try:
+        # 1. equivalencia: una vuelta por turnos publica lo mismo que la vuelta entera
+        iguales, detalle = True, []
+        for k, tema in enumerate(TEMAS):
+            c = dict(cfg, tema=k)
+            W, t1 = _mundo_prueba_piel(c, segundos)
+            T0 = t1 + 1.0
+            _TURNOS.clear()
+            now, A, turnos = T0 - c['refresco_piel'], None, 0
+            for f in range(60):
+                o, inf = _piel_foto(W, c, now)
+                if f > 0 and inf.get('publica'):
+                    A, turnos = o, inf.get('turnos', 0)
+                    break
+                now += 1.0 / fps
+            _TURNOS.clear()
+            B, _ = _piel_foto(W, dict(c, turnos=0), T0)
+            bien = A is not None and A == B and any(_mods(A).values())
+            iguales = iguales and bien
+            detalle.append('%s %d turnos %d filas%s' % (tema, turnos, sum(len(v) for v in (A or {}).values()),
+                                                        '' if bien else ' DISTINTAS'))
+        res.append(('equivalencia: una vuelta por turnos publica las mismas filas que la vuelta entera en el '
+                    'mismo instante (%s)' % ', '.join(detalle), iguales, ''))
+        # y la arqueologia: con la cache, las mismas filas que sin ella
+        ca = dict(cfg, nivel=max(16, cfg['nivel']), tema=0)
+        W, t1 = _mundo_prueba_piel(ca, segundos, eras=2)
+        obj = max(range(N), key=lambda x: (W['occ'][x], -x))
+        cut(W, ca, obj, 2, 1, t1)
+        tarde = t1 + ca['scar_time'] + 1.0
+        _ARQ.clear()
+        filas = []
+        for cache in (1, 1, 0):
+            o = {}
+            build_arqueologia(W, dict(ca, cache_arq=cache), tarde, o)
+            filas.append(o)
+        n_arq = sum(len(v) for v in filas[0].values())
+        res.append(('equivalencia: la arqueologia con Cachearq (calculada y de la cache) da las mismas filas que '
+                    'sin ella (%d piezas)' % n_arq, filas[0] == filas[1] == filas[2] and n_arq > 0, ''))
+        # 4. cicatriz: con un corte reciente las filas cambian en cada fotograma; luego se congelan
+        _ARQ.clear()
+        st = ca['scar_time']
+        cambian = quietas = 0
+        malas = []
+        antes = None
+        k_max = int(st / 0.25) + 6
+        for k in range(k_max + 1):
+            now = t1 + 0.25 * k
+            o = {}
+            build_arqueologia(W, ca, now, o)
+            if antes is not None:
+                if now - 0.25 - t1 < st - 1e-9:     # el anterior aun se fundia: cambian
+                    cambian += o != antes
+                    if o == antes:
+                        malas.append(k)
+                elif now - 0.25 - t1 > st + 1e-9:
+                    quietas += o == antes
+                    if o != antes:
+                        malas.append(k)
+            antes = o
+        res.append(('cicatriz: con un corte reciente las filas de la arqueologia cambian en cada fotograma '
+                    'hasta Cicatriz (%d) y luego se congelan (%d, de la cache: %s)'
+                    % (cambian, quietas, 'si' if _ARQ.get('cache') else 'no'),
+                    not malas and cambian > 0 and quietas > 0 and _ARQ.get('cache'),
+                    'fotogramas mal: %s' % malas if malas else ''))
+        # 2. sin publicaciones a medias: entre dos publicaciones, sin eventos, las mismas filas
+        mal, pubs, vistas = [], 0, 0
+        for k, tema in enumerate(TEMAS):
+            c = dict(cfg, tema=k)
+            W, t1 = _mundo_prueba_piel(c, segundos)
+            _TURNOS.clear()
+            antes = None
+            for f in range(40):
+                now = t1 + f / fps
+                tick(W, c, now, 120.0, True)
+                o, inf = _piel_foto(W, c, now)
+                mo = _mods(o)
+                libre = not inf.get('publica') and not inf.get('inmediatas') and not inf.get('reinicio')
+                if antes is not None and libre:
+                    vistas += 1
+                    if mo != antes:
+                        mal.append('%s %d' % (tema, f))
+                pubs += bool(inf.get('publica'))
+                antes = mo
+        res.append(('sin publicaciones a medias: entre dos publicaciones, sin eventos, las filas de los modelos '
+                    'son las mismas fotograma a fotograma (%d fotogramas, %d publicaciones)' % (vistas, pubs),
+                    not mal and vistas > 0 and pubs > 0, 'cambian en %s' % ', '.join(mal[:6]) if mal else ''))
+        # 3. camino inmediato: una nota cambia su celda en el acto y nada fuera de su vecindad
+        c = dict(cfg, tema=0)
+        W, t1 = _mundo_prueba_piel(c, segundos)
+        sueltas = [x for x in range(N) if not W['occ'][x] and not any(W['occ'][j] for j in NEIGH[x])]
+        if sueltas:                         # una celda suelta, sembrada y crecida (2 s)
+            subir_escalon(W, c, GEO, sueltas[len(sueltas) // 2], 100, t1)
+            for f in range(60):
+                t1 += 1.0 / fps
+                tick(W, c, t1, 120.0, True)
+        _TURNOS.clear()
+        now = t1
+        for f in range(3):                  # a mitad de vuelta
+            now = t1 + f / fps
+            _piel_foto(W, c, now)
+        cl0 = clusters(W, c)
+        libres = [x for x in range(N) if W['occ'][x] and W['own'][x] == GEO and cl0['de'][x] < 0 and
+                  W['occ'][x] + 1 < c['th_branch'] and x in _TURNOS['pub']['cubos']]
+        bien, texto = False, 'ninguna celda ocupada suelta'
+        if libres:
+            x = libres[0]
+            antes = dict(_TURNOS['pub']['cubos'])
+            now += 1.0 / fps
+            note_on(W, c, GEO, cell_note(x), 100, now)
+            o, inf = _piel_foto(W, c, now)
+            despues = _TURNOS['pub']['cubos']
+            cl = clusters(W, c)
+            vec = set([x]) | set(NEIGH[x])
+            if cl['de'][x] >= 0:
+                vec |= set(cl['celdas'][cl['de'][x]])
+            fuera = [i for i in set(antes) | set(despues) if i not in vec and antes.get(i) is not despues.get(i)]
+            propia = x in despues and despues[x] is not antes.get(x) and \
+                despues[x]['filas'] != antes[x]['filas']
+            bien = propia and not fuera and not inf.get('publica')
+            texto = 'celda %d: sus filas en el mismo fotograma %s; inmediatas %d; fuera de su vecindad cambian %d' \
+                % (x, 'si' if propia else 'NO', inf.get('inmediatas', 0), len(fuera))
+        res.append(('camino inmediato: una nota en una celda cambia sus filas en ese fotograma y no cambia las de '
+                    'ninguna celda fuera de su vecindad y su cluster (%s)' % texto, bien, ''))
+        # 5. reinicio: Resetmundo, Forzarciclo y un cambio de Tema publican una vuelta completa
+        c = dict(cfg, tema=0)
+        W, t1 = _mundo_prueba_piel(c, segundos)
+        _TURNOS.clear()
+        for f in range(3):
+            _piel_foto(W, c, t1 + f / fps)
+        casos = []
+        W2, _ = _mundo_prueba_piel(c, segundos / 2.0)          # Resetmundo: otro mundo
+        casos.append(('Resetmundo', W2, c))
+        casos.append(('Tema', W2, dict(c, tema=1)))
+        casos.append(('Forzarciclo', W2, dict(c, tema=1)))
+        bien, det = True, []
+        now = t1 + 3.0 / fps
+        for nombre, Wx, cx in casos:
+            if nombre == 'Forzarciclo':
+                end_cycle(Wx, cx, now)
+            now += 1.0 / fps
+            o, inf = _piel_foto(Wx, cx, now)
+            P = _piel_ctx(Wx, cx, now)
+            dib = set(i for i in P['celdas'] if _piel_cubo(P, i) is not None)
+            ok_ = bool(inf.get('reinicio')) and set(_TURNOS['pub']['cubos']) == dib and \
+                (bool(dib) or nombre == 'Forzarciclo')
+            bien = bien and ok_
+            det.append('%s %s (%d celdas)' % (nombre, 'si' if ok_ else 'NO', len(dib)))
+        res.append(('reinicio: Resetmundo, Forzarciclo y un cambio de Tema publican una vuelta completa en el '
+                    'fotograma siguiente (%s)' % ', '.join(det), bien, ''))
+        # 6. contrato: chop_names sigue listando todas las geometrias instanciadas
+        nombres = set(x[2:] for x in chop_names(cfg) if x.startswith('i_'))
+        faltan = set()
+        for k, tema in enumerate(TEMAS):
+            c = dict(cfg, tema=k)
+            W, t1 = _mundo_prueba_piel(c, segundos / 2.0)
+            _TURNOS.clear()
+            o, _ = _piel_foto(W, c, t1)
+            faltan |= set(g for g, f in o.items() if f and g not in nombres)
+        res.append(('contrato: chop_names lista todas las geometrias que publica la piel por turnos',
+                    not faltan, 'faltan %s' % ', '.join(sorted(faltan)) if faltan else ''))
+    finally:
+        _TURNOS.clear()
+        _ARQ.clear()
+    return res
+
+
+def _ciudad_res_vacio(W, cfg):
+    """El resumen de la ciudad para la leyenda, vacio (antes de la primera celda)."""
+    return dict(lenguajes=[0, 0, 0], edificios=0, tipos=set(), obra={}, gruas=0, colonias={}, marcos={},
+                protagonistas={}, mutacion=mutacion_actual(W, cfg),
+                fuente=MUTACION_FUENTES[int(cfg.get('mutacion_fuente', 0)) % 2],
+                epocas=[0, 0, 0], cortas={}, integradas={}, tema=tema_de(cfg))
+
+
+def _ciudad_ctx(W, cfg, now, cl, tf, bases, paso):
+    """Lo que la ciudad mira del planeta entero (fase 11 v10; motor v101, una vez
+    por vuelta): el edificio de cada celda (el cluster mira a sus vecinas), la
+    distancia, las ventanas, la red, el recurso de cada mina, el carbon de cada
+    planta y las piezas de cada cluster. ctx['info']: las celdas que se dibujan."""
     doce = cfg['nivel'] >= 12
     tiempo = cfg['nivel'] >= 17
     bq = beat_stop(W, cfg) if tiempo else 0.0
@@ -7360,13 +7922,10 @@ def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
             v = cerca[i] = px_lod is None or \
                 min(SIZE_EW[i], SIZE_NS[i]) * _len(bases[i]) * px_lod >= lod_px
         return v
-    res = dict(lenguajes=[0, 0, 0], edificios=0, tipos=set(), obra={}, gruas=0, colonias={}, marcos={},
-               protagonistas={}, mutacion=mutacion_actual(W, cfg),
-               fuente=MUTACION_FUENTES[int(cfg.get('mutacion_fuente', 0)) % 2],
-               epocas=[0, 0, 0], cortas={}, integradas={}, tema=tema_de(cfg))
+    res = _ciudad_res_vacio(W, cfg)
     luz = {}
 
-    def luces(i):                       # las ventanas de la celda (fase 17), una vez por fotograma
+    def luces(i):                       # las ventanas de la celda (fase 17), una vez por calculo
         v = luz.get(i)
         if v is None:
             v = luz[i] = ventanas_celda(W, cfg, i, bq) if tiempo and doce and not respaldo else 0
@@ -7398,8 +7957,36 @@ def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
     ctx['cluster'] = piezas_de_cluster(W, cfg, ctx, tf)
     ctx['cadenas'] = dict((e, cadenas_de(cfg, tema_de(cfg), e)[0])
                           for e in ('informal', 'planificada', 'mina', 'energia'))
+    ctx['industria'] = ind
+    return ctx
+
+
+def _ciudad_resumen(W, cfg, ctx):
+    """El resumen de la ciudad para la leyenda (una copia: el de ctx no cambia)."""
+    res = dict(ctx['res'])
+    res['tipos'] = len(res['tipos'])
+    if ctx.get('industria'):            # la leyenda INDUSTRIA
+        info = ctx['info']
+        res['humo'] = ctx['humo'][0]
+        res['recursos'] = dict((r, 0) for r in RECURSOS)
+        for i in info:
+            if info[i]['esp'] == 'mina':
+                res['recursos'][ctx['recurso'](i)] += 1
+        res['plantas'] = sum(1 for i in info if info[i]['esp'] == 'energia')
+        res['epoca'] = EPOCAS[epoca_actual(cfg, W)]
+    return res
+
+
+def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba=None):
+    """La ciudad entera (fase 11 v10): una pasada para saber el edificio de cada
+    celda y otra para dibujarlo. Devuelve (piezas, resumen para la leyenda).
+    Desde el motor v101 la piel la monta por partes (_piel_ctx, _piel_celda,
+    _piel_global); esto queda para quien dibuje solo la ciudad."""
+    ctx = _ciudad_ctx(W, cfg, now, cl, tf, bases, paso)
+    doce = cfg['nivel'] >= 12
     piezas = 0
-    for i in sorted(info):
+    bomba = _Bomba(W, cfg, now, out)
+    for i in sorted(ctx['info']):
         bomba.cerrar()
         n = normal_i(i)
         cw, cl_ = _cell_sizes(_len(bases[i]), i)
@@ -7409,16 +7996,7 @@ def build_ciudad(W, cfg, now, out, cl, tf, bases, paso, arde, bomba):
         piezas += piel_ciudad(W, cfg, ctx, i, rug, kb, fl, arde, out, now, paso)
     bomba.cerrar()
     piezas += emitir_gruas(W, cfg, ctx, out, now, paso)
-    res['tipos'] = len(res['tipos'])
-    if ind:                             # la leyenda INDUSTRIA
-        res['humo'] = ctx['humo'][0]
-        res['recursos'] = dict((r, 0) for r in RECURSOS)
-        for i in info:
-            if info[i]['esp'] == 'mina':
-                res['recursos'][recurso(i)] += 1
-        res['plantas'] = sum(1 for i in info if info[i]['esp'] == 'energia')
-        res['epoca'] = EPOCAS[epoca_actual(cfg, W)]
-    return piezas, res
+    return piezas, _ciudad_resumen(W, cfg, ctx)
 
 # -----------------------------------------------------------------------------
 # 1. NUCLEO - la naturaleza legible (fase 11 v5, motor v46)
@@ -7858,9 +8436,37 @@ def erupcion(cfg, c, now, paso):
     return math.sqrt(max(0.0, math.sin(math.pi * f / ERUPCION_DURA)))
 
 
+FORMAS_MAX, PARCHES_MAX = 900, 700      # motor v101: las caches del mapa (las menos usadas salen)
+
+
+def _lru(cache, clave, hacer, tope):
+    """Una cache que olvida lo menos usado (sin vaciarse de golpe, que obligaria a
+    rehacerlo todo en un fotograma)."""
+    v = cache.pop(clave, None)
+    if v is None:
+        v = hacer()
+        if len(cache) >= tope:
+            for k in list(cache)[:len(cache) - int(0.75 * tope)]:
+                del cache[k]
+    cache[clave] = v
+    return v
+
+
+def _forma(clave, hacer):
+    """Motor v101: la forma de un parche (filas, columnas, f 0-1) no depende de su
+    alto; se guarda y el alto solo la multiplica (una nota cambia el alto de los
+    istmos y de los conos, no su forma)."""
+    return _lru(_TERRENO.setdefault('formas', {}), clave, hacer, FORMAS_MAX)
+
+
 def _isla(np, rej, c, H, k, islotes):
     """El parche de la isla de la celda c: meseta de alto H con playa; la costa la
     ondula el ruido y, con 'islotes', hay islotes en el anillo de alrededor."""
+    filas, cols, f = _forma(('isla', GRID['lo'], GRID['hi'], c, k, islotes), lambda: _isla_forma(np, rej, c, k, islotes))
+    return filas, cols, H * f, float(H)
+
+
+def _isla_forma(np, rej, c, k, islotes):
     n = NORMALS[c]
     e, t = tangents(n)
     hx, hz = _semiejes(c, k)
@@ -7876,11 +8482,16 @@ def _isla(np, rej, c, H, k, islotes):
         anillo = _smooth(np, 0.95, 1.12, q) * _smooth(np, 1.7, 1.45, q)
         f = np.maximum(f, 0.6 * anillo * _smooth(np, 0.84 - 0.12 * islotes, 0.92 - 0.12 * islotes,
                                                  rej['islotes'][ix]))
-    return filas, cols, H * f, np.full(f.shape, float(H))
+    return filas, cols, f
 
 
 def _istmo(np, rej, a, b, H):
     """El parche del istmo que une las islas de a y b."""
+    filas, cols, f = _forma(('istmo', GRID['lo'], GRID['hi'], a, b), lambda: _istmo_forma(np, rej, a, b))
+    return filas, cols, H * f, float(H)
+
+
+def _istmo_forma(np, rej, a, b):
     na, nb = np.array(NORMALS[a]), np.array(NORMALS[b])
     mid = _norm(tuple((na + nb) / 2.0))
     medio = 0.5 * (min(SIZE_EW[a], SIZE_NS[a]) + min(SIZE_EW[b], SIZE_NS[b]))
@@ -7893,7 +8504,7 @@ def _istmo(np, rej, a, b, H):
     cpt /= np.linalg.norm(cpt, axis=-1, keepdims=True)
     dist = np.linalg.norm(D - cpt, axis=-1) / (0.22 * medio) + 0.5 * (rej['costa'][ix] - 0.5)
     f = _smooth(np, 1.0, 0.55, dist)
-    return filas, cols, H * f, np.full(f.shape, float(H))
+    return filas, cols, f
 
 
 def _lava(np, rej, c, k):
@@ -7924,6 +8535,12 @@ def _lava(np, rej, c, k):
 def _pintar(np, rej, n, e, t, hx, hz, H, perfil):
     """El parche de un casquete (cono o domo) de alto H: (filas, columnas,
     alturas, alto del rasgo)."""
+    filas, cols, f = _forma(('casquete', n, hx, hz, perfil),
+                            lambda: _pintar_forma(np, rej, n, e, t, hx, hz, perfil))
+    return filas, cols, H * f, float(H)
+
+
+def _pintar_forma(np, rej, n, e, t, hx, hz, perfil):
     filas, cols = _ventana(np, n, 1.25 * max(hx, hz))
     ix = np.ix_(filas, cols)
     D = rej['D'][ix]
@@ -7939,12 +8556,20 @@ def _pintar(np, rej, n, e, t, hx, hz, H, perfil):
         f = np.where(q < CRATER_Q, fc - CRATER_HONDO * (1.0 - (q / CRATER_Q) ** 2), f)
     else:
         f = np.clip(1.0 - q, 0.0, 1.0) ** 1.1
-    return filas, cols, H * f, np.full(f.shape, float(H))
+    return filas, cols, f
 
 
 def _cresta(np, rej, a, b, ha, hb, silla):
     """El parche de la cresta de a a b: el alto baja del de cada cumbre al
     collado (silla x la media) y la anchura es la de media celda."""
+    filas, cols, u, sf, perfil = _forma(('cresta', GRID['lo'], GRID['hi'], a, b, silla),
+                                        lambda: _cresta_forma(np, rej, a, b, silla))
+    H = (ha + (hb - ha) * u) * sf
+    return filas, cols, H * perfil, H
+
+
+def _cresta_forma(np, rej, a, b, silla):
+    """Lo que de la cresta no depende de los altos (motor v101: se guarda)."""
     na, nb = np.array(NORMALS[a]), np.array(NORMALS[b])
     mid = _norm(tuple((na + nb) / 2.0))
     medio = 0.5 * (min(SIZE_EW[a], SIZE_NS[a]) + min(SIZE_EW[b], SIZE_NS[b]))
@@ -7957,8 +8582,8 @@ def _cresta(np, rej, a, b, ha, hb, silla):
     cpt /= np.linalg.norm(cpt, axis=-1, keepdims=True)
     dist = np.linalg.norm(D - cpt, axis=-1)
     w = 0.42 * medio
-    H = (ha + (hb - ha) * u) * (silla + (1.0 - silla) * np.abs(2.0 * u - 1.0) ** 1.5)
-    return filas, cols, H * np.clip(1.0 - dist / w, 0.0, 1.0) ** 1.15, H
+    return (filas, cols, u, silla + (1.0 - silla) * np.abs(2.0 * u - 1.0) ** 1.5,
+            np.clip(1.0 - dist / w, 0.0, 1.0) ** 1.15)
 
 
 def _parche(np, rej, r):
@@ -7979,15 +8604,43 @@ def _parche(np, rej, r):
         e_, t_ = tangents(NORMALS[c])
         hx, hz = _semiejes(c, r[3] if r[0] in ('cono', 'volcan') else 1.1)
         v = _pintar(np, rej, NORMALS[c], e_, t_, hx, hz, r[2], r[0])
-    if len(cache) > 3000:
-        cache.clear()
+    if len(cache) >= PARCHES_MAX:     # motor v101: salen los de los rasgos que ya no estan
+        vivos = (_TERRENO.get('capas') or {}).get('rasgos', ())
+        for k in [k for k in cache if k not in vivos and k[0] != 'lava'][:len(cache) - int(0.75 * PARCHES_MAX)]:
+            del cache[k]
     cache[r] = v
     return v
 
 
 def _sobre(np, dst, hloc, parche):
-    """El maximo del mapa y el parche, y el alto del rasgo que gana."""
+    """El maximo del mapa y el parche, y el alto del rasgo que gana. Motor v101:
+    con las filas seguidas y las columnas seguidas (o dando la vuelta una vez),
+    por bloques (mucho mas rapido que los indices sueltos)."""
     filas, cols, v, H = parche
+    nf, nc = len(filas), len(cols)
+    if not nf or not nc:
+        return
+    if int(filas[-1]) - int(filas[0]) == nf - 1:
+        c0_, c1_ = int(cols[0]), int(cols[-1])
+        if c1_ - c0_ == nc - 1:
+            cortes = ()
+        elif c0_ > c1_ and TERRENO_W - c0_ < nc and int(cols[TERRENO_W - c0_ - 1]) == TERRENO_W - 1 and \
+                c1_ == nc - (TERRENO_W - c0_) - 1:
+            cortes = (TERRENO_W - c0_ - 1,)       # da la vuelta una vez (las de _ventana)
+        else:
+            cortes = np.flatnonzero(np.diff(cols) != 1)
+        if len(cortes) <= 1:
+            rs = slice(int(filas[0]), int(filas[-1]) + 1)
+            tramos = [(0, nc)] if not len(cortes) else [(0, int(cortes[0]) + 1), (int(cortes[0]) + 1, nc)]
+            h2 = np.ndim(H) == 2
+            for a, b in tramos:
+                cs = slice(int(cols[a]), int(cols[b - 1]) + 1)
+                vv = v[:, a:b]
+                cur = dst[rs, cs]
+                gana = vv > cur
+                dst[rs, cs] = np.where(gana, vv, cur)
+                hloc[rs, cs] = np.where(gana, H[:, a:b] if h2 else H, hloc[rs, cs])
+            return
     ix = np.ix_(filas, cols)
     cur = dst[ix]
     gana = v > cur
@@ -8011,22 +8664,62 @@ def _capa_de(r):
     return 'dom' if r[0] == 'domo' else ('isla' if r[0] in ('isla', 'istmo') else 'rel')
 
 
+def _caja_de(np, filas, cols):
+    """(r0, r1, columnas) de un parche."""
+    mk = np.zeros(TERRENO_W, dtype=bool)
+    mk[cols] = True
+    return int(filas[0]), int(filas[-1]) + 1, mk
+
+
+def _juntar_cajas(np, cajas, margen=0):
+    """Junta las cajas [(r0, r1, columnas)] que se tocan (a margen texels o menos):
+    las que quedan no se tocan."""
+    cajas = [(a, b, m.copy()) for a, b, m in cajas if b > a and m.any()]
+    junta = True
+    while junta:
+        junta = False
+        for i in range(len(cajas)):
+            a0, a1, am = cajas[i]
+            amd = _dilata_circ(np, am, margen) if margen else am
+            for j in range(i + 1, len(cajas)):
+                b0, b1, bm = cajas[j]
+                if a0 - margen < b1 and b0 - margen < a1 and (amd & bm).any():
+                    cajas[i] = (min(a0, b0), max(a1, b1), am | bm)
+                    del cajas[j]
+                    junta = True
+                    break
+            if junta:
+                break
+    return cajas
+
+
 def _capas(np, rej, rasgos):
     """Motor v99: las tres capas del mapa (relieve, montes e islas; cada una, su
     altura y el alto del rasgo que gana), guardadas entre llamadas. Solo se borra
     la ventana de los rasgos que cambian (los que salen y los que entran) y se
     vuelven a pintar los que la tocan: una nota cambia unos pocos, no los 450.
-    No se pueden modificar las matrices que devuelve."""
+    Motor v101: la ventana son las cajas de lo que cambia en cada capa (juntas
+    solo si se tocan) y lo que se vuelve a pintar es solo lo que cae dentro de
+    ellas. Deja en _TERRENO['capas_cajas'] las cajas tocadas ([(r0, r1,
+    columnas)], 'todo' o []) y en _TERRENO['capas_cambian'] los rasgos que han
+    cambiado. No se pueden modificar las matrices que devuelve."""
     clave = (GRID['lo'], GRID['hi'], TERRENO_W, TERRENO_H)
     cp = _TERRENO.get('capas')
     nuevos = set(rasgos)
+    todo = False
     if cp is None or cp['clave'] != clave:
         cp = _TERRENO['capas'] = dict(clave=clave, rasgos=set(), parches={})
         for nm in ('rel', 'dom', 'isla'):
             cp[nm] = (np.zeros((TERRENO_H, TERRENO_W)), np.zeros((TERRENO_H, TERRENO_W)))
+        todo = True
     cambian = cp['rasgos'] ^ nuevos
+    tocadas = []
     if cambian:
-        todo = len(cambian) > 0.5 * len(nuevos) + 8
+        todo = todo or len(cambian) > 0.5 * len(nuevos) + 8
+        por_capa = {}
+        for r in rasgos:
+            por_capa.setdefault(_capa_de(r), []).append(r)
+        rangos = cp.setdefault('rangos', {})
         for nm in ('rel', 'dom', 'isla'):
             E, H = cp[nm]
             ch = [r for r in cambian if _capa_de(r) == nm]
@@ -8035,28 +8728,54 @@ def _capas(np, rej, rasgos):
             if todo:
                 E[:] = 0.0
                 H[:] = 0.0
-                for r in rasgos:
-                    if _capa_de(r) == nm:
-                        _sobre(np, E, H, _parche(np, rej, r))
+                for r in por_capa.get(nm, ()):
+                    _sobre(np, E, H, _parche(np, rej, r))
                 continue
-            fr = np.zeros(TERRENO_H, dtype=bool)
-            fc = np.zeros(TERRENO_W, dtype=bool)
-            for r in ch:                    # la ventana de lo que cambia, a cero
+            cajas = []
+            for r in ch:
                 pa = cp['parches'].get(r) or _parche(np, rej, r)
-                ix = np.ix_(pa[0], pa[1])
-                E[ix] = 0.0
-                H[ix] = 0.0
-                fr[pa[0]] = True
-                fc[pa[1]] = True
-            for r in rasgos:                # y encima, lo que la toca
-                if _capa_de(r) != nm:
-                    continue
-                pa = _parche(np, rej, r)
-                if len(pa[0]) and fr[pa[0]].any() and fc[pa[1]].any():
-                    _sobre(np, E, H, pa)
+                if len(pa[0]):
+                    cajas.append(_caja_de(np, pa[0], pa[1]))
+            for r0, r1, fc in _juntar_cajas(np, cajas):
+                tocadas.append((r0, r1, fc))
+                E[r0:r1, fc] = 0.0
+                H[r0:r1, fc] = 0.0
+                for r in por_capa.get(nm, ()):  # y encima, lo que cae dentro de la caja
+                    rg = rangos.get(r)
+                    if rg is None:
+                        pa = _parche(np, rej, r)
+                        rg = rangos[r] = (int(pa[0][0]), int(pa[0][-1]) + 1) if len(pa[0]) else (0, 0)
+                    if rg[1] <= r0 or rg[0] >= r1:
+                        continue
+                    pa = _parche(np, rej, r)
+                    cm = fc[pa[1]]
+                    if not cm.any():
+                        continue
+                    # las filas de la caja, seguidas; las columnas, si son seguidas, como vista (sin copiar)
+                    a_, b_ = max(rg[0], r0) - rg[0], min(rg[1], r1) - rg[0]
+                    i0 = int(cm.argmax())
+                    i1 = len(cm) - int(cm[::-1].argmax())
+                    h2 = np.ndim(pa[3]) == 2
+                    if cm[i0:i1].all():
+                        _sobre(np, E, H, (pa[0][a_:b_], pa[1][i0:i1], pa[2][a_:b_, i0:i1],
+                                          pa[3][a_:b_, i0:i1] if h2 else pa[3]))
+                    else:
+                        sub = np.ix_(np.arange(a_, b_), np.flatnonzero(cm))
+                        _sobre(np, E, H, (pa[0][a_:b_], pa[1][cm], pa[2][sub], pa[3][sub] if h2 else pa[3]))
         # la ventana de cada rasgo pintado, para borrarlo luego aunque se vacie la cache de parches
-        cp['parches'] = dict((r, _parche(np, rej, r)[:2]) for r in nuevos)
+        if todo:
+            cp['parches'] = dict((r, _parche(np, rej, r)[:2]) for r in nuevos)
+        else:
+            for r in cambian:
+                if r in nuevos:
+                    cp['parches'][r] = _parche(np, rej, r)[:2]
+                else:
+                    cp['parches'].pop(r, None)
         cp['rasgos'] = nuevos
+        if len(rangos) > 4 * len(nuevos) + 64:
+            cp['rangos'] = dict((r, v) for r, v in rangos.items() if r in nuevos)
+    _TERRENO['capas_cajas'] = 'todo' if todo else tocadas
+    _TERRENO['capas_cambian'] = cambian
     return cp['rel'], cp['dom'], cp['isla']
 
 
@@ -8077,8 +8796,6 @@ def terreno(W, cfg, cl=None):
         _TERRENO['sello_t'] = sello
         return t
     np = _np()
-    E = Sa = El = R = None
-    centro = [0.0] * N
     if np is not None:
         rej = _rejilla(np)
         # motor v80: de quien es el relieve (los bocetos): 1 el del SEQ2 (conos y crestas),
@@ -8089,6 +8806,19 @@ def terreno(W, cfg, cl=None):
         # costaba mas de 100 ms: el fotograma entero a 20 fps son 50.
         (Erel, Hrel), (Edom, Hdom), isl = _capas(np, rej, rasgos)
         Eis, His = isl if any(r[0] in ('isla', 'istmo') for r in rasgos) else (None, None)
+        # motor v101: si solo cambian rasgos (el mismo reparto, el mismo alto y los mismos
+        # hibridos), el mapa se rehace solo en las filas que tocan y un borde de suavizado
+        prev = _TERRENO.get('clave')
+        hay_vol = any(r[0] == 'volcan' for r in rasgos)
+        cajas_hib = _hibridos_cajas(np, prev[5], hib) if prev is not None and prev[5] != hib else []
+        if _TERRENO_VENTANA and t is not None and t.get('_np') and prev is not None and \
+                prev[:2] == clave[:2] and prev[4] == clave[4] and cajas_hib is not None and \
+                _TERRENO.get('capas_cajas') != 'todo' and t.get('_isl') == (Eis is not None) and \
+                (t.get('L') is not None) == hay_vol:
+            E, R, Lv, El, hib_t = _terreno_ventana(np, rej, t, rasgos, Erel, Hrel, Edom, Hdom, Eis, His,
+                                                   cfg, hib, cajas_hib)
+            return _terreno_cierre(W, cfg, rasgos, res, S, hib, clave, sello, np, rej, E, R, Lv, El, hib_t,
+                                   Eis is not None)
         Lv = None
         r0, r1 = TERRENO_H, 0               # solo las filas con relieve (lo demas es 0)
         for r in rasgos:
@@ -8140,17 +8870,160 @@ def terreno(W, cfg, cl=None):
         cero = [0.0] * TERRENO_W
         El = [cero] * r0 + E[r0:r1].tolist() + [cero] * (TERRENO_H - max(r0, r1)) if r1 > r0 \
             else [cero] * TERRENO_H
-        Sa = _suelo_mapa(np, rej, S)
-    t = dict(E=E, S=Sa, El=El, R=R, L=Lv if np is not None else None, centro=centro, hmax=alto_hipso(cfg),
+        return _terreno_cierre(W, cfg, rasgos, res, S, hib, clave, sello, np, rej, E, R, Lv, El, hib_t,
+                               Eis is not None)
+    return _terreno_cierre(W, cfg, rasgos, res, S, hib, clave, sello, None, None, None, None, None, None, None,
+                           False)
+
+
+_TERRENO_VENTANA = True     # motor v101: el mapa por ventanas (las autopruebas lo comparan con el entero)
+
+
+def _terreno_cierre(W, cfg, rasgos, res, S, hib, clave, sello, np, rej, E, R, Lv, El, hib_t, isl):
+    """El dict del mapa de alturas (lo comun al mapa entero y al de ventanas)."""
+    Sa = _suelo_mapa(np, rej, S) if np is not None else None
+    t = dict(E=E, S=Sa, El=El, R=R, L=Lv if np is not None else None, centro=[0.0] * N, hmax=alto_hipso(cfg),
              version=_TERRENO.get('version', 0) + 1, rasgos=len(rasgos), **res)
     t['hib'] = hib_t if np is not None else None
     t['hibridos'] = dict(arrozales=dict((i, nb) for i, nb in hib[0]), mesetas=dict(hib[1]))
+    t['_np'], t['_isl'] = np is not None, isl
     if El is not None:
         t['centro'] = [alto_en(t, NORMALS[c]) for c in range(N)]
     _TERRENO['clave'], _TERRENO['t'], _TERRENO['version'] = clave, t, t['version']
     _TERRENO['array'] = None
     _TERRENO['sello_t'] = sello
     return t
+
+
+def _lava_de(np, rej, r):
+    """La lava del volcan del rasgo r (se guarda con los parches)."""
+    cache = _TERRENO.setdefault('parches', {})
+    lv = cache.get(('lava', r[1], r[3]))
+    if lv is None:
+        lv = cache[('lava', r[1], r[3])] = _lava(np, rej, r[1], r[3])
+    return lv
+
+
+def _tramos_circ(np, mask):
+    """Los tramos seguidos de columnas de mask (las columnas dan la vuelta):
+    [(inicio, largo)]."""
+    n = len(mask)
+    if mask.all():
+        return [(0, n)]
+    if not mask.any():
+        return []
+    k = int(np.flatnonzero(~mask)[0])         # empezar en una columna vacia: ningun tramo se parte
+    m2 = np.roll(mask, -k)
+    d = np.diff(np.concatenate(([0], m2.astype(np.int8), [0])))
+    ini, fin = np.flatnonzero(d == 1), np.flatnonzero(d == -1)
+    return [((int(s) + k) % n, int(e - s)) for s, e in zip(ini, fin)]
+
+
+def _dilata_circ(np, mask, k):
+    out = mask.copy()
+    for d in range(1, k + 1):
+        out |= np.roll(mask, d) | np.roll(mask, -d)
+    return out
+
+
+def _terreno_ventana(np, rej, t, rasgos, Erel, Hrel, Edom, Hdom, Eis, His, cfg, hib, cajas_hib):
+    """Motor v101: el mapa de alturas rehecho solo en las cajas que tocan los
+    rasgos que han cambiado (las de _capas, la lava de los volcanes que cambian y
+    los hibridos que cambian) y un borde de suavizado; el resto se copia del mapa
+    anterior. Da lo mismo que el mapa entero: cada texel del resultado depende de
+    los de entrada a 2 texels o menos (dos pasadas de _suave5), asi que se calcula
+    con 4 de margen y se guardan los de 2. Las columnas dan la vuelta. Devuelve
+    (E, R, L, El, hibridos)."""
+    cajas = list(_TERRENO.get('capas_cajas') or []) + list(cajas_hib)
+    for r in _TERRENO.get('capas_cambian', ()):
+        if r[0] == 'volcan':
+            lv = _lava_de(np, rej, r)
+            if len(lv[0]):
+                cajas.append(_caja_de(np, lv[0], lv[1]))
+    cajas = _juntar_cajas(np, cajas, 8)
+    if not cajas:                           # solo el suelo ha cambiado: el mismo mapa
+        return t['E'], t['R'], t['L'], t['El'], t['hib']
+    E = t['E'].copy()
+    R = t['R'].copy()
+    Lv = t['L'].copy() if t['L'] is not None else None
+    lava = [_lava_de(np, rej, r) for r in rasgos if r[0] == 'volcan'] if Lv is not None else []
+    hb = None
+    if hib[0] or hib[1]:
+        hb = t['hib']
+        if hb is None:
+            hb = dict(h0=np.zeros_like(E), top=np.zeros_like(E), mesa=np.zeros_like(E))
+        hb = dict(h0=hb['h0'].copy(), top=hb['top'].copy(), mesa=hb['mesa'].copy())
+    El = list(t['El'])
+    for a, b, cm in cajas:
+        o0, o1 = max(0, a - 2), min(TERRENO_H, b + 2)
+        c0, c1 = max(0, a - 4), min(TERRENO_H, b + 4)
+        k0, k1 = o0 - c0, o1 - c0
+        sale = _dilata_circ(np, cm, 2)      # las columnas que cambian
+        if sale.sum() >= TERRENO_W - 8:
+            sale[:] = True
+        tramos = _tramos_circ(np, sale)
+        for s, n in tramos:
+            if n >= TERRENO_W:              # la vuelta entera: _suave5 ya da la vuelta
+                idx_in, q0, q1 = np.arange(TERRENO_W), 0, TERRENO_W
+            else:
+                idx_in, q0, q1 = (s - 2 + np.arange(n + 4)) % TERRENO_W, 2, n + 2
+            idx = idx_in[q0:q1]
+            Nz = rej['ruido'][c0:c1][:, idx_in]
+            er, hr = Erel[c0:c1][:, idx_in], Hrel[c0:c1][:, idx_in]
+            ed, hd = Edom[c0:c1][:, idx_in], Hdom[c0:c1][:, idx_in]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                fr = np.where(hr > 1e-9, er / np.maximum(hr, 1e-9), 0.0)
+                fd = np.where(hd > 1e-9, ed / np.maximum(hd, 1e-9), 0.0)
+            er = er * (1.0 - 0.45 * (1.0 - Nz) * (1.0 - fr * fr))
+            ed = ed * (1.0 - 0.15 * (1.0 - Nz) * (1.0 - fd * fd))
+            Ez = np.maximum(er, ed)
+            for _ in range(2):
+                Ez = _suave5(np, Ez)
+                er = _suave5(np, er)
+                ed = _suave5(np, ed)
+            mk = None
+            if Eis is not None:
+                ei = _suave5(np, Eis[c0:c1][:, idx_in])
+                hi = His[c0:c1][:, idx_in]
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    mk = _smooth(np, 0.0, 1.0, np.where(hi > 1e-9, ei / np.maximum(hi, 1e-9), 0.0))
+                Ez = Ez * mk + ei
+            E[o0:o1, idx] = Ez[k0:k1, q0:q1]
+            R[o0:o1, idx] = np.where(ed > er, 0.0, 1.0)[k0:k1, q0:q1]
+            if Lv is not None:
+                Lr = np.zeros((o1 - o0, len(idx)), dtype=np.float32)
+                pos = np.full(TERRENO_W, -1)
+                pos[idx] = np.arange(len(idx))
+                for lv in lava:
+                    sel = (lv[0] >= o0) & (lv[0] < o1)
+                    cs = pos[lv[1]] >= 0
+                    if not sel.any() or not cs.any():
+                        continue
+                    ixl = np.ix_(lv[0][sel] - o0, pos[lv[1][cs]])
+                    Lr[ixl] = np.maximum(Lr[ixl], lv[2][np.ix_(sel, cs)])
+                if mk is not None:
+                    Lr = (Lr * mk[k0:k1, q0:q1]).astype(np.float32)
+                Lv[o0:o1, idx] = Lr
+        if hb is not None:                  # los hibridos, en esa caja
+            _hibridos_filas(np, rej, E, cfg, hib, hb, o0, o1, sale)
+        for r in range(o0, o1):
+            fila = list(El[r])
+            for s, n in tramos:
+                e_ = s + n
+                if e_ <= TERRENO_W:
+                    fila[s:e_] = E[r, s:e_].tolist()
+                else:
+                    fila[s:] = E[r, s:].tolist()
+                    fila[:e_ - TERRENO_W] = E[r, :e_ - TERRENO_W].tolist()
+            El[r] = fila
+    hib_t = None
+    if hb is not None:
+        filas = np.zeros(TERRENO_H, dtype=bool)
+        for i, _ in list(hib[0]) + list(hib[1]):
+            k = 0.8 if i in dict(hib[0]) else 0.75
+            filas[_ventana(np, NORMALS[i], k * max(SIZE_EW[i], SIZE_NS[i]))[0]] = True
+        hib_t = dict(h0=hb['h0'], top=hb['top'], mesa=hb['mesa'], filas=filas)
+    return E, R, Lv, El, hib_t
 
 
 def _hibridos_clave(W, cfg, cl):
@@ -8199,56 +9072,136 @@ def _hibridos_terreno(np, rej, E, cfg, hib):
     mesa = np.zeros_like(E)
     filas = np.zeros(E.shape[0], dtype=bool)
     for i, nb in arroz:
-        f_, c_ = _ventana(np, NORMALS[i], 0.8 * max(SIZE_EW[i], SIZE_NS[i]))
-        ix = np.ix_(f_, c_)
-        dentro = rej['celda'][ix] == i
-        h = E[ix].astype(np.float64)
-        tope = D * min(nb, int(lb * hmax / D))
-        banda = dentro & (h < tope)
-        q = h / D
-        fr = q - np.floor(q)
-        hq = D * np.floor(q) + D * _smooth(np, 1.0 - m, 1.0, fr)
-        E[ix] = np.where(banda, hq, h).astype(np.float32)
-        h0[ix] = np.where(dentro, h, h0[ix])
-        top[ix] = np.where(dentro, tope, top[ix])
-        filas[f_] = True
+        filas[_arrozal(np, rej, E, h0, top, i, nb, D, m, lb, hmax)] = True
     if mes:
         nivel = dict(mes)
         cap = dict(caps)
         alt = cfg['altura_meseta'] * lim
         for i, nv in mes:
-            c0 = cap.get(i, i)
-            grupo = [x for x in nivel if cap.get(x, x) == c0]
-            # cada nivel se contrae hacia la capital (la mas alta del grupo; a igualdad, la del cluster)
-            c = max(grupo, key=lambda x: (nivel[x], x == c0, -x))
-            otras = set(grupo)
-            for x in grupo:
-                otras.update(NEIGH[x])
-            celdas = sorted(otras)
-            Nc = np.array([NORMALS[x] for x in celdas])
-            L = np.array([float(nivel.get(x, 0)) for x in celdas])
-            tam = np.array([0.5 * (SIZE_EW[x] + SIZE_NS[x]) for x in celdas])
-            R0 = max(float(np.linalg.norm(np.array(NORMALS[x]) - np.array(NORMALS[c]))) +
-                     0.5 * (SIZE_EW[x] + SIZE_NS[x]) * 0.5 for x in grupo)
-            f_, c_ = _ventana(np, NORMALS[i], 0.75 * max(SIZE_EW[i], SIZE_NS[i]))
-            ix = np.ix_(f_, c_)
-            Dd = rej['D'][ix]
-            d2 = ((Dd[..., None, :] - Nc[None, None, :, :]) ** 2).sum(-1)
-            w = np.exp(-d2 / (0.42 * tam[None, None, :]) ** 2)
-            fld = (w * L[None, None, :]).sum(-1) / np.maximum(1e-9, w.sum(-1))
-            dcap = np.linalg.norm(Dd - np.array(NORMALS[c]), axis=-1)
-            sube = np.zeros(fld.shape)
-            for k in range(1, int(max(L)) + 1):
-                dentro = _smooth(np, k - 0.62, k - 0.5, fld)
-                if k > 1:
-                    Rk = R0 * MESETA_K ** (k - 1)
-                    dentro = dentro * _smooth(np, Rk + 0.012, Rk, dcap)
-                sube += dentro
-            mesa[ix] = np.maximum(mesa[ix], sube)
-            filas[f_] = True
+            filas[_meseta(np, rej, mesa, i, nivel, cap)] = True
         E += (mesa * alt).astype(np.float32)
     return dict(h0=h0.astype(np.float32), top=top.astype(np.float32), mesa=mesa.astype(np.float32),
                 filas=filas)
+
+
+def _meseta(np, rej, mesa, i, nivel, cap, o0=0, o1=None, cols=None):
+    """La meseta de la celda i en el mapa mesa (el maximo; lo cambia), solo en las
+    filas o0-o1 y las columnas cols (motor v101). Devuelve las filas de su ventana."""
+    f_, c_ = _ventana(np, NORMALS[i], 0.75 * max(SIZE_EW[i], SIZE_NS[i]))
+    filas = f_
+    if o1 is not None:
+        f_ = f_[(f_ >= o0) & (f_ < o1)]
+        if cols is not None:
+            c_ = c_[cols[c_]]
+        if not len(f_) or not len(c_):
+            return filas
+    c0 = cap.get(i, i)
+    grupo = [x for x in nivel if cap.get(x, x) == c0]
+    # cada nivel se contrae hacia la capital (la mas alta del grupo; a igualdad, la del cluster)
+    c = max(grupo, key=lambda x: (nivel[x], x == c0, -x))
+    otras = set(grupo)
+    for x in grupo:
+        otras.update(NEIGH[x])
+    celdas = sorted(otras)
+    Nc = np.array([NORMALS[x] for x in celdas])
+    L = np.array([float(nivel.get(x, 0)) for x in celdas])
+    tam = np.array([0.5 * (SIZE_EW[x] + SIZE_NS[x]) for x in celdas])
+    R0 = max(float(np.linalg.norm(np.array(NORMALS[x]) - np.array(NORMALS[c]))) +
+             0.5 * (SIZE_EW[x] + SIZE_NS[x]) * 0.5 for x in grupo)
+    ix = np.ix_(f_, c_)
+    Dd = rej['D'][ix]
+    d2 = ((Dd[..., None, :] - Nc[None, None, :, :]) ** 2).sum(-1)
+    w = np.exp(-d2 / (0.42 * tam[None, None, :]) ** 2)
+    fld = (w * L[None, None, :]).sum(-1) / np.maximum(1e-9, w.sum(-1))
+    dcap = np.linalg.norm(Dd - np.array(NORMALS[c]), axis=-1)
+    sube = np.zeros(fld.shape)
+    for k in range(1, int(max(L)) + 1):
+        dentro = _smooth(np, k - 0.62, k - 0.5, fld)
+        if k > 1:
+            Rk = R0 * MESETA_K ** (k - 1)
+            dentro = dentro * _smooth(np, Rk + 0.012, Rk, dcap)
+        sube += dentro
+    mesa[ix] = np.maximum(mesa[ix], sube)
+    return filas
+
+
+def _hibridos_cajas(np, prev, hib):
+    """Motor v101: las cajas [(r0, r1, columnas)] que cambian los hibridos al pasar de
+    prev a hib (los arrozales que cambian y las mesetas de los grupos que cambian,
+    antes y despues). None si cambian sus parametros (el mapa entero)."""
+    if prev[0] or prev[1]:
+        if (hib[0] or hib[1]) and prev[3] != hib[3]:
+            return None
+    ap, an = dict(prev[0]), dict(hib[0])
+    celdas = [(i, 0.8) for i in set(ap) | set(an) if ap.get(i) != an.get(i)]
+
+    def grupos(h):
+        cap = dict(h[2])
+        g = {}
+        for i, nv in h[1]:
+            g.setdefault(cap.get(i, i), set()).add((i, nv))
+        return g
+    gp, gn = grupos(prev), grupos(hib)
+    for k in set(gp) | set(gn):
+        if gp.get(k) != gn.get(k):
+            celdas += [(i, 0.75) for i, _ in gp.get(k, set()) | gn.get(k, set())]
+    cajas = []
+    for i, k in celdas:
+        f_, c_ = _ventana(np, NORMALS[i], k * max(SIZE_EW[i], SIZE_NS[i]))
+        if len(f_):
+            mk = np.zeros(TERRENO_W, dtype=bool)
+            mk[c_] = True
+            cajas.append((int(f_[0]), int(f_[-1]) + 1, mk))
+    return cajas
+
+
+def _arrozal(np, rej, E, h0, top, i, nb, D, m, lb, hmax, o0=0, o1=None, cols=None):
+    """Los bancales del arrozal de la celda i en E (lo cambia), solo en las filas
+    o0-o1 y las columnas cols (motor v101: el mapa por ventanas). Devuelve las
+    filas de su ventana."""
+    f_, c_ = _ventana(np, NORMALS[i], 0.8 * max(SIZE_EW[i], SIZE_NS[i]))
+    if o1 is not None:
+        f_ = f_[(f_ >= o0) & (f_ < o1)]
+        if cols is not None:
+            c_ = c_[cols[c_]]
+        if not len(f_) or not len(c_):
+            return f_
+    ix = np.ix_(f_, c_)
+    dentro = rej['celda'][ix] == i
+    h = E[ix].astype(np.float64)
+    tope = D * min(nb, int(lb * hmax / D))
+    banda = dentro & (h < tope)
+    q = h / D
+    fr = q - np.floor(q)
+    hq = D * np.floor(q) + D * _smooth(np, 1.0 - m, 1.0, fr)
+    E[ix] = np.where(banda, hq, h).astype(np.float32)
+    h0[ix] = np.where(dentro, h, h0[ix])
+    top[ix] = np.where(dentro, tope, top[ix])
+    return f_
+
+
+def _hibridos_filas(np, rej, E, cfg, hib, hb, o0, o1, cols):
+    """Motor v101: los hibridos de hib en la caja (filas o0-o1, columnas cols) del
+    mapa E, que se acaba de rehacer: h0, top y mesa (los de hb, que cambia) se
+    ponen a cero en la caja y se vuelven a calcular en ella; los bancales del
+    arrozal se cuantizan y la meseta se suma."""
+    arroz, mes, caps, _ = hib
+    lim = limit(cfg)
+    D = max(1e-4, cfg['paso_terraza'] * lim)
+    lb, _ = _limites_pisos(cfg)
+    hmax = alto_hipso(cfg)
+    h0, top, mesa = hb['h0'], hb['top'], hb['mesa']
+    h0[o0:o1, cols] = 0.0
+    top[o0:o1, cols] = 0.0
+    mesa[o0:o1, cols] = 0.0
+    for i, nb in arroz:
+        _arrozal(np, rej, E, h0, top, i, nb, D, cfg['muro_terraza'], lb, hmax, o0, o1, cols)
+    if mes:
+        nivel, cap = dict(mes), dict(caps)
+        for i, _ in mes:
+            _meseta(np, rej, mesa, i, nivel, cap, o0, o1, cols)
+        E[o0:o1, cols] += (mesa[o0:o1, cols] * (cfg['altura_meseta'] * lim)).astype(np.float32)
+
 
 
 _CULTIVOS = {}
@@ -10564,8 +11517,51 @@ def _variante(lista, s, x, j):
     return lista[int(v * len(lista)) % len(lista)], v
 
 
+_ARQ = {}
+
+
+def _firma_arq(W, cfg):
+    """Lo que decide las piezas expuestas (motor v101): la columna de cada celda
+    (su suelo y lo que ensena cada corte), las conchas, las uniones (galerias), las
+    escisiones (fase 29: no son cortes), las cicatrices y la configuracion que leen
+    modelos_de y cimiento_de."""
+    return (id(W), GRID['lo'], GRID['hi'], cfg['nivel'], tema_de(cfg), cfg.get('detalle_expuesto'),
+            cfg.get('respaldo', 0), cfg['core_radius'], cfg.get('shell_thick'), id(cfg.get('catalogo')),
+            len(W['shells']), tuple(tuple(map(tuple, col)) for col in W['cols']),
+            tuple((u['tipo'], tuple(u['celdas'])) for u in W['uniones']),
+            tuple(sorted(W.get('esc_celdas', {}))) if cfg['nivel'] >= 29 else (),
+            tuple(sorted(W['scars'].items())))       # una cicatriz que sale cambia el color (exacto)
+
+
 def build_arqueologia(W, cfg, now, out):
-    """Las piezas expuestas en los cortes y las galerias de metro."""
+    """Las piezas expuestas en los cortes y las galerias de metro. Con Cachearq
+    (motor v101) guarda sus filas y solo las rehace cuando cambia lo que ensenan
+    los cortes (_firma_arq) o mientras alguna cicatriz se esta fundiendo (el color
+    pasa del cian al mineral); cuando todas han terminado, una ultima vez con el
+    color final. Con la firma igual, las mismas filas: el Script CHOP no se recuece."""
+    if not cfg.get('cache_arq', 1):
+        _ARQ.clear()
+        return _build_arqueologia(W, cfg, now, out)
+    st = max(1e-6, cfg['scar_time'])
+    vivas = any(0.0 <= now - t0 < st for t0 in W['scars'].values())
+    firma = _firma_arq(W, cfg)
+    v = _ARQ.get('v')
+    if v is not None and v['firma'] == firma and not vivas and not v['vivas']:
+        for g, f in v['filas'].items():
+            out.setdefault(g, []).extend(f)
+        W['arqueo'] = dict(v['arqueo'])
+        _ARQ['cache'] = True
+        return
+    filas = {}
+    _build_arqueologia(W, cfg, now, filas)
+    for g, f in filas.items():
+        out.setdefault(g, []).extend(f)
+    _ARQ['v'] = dict(firma=firma, vivas=vivas, filas=filas, arqueo=dict(W['arqueo']))
+    _ARQ['cache'] = False
+
+
+def _build_arqueologia(W, cfg, now, out):
+    """Las piezas expuestas en los cortes y las galerias de metro (sin la cache)."""
     doce = cfg['nivel'] >= 12
     respaldo = doce and cfg.get('respaldo', 0)
     st = max(1e-6, cfg['scar_time'])
@@ -11030,7 +12026,9 @@ ESCENA_PARS = [
     ('Swaymax', 6.0, 4.0, 2.0), ('Trafico', 2, 3, 2),
     ('Luzcalida', 0.35, 0.0, 0.1),
     ('luz_principal.dimmer', 1.15, 1.0, 0.95), ('luz_relleno.dimmer', 0.16, 0.24, 0.26),
+    ('Refrescopiel', 0.25, 0.25, 0.25),         # motor v101 (fase 18 v3): la piel por turnos, por escena
 ]
+ESCENA_MIGRA = {'Refresconat': 'Refrescopiel'}  # motor v101: lo que una escena guardada llamaba de otro modo
 LUZ_CALIDA = (1.00, 0.88, 0.72)             # la luz de dia de la escena de naturaleza
 COL_FOCO, COL_CHARCO = (1.00, 0.62, 0.20), (0.30, 0.17, 0.05)
 COL_BRILLO_BRASA = (0.55, 0.20, 0.04)
@@ -13258,6 +14256,7 @@ def _catalogo():
         return _CACHE['cat']
     t = parent().op('catalogo')
     cat = CATALOGO
+    filas = None
     if t is not None and t.numRows > 1:
         filas = []
         for r in range(1, t.numRows):
@@ -13267,8 +14266,13 @@ def _catalogo():
                               t[r, 'modelo'].val.strip()))
             except Exception:
                 pass
-        cat = catalogo_de(filas) or CATALOGO
-    _CACHE['cat'], _CACHE['cat_frame'] = cat, absTime.frame
+        # motor v101: la tabla igual, el mismo catalogo (el mismo objeto): las caches que lo
+        # miran (la piel por turnos, la arqueologia, los edificios) no se vacian cada medio segundo
+        if filas == _CACHE.get('cat_filas') and _CACHE.get('cat') is not None:
+            cat = _CACHE['cat']
+        else:
+            cat = catalogo_de(filas) or CATALOGO
+    _CACHE['cat'], _CACHE['cat_frame'], _CACHE['cat_filas'] = cat, absTime.frame, filas
     return cat
 
 
@@ -13386,7 +14390,9 @@ def cfg():
                  pradera=max(0, min(2000000, int(_p('Pradera', c['pradera'])))),          # motor v99
                  mata=max(0.01, min(1.0, _p('Mata', c['mata']))),
                  tierra=max(0.0, min(1.0, _p('Tierra', c['tierra']))),                    # motor v100
-                 refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
+                 # motor v101: la piel por turnos (Refrescopiel sustituye a Refresconat)
+                 refresco_piel=max(0.0, min(2.0, _p('Refrescopiel', _p('Refresconat', c['refresco_piel'])))),
+                 turnos=int(bool(_p('Turnos', True))), cache_arq=int(bool(_p('Cachearq', True))),
                  biomas=int(bool(_p('Biomas', True))),
                  variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
                  traslucidez=max(0.0, min(1.0, _p('Traslucidez', c['traslucidez']))),
@@ -15234,9 +16240,15 @@ def valores_escena(nombre):
     out = dict((k, str(v)) for k, v in escena_defecto(nombre).items()) if nombre in ESCENAS else {}
     t = tabla_escenas()
     if t is not None:
+        guardadas = {}
         for r in range(1, t.numRows):
             if t[r, 0].val == nombre:
-                out[t[r, 1].val] = t[r, 2].val
+                guardadas[t[r, 1].val] = t[r, 2].val
+        for viejo, nuevo in ESCENA_MIGRA.items():   # motor v101: Refresconat -> Refrescopiel
+            if viejo in guardadas:
+                v = guardadas.pop(viejo)
+                guardadas.setdefault(nuevo, v)
+        out.update(guardadas)
     return out
 
 
@@ -16075,6 +17087,32 @@ def _legend_ciudad(W, c, r):
     return out
 
 
+def _coma(x, d=1):
+    return ('%%.%df' % d % x).replace('.', ',')
+
+
+def _legend_piel(c):
+    """Motor v101: la linea PIEL de la leyenda: el turno de la vuelta, las celdas
+    calculadas en el, las del camino inmediato, cada cuanto se publica, lo que
+    tarda build_instances en Python y la arqueologia (de la cache o calculada)."""
+    inf = _TURNOS.get('info') or {}
+    if not c.get('cache_arq', 1):
+        arq = 'arq sin cache'
+    else:
+        arq = 'arq cache' if _ARQ.get('cache') else 'arq calcula'
+    py = 'python %s ms' % _coma(_TURNOS.get('ms_inst', 0.0))
+    modo = inf.get('modo', 'entera')
+    if modo == 'entera':
+        return '  PIEL     entera en cada fotograma (Refrescopiel 0)   %s   %s' % (py, arq)
+    publica = 'publica %s s' % _coma(inf.get('refresco', 0.0), 2)
+    if modo == 'vuelta':
+        return '  PIEL     vuelta entera (Turnos apagado)   inmediatas %d   %s%s   %s   %s' \
+            % (inf.get('inmediatas', 0), publica, ' (ahora)' if inf.get('publica') else '', py, arq)
+    return '  PIEL     turno %d/%d   celdas %d   inmediatas %d   %s%s   %s   %s' \
+        % (inf.get('turno', 0), inf.get('turnos', 0), inf.get('celdas', 0), inf.get('inmediatas', 0), publica,
+           ' (ahora)' if inf.get('publica') else '', py, arq)
+
+
 def legend(frame=None):
     try:
         return _legend()
@@ -16218,6 +17256,7 @@ def _legend():
         lines.append('  TEMA     %s   clusters %d (max %d)   compuestos %d   piezas %d   obras %d (%d a medias)'
                      % (tema_de(c), pz.get('clusters', 0), pz.get('max', 0), pz.get('compuestos', 0),
                         pz.get('piezas', 0), pz.get('obras', 0), pz.get('medias', 0)))
+        lines.append(_legend_piel(c))           # motor v101: la piel por turnos
         if pz.get('ciudad'):                    # fase 11 v10: la ciudad legible
             lines += _legend_ciudad(W, c, pz['ciudad'])
         if 'copas' in pz:                       # fase 11 v5: la naturaleza legible
