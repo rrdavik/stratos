@@ -91,6 +91,31 @@ CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
                edificio con el color de su secuenciador (Tinteventanas,
                Pasostinte). De lejos (Lodciudad), sin los remates pequenos.
 
+LA PIEL POR TURNOS (v18, motor v101)
+------------------------------------
+  Rendimiento, sin cambiar la logica del mundo ni la imagen:
+  TURNOS     la piel de los tres temas se calcula por porciones en varios
+             fotogramas (un bufer de trabajo agrupado por celda, todas las
+             porciones en el mismo instante de publicacion) y se publica de
+             golpe cada Refrescopiel s (0,25). Entre publicaciones las filas de
+             los modelos son las mismas: los Script CHOP no se recuecen (unas 4
+             veces por segundo en vez de 30). La obra, las gruas, el balanceo,
+             los balancines y las ventanas que respiran avanzan a saltos de
+             Refrescopiel; el humo y el viento del dosel los anima la GPU.
+  INMEDIATO  una celda que recibe nota, impulso, erosion o corte, o que cambia
+             de ocupacion, especie o dueno, se recalcula en ese fotograma con
+             sus vecinas y la capital de su cluster: el brote, el tinte de las
+             ventanas, el pumping y el destello siguen sin retraso.
+  MAPA       el mapa de alturas se rehace solo en las cajas de lo que cambia
+             (y un borde de suavizado), tambien con arrozales y mesetas: da lo
+             mismo que rehacerlo entero.
+  ARQUEO     la arqueologia guarda sus filas (Cachearq) y solo las rehace
+             cuando cambian los cortes o mientras se funde una cicatriz.
+  Parametros: Refrescopiel (sustituye a Refresconat, copia su valor una vez;
+  0 = la piel entera en cada fotograma), Turnos (apagado: la vuelta entera
+  en el fotograma de publicacion) y Cachearq. Linea PIEL en la leyenda.
+  Fuera de TouchDesigner: pruebas/perfil_piel.py (antes y despues).
+
 TIERRA EN VEZ DE LOSETAS (v17, motor v100)
 ------------------------------------------
   SEDIMENTO  con Oceano, la concha que entierra un mundo solo deja su capa donde
@@ -182,8 +207,9 @@ BROTES, ARBOLES Y TERRAZAS (v8)
                Riego en cascada con la fase 13) y MESETA-JARDIN (relieve sobre
                vegetacion: un nivel por nota del SEQ2, frutales en Marco, Setos).
   LIGERO       (por defecto, para una maquina modesta) la naturaleza se
-               recalcula cada Refresconat s (a saltos: sus Script CHOP casi no
-               se recuecen), 6 arboles por celda de bosque, tarjetas de racimo
+               publica cada Refrescopiel s (v18; antes Refresconat: a saltos,
+               sus Script CHOP casi no se recuecen), 6 arboles por celda de
+               bosque, tarjetas de racimo
                con la camara de globo, Variantes 2 y solo el arbol joven y el
                adulto en TD (80 geometrias).
   (Los arboles de pisos de la v6 y la v7 se sustituyen; sus parametros
@@ -201,7 +227,7 @@ PAGINA MAS CORTA (v9)
     Densidadhoja 6    hojas minimas por racimo
     Muroterraza 0,25  parte del bancal que es muro
   Se quedan los que cambian las escenas (fase 18), los de rendimiento
-  (Ligero, Refresconat, Impostores, Lodnat) y los que dan caracter al
+  (Ligero, Refrescopiel, Turnos, Cachearq, Impostores, Lodnat) y los que dan caracter al
   bosque, los pisos y los hibridos. Relanzar cualquier fase los quita de
   un proyecto anterior y avisa si los habias cambiado.
 
@@ -272,7 +298,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v17  (tierra en vez de losetas: el mar no sedimenta, conchas como capas de tierra)'
+VERSION = 'fase11 v18  (la piel por turnos: Refrescopiel, Turnos y Cachearq; el mapa por cajas)'
 banner(VERSION)
 
 base = require_base(11)
@@ -307,7 +333,26 @@ add_par(base, page, 'float', 'Tintebordenat', 'Tinte del secuenciador en el bord
 # v8: brotes, arboles y terrazas (los arboles de pisos de la v6 y la v7 se van)
 quitados = [nm for nm in ('Pisoscopa', 'Anchocopa', 'Angulorama', 'Troncofrac') if remove_par(base, nm)]
 add_par(base, page, 'toggle', 'Ligero', 'Naturaleza ligera (maquina modesta)', True)
-add_par(base, page, 'float', 'Refresconat', 'La naturaleza se recalcula cada (s; 0 cada fotograma)', 0.25, 0.0, 2.0)
+# v18 (motor v101): la piel por turnos. Refrescopiel sustituye a Refresconat: copia su valor una sola vez
+ref_viejo = None
+if has_par(base, 'Refresconat'):
+    try:
+        ref_viejo = float(base.par.Refresconat.eval())
+    except Exception:
+        ref_viejo = None
+ref_nuevo = not has_par(base, 'Refrescopiel')
+add_par(base, page, 'float', 'Refrescopiel', 'La piel se publica cada (s; 0 entera en cada fotograma)', 0.25, 0.0, 2.0)
+if ref_viejo is not None:
+    if ref_nuevo:
+        base.par.Refrescopiel.val = ref_viejo
+        info('v18: Refrescopiel toma el valor de Refresconat (%s s) y Refresconat se quita'
+             % str(round(ref_viejo, 3)).replace('.', ','))
+    else:
+        info('v18: Refresconat se quita (manda Refrescopiel, %s s)'
+             % str(round(float(base.par.Refrescopiel.eval()), 3)).replace('.', ','))
+    remove_par(base, 'Refresconat')
+add_par(base, page, 'toggle', 'Turnos', 'La piel por turnos (doble bufer; apagado: la vuelta entera)', True)
+add_par(base, page, 'toggle', 'Cachearq', 'Cache de la arqueologia (filas iguales mientras no cambien los cortes)', True)
 add_par(base, page, 'toggle', 'Biomas', 'Biomas por latitud (frio, templado, calido)', True)
 add_par(base, page, 'int', 'Variantes', 'Variantes por modelo (biblioteca)', 2, 1, 8, clamp=True)
 renew_default(base, 'Variantes', 4, 2)          # v8 ligera: 2 variantes (menos geometrias)
@@ -374,7 +419,7 @@ add_par(base, page, 'float', 'Lodind', 'Remates pequenos de la industria desde (
 ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
    'Maxpiezas 6, Avance (gates), Pasosetapa 2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
    'Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
-   'Ligero, Refresconat 0,25, Biomas, Variantes 2, Traslucidez 0,35, '
+   'Ligero, Refrescopiel 0,25 (v18; antes Refresconat), Turnos, Cachearq, Biomas, Variantes 2, Traslucidez 0,35, '
    'Timidez 0,12, Emergentes 0,1, Orla, Mezcla 0,3, Impostores, Terrazaspornota 1, Maxterrazas 8, '
    'Pasoterraza 0,12, Riego, Colorcultivo, Alturameseta 0,15, Maxniveles 3, Marco '
    '(tresbolillo), Setos; v10: Lenguaje (latitud), Variantesciudad 3, Fijartipo (auto), Oblicuidad 6, '
@@ -443,9 +488,8 @@ leeme(base, 11, """FASE 11 - LA PIEL
   lejos, tarjetas de racimo (Impostores). Hibridos: arrozal (Terrazaspornota,
   Maxterrazas, Pasoterraza, Riego, Colorcultivo) y
   meseta-jardin (Alturameseta, Maxniveles, Marco, Setos); textura
-  'cultivos' para el shader. Ligero (por defecto): la naturaleza se
-  recalcula cada Refresconat s (a saltos), 6 arboles por celda de bosque y
-  tarjetas de racimo con la camara de globo.
+  'cultivos' para el shader. Ligero (por defecto): 6 arboles por celda de
+  bosque y tarjetas de racimo con la camara de globo.
   v10, ciudad legible: cada etapa es un tipo de edificio (biblioteca de
   edificios por gramatica, modelos/edi_*; la fachada la dibuja el shader),
   con lenguaje por latitud (Lenguaje), obra visible entre etapas (Obra,
@@ -456,7 +500,13 @@ leeme(base, 11, """FASE 11 - LA PIEL
   v11, tema industria: mina (SEQ1) y energia (SEQ2), del aserradero y la
   bocamina a la refineria y la central; recurso de la concha de abajo
   (Recursos), Epoca, corta que devora (Bancospornota, Maxbancos) y planta
-  integrada (Maxbastidor), humo (Emisiones, Maxhumo), Variantesind, Lodind.""")
+  integrada (Maxbastidor), humo (Emisiones, Maxhumo), Variantesind, Lodind.
+  v18, la piel por turnos: la piel de los tres temas se calcula por porciones
+  y se publica de golpe cada Refrescopiel s (0,25; 0 = entera en cada
+  fotograma); entre publicaciones los Script CHOP de los modelos no se
+  recuecen. Una nota, un golpe o un corte recalculan su celda y sus vecinas
+  en el acto. Turnos apagado: la vuelta entera al publicar. Cachearq: la
+  arqueologia, de la cache. Linea PIEL en la leyenda.""")
 
 print_report()
 
@@ -733,6 +783,14 @@ def _prueba(t, m):
     _prueba_ciudad(t, m)
     _prueba_industria(t, m)
     _prueba_rendimiento_td(t, m)
+    _prueba_turnos(t, m)
+
+
+def _prueba_turnos(t, m):
+    """v18 (motor v101): la piel por turnos, con los valores de fabrica de Refrescopiel,
+    Turnos y Cachearq y mundos propios (no toca el de la sesion)."""
+    for texto, bien, det in m.autoprueba_turnos(m.cfg()):
+        t.check('turnos: ' + texto, bien, det)
 
 
 def _prueba_natural(t, m):
@@ -1220,18 +1278,19 @@ def _prueba_natural_(t, m):
             hojas = W['piel']['hojas']
     base.par.Tema = 'naturaleza'
     # los tiempos se informan, no se comprueban: dependen de la maquina y de lo que haga en
-    # ese momento, y la naturaleza no se recalcula en cada fotograma sino cada Refresconat
+    # ese momento, y la piel no se recalcula en cada fotograma sino por turnos (Refrescopiel)
     # (unas 4 veces por segundo); lo que se comprueba es el presupuesto de hojas
-    ref = float(m.cfg().get('refresco_nat', 0.25))
+    ref = float(m.cfg().get('refresco_piel', 0.25))
     por_foto = 1000 * tiempos['naturaleza'] * (min(1.0, 1.0 / (30.0 * ref)) if ref > 0 else 1.0)
     t.check('rendimiento: %d celdas en bosque maximo, hojas %d (presupuesto %d); naturaleza %.1f ms por calculo '
             '(cada %.2f s: unos %.1f ms por fotograma a 30 fps), ciudad %.1f ms (solo se informa)'
             % (m.N, hojas, m.presupuesto_hojas(cc), 1000 * tiempos['naturaleza'], ref, por_foto,
                1000 * tiempos['ciudad']),
             hojas <= m.presupuesto_hojas(cc))
-    # 15. Refresconat: entre dos refrescos las filas de la vegetacion no cambian (los CHOP no se recuecen)
+    # 15. Refrescopiel (v18; antes Refresconat): entre dos publicaciones las filas de la vegetacion no
+    # cambian (los CHOP no se recuecen)
     cq = m.cfg()
-    cq['refresco_nat'] = 0.25
+    cq['refresco_piel'] = 0.25
     Wq = mundo([i] + list(m.NEIGH[i]), m.GEO, 7)
     t0 = absTime.seconds + 50.0
     f0 = m.build_instances(Wq, cq, t0, refresco=True)
@@ -1239,8 +1298,8 @@ def _prueba_natural_(t, m):
     veg = lambda inst: dict((g, v) for g, v in inst.items() if g.startswith('mod_veg_'))
     Wq['occ'][i] = 8
     f2 = m.build_instances(Wq, cq, t0 + 0.15, refresco=True)
-    t.check('Refresconat %.2f s: entre dos refrescos la vegetacion copia sus filas; una ocupacion nueva '
-            'refresca enseguida' % cq['refresco_nat'], veg(f0) == veg(f1) and veg(f0) and veg(f2) != veg(f1))
+    t.check('Refrescopiel %.2f s: entre dos publicaciones la vegetacion copia sus filas; una ocupacion nueva '
+            'refresca enseguida' % cq['refresco_piel'], veg(f0) == veg(f1) and veg(f0) and veg(f2) != veg(f1))
     m.reset_world()
     m.on_pulse('Sembrarzona')
     m.on_pulse('Sembrarzona')

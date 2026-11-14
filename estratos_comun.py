@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v78'
+VERSION_COMUN = 'comun v79'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2058,7 +2058,8 @@ def fase8_al_dia(base):
 # --- la pagina Fase11, mas corta (comun v43, motor v63) -----------------------
 # De 42 parametros a 35: siete ajustes finos de la geometria quedan fijos en
 # su valor por defecto. Se quedan los de las escenas (fase 18), los de
-# rendimiento (Ligero, Refresconat, Impostores, Lodnat) y los que dan
+# rendimiento (Ligero, Refrescopiel, Turnos, Cachearq, Impostores, Lodnat;
+# comun v79, motor v101: Refrescopiel sustituye a Refresconat) y los que dan
 # caracter al bosque, los pisos y los hibridos.
 
 FASE11_FIJOS = (('Rebote', 0.2, 'rebote del nacimiento'),
