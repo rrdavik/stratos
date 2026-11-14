@@ -2084,8 +2084,11 @@ def _prueba_rendimiento_td(t, m):
                 fu is not None and fu['ry'] is not None and fu['rx'] is not None and not con_giro and not sueltas,
                 ', '.join((con_giro + sueltas)[:3]))
         # motor v75: cada geometria instanciada tiene su Script CHOP en chop_names (el
-        # motor solo recuece esos: el humo de la v74 no estaba y no se habria actualizado)
-        nombres = set(m.chop_names(m.cfg()))
+        # motor solo recuece esos: el humo de la v74 no estaba y no se habria actualizado).
+        # v18: durante la autoprueba Variantes (y las de la ciudad y la industria) estan en su
+        # valor por defecto, pero las geometrias son las de tus variantes: se mira con todas las
+        # que tienen geometria en TD (variantes() no pasa de VARIANTES_TD)
+        nombres = set(m.chop_names(dict(m.cfg(), variantes=8, variantes_ciudad=6, variantes_ind=6)))
         sin_cocer = []
         for g in base.children:
             try:
