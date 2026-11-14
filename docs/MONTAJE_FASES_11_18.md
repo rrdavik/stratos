@@ -1706,3 +1706,11 @@ En la ciudad y la industria los fotogramas con modelos que cambian son ya solo l
 - **El objetivo de 4 ms de media** en la máquina del encargo equivale a algo más de 1 ms aquí: la ciudad y la industria se quedan en 1,8 ms (unos 6 ms allí). Lo que queda en ellas es el camino inmediato de cada nota (unas 5 celdas y el contexto de la ciudad) y el resto del fotograma (tejido, luces, losetas), que este encargo no toca.
 
 **En TouchDesigner (prueba de Dave):** `diagnostico_fps.py` dos veces, con unos 10 s entre una y otra, antes y después, en los tres temas, con `Modocamara` en globo y en rasante. Mirar los fps reales y si los Script CHOP `i_mod_*` salen de la lista de los que más cuestan. Imagen: sesión de 5 minutos por tema con `Turnos` encendido y apagado; las capturas en el mismo instante de publicación tienen que coincidir. A ojo: la obra, las grúas y los balancines avanzan a saltos, y las notas siguen encendiendo su celda sin retraso.
+
+### Primeras medidas en TouchDesigner y el diagnóstico por partes (motor v102)
+
+Con `diagnostico_fps.py` en globo y rasante (nivel 23): ningún Script CHOP `i_mod_*` aparece ya entre los que más cuestan en ningún tema. Rasante, los tres temas a 60 fps; globo, industria a 60, ciudad a 50 y naturaleza a 29.
+
+- **La columna «ms la última vez» es un solo fotograma.** En la medida de naturaleza en globo ese fotograma fue un tirón de todo el proyecto (el latido 559 ms, el micrófono 453, el render 321, cada GLSL MAT 11 a 41): la lista quedó inflada y no dice qué cuesta de media. Los fps reales sí valen.
+- **Motor v102:** el latido cuenta lo que tarda cada parte (mundo, `build_instances`, Script CHOP recocidos, terreno, resto) en todos los fotogramas entre las dos pasadas, con media y máximo, y `diagnostico_fps.py` lo escribe al final con la línea PIEL, las geometrías de la piel, `Variantes` y `Pradera`.
+- **El bucle de los Script CHOP** buscaba cada operador por su nombre en cada fotograma: con `Variantes` 8 son cientos. Ahora los guarda.
