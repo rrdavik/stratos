@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v78'
+VERSION_COMUN = 'comun v79'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -827,9 +827,14 @@ vec3 sobre(vec3 d)
 {
     // uTerreno.z > 0: sin relieve la malla se hunde bajo las losetas; < 0 (Oceano): flota
     // sobre ellas, y es el mar
-    vec3 a = textureLod(sAlturas, uvDe(d), 0.0).rgb;
+    vec4 a = textureLod(sAlturas, uvDe(d), 0.0);
     float e = relieveFino(d, max(a.r, 0.0), a.b);
-    return d * (a.g + e - uTerreno.z * (1.0 - smoothstep(0.0, 0.08, e)));
+    float r = a.g + e - uTerreno.z * (1.0 - smoothstep(0.0, 0.08, e));
+    // motor v101: el agua de una hondonada (a < 0: lo que sube sobre el nivel del mar) cubre
+    // lo que haya por debajo
+    if (uOceano.x > 0.5 && a.a < -0.001)
+        r = max(r, uOceano.z - a.a - uTerreno.z);
+    return d * r;
 }
 
 void main()
@@ -866,6 +871,7 @@ void main()
         float hr = e / max(1e-4, uTerreno.y);
         float mancha = fruido(d * 21.0) * 0.6 + fruido(d * 57.0) * 0.4;      // espesa aqui, rala alli
         bool vive = uOceano.w > 0.5 && id < uPradera.x && e > 0.035 && hr < uPisos.x - 0.03 && a.a < 0.05
+                    && !(a.a < -0.001 && a.g + e < uOceano.z - a.a)        // ni bajo el agua de una hondonada
                     && h3 < 1.9 * mancha - 0.35;
         if (!vive) {
             gl_Position = vec4(0.0, 0.0, 2.0, 1.0);     // fuera del volumen de recorte: no se dibuja
@@ -1278,7 +1284,7 @@ void main()
             n = normalize(mix(n, nf, 0.35 * cantil));
             // la lava de los volcanes (sAlturas.a): basalto negro; el crater y las coladas
             // brillan, y al rojo vivo cuando su volcan entra en erupcion
-            float lava = mapa.a;
+            float lava = max(mapa.a, 0.0);       // a < 0 es agua (motor v101)
             if (lava > 0.02) {
                 vec3 dP = normalize(iVert.pPos);
                 float er = clamp(cercaDe(uVolcan0, dP) + cercaDe(uVolcan1, dP) + cercaDe(uVolcan2, dP), 0.0, 1.0);
@@ -1299,7 +1305,10 @@ void main()
             // motor v100: el nivel del mar es el del suelo mas bajo (uOceano.z): la celda con
             // sedimento por encima es tierra aunque no tenga nada: suelo desnudo, no agua
             float sobreMar = max(mapa.g - uOceano.z, 0.0);
-            mar = sobreMar + eAbs < 0.006;
+            // motor v101: el agua que se desborda (a < 0): lo que queda por debajo de su nivel es agua
+            float crecida = max(-mapa.a, 0.0);
+            float fondo = crecida - sobreMar - eAbs;
+            mar = sobreMar + eAbs < 0.006 || (crecida > 0.001 && fondo > -0.004);
             vec3 e1 = normalize(cross(vec3(0.0, 1.0, 0.0), dT) + vec3(1e-4, 0.0, 0.0));
             vec3 e2 = cross(dT, e1);
             float tiempo = uOceano.y;
@@ -1314,6 +1323,8 @@ void main()
                     costa += 0.050 * smoothstep(0.0, 0.03, m2.r + max(m2.g - uOceano.z, 0.0));
                 }
                 costa = clamp(max(costa, (sobreMar + eAbs) / 0.006), 0.0, 1.0);
+                if (crecida > 0.001)        // en la hondonada, el color lo da el fondo: clara donde cubre poco
+                    costa = 1.0 - smoothstep(0.0, 0.45, fondo);
                 vec3 pw = iVert.pPos * 11.0;
                 float o1 = ruido(pw + vec3(0.31, 0.17, 0.0) * tiempo);
                 float o2 = ruido(pw * 2.9 - vec3(0.0, 0.43, 0.29) * tiempo);
@@ -1332,7 +1343,7 @@ void main()
                 amb = 1.0;
                 emis = base * 0.38;     // comun v76: el mar se lee tambien con poca luz
             } else {
-                float arena = (1.0 - smoothstep(0.016, 0.034, eAbs)) * (1.0 - smoothstep(0.02, 0.2, mapa.a));
+                float arena = (1.0 - smoothstep(0.016, 0.034, eAbs)) * (1.0 - smoothstep(0.02, 0.2, max(mapa.a, 0.0)));
                 vec3 playa = vec3(0.80, 0.72, 0.52) * (0.86 + 0.24 * ruido(iVert.pPos * 70.0));
                 playa = mix(playa * vec3(0.62, 0.64, 0.66), playa, smoothstep(0.006, 0.013, sobreMar + eAbs));    // mojada
                 // sobre el sedimento, lejos del agua, no hay playa: tierra desnuda, parda y

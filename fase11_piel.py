@@ -91,6 +91,21 @@ CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
                edificio con el color de su secuenciador (Tinteventanas,
                Pasostinte). De lejos (Lodciudad), sin los remates pequenos.
 
+EL DETALLE SE LEE Y EL AGUA SE DESBORDA (v18, motor v101)
+---------------------------------------------------------
+  ESCALA     (Radionucleo 8) con el nucleo en 12 las especies se veian a la mitad de
+             tamano desde el globo y su detalle no se leia; con 6 (el de siempre) las
+             islas no tenian sitio. 8 es el termino medio. Menor: especies mas grandes
+             en pantalla; mayor: mas sitio por celda. Tras cambiarlo, relanzar la fase.
+  ESPECIES   mas hoja y mas fina (10 por racimo, antes 6; un 20 % mas pequenas) y la
+             copa mas llena en las especies que salian ralas (olivo, mangle, baobab,
+             bambu, drago, parasol, abedul...). Hasta 14 arboles por celda de bosque.
+  AGUA       (Inundacion 0,08 por segundo) una celda de mar que queda encerrada por
+             sedimento deja de ser mar abierto: su agua sube poco a poco hasta el borde
+             mas bajo y, si al subir supera el suelo de una hondonada vecina, se
+             desborda en ella y la llena igual, cubriendo lo que haya. Una hondonada
+             seca sin agua cerca sigue seca. Inundacion 0: no se desborda.
+
 TIERRA EN VEZ DE LOSETAS (v17, motor v100)
 ------------------------------------------
   SEDIMENTO  con Oceano, la concha que entierra un mundo solo deja su capa donde
@@ -272,7 +287,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v17  (tierra en vez de losetas: el mar no sedimenta, conchas como capas de tierra)'
+VERSION = 'fase11 v18  (nucleo 8 y mas hoja: el detalle de las especies se lee; el agua se desborda en las hondonadas)'
 banner(VERSION)
 
 base = require_base(11)
@@ -332,6 +347,10 @@ add_par(base, page, 'toggle', 'Oceano', 'Oceano: las celdas vacias son mar; las 
 add_par(base, page, 'float', 'Volcanes', 'Volcanes: parte de los conos de relieve que lo son', 0.2, 0.0, 1.0)
 add_par(base, page, 'toggle', 'Detalle', 'Detalle alto: hojas de verdad desde el globo (tarjeta grafica)', True)
 add_par(base, page, 'float', 'Tierra', 'Las conchas, como capas de tierra (0: losetas de color)', 0.75, 0.0, 1.0)
+# v18 (motor v101): el tamano del planeta frente a las especies, y el agua que se desborda
+add_par(base, page, 'float', 'Radionucleo', 'Radio del nucleo (menor: las especies se ven mas grandes)', 8.0, 4.0, 16.0)
+add_par(base, page, 'float', 'Inundacion', 'Lo que sube el agua de una hondonada (por segundo; 0: no se desborda)',
+        0.08, 0.0, 2.0)
 # v10: la ciudad legible
 add_par(base, page, 'menu', 'Lenguaje', 'Lenguaje de la ciudad', 'latitud', menu=m.LENGUAJE_MODOS,
         menu_labels=['Por latitud (como los biomas)', 'Frio: hormigon y chapa', 'Templado: ladrillo y vidrio',
@@ -382,7 +401,7 @@ ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Minclust
    'Modulomarco 0,25, Maxmarco 3, Capsulas 0,4, Mutacion 0,5, Mutacionfuente (manual), Obra, '
    'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60; v11: Tema + industria, '
    'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
-   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16; v17: Tierra 0,75')
+   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16; v17: Tierra 0,75; v18: Radionucleo 8, Inundacion 0,08')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -879,7 +898,7 @@ def _prueba_oceano(t, m):
     t.check('escala: nucleo de radio %g; la celda de Nota mide %.1f x %.1f, %.1f veces el limite de altura '
             '(antes 1,2); las luces fijas, al doble (una sola vez)' % (c['core_radius'], cw, cl_,
                                                                        min(cw, cl_) / m.limit(c)),
-            c['core_radius'] == 12.0 and min(cw, cl_) > 2.0 * m.limit(c)
+            abs(c['core_radius'] - float(base.par.Radionucleo)) < 1e-9 and min(cw, cl_) > 1.5 * m.limit(c)
             and 'escala:nucleo12' in (base.fetch('migraciones', [], search=False) or []))
     pr = base.op('pradera')
     vsh = base.op('piel_vertex').text if base.op('piel_vertex') is not None else ''
@@ -914,6 +933,38 @@ def _prueba_oceano(t, m):
     t.check('mapa de alturas por capas: una nota rehace solo lo que cambia (%.0f ms; entero, %.0f ms) y da '
             'exactamente el mismo mapa' % (1000 * min(ts), 1000 * entero),
             float(np.abs(Ei - Ef).max()) == 0.0 and min(ts) < 0.6 * entero)
+    # v18 (motor v101): el agua se desborda
+    Wa = m.new_world()
+    m.ensure(Wa)
+    anillo = list(m.NEIGH[i])
+    poza = anillo[0]
+    fuera = [x for x in m.NEIGH[poza] if x != i and x not in anillo]
+    for x in anillo[1:] + fuera:
+        Wa['cols'][x] = [[0, 0.5]]
+    Wa['cols'][poza] = [[0, 0.2]]
+    core = c['core_radius']
+    ca = dict(c, inundacion=0.1)
+    m.inundar(Wa, ca, 0.5)
+    primero = dict(Wa['agua'])
+    for _ in range(3):
+        m.inundar(Wa, ca, 0.5)
+    medio = dict(Wa['agua'])
+    for _ in range(20):
+        m.inundar(Wa, ca, 0.5)
+    lleno = dict(Wa['agua'])
+    m.terreno(Wa, ca)
+    canal = m.alturas_array()[..., 3]
+    seco = m.inundar(m.new_world(), ca, 0.5)
+    m.inundar(Wa, dict(ca, inundacion=0.0), 0.5)
+    t.check('el agua se desborda: la celda de mar encerrada por sedimento se llena poco a poco (%.2f, %.2f... '
+            'hasta el borde, %.2f); al pasar de 0,2 entra en la poza de al lado y la cubre; en el mapa, canal a '
+            'negativo (%.2f); con el mar abierto o Inundacion 0, nada'
+            % (primero.get(i, 0) - core, medio.get(i, 0) - core, lleno.get(i, 0) - core, float(canal.min())),
+            list(primero) == [i] and 0.0 < primero[i] - core < 0.1 and poza not in medio
+            and abs(lleno[i] - core - 0.5) < 1e-6 and abs(lleno.get(poza, 0) - core - 0.5) < 1e-6
+            and float(canal[rej['celda'] == i].min()) < -0.45 and float(canal[rej['celda'] == poza].min()) < -0.45
+            and float(canal[rej['celda'] == anillo[1]].min()) >= 0.0 and seco == 0 and not Wa['agua'])
+    m._TERRENO['agua'] = {}
     # v17 (motor v100): el mar no sedimenta; la tierra sube sobre el; las conchas, de tierra
     c8 = dict(c, nivel=max(15, c['nivel']))
     j = m.NEIGH[i][0]
@@ -940,7 +991,7 @@ def _prueba_oceano(t, m):
                                                          or 'mat_piel_estrato' in (est.par.material.expr or ''))
             and abs(u8['uTierra'][0] - float(base.par.Tierra)) < 1e-9
             and m.uniformes_piel(Ws, dict(c8, tema=1), 11.0)['uTierra'][0] == 0.0
-            and all(k in sh for k in ('uTierra', 'sobreMar', 'estrato')))
+            and all(k in sh for k in ('uTierra', 'sobreMar', 'estrato', 'crecida')))
     # v15: con las 85 celdas ocupadas sigue habiendo mar
     Wll = mundo(range(m.N), m.GEO, 12)
     agua = float((~tierra(Wll)).mean())

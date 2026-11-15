@@ -142,6 +142,11 @@
 #                 el del suelo mas bajo (nivel_mar): una celda con sedimento y sin nada encima
 #                 es tierra desnuda, no agua. Las conchas se dibujan como capas de tierra
 #                 (Tierra: mat_piel_estrato) y la celda que suena ilumina su suelo.
+#                 Motor v101, fase 11 v18: el nucleo, de 12 a 8 (Radionucleo): con 12 las
+#                 especies se veian a la mitad de tamano desde el globo y su detalle no se
+#                 leia. Mas hoja y mas fina (Densidadhoja 6 -> 10). El AGUA SE DESBORDA: una
+#                 celda de mar que queda encerrada por tierra se llena poco a poco hasta el
+#                 borde mas bajo y de ahi pasa a las hondonadas vecinas, cubriendo lo que haya.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -153,7 +158,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v100'
+MOTOR_VERSION = 'motor v101'
 
 import math
 
@@ -281,7 +286,7 @@ def pads_corte(cfg):
 COL_RED_DEF = (0.60, 0.36, 0.92)           # el violeta electrico de la red (OKLCH 0,62 0,21 300; reservado)
 DEFAULT_CFG = dict(
     nivel=3,
-    core_radius=12.0,           # motor v99: el doble (6 hasta la v98): las celdas, el doble de anchas
+    core_radius=8.0,            # motor v101 (Radionucleo): 6 hasta la v98, 12 en la v99 y la v100
     # fase 3
     shell_thick=0.5, height_factor=3.75, seed_frac=0.20, grow_frac=0.20,
     gate_mode=1, gate_max=1.25, vel_umbral=64, steps_per_beat=4, cost_max=5,
@@ -322,10 +327,11 @@ DEFAULT_CFG = dict(
     lod_nat=80.0, tinte_borde_nat=0.8, superficie=0,
     # fase 11 v8 (motor v52): brotes, arboles y terrazas
     ligero=1, refresco_nat=0.25,
-    biomas=1, variantes=2, var_angulo=12.0, cuantizar30=0, inclinacion=8.0, densidad_hoja=6,
+    biomas=1, variantes=2, var_angulo=12.0, cuantizar30=0, inclinacion=8.0, densidad_hoja=10,     # v101: 10 (antes 6)
     traslucidez=0.35, timidez=0.12, emergentes=0.1, orla=1, mezcla=0.3, impostores=1,
     # motor v97: el oceano (las celdas vacias son mar; las ocupadas, islas), los volcanes y el detalle
     oceano=1, volcanes=0.2, detalle=1,
+    inundacion=0.08,                    # motor v101: lo que sube el agua de una hondonada (unidades por segundo)
     tierra=0.75,                        # motor v100: cuanto se ven las conchas como capas de tierra
     pradera=300000, mata=0.16,          # motor v99: las matas de la pradera (GPU) y su tamano
     terrazas_por_nota=1, max_terrazas=8, paso_terraza=0.12, muro_terraza=0.25, riego=1,
@@ -2083,6 +2089,89 @@ def sedimenta(W, cfg):
             for c in range(N)]
 
 
+# --- motor v101: el agua se desborda ------------------------------------------------------------
+# El mar abierto es el grupo mas grande de celdas vecinas con el suelo mas bajo. Cuando el
+# sedimento encierra una celda de mar (o varias), deja de ser mar abierto: es una hondonada
+# con agua. Su agua sube poco a poco (Inundacion, unidades por segundo) hasta el borde mas
+# bajo por el que saldria hacia el mar; y si al subir supera el suelo de una vecina que
+# tambien es hondonada (un corte, otra poza), se desborda en ella y la llena igual. El agua
+# cubre lo que haya: el terreno la dibuja por encima del suelo (canal a del mapa, en negativo).
+# Una hondonada seca (un corte de la bateria sin agua cerca) sigue seca.
+_CUENCAS = {}
+
+
+def _cuencas(S):
+    """(T, abierto): T[c], el nivel hasta el que se llenaria la celda c (el del paso mas
+    bajo hacia el mar abierto; = su suelo si desagua sola), y las celdas del mar abierto."""
+    v = _CUENCAS.get('v')
+    if v is not None and v[0] == S:
+        return v[1]
+    import heapq
+    gmin = min(S)
+    bajas = set(c for c in range(N) if S[c] <= gmin + 1e-4)
+    abierto, vistas = set(), set()
+    for c in sorted(bajas):
+        if c in vistas:
+            continue
+        grupo, frente = set([c]), [c]
+        while frente:
+            x = frente.pop()
+            for j in NEIGH[x]:
+                if j in bajas and j not in grupo:
+                    grupo.add(j)
+                    frente.append(j)
+        vistas |= grupo
+        if len(grupo) > len(abierto):
+            abierto = grupo
+    T = [float('inf')] * N
+    cola = []
+    for c in abierto:
+        T[c] = S[c]
+        cola.append((S[c], c))
+    heapq.heapify(cola)
+    while cola:
+        t_, c = heapq.heappop(cola)
+        if t_ > T[c]:
+            continue
+        for j in NEIGH[c]:
+            nt = max(t_, S[j])
+            if nt < T[j]:
+                T[j] = nt
+                heapq.heappush(cola, (nt, j))
+    v = (T, abierto)
+    _CUENCAS['v'] = (S, v)
+    return v
+
+
+def inundar(W, cfg, dt):
+    """Un paso del agua que se desborda. W['agua']: {celda: nivel del agua (radio)} de las
+    hondonadas con agua. Devuelve cuantas hay."""
+    agua = W.setdefault('agua', {})
+    ritmo = float(cfg.get('inundacion', 0.0))
+    if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza' or not cfg.get('oceano') or ritmo <= 0.0:
+        if agua:
+            agua.clear()
+        _TERRENO['agua'] = {}
+        return 0
+    S = tuple(round(suelo(W, cfg, c), 4) for c in range(N))
+    T, abierto = _cuencas(S)
+    gmin = min(S)
+    for c in list(agua):                    # ya no es hondonada (o volvio al mar abierto): se seca
+        if c in abierto or T[c] <= S[c] + 1e-6:
+            del agua[c]
+    for c in range(N):                      # el mar que queda encerrado
+        if c not in abierto and c not in agua and S[c] <= gmin + 1e-4 and T[c] > S[c] + 1e-6:
+            agua[c] = S[c]
+    for c in agua:                          # sube, hasta el borde
+        agua[c] = min(T[c], max(agua[c], S[c]) + ritmo * dt)
+    for c, L in list(agua.items()):         # y se desborda en la hondonada de al lado
+        for j in NEIGH[c]:
+            if j not in abierto and j not in agua and S[j] < L - 1e-3 and T[j] > S[j] + 1e-6:
+                agua[j] = S[j]
+    _TERRENO['agua'] = dict((c, round(L - gmin, 2)) for c, L in agua.items() if L - gmin > 0.004)
+    return len(agua)
+
+
 def nivel_mar(W, cfg):
     """El radio del mar: el suelo mas bajo del planeta (motor v100). Una celda cuyo suelo
     queda por encima es tierra, tenga o no algo encima."""
@@ -2229,6 +2318,7 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
         frente_tick(W, cfg)
     if piel:
         tick_piel(W, cfg, now, W['paso'], playing)
+        inundar(W, cfg, dt)             # motor v101: el agua que se desborda
     if cfg['nivel'] >= 14:
         tick_destructores(W, cfg, now)
     if cfg['nivel'] >= 15:
@@ -3345,6 +3435,9 @@ TONO_PLANTA = dict(
     araucaria=(0.08, 0.27, 0.15), olivo=(0.38, 0.47, 0.35), baobab=(0.31, 0.43, 0.16), mangle=(0.10, 0.34, 0.16),
     bambu=(0.41, 0.57, 0.16), cardon=(0.25, 0.43, 0.27), agave=(0.30, 0.47, 0.39), junco=(0.43, 0.51, 0.20))
 TONO_K = 0.6
+# Motor v101: (hojas, largo) de cada racimo, x lo normal, en las especies que salian ralas
+RACIMO_K = dict(olivo=(2.2, 1.25), mangle=(2.0, 1.25), baobab=(2.6, 1.5), bambu=(1.7, 1.2), drago=(1.6, 1.15),
+                parasol=(1.8, 1.1), abedul=(1.5, 1.15), pagoda=(1.4, 1.0), sauce=(1.4, 1.0), araucaria=(1.3, 1.1))
 DERIVACIONES = 3             # el arbol: 1 brinzal, 2 joven, 3 adulto (derivacion completa)
 DERIVACION_JOVEN = 2
 ANGULO_PLANTA = dict(conifera=84.0, pagoda=88.0, parasol=45.0, drago=34.0, frondosa=36.0, palmera=12.0,
@@ -3413,9 +3506,10 @@ class _Planta(object):
         repartidas con el angulo aureo. Su tamano varia 0,6-1,4; 'plano': las
         hojas miran arriba (platos y techos). 'roseta': todas desde la punta."""
         f = self.u(0.6, 1.4)
-        tam *= f
+        kn, kt = RACIMO_K.get(self.modelo, (1.0, 1.0))      # motor v101: copa mas llena en las especies ralas
+        tam *= f * kt
         tipo = tipo or HOJA_DE[self.modelo]
-        n = max(self.dens, int(round((n or self.dens) * f)))
+        n = max(self.dens, int(round((n or self.dens) * f * kn)))
         q = _add(p, d, tam)
         k = self.tramo(p, q, nivel + 1, padre)
         self.racimos.append((q, tam, d, plano))
@@ -3493,6 +3587,7 @@ class _Planta(object):
 
 HOJA_K = dict(aguja=0.95, ancha=0.75, lanceolada=0.62, espada=1.25, fronda=0.55, abanico=0.6, lamina=1.0,
               menuda=0.55)   # largo de la hoja, x el del racimo
+HOJA_K = dict((k_, 0.8 * v_) for k_, v_ in HOJA_K.items())     # motor v101: mas hojas (Densidadhoja 10) y mas finas
 HOJA_K.update((f, 0.5) for f in FLORES)
 
 
@@ -8308,8 +8403,8 @@ RUTA_HOJAS = 'SOP'          # las hojas van en la malla de cada ejemplar (Script
 # Motor v97 (Detalle): la tarjeta grafica lleva las hojas de verdad tambien desde el globo (antes,
 # con Ligero, todo eran tarjetas de racimo salvo a ras de suelo) y el presupuesto sube: son
 # triangulos en la GPU, no filas que calcule el motor.
-HOJAS_DETALLE = 3000000
-DETALLE_ARBOLES = 24        # con Detalle y Ligero, arboles como mucho por celda de bosque (v99: celdas el doble de anchas)
+HOJAS_DETALLE = 4000000
+DETALLE_ARBOLES = 14        # con Detalle y Ligero, arboles como mucho por celda de bosque (v101: nucleo 8, mas hoja)
 
 
 def presupuesto_hojas(cfg):
@@ -8411,6 +8506,20 @@ def alturas_array():
         if t.get('L') is not None:
             a[..., 3] = t['L']
         _TERRENO['array'] = a
+        _TERRENO['array_agua'] = None
+    ag = _TERRENO.get('agua')
+    if ag:                                  # motor v101: el agua de las hondonadas, en a, en negativo
+        clave = tuple(sorted(ag.items()))
+        v = _TERRENO.get('array_agua')
+        if v is None or v[0] != clave:
+            por_celda = np.zeros(N, dtype=np.float32)
+            for c, x in ag.items():
+                por_celda[c] = x
+            A = por_celda[_rejilla(np)['celda']]
+            b = a.copy()
+            b[..., 3] = np.where(A > 0.0, -A, a[..., 3])
+            v = _TERRENO['array_agua'] = (clave, b)
+        return v[1]
     return a
 
 
@@ -13299,6 +13408,7 @@ def cfg():
         luz_conchas_pulso=c['luz_conchas_pulso'] * max(0.0, _p('Luzconchas', 1.0)),
         luz_conchas_reposo=c['luz_conchas_reposo'] * max(0.0, _p('Luzconchas', 1.0)),
         shell_thick=_p('Shellthick', c['shell_thick']),
+        core_radius=max(3.0, min(40.0, _p('Radionucleo', c['core_radius']))),      # motor v101
         height_factor=_p('Alturafactor', c['height_factor']),
         seed_frac=_p('Semillafrac', c['seed_frac']),
         cost_max=_p('Costemax', c['cost_max']),
@@ -13386,6 +13496,7 @@ def cfg():
                  pradera=max(0, min(2000000, int(_p('Pradera', c['pradera'])))),          # motor v99
                  mata=max(0.01, min(1.0, _p('Mata', c['mata']))),
                  tierra=max(0.0, min(1.0, _p('Tierra', c['tierra']))),                    # motor v100
+                 inundacion=max(0.0, min(10.0, _p('Inundacion', c['inundacion']))),       # motor v101
                  refresco_nat=max(0.0, min(2.0, _p('Refresconat', c['refresco_nat']))),
                  biomas=int(bool(_p('Biomas', True))),
                  variantes=max(1, min(8, int(_p('Variantes', c['variantes'])))),
@@ -13951,8 +14062,9 @@ def terreno_al_dia_td(W, c):
         return
     t = terreno(W, c)
     o = parent().op('alturas')
-    if o is not None and _CACHE.get('alturas_v') != t['version']:
-        _CACHE['alturas_v'] = t['version']
+    sello_mapa = (t['version'], tuple(sorted((_TERRENO.get('agua') or {}).items())))     # v101: y el agua
+    if o is not None and _CACHE.get('alturas_v') != sello_mapa:
+        _CACHE['alturas_v'] = sello_mapa
         try:
             o.cook(force=True)
         except Exception as e:
