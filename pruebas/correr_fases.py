@@ -2,7 +2,7 @@
 Ejecuta los scripts de fase en un TouchDesigner simulado y resume lo que
 dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
-    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 37 (las que haya)
+    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 38 (las que haya)
     python3 pruebas/correr_fases.py --hasta=fase24   # solo hasta esa fase
     python3 pruebas/correr_fases.py -v         # con todo el Textport
 
@@ -39,7 +39,7 @@ FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_espec
          'fase25_huella.py', 'fase26_borrado.py', 'fase27_clasificacion.py', 'fase28_noche.py',
          'fase29_fila.py', 'fase30_relampago.py', 'fase31_historico.py',
          'fase32_juego.py', 'fase33_monstruo.py', 'fase34_zanjas.py', 'fase35_rescate.py', 'fase36_luzjuego.py',
-         'fase37_armas.py']
+         'fase37_armas.py', 'fase38_trumpzilla.py']
 SALA = 'sala_virtual.py'           # no es una fase: la maqueta de la instalacion
 
 
