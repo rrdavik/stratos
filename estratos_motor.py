@@ -153,7 +153,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v102'
+MOTOR_VERSION = 'motor v104'
 
 import math
 import time as _time
@@ -14869,24 +14869,25 @@ def registrar_ciclo(W, c, ev):
 
 DIAG = {}                    # motor v102: lo que tarda cada parte del fotograma (diagnostico_fps.py)
 DIAG_PARTES = ('mundo', 'instancias', 'chops', 'terreno', 'resto')
+DIAG_MUNDO = ('cfg', 'modular', 'sala', 'micro', 'tick', 'dmx', 'uniformes')
 
 
 def diag_reset():
     """Pone a cero las cuentas del fotograma (la primera pasada de diagnostico_fps.py)."""
     DIAG.clear()
-    DIAG.update(n=0, lentos=0, recocidos=0, total=[0.0, 0.0])
-    for k in DIAG_PARTES:
+    DIAG.update(n=0, lentos=0, recocidos=0, total=[0.0, 0.0], t0=_time.time())
+    for k in DIAG_PARTES + DIAG_MUNDO:
         DIAG[k] = [0.0, 0.0]
 
 
-def _diag_suma(t, partes, chops):
-    if 'n' not in DIAG:
+def _diag_suma(t, partes, chops, sub=None):
+    if 'cfg' not in DIAG:
         diag_reset()
     DIAG['n'] += 1
     DIAG['recocidos'] += chops
     tot = sum(partes.values())
     DIAG['lentos'] += tot > 1000.0 / 60.0
-    for k, v in list(partes.items()) + [('total', tot)]:
+    for k, v in list(partes.items()) + [('total', tot)] + list((sub or {}).items()):
         a = DIAG[k]
         a[0] += v
         a[1] = max(a[1], v)
@@ -14901,11 +14902,21 @@ def diag_texto():
     nombres = dict(mundo='mundo (tick, sala, micro, modular)', instancias='instancias (build_instances)',
                    chops='Script CHOP recocidos (cook)', terreno='terreno y texturas al dia',
                    resto='resto (frame_u, render, reticula)', total='TOTAL del latido')
-    out = ['  %d fotogramas del motor: %.1f ms de media, %.1f de maximo; %d por encima de 16,7 ms; '
+    seg = max(1e-6, _time.time() - DIAG.get('t0', _time.time()))
+    out = ['  %d fotogramas del motor en %.1f s = %.1f fps DE VERDAD (cada latido es un fotograma dibujado)'
+           % (n, seg, n / seg),
+           '  latido: %.1f ms de media, %.1f de maximo; %d por encima de 16,7 ms; '
            '%.1f Script CHOP recocidos por fotograma'
-           % (n, DIAG['total'][0] / n, DIAG['total'][1], DIAG['lentos'], DIAG['recocidos'] / float(n))]
+           % (DIAG['total'][0] / n, DIAG['total'][1], DIAG['lentos'], DIAG['recocidos'] / float(n))]
+    sub = dict(cfg='leer los parametros (cfg)', modular='modular (fase 19)', sala='sala y camara (fase 22)',
+               micro='microfono (fase 21)', tick='el mundo (tick)', dmx='DMX (fase 23)',
+               uniformes='uniformes y luces del shader')
     for k in DIAG_PARTES + ('total',):
         out.append('    %-38s media %7.2f ms   maximo %8.2f ms' % (nombres[k], DIAG[k][0] / n, DIAG[k][1]))
+        if k == 'mundo':
+            for q in DIAG_MUNDO:
+                if q in DIAG:
+                    out.append('      %-36s media %7.2f ms   maximo %8.2f ms' % (sub[q], DIAG[q][0] / n, DIAG[q][1]))
     try:
         c = cfg()
         out.append('  ' + _legend_piel(c).strip())
@@ -14936,8 +14947,17 @@ def _op_chop(name):
 def frame_tick():
     t0 = _time.perf_counter()
     partes = {}
-    W, c = world(), cfg()
+    sub = {}                            # motor v103: las partes de 'mundo'
+
+    def marca(k, t):
+        t_ = _time.perf_counter()
+        sub[k] = sub.get(k, 0.0) + (t_ - t) * 1000.0
+        return t_
+    # motor v103: cfg_foto (la de las expresiones del fotograma), no cfg(): asi los ~180
+    # parametros se leen una vez por fotograma y no dos
+    W, c = world(), cfg_foto()
     now = absTime.seconds
+    ta = marca('cfg', t0)
     if c['nivel'] >= 15 and (W.get('tema') is None or not c['tema_en_ciclo']):
         W['tema'] = int(c['tema'])      # fase 15: el tema del mundo
     if c['nivel'] >= 19:                # fase 19: las senales del modular, antes del mundo
@@ -14945,11 +14965,15 @@ def frame_tick():
         dt = max(0.0, min(0.25, now - md.get('t_fotograma', now)))
         md['t_fotograma'] = now
         modular_tick(W, c, leer_modular(c, now), dt, now)
+    ta = marca('modular', ta)
     if c['nivel'] >= 22:                # fase 22: la camara, antes del microfono (su objetivo)
         sala_tick(W, c, now)
+    ta = marca('sala', ta)
     if c['nivel'] >= 21:                # fase 21: el microfono, antes del mundo
         mic_tick(W, c, now)
+    ta = marca('micro', ta)
     res = tick(W, c, now, tempo(), playing())
+    ta = marca('tick', ta)
     if c['nivel'] >= 23:                # fase 23: los valores DMX de este fotograma
         o = parent().op('dmx_valores')
         if o is not None:
@@ -14957,6 +14981,7 @@ def frame_tick():
                 o.cook(force=True)
             except Exception as e:
                 _say('dmx_valores', 'AVISO  dmx_valores: %s' % e)
+    ta = marca('dmx', ta)
     _CACHE['nivel'] = c['nivel']        # fase 17: para la luz y las ventanas del shader
     _CACHE['modular'] = dict(W['modular']) if c['nivel'] >= 19 else None
     _CACHE['ventanas'] = ventanas_luz_de(W, c)
@@ -14964,6 +14989,7 @@ def frame_tick():
     _CACHE['luz_calida'] = c.get('luz_calida', 0.0) if c['nivel'] >= 18 else 0.0
     _CACHE['uni'] = uniformes_piel(W, c, now)       # fase 11 v5: pisos, borde y agua del shader
     _CACHE['dia'] = 1.0 - noche_nivel(W, c, now) if c['nivel'] >= 28 else 1.0     # fase 28: las luces
+    ta = marca('uniformes', ta)
     if res.get('burst'):
         print('AVISO  %s' % W['aviso'])
     if res.get('frente'):
@@ -15031,7 +15057,7 @@ def frame_tick():
             pass
     W['dirty'] = False
     partes['resto'] = (_time.perf_counter() - t5 + t4 - t3) * 1000.0
-    _diag_suma(t0, partes, recocidos)
+    _diag_suma(t0, partes, recocidos, sub)
 
 
 def terreno_al_dia_td(W, c):
@@ -15557,10 +15583,16 @@ def sala_tick(W, c, now):
     viva = sim or camara_encontrada(c)[0]
     if viva:
         try:
-            o = parent().op('alturas_sala')
-            if not sim and (_SALA.get('purgar', True) or _SALA.get('fuente') != c['fuente_sala']):
-                _top_array(o)
-            alt = _top_array(o, diferida=not sim)
+            if sim:
+                # motor v104: la sala simulada, de Python (la misma imagen que sube sala_sim y que
+                # alturas_sala deja igual: misma resolucion). Leerla de la GPU al momento obligaba a
+                # esperar a que la tarjeta acabara todo lo pendiente (el render entero) en cada lectura
+                alt = sala_sim_imagen(c, sala_personas())
+            else:
+                o = parent().op('alturas_sala')
+                if _SALA.get('purgar', True) or _SALA.get('fuente') != c['fuente_sala']:
+                    _top_array(o)
+                alt = _top_array(o, diferida=True)
         except Exception as e:
             _say('alturas_sala', 'AVISO  camara: %s' % e)
     _SALA.update(alt=alt, purgar=not viva, fuente=c['fuente_sala'])

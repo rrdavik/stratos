@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v79'
+VERSION_COMUN = 'comun v80'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -862,11 +862,38 @@ void main()
         e1 = normalize(cross(vec3(0.0, 1.0, 0.0), d) + vec3(1e-4, 0.0, 0.0));
         e2 = cross(d, e1);
         vec4 a = textureLod(sAlturas, uvDe(d), 0.0);
-        float e = relieveFino(d, max(a.r, 0.0), a.b);
-        float hr = e / max(1e-4, uTerreno.y);
-        float mancha = fruido(d * 21.0) * 0.6 + fruido(d * 57.0) * 0.4;      // espesa aqui, rala alli
-        bool vive = uOceano.w > 0.5 && id < uPradera.x && e > 0.035 && hr < uPisos.x - 0.03 && a.a < 0.05
-                    && h3 < 1.9 * mancha - 0.35;
+        float e0 = max(a.r, 0.0);
+        // comun v80: primero lo barato. relieveFino sube como mucho 0,017 + 1,1 % (fruido va de 0 a
+        // 1): el mar, la lava y lo que no llega a tierra firme se descartan sin calcular ruido
+        bool vive = uOceano.w > 0.5 && id < uPradera.x && a.a < 0.05 && e0 * 1.02 + 0.018 > 0.035;
+        if (vive) {
+            // y lo que queda detras del planeta con la camara lejos (globo): el horizonte de una
+            // esfera mas pequena que el nucleo, con el margen del relieve mas alto y de la mata
+            vec3 oW = TDDeform(vec3(0.0)).xyz;
+            vec3 pW = TDDeform(d * (a.g + e0)).xyz;
+            vec3 oc = uTDMats[TDCameraIndex()].camInverse[3].xyz - oW;
+            float dc = length(oc);
+            float rp = length(pW - oW);
+            if (dc > 1.2 * rp) {
+                float rmin = 0.9 * rp;
+                float alto_max = rp - rmin + uTerreno.y + 2.0 * uPradera.y + 0.1;
+                float th = acos(clamp(dot(pW - oW, oc) / max(1e-6, rp * dc), -1.0, 1.0));
+                vive = th < acos(clamp(rmin / dc, 0.0, 1.0)) + acos(clamp(rmin / (rmin + alto_max), 0.0, 1.0))
+                       + 0.03;
+            }
+        }
+        float mancha = 0.0;
+        if (vive) {
+            mancha = fruido(d * 21.0) * 0.6 + fruido(d * 57.0) * 0.4;        // espesa aqui, rala alli
+            vive = h3 < 1.9 * mancha - 0.35;
+        }
+        float e = 0.0;
+        float hr = 0.0;
+        if (vive) {
+            e = relieveFino(d, e0, a.b);
+            hr = e / max(1e-4, uTerreno.y);
+            vive = e > 0.035 && hr < uPisos.x - 0.03;
+        }
         if (!vive) {
             gl_Position = vec4(0.0, 0.0, 2.0, 1.0);     // fuera del volumen de recorte: no se dibuja
             return;

@@ -25,7 +25,11 @@ Copia y pega esa salida entera.
 
 OJO con la columna "ms la ultima vez": es UN fotograma, el ultimo. Si ese
 fue un tiron (un fin de ciclo, por ejemplo), todo sale inflado; las medias
-del motor y los fps reales son lo que vale.
+del motor son lo que vale. Y los "fotogramas" de la primera linea son los de
+la linea de tiempo, que avanza aunque TouchDesigner se salte fotogramas: los
+fps de verdad son los del latido del motor (cada latido, un fotograma dibujado).
+En "veces por fotograma", 1 es cada fotograma dibujado si coincide con la
+proporcion de latidos (fotogramas del motor / fotogramas de la linea de tiempo).
 
 Para comparar: hazlo una vez con Modocamara = globo y otra con rasante.
 =============================================================================
@@ -78,7 +82,10 @@ def _informe_diag(antes, ahora):
     print('=' * 100)
     print('DIAGNOSTICO DE FOTOGRAMAS   %s' % RAIZ_DIAG)
     print('=' * 100)
-    print('  %d fotogramas en %.1f s = %.1f fps reales   (%.0f ms por fotograma)' % (fot, seg, fot / seg, 1000.0 * seg / fot))
+    # OJO: absTime.frame avanza al ritmo de la linea de tiempo aunque TouchDesigner se salte
+    # fotogramas: no son los dibujados. Los de verdad los cuenta el motor (abajo, motor v102+)
+    print('  %d fotogramas de la linea de tiempo en %.1f s (%.1f por segundo: NO son los dibujados; los fps de '
+          'verdad, abajo, en EL LATIDO DEL MOTOR)' % (fot, seg, fot / seg))
     try:
         b = op('/project1/FASE1')
         print('  Nivel %s   Modocamara %s   Tema %s   motor: %s' % (
