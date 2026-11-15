@@ -1732,3 +1732,13 @@ Con `diagnostico_fps.py` en globo y rasante (nivel 23): ningún Script CHOP `i_m
 
 - **El fallo:** la fase 11 ponía en el material de `particulas` y `humo` la expresión `'mat_particulas' if parent().par.Materialrespaldo else …`, pero `Materialrespaldo` no existe hasta la fase 12. Entre las dos fases (y en un proyecto en el nivel 11) esa expresión daba error. En el simulador el error quedaba apuntado y el diagnóstico del render decía `FALLO  particulas.material: Materialrespaldo` en todas las fases.
 - **El arreglo:** `particulas_al_dia` y `humo_al_dia` solo ponen la rama de `Materialrespaldo` si el parámetro ya existe; si no, el material GLSL tal cual (`mat_motas`, `mat_humo`). La fase 12 las vuelve a llamar después de crear el parámetro, y su autoprueba comprueba que las dos van a `mat_particulas` con `Materialrespaldo` y a su GLSL sin él.
+
+## El detalle se lee y el agua se desborda (motor v114, comun v84, fase11 v19)
+
+Relanzar `recargar_todo.py` (la biblioteca de ejemplares se regenera).
+
+- **Escala (`Radionucleo`, 8).** Con el núcleo en 12 las especies se veían a la mitad de tamaño desde el globo y su detalle no se leía; con 6, el de siempre, las islas no tenían sitio. 8 es el término medio y ahora es un parámetro: menor, especies más grandes en pantalla; mayor, más sitio por celda. Tras cambiarlo, relanzar una fase.
+- **Especies.** Más hoja y más fina (10 por racimo, antes 6; cada hoja un 20 % más pequeña) y la copa más llena en las especies que salían ralas (olivo, mangle, baobab, bambú, drago, parasol, abedul, pagoda, sauce, araucaria). Hasta 14 árboles por celda de bosque; presupuesto de 4 millones de hojas.
+- **El agua se desborda (`Inundacion`, 0,08 unidades por segundo).** El mar abierto es el grupo más grande de celdas vecinas con el suelo más bajo. Una celda de mar que queda encerrada por sedimento es una hondonada con agua: sube poco a poco hasta el borde más bajo por el que saldría al mar y, si al subir supera el suelo de una hondonada vecina (un corte, otra poza), se desborda en ella y la llena igual, cubriendo lo que haya. Una hondonada seca sin agua cerca sigue seca. Con 0 no se desborda.
+- **Lo que el agua no hace todavía:** las plantas de una celda inundada no mueren (quedan cubiertas hasta donde llegue el agua) y los ríos no cuentan con ella.
+
