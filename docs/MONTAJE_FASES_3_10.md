@@ -122,19 +122,19 @@ Antes se llegaba al límite con 4 notas. Ahora hacen falta 11, y el límite es u
 
 **Luz de celda** (fase 3 v9, motor v18). No hay balizas: ni la del SEQ1, ni la del SEQ2, ni las de la batería. Cada celda cuenta con luz lo que le está pasando, en una rejilla de 3 × 3 losetas opacas a ras de su superficie (geometría `luz_celda`, Script CHOP `i_luz_celda`, material `mat_luz_celda`). La crea y la mantiene cualquier fase al relanzarse, que también retira las balizas de las versiones anteriores.
 
-- **El centro dice quién construye:** el color del secuenciador que acaba de tocar la celda. SEQ1 cian (blanco desde la fase 9: el cian queda para las cicatrices) y SEQ2 ámbar (fase 5).
+- **El centro dice quién construye:** el color del secuenciador que acaba de tocar la celda. SEQ1 cian (desde la fase 9, verde menta muy claro: el cian queda para las cicatrices; blanco hasta el motor v104) y SEQ2 ámbar (fase 5).
   - **El gate manda** (motor v20). Mientras la nota está pulsada, del note on al note off, la loseta brilla a plena luz y crece en alto. Al soltarla se apaga en un cuarto de segundo hasta el reposo: la última celda de cada secuenciador queda tenue (70 % del color) hasta su siguiente nota, para que se vea dónde está cada uno. Una nota corta da un destello; una ligada, una celda encendida todo lo que suena. Una nota sin note off cuenta como pulsada 2 s como mucho.
   - **Más evidente** (v20): la loseta mide un 34 % de la celda (antes 26 %) y sube hasta 0,28 de alto con el gate.
   - **Los dos en la misma celda:** el centro se parte en dos mitades, SEQ1 al oeste y SEQ2 al este.
   - **Con formación,** el centro se ensancha hasta asomar alrededor de su base: se enciende el pie de la formación y se lee desde la cámara aunque la formación sea alta. La luz va en la superficie, no en la punta, así que el ámbar del SEQ2 no se confunde con las coronas.
-  - **El latido sigue al gate** (v20). Mientras la nota suena, la formación se hincha un 12 % (antes 5 %), se aclara y se tiñe del color de su secuenciador (cian o blanco el SEQ1, ámbar el SEQ2). Al soltarla, vuelve a su color en ~0,25 s. Con la loseta del centro, la construcción que suena se ve de lejos.
+  - **El latido sigue al gate** (v20). Mientras la nota suena, la formación se hincha un 12 % (antes 5 %), se aclara y se tiñe del color de su secuenciador (cian o verde menta el SEQ1, ámbar el SEQ2). Al soltarla, vuelve a su color en ~0,25 s. Con la loseta del centro, la construcción que suena se ve de lejos.
   - **En las fases 1 y 2** (`fase12_base.py`) no se escucha el note off: la luz es un pulso de 0,25 s con cada nota, del mismo tamaño y brillo.
 - **La batería se ve igual** (fase 7, motor v21): cada golpe ilumina el centro de la celda y su formación con el color de su pad. Si coinciden en la celda, manda la luz más intensa en ese instante.
 - **La luz del secuenciador llega a las conchas de la celda** (desde la fase 8; motor v25, comun v16). Con muchas conchas, y más con la cámara de globo, el centro de la celda se pierde entre las bandas de las losetas. Por eso una nota también tiñe tenuemente las losetas de su celda, que la ocupan entera:
   - **Qué se tiñe:** las losetas dibujadas de la columna de la celda, de arriba abajo: la superior con toda la luz y menos en cada una, hasta apagarse en la cuarta. En las paredes de un corte se siguen leyendo los colores de cada estrato. El zócalo no se tiñe. En una celda en el fondo de un corte se tiñe la loseta del fondo hacia abajo; las paredes vecinas son de otras celdas y no se tiñen.
   - **Pulso y reposo**, como el centro: un pulso con cada nota (0,35) y, mientras es la última celda de ese secuenciador, un reposo tenue (0,10). Es un tinte, no un foco. `Luzconchas` es la intensidad: 0 la apaga, 1 da esos valores y 2 el doble (desde la fase 3 v13; antes un interruptor y `Luzconchaspulso`, `Luzconchasreposo` y `Luzconchasalcance`).
   - **Cómo:** es una capa de **luz aditiva** (geometría `luz_conchas`, Script CHOP `i_luz_conchas`, material constante `mat_luz_conchas` con mezcla aditiva) que envuelve las losetas. Suma el color del secuenciador sin tocar el de la generación ni la diferencia entre loseta ocupada y vacía, se ve igual en la cara en sombra y en las paredes de una hondonada, y nunca oscurece ni tapa: el centro de la celda, la luz de la batería y las formaciones siguen encima.
-  - **El reposo respira** (entre el 70 % y el 100 %, cada 2,4 s). Una loseta ocupada es más clara pero quieta: el reposo blanco del SEQ1 no se confunde con ella.
+  - **El reposo respira** (entre el 70 % y el 100 %, cada 2,4 s). Una loseta ocupada es más clara pero quieta: el reposo verde menta del SEQ1 no se confunde con ella.
   - **La cicatriz manda:** una loseta en cian por un corte reciente no se tiñe.
   - **Los dos secuenciadores en la misma celda:** una loseta tiene un solo color, así que manda el más encendido y, si empatan, el último que ha tocado.
   - **El SEQ2 sobre una concha de tono parecido:** como la luz se suma, el pulso aclara la loseta además de teñirla, y se nota aunque el color sea parecido. Con la paleta de generaciones ninguna concha es ámbar (la banda del SEQ2 está reservada); con `Paleta` mineral, la base sí lo es.
@@ -419,7 +419,7 @@ Las 8 pistas de batería son las 8 señales de la batería. Cada pad tiene un **
 - **Dónde se ve:** con formación, vacía o con huella, y también en modo actuación.
 - **Lo que ya tiene significado queda a salvo:**
   - nota y golpe usan el mismo lenguaje (loseta del centro y formación teñida), así que se leen igual; solo cambia el color;
-  - el ámbar de las coronas, el cian de las cicatrices y el blanco del SEQ1 no están en la paleta de la batería;
+  - el ámbar de las coronas, el cian de las cicatrices y el verde menta del SEQ1 no están en la paleta de la batería (el más cercano, la lima del pad 6, queda a 0,61 en sRGB);
   - el oscuro de la huella no puede confundirse con colores opacos y plenos.
 - **Destello de la fase 9:** `luz_destello` usa también el color del pad, aclarado un 35 % con blanco para que siga siendo un golpe de luz.
 
@@ -666,7 +666,7 @@ croma     = Paletacroma
 
 - **Bandas reservadas** (tono OKLCH): 165°–235°, el cian de la cicatriz, y 55°–100°, el ámbar del SEQ2. Desde el motor v46 (fase 11 v5 y fase 13 v2) también 120°–165°, los verdes de los pisos de la naturaleza, y 235°–275°, el azul de los ríos: una sola banda de 120° a 275°. La secuencia se reparte sobre los 200° que quedan, recorriendo el círculo y saltando las bandas; no se recorta al borde. Ninguna concha camufla un bosque ni un río. La banda verde empieza en 120° y no antes: con menos tono libre, dos conchas seguidas dejarían de diferir 60°.
 - **Croma contenido** (0,04; 0,09 hasta la v11): las conchas son mineral; las luces (secuenciadores, batería, cicatriz) son saturadas y emisivas, y siguen destacando encima.
-- **Sin blancos:** la luminosidad máxima (0,42; 0,76 hasta la v11) queda lejos del blanco del SEQ1. Todos los colores caen dentro de sRGB sin recortar.
+- **Sin blancos:** la luminosidad máxima (0,42; 0,76 hasta la v11) queda lejos del verde menta del SEQ1 (L 0,92). Todos los colores caen dentro de sRGB sin recortar.
 - **Se conserva** la alternancia claro / oscuro entre conchas seguidas y la loseta de una celda ocupada más clara que la vacía (los continentes se leen así). El zócalo (gris casi negro) y el núcleo quedan oscuros y neutros, fuera de la paleta.
 - **Calculado, no guardado:** el color sale de la generación y de los parámetros. Al cargar un mundo y al cambiar la paleta, todo lo enterrado se vuelve a colorear (el color que guardaban las conchas antiguas ya no manda).
 - **`Paleta` = mineral** vuelve a la paleta anterior, tal cual, para comparar: ámbar en la base y después grises minerales y negros alternos; con ella el zócalo vuelve a ser ámbar apagado.
@@ -740,7 +740,7 @@ CONCHAS  11   radio 10.12   ultima 0.75   corteza 4.12 de 4 (x0.86)   laguna max
 - **Grosores distintos:** como cada loseta tiene el grosor de su ciclo, un corte de 3 es más o menos hondo según lo que duraron esos mundos.
 - **Cicatriz:** el fondo (la loseta superior que queda en la columna cortada) y las paredes recién expuestas (las losetas vecinas con el radio exterior por encima del suelo nuevo y el interior por debajo del anterior) se ven en **cian** y se funden con el color de la concha de cada loseta en `Cicatriz` segundos. Un golpe que no quita nada no expone nada, y enterrar (depositar) no enciende cicatrices.
 - **Destello:** `luz_destello`, una luz puntual que sigue el giro del planeta, golpea la celda en cada destrucción: fuerte en los cortes, suave en los arañazos.
-- **Luz del SEQ1:** el centro de su celda pasa a blanco, porque el cian queda reservado para lo recién expuesto. El destello toma el color del pad que golpea, aclarado.
+- **Luz del SEQ1:** el centro de su celda pasa a verde menta muy claro y brillante (OKLCH 0,92 0,14 150°, sRGB 0,615 1,00 0,70; blanco hasta el motor v104), porque el cian queda reservado para lo recién expuesto. El destello toma el color del pad que golpea, aclarado.
 
 **Página Fase9:** `Cicatriz` 4 s · `Destello` 3
 
@@ -932,7 +932,7 @@ Sin TouchDesigner a mano, todo se ha probado en simulación:
   - Relanzar sustituye una tabla con los valores de la v1, conserva una editada a mano y no pisa un `Canaldrum` cambiado a mano.
   - Luz de celda (motor v18):
     - la nota del SEQ1 enciende el centro de su celda en su color y queda tenue hasta la siguiente; la del SEQ2, en ámbar; con los dos en la misma celda, el centro se parte y se ven los dos;
-    - desde la fase 9, el SEQ1 en blanco;
+    - desde la fase 9, el SEQ1 en verde menta (en blanco hasta el motor v104);
     - golpe (motor v21): el centro de la celda y la formación con el color del pad; en la celda del SEQ1 manda el golpe mientras dura y luego vuelve el SEQ1; una sola loseta por celda, sin borde; `luz_celda` lee el color por instancia;
     - la luz se ve con formación, vacía y con huella, gira con el planeta y sube con el radio;
     - no queda ninguna baliza en escena ni en `CHOP_NAMES`;

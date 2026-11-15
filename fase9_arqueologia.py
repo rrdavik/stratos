@@ -47,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v11  (cortes en la columna de cada celda, tope por mundo, cicatriz; el impulso no corta)'
+VERSION = 'fase9 v12  (autoprueba: la luz del SEQ1, verde menta desde el motor v105)'
 banner(VERSION)
 
 base = require_base(9)
@@ -185,9 +185,9 @@ def prueba(t):
     W9 = m.new_world()
     m.note_on(W9, c9, m.GEO, 64, 100, 1.0)
     f9 = m.cell_lights(W9, c9, 1.0)
-    t.check('la luz del SEQ1 es blanca desde la fase 9',
+    t.check('la luz del SEQ1 es verde menta desde la fase 9 (motor v105)',
             f9 and tuple(round(x, 3) for x in f9[0][9:12])
-            == tuple(round(x, 3) for x in m.COL_SEQ1_BLANCO))
+            == tuple(round(x, 3) for x in m.COL_SEQ1_VERDE))
 
 
 run_test(base, prueba)

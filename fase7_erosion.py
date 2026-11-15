@@ -164,7 +164,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v17  (autoprueba: el giro y el balanceo se leen de frame_u, comun v49)'
+VERSION = 'fase7 v18  (autoprueba: la bateria tampoco usa el verde menta del SEQ1, motor v105)'
 banner(VERSION)
 
 base = require_base(7)
@@ -733,9 +733,9 @@ def prueba(t):
     m.on_pulse('Erosionar')
     base.par.Padprueba = 1
     cian, ambar, blanco = (0.10, 0.90, 1.00), (1.0, 0.7, 0.3), (0.95, 0.95, 0.92)
-    t.check('ningun color es cian, ambar ni blanco',
+    t.check('ningun color es cian, ambar, blanco ni el verde menta del SEQ1',
             all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
-                for col in cd['colores_drum'] for ref in (cian, ambar, blanco)))
+                for col in cd['colores_drum'] for ref in (cian, ambar, blanco, m.COL_SEQ1_VERDE)))
     geo = base.op('luz_celda')
     t.check('luz_celda gira y se balancea con el planeta (hija de planeta)',
             geo is not None and gira_con_planeta(geo))
