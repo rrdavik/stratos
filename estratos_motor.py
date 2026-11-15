@@ -150,6 +150,8 @@
 #                 la luz de juego; v111 (37): las armas opcionales. Motor v112
 #                 (fase 38): Trumpzilla, el monstruo en sprite (un atlas de diez
 #                 emociones) que cambia de cara con su estado; la logica, igual.
+#                 Motor v113: leer_modular lee los canales con chans() (en
+#                 TouchDesigner es un metodo; con la lista fallaba con un CHOP).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -161,7 +163,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v112'
+MOTOR_VERSION = 'motor v113'
 
 import math
 import time as _time
@@ -19064,7 +19066,7 @@ def leer_modular(c, now):
         ch = None
     if ch is None or not getattr(ch, 'numChans', 0):
         return None
-    chans = list(ch.chans)
+    chans = list(ch.chans())          # motor v113: en TouchDesigner chans es un metodo
     nombres = [x.name for x in chans]
     out = {}
     for k, senal in enumerate(MODULAR):
