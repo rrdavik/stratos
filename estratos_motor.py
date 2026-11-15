@@ -157,6 +157,10 @@
 #                 leia. Mas hoja y mas fina (Densidadhoja 6 -> 10). El AGUA SE DESBORDA: una
 #                 celda de mar que queda encerrada por tierra se llena poco a poco hasta el
 #                 borde mas bajo y de ahi pasa a las hondonadas vecinas, cubriendo lo que haya.
+#                 Motor v115: el agua de las zanjas del juego (fase 34) pasa a llamarse
+#                 inundar_zanjas. Se llamaba inundar, como el agua que se desborda de la
+#                 v101, y al fusionar las dos ramas la del juego tapaba a la otra: tick la
+#                 llamaba en cada fotograma y fallaba sin partida (KeyError: 'juego').
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -168,7 +172,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v114'
+MOTOR_VERSION = 'motor v115'
 
 import math
 import time as _time
@@ -14576,7 +14580,7 @@ def paso_de_juego(W, cfg, now):
     if cfg['nivel'] >= 37:
         armas_paso(W, cfg, now)
     if cfg['nivel'] >= 34:
-        inundar(W, cfg, now)
+        inundar_zanjas(W, cfg, now)     # motor v115: tenia el mismo nombre que el agua de la v101
     if cfg['nivel'] >= 33:
         monstruo_paso(W, cfg, now)
 
@@ -15243,7 +15247,7 @@ def toca_rio_o_lago(W, cfg, c, dulce=None):
     return c in dulce or any(j in dulce for j in NEIGH[c])
 
 
-def inundar(W, cfg, now):
+def inundar_zanjas(W, cfg, now):
     """Un paso de juego del agua: aflora (profundidad >= Profundidadagua) o entra
     desde un rio o un lago vecino (x Ritmoagua) y desborda (x Desbordeagua) hacia
     las zanjas vecinas mas bajas, sin pasar de su capacidad (profundidad x

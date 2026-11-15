@@ -252,6 +252,23 @@ def partida(sim, fps=30.0, ronda=60.0):
     return hechos
 
 
+def duplicados():
+    """Funciones de nivel de modulo definidas dos veces en el motor o en comun. Python se
+    queda con la ultima sin avisar: al fusionar dos ramas, una funcion nueva con el nombre
+    de otra la tapa (motor v115: las dos inundar). [(archivo, nombre, lineas)]"""
+    import ast
+    out = []
+    for f in ('estratos_motor.py', 'estratos_comun.py'):
+        with open(os.path.join(REPO, f), encoding='utf-8') as fh:
+            arbol = ast.parse(fh.read())
+        vistas = {}
+        for n in arbol.body:
+            if isinstance(n, (ast.FunctionDef, ast.ClassDef)):
+                vistas.setdefault(n.name, []).append(n.lineno)
+        out += [(f, k, v) for k, v in sorted(vistas.items()) if len(v) > 1]
+    return out
+
+
 def main():
     # las rutas de Windows de los scripts (C:/...) no existen aqui: lo que alguno cree con
     # una ruta asi (la carpeta historico de la fase 31) cae en una carpeta temporal, no en
@@ -265,6 +282,11 @@ def main():
             hasta = a.split('=')[1]
     sim = td_simulado.Sim(REPO)
     todo = True
+    dup = duplicados()
+    print('%-6s funciones definidas dos veces en el motor y en comun: %d' % ('OK' if not dup else 'FALLO', len(dup)))
+    for f, k, v in dup:
+        print('         %s: %s (lineas %s)' % (f, k, ', '.join(str(x) for x in v)))
+    todo = todo and not dup
     for f in FASES:
         if not os.path.exists(os.path.join(REPO, f)):
             continue
