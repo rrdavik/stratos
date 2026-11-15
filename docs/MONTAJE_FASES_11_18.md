@@ -1715,6 +1715,12 @@ Con `diagnostico_fps.py` en globo y rasante (nivel 23): ningún Script CHOP `i_m
 - **Motor v102:** el latido cuenta lo que tarda cada parte (mundo, `build_instances`, Script CHOP recocidos, terreno, resto) en todos los fotogramas entre las dos pasadas, con media y máximo, y `diagnostico_fps.py` lo escribe al final con la línea PIEL, las geometrías de la piel, `Variantes` y `Pradera`.
 - **El bucle de los Script CHOP** buscaba cada operador por su nombre en cada fotograma: con `Variantes` 8 son cientos. Ahora los guarda.
 
+### La luz del SEQ1, verde menta (motor v105, fase 7 v18, fase 9 v12)
+
+- **El SEQ1 deja el blanco:** desde la fase 9 su luz (centro de la celda, formación que suena, tinte de las conchas y de las ventanas, `uSeq1`) es un verde menta muy claro y brillante, OKLCH 0,92 0,14 150° (sRGB 0,615 1,00 0,70, `COL_SEQ1_VERDE`). Hasta la fase 8 sigue en cian; `COL_SEQ1_BLANCO` queda como referencia.
+- **Por qué no choca:** está fuera de la banda del cian de las cicatrices (165°–235°) y es mucho más claro y saturado que los verdes de los pisos (oscuros y apagados). De los colores de la batería, el más cercano es la lima del pad 6 (0,61 de distancia en sRGB), y del gris del micrófono, 0,45. El blanco queda solo para el estroboscopio y el relámpago.
+- **Autopruebas:** la fase 9 comprueba la luz verde del SEQ1; la fase 7, que ningún pad se le parece.
+
 ### Los fps de verdad, el mundo por partes y la pradera (motor v103, comun v80)
 
 - **Los «fotogramas» de la primera línea de `diagnostico_fps.py` no son los dibujados:** `absTime.frame` avanza al ritmo de la línea de tiempo aunque TouchDesigner se salte fotogramas. Con naturaleza en globo decía 60 fps y eran 14 (276 latidos en 19 s). Los fps de verdad los da ahora el motor (cada latido es un fotograma dibujado), en la sección del latido.

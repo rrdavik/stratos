@@ -134,7 +134,7 @@ Comprueba, con la señal sintética y sin micrófono:
 | ¿Encima de qué fase? (D1) | De la 19 o de la 20 (POPs, sin fusionar): `require_base(21)` acepta las dos y lo dice en el informe. Nada del motor se activa con `Nivel` 20 |
 | ¿Cuánto baja un onset? (D3) | Un escalón entero de ocupación (`Reduccionmic`, 1), no una nota: queda al principio del escalón de abajo |
 | ¿Es un arañazo? (D9) | Sí: el pad 9 no corta ni es impulso, así que la fase 14 lo trata como arañazo (accidente y escalada) |
-| ¿Su color? (D10) | Gris cálido claro (`#D8CCB8`): no es el blanco del SEQ1, ni el ámbar del SEQ2, ni el cian de las cicatrices |
+| ¿Su color? (D10) | Gris cálido claro (`#D8CCB8`): no es el verde menta del SEQ1 (blanco hasta el motor v104), ni el ámbar del SEQ2, ni el cian de las cicatrices |
 | ¿Cómo se detecta? | Flujo espectral en 16 bandas en dB contra el máximo de los tres bloques anteriores, sin ventana (un clic al principio del bloque cuenta), calculado con numpy en el motor. Sin Audio Spectrum CHOP, para poder probarlo en el simulador |
 | ¿Dónde va el objetivo? (D2) | Como los pads (`Objetivo`) hasta la fase 22; desde ella, la casilla más ocupada |
 | ¿Dispositivo y canal? | El dispositivo, en el parámetro Device de `mic_in` (es un menú de los que hay en el ordenador); el canal, con `Canalmic` |

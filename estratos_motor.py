@@ -153,7 +153,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v104'
+MOTOR_VERSION = 'motor v105'
 
 import math
 import time as _time
@@ -225,7 +225,8 @@ def _hex(h):
 
 # Balizas de la bateria: un color por pad. Cortes en rojos y violetas,
 # aranazos frios y claros. Fuera a proposito: cian (cicatrices), ambar
-# (SEQ2, coronas), blanco (SEQ1 desde la fase 9) y los minerales.
+# (SEQ2, coronas), verde menta (SEQ1 desde la fase 9; blanco hasta el motor
+# v104) y los minerales.
 COLORES_DRUM = [_hex(h) for h in ('#D7263D', '#E83E8C', '#7C3AED', '#3B5BDB',
                                   '#12B76A', '#A3E635', '#F9A8D4', '#C4B5FD')]
 
@@ -234,7 +235,7 @@ COLORES_DRUM = [_hex(h) for h in ('#D7263D', '#E83E8C', '#7C3AED', '#3B5BDB',
 # lo golpean los onsets del publico. Su perfil (reduccion, radio, profundidad)
 # va en la novena fila de perfiles_erosion, pero la reduccion la da
 # Reduccionmic y cuenta ESCALONES enteros, no notas (D3). Su color, un gris
-# calido claro (D10): no es el blanco del SEQ1, ni el ambar del SEQ2, ni el
+# calido claro (D10): no es el verde menta del SEQ1, ni el ambar del SEQ2, ni el
 # cian de las cicatrices.
 PAD_MIC = 8
 PERFIL_MIC = (1, 0, 0)
@@ -2669,7 +2670,7 @@ def _tile_row(c, n, r_in, r_out, col, k=1.0, kh=1.0):
 # aditiva (luz, material constante): suma color sin tapar el de la
 # generacion, se ve tambien en la cara en sombra y nunca oscurece. En
 # reposo respira despacio: una loseta ocupada es mas clara pero quieta, asi
-# que el reposo del SEQ1 (blanco) no se confunde con ella. La cicatriz manda.
+# que el reposo del SEQ1 (verde menta) no se confunde con ella. La cicatriz manda.
 
 LUZ_CONCHAS_K = 1.06        # la capa envuelve la loseta (que mide 1.04)
 LUZ_CONCHAS_KH = 1.012      # y asoma por arriba, sin llegar a la luz de celda
@@ -2728,7 +2729,11 @@ def shell_lights(W, cfg, now):
 # Colores opacos, sin transparencia: no se mezclan.
 
 COL_SEQ1 = (0.10, 0.90, 1.00)       # cian hasta la fase 8
-COL_SEQ1_BLANCO = (0.95, 0.95, 0.92)  # blanco desde la fase 9 (cian = cicatriz)
+COL_SEQ1_BLANCO = (0.95, 0.95, 0.92)  # blanco desde la fase 9 hasta el motor v104 (referencia)
+# motor v105: desde la fase 9, verde menta muy claro y brillante (OKLCH 0,92 0,14 150).
+# Lejos de la cicatriz (cian), de la lima del pad 6, de las esporas y del gris
+# del microfono; los verdes de los pisos son oscuros y apagados.
+COL_SEQ1_VERDE = (0.615, 1.00, 0.70)
 COL_SEQ2 = (1.00, 0.62, 0.25)       # ambar
 SEQ_DECAY = 0.25                    # el pulso de la nota cae en 1/4 de segundo
 LUZ_LIFT = 0.02
@@ -2737,7 +2742,7 @@ LUZ_LIFT = 0.02
 def seq_color(cfg, s):
     if s == 2:
         return COL_SEQ2
-    return COL_SEQ1_BLANCO if cfg['nivel'] >= 9 else COL_SEQ1
+    return COL_SEQ1_VERDE if cfg['nivel'] >= 9 else COL_SEQ1
 
 
 def light_level(cfg, h, now):
