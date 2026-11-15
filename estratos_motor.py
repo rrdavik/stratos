@@ -153,7 +153,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v105'
+MOTOR_VERSION = 'motor v106'
 
 import math
 import time as _time
@@ -12484,6 +12484,7 @@ FUENTE_SIMULADA = 1
 SENSORES_SALA = ['femto', 'kinect']     # v92: el aparato del techo (menu Sensor)
 SENSOR_OPS = ('orbbec1', 'kinect1')     # su TOP: Orbbec TOP (Femto Bolt) o Kinect TOP (Kinect v2)
 CAM_FPS = 30.0                  # la camara da 30 imagenes por segundo: no se lee mas deprisa
+CAM_MIN = (256, 192)            # v106: menos que esto no es un aparato (Femto 320 x 288 como poco, Kinect v2 512 x 424)
 CUANTO_MAX = 0.5                # tope de Cuanto, tambien en el codigo
 TIPOS_SENAL = ('crear', 'erosionar')
 SALA_COLS = ['x', 'y', 'altura']        # tabla sala_personas (m; x desde la izquierda, y desde la pantalla)
@@ -15649,7 +15650,9 @@ def sensor_sala(c=None):
 
 def camara_encontrada(c=None):
     """(si, texto) del TOP del Sensor (orbbec1 o kinect1): sin errores ni avisos y
-    con imagen de mas de un pixel. No descarga la imagen: se mira cada fotograma."""
+    con imagen del tamano de un aparato de verdad (CAM_MIN). No descarga la imagen:
+    se mira cada fotograma. Motor v106: el Kinect TOP sin Kinect no da error en
+    TouchDesigner, saca una imagen de relleno de 128 x 128; antes contaba como camara."""
     nombre, nop = sensor_sala(c)
     o = parent().op(nop)
     if o is None:
@@ -15666,6 +15669,8 @@ def camara_encontrada(c=None):
         w = h = 0
     if err or w <= 1:
         return False, '%s: %s' % (nop, err.splitlines()[0] if err else 'sin imagen')
+    if w < CAM_MIN[0] or h < CAM_MIN[1]:
+        return False, '%s: imagen de %d x %d, sin aparato' % (nop, w, h)
     return True, '%s %d x %d' % (nop, w, h)
 
 

@@ -14,8 +14,9 @@ aceptan los parametros que tienen en TouchDesigner: un nombre equivocado
 devuelve None, como alli, y el script lo avisa con '..'. Los demas SOP, MAT,
 TOP, CHOP y DAT aceptan cualquier nombre (no comprobamos sus parametros).
 
-Camara (fase 22): el Orbbec TOP y el Kinect TOP no tienen aparato (un error,
-como en un ordenador sin camara; Sim.camaras = True lo quita), y un GLSL TOP no
+Camara (fase 22): el Orbbec TOP y el Kinect TOP no tienen aparato (el Orbbec,
+un error; el Kinect, como en TouchDesigner, ningun error y una imagen de 128 x
+128; Sim.camaras = True los enchufa, 640 x 576 y 512 x 424), y un GLSL TOP no
 calcula nada. Un Script TOP guarda lo que le copian (copyNumpyArray), y
 Resolution, Null y Switch TOP dejan pasar la imagen de su entrada, asi que la
 sala simulada (un Script TOP) llega al motor por el mismo camino que la camara.
@@ -130,6 +131,10 @@ _MENUS_TIPO = {('kinectTOP', 'image'): ['color', 'depth', 'infrared', 'playerind
                ('sphereSOP', 'type'): ['prim', 'poly', 'polymesh', 'mesh', 'nurbs', 'bezier']}
 _ETIQUETAS_TIPO = {('sphereSOP', 'type'): ['Primitive', 'Polygon', 'Polygon Mesh', 'Mesh', 'NURBS', 'Bezier']}
 _CAMARAS = ('orbbecTOP', 'kinectTOP')
+# su imagen (ancho, alto) sin aparato y con el: el Kinect TOP sin Kinect no da error,
+# saca una imagen de relleno de 128 x 128 (TouchDesigner, 15 de noviembre de 2026)
+_CAMARA_PX = {'orbbecTOP': {False: (256, 256), True: (640, 576)},
+              'kinectTOP': {False: (128, 128), True: (512, 424)}}
 
 
 class AbsTime(object):
@@ -887,7 +892,7 @@ class OP(object):
     # errores
     def errors(self, recurse=False):
         err = list(self._errors[-3:])
-        if self.OPType in _CAMARAS and not getattr(self.sim, 'camaras', False):
+        if self.OPType in _CAMARAS and not getattr(self.sim, 'camaras', False) and self.OPType != 'kinectTOP':
             err.insert(0, '%s: no encuentro el aparato (simulado)' % self.OPType)
         return '\n'.join(err)
 
@@ -1075,10 +1080,14 @@ class OP(object):
 
     @property
     def width(self):
+        if self.OPType in _CAMARAS:
+            return _CAMARA_PX[self.OPType][bool(getattr(self.sim, 'camaras', False))][0]
         return int(float(self.par.resolutionw.eval()))
 
     @property
     def height(self):
+        if self.OPType in _CAMARAS:
+            return _CAMARA_PX[self.OPType][bool(getattr(self.sim, 'camaras', False))][1]
         return int(float(self.par.resolutionh.eval()))
 
     # expresiones y callbacks
