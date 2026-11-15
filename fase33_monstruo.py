@@ -65,7 +65,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v1  (el devorador: el monstruo, su objetivo y los brotes del mal)'
+VERSION = 'fase33 v2  (autoprueba: con la fase 38, el cuerpo provisional con Spritemonstruo apagado)'
 banner(VERSION)
 
 base = require_base(33)
@@ -131,7 +131,7 @@ print_report()
 # -----------------------------------------------------------------------------
 
 PARS33 = ('Fuente', 'Simcasilla', 'Probllegada', 'Tparada', 'Temaenciclo', 'Modojuego', 'Duracionronda',
-          'Umbralaparicion', 'Simceldamon', 'Simbalance', 'Colapsoon', 'Loncentral')
+          'Umbralaparicion', 'Simceldamon', 'Simbalance', 'Colapsoon', 'Loncentral', 'Spritemonstruo')
 
 
 def prueba(t):
@@ -166,6 +166,8 @@ def _prueba(t, m, copy):
     base.par.Tparada = 30.0
     base.par.Colapsoon = False
     base.par.Umbralaparicion = 1.0          # que no aparezca solo mientras se prepara el mundo
+    if has_par(base, 'Spritemonstruo'):     # v2: con la fase 38, se prueba el cuerpo provisional
+        base.par.Spritemonstruo = False
     S = SalaJuego(base, m, absTime.seconds + 1500.0)
 
     # 1. el objetivo

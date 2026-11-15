@@ -147,7 +147,9 @@
 #                 la ronda, el recuento del globo, Herenciamal y la marca de jugador;
 #                 v107 (33): el monstruo y los brotes del mal (sp = MAL); v108 (34):
 #                 las zanjas de las filas y el agua; v109 (35): el rescate; v110 (36):
-#                 la luz de juego; v111 (37): las armas opcionales.
+#                 la luz de juego; v111 (37): las armas opcionales. Motor v112
+#                 (fase 38): Trumpzilla, el monstruo en sprite (un atlas de diez
+#                 emociones) que cambia de cara con su estado; la logica, igual.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -159,7 +161,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v111'
+MOTOR_VERSION = 'motor v112'
 
 import math
 import time as _time
@@ -400,6 +402,7 @@ DEFAULT_CFG = dict(
     arma_cerco=0, arma_pison=0, arma_estatuas=0, arma_grito=0, arma_relampago=0,
     hambre=1, n_pison=3, encoge=0.05, t_quietud=4.0, umbral_silencio=0.3, t_piedra=6.0, prof_grito=2,
     recarga_grito=30.0, t_aturdido=4.0,
+    sprite_mon=1, emocion_fija='auto', alto_sprite=1.6,
 )
 
 
@@ -14841,13 +14844,16 @@ def desborde_mal(W, cfg, i, j, vel, now):
 
 def build_juego(W, cfg, now, out):
     """Las geometrias del juego: marcas (fase 32), monstruo, tocon y brotes_mal
-    (33) y agua_juego (34). Vacias con el modo apagado."""
+    (33), agua_juego (34) y trumpzilla (38: con Spritemonstruo, en lugar de
+    monstruo). Vacias con el modo apagado."""
     lvl = cfg['nivel']
     out['marcas'] = []
     if lvl >= 33:
         out['monstruo'], out['tocon'], out['brotes_mal'] = [], [], []
     if lvl >= 34:
         out['agua_juego'] = []
+    if lvl >= 38:
+        out['trumpzilla'] = []
     if not juego_on(W, cfg):
         return out
     J = W['juego']
@@ -14869,8 +14875,11 @@ def build_juego(W, cfg, now, out):
                 out['brotes_mal'].append(_row(_mul(n, r0), n, k * cw, alto, k * cl, COL_MAL)
                                          + [0.6 + 2 * MAL_PARTE['velo']])
         m = J['mon']
-        if m['celda'] is not None and m['estado'] not in ('espera', 'muere'):
+        sprite = lvl >= 38 and cfg.get('sprite_mon', 1)
+        if m['celda'] is not None and m['estado'] not in ('espera', 'muere') and not sprite:
             out['monstruo'] = filas_monstruo(W, cfg, m)
+        if sprite:                      # fase 38: el sprite en lugar del cuerpo provisional
+            out['trumpzilla'] = filas_trumpzilla(W, cfg, m, now)
         if cfg.get('ver_objetivo', 1) and m['objetivo'] is not None and m['estado'] not in ('espera', 'muere'):
             c = m['objetivo']
             r0 = base_radius(W, cfg, c)
@@ -15326,6 +15335,150 @@ def rayo_relampago(W, cfg, celdas, now):
     return True
 
 
+# --- fase 38: Trumpzilla, el monstruo en sprite con emociones ---------------------
+# Lo visual del monstruo (provisional en la fase 33: un cuerpo y dos ojos) pasa a un
+# sprite: el atlas sprites/trumpzilla_emociones.png (EMOCIONES_MON, de arriba a la
+# izquierda) en una lamina que mira a la camara de pie sobre su celda, con su sombra
+# en el suelo (geometria 'trumpzilla', mat_sprite: el shader la gira, la anima con
+# sprite_t de frame_u y la voltea hacia donde camina). La emocion sale del estado del
+# monstruo; la logica no cambia. Lo que recuerda la vista (cuando cayo, cuando comio)
+# va en _VISTA_MON, fuera del mundo.
+#
+# Cada fila de 'trumpzilla' lleva en el alfa la cara y la animacion:
+#   cara + 16 x animacion           el sprite: sx el ancho, sy el alto, sz el ancho; el
+#                                   eje z local, hacia donde camina; rgb el tinte
+#   SPRITE_SOMBRA (+ nada)          la sombra: una elipse de sx por sz en el suelo; r
+#                                   su opacidad
+
+EMOCIONES_MON = ('serio', 'enfado', 'furia', 'rie', 'carcajada', 'susto', 'mueca', 'llora', 'panico', 'calma')
+ATLAS_MON = (4, 3)              # columnas y filas del atlas (celdas de 192 x 256)
+ASPECTO_SPRITE = 0.75           # ancho / alto de una celda del atlas
+ANIMS_MON = ('respira', 'camina', 'devora', 'tiembla', 'hunde', 'piedra', 'aturdido')
+SPRITE_SOMBRA = 256
+SOMBRA_OPACIDAD = 0.45
+T_SUSTO = 1.5                   # s con cara de susto tras caer en una zanja
+T_RISA = 1.2                    # s riendo tras tragar un escalon
+T_HUNDE = 2.0                   # s que tarda en hundirse al ahogarse
+_VISTA_MON = {}
+
+
+def _vista_mon(m, now):
+    """Lo que recuerda la vista del monstruo m: cuando cayo y cuando comio por
+    ultima vez (de sus contadores caidas y comidos). Un monstruo nuevo la vacia."""
+    v = _VISTA_MON
+    if v.get('n') != m['n'] or now < v.get('t', now):
+        v.clear()
+        v.update(n=m['n'], caidas=m.get('caidas', 0), comidos=m.get('comidos', 0), t_caida=-1e9, t_comio=-1e9)
+    if m.get('caidas', 0) > v['caidas']:
+        v['t_caida'] = now
+    if m.get('comidos', 0) > v['comidos']:
+        v['t_comio'] = now
+    v.update(caidas=m.get('caidas', 0), comidos=m.get('comidos', 0), t=now)
+    return v
+
+
+def emocion_mon(W, cfg, m, now):
+    """(emocion, animacion) del monstruo, la primera que vale:
+      se ahoga (muere)        panico     hunde      se hunde T_HUNDE s
+      petrificado (37)        calma      piedra     gris y quieto
+      aturdido (37)           mueca      aturdido
+      cae, o hace < T_SUSTO   susto      tiembla
+      su zanja tiene agua     panico     tiembla
+      en una zanja            llora      respira
+      pisoton (37)            llora      tiembla
+      acorralado (37)         panico     tiembla
+      devora, o < T_RISA      rie        devora     carcajada si es grande
+      aparece                 serio      respira
+      busca y anda            enfado     camina     furia si es grande
+      quieto                  serio      respira    furia si es grande
+    Con Emocion distinta de auto, esa cara con la animacion del estado."""
+    J = W['juego']
+    v = _vista_mon(m, now)
+    c = m['celda']
+    big = grande(m)
+    if m['estado'] == 'muere':
+        e, a = 'panico', 'hunde'
+    elif m.get('piedra') is not None and now < m['piedra']:
+        e, a = 'calma', 'piedra'
+    elif m.get('aturdido') is not None and now < m['aturdido']:
+        e, a = 'mueca', 'aturdido'
+    elif m['estado'] == 'cae' or now - v['t_caida'] < T_SUSTO:
+        e, a = 'susto', 'tiembla'
+    elif J['agua'].get(c, 0) > 0:
+        e, a = 'panico', 'tiembla'
+    elif c in J['zanjas']:
+        e, a = 'llora', 'respira'
+    elif m.get('pisoton'):
+        e, a = 'llora', 'tiembla'
+    elif m.get('acorralado'):
+        e, a = 'panico', 'tiembla'
+    elif m['estado'] == 'devora' or now - v['t_comio'] < T_RISA:
+        e, a = ('carcajada' if big else 'rie'), 'devora'
+    elif m['estado'] == 'aparece':
+        e, a = 'serio', 'respira'
+    elif m['camino'] and m['camino'][0] != c:
+        e, a = ('furia' if big else 'enfado'), 'camina'
+    else:
+        e, a = ('furia' if big else 'serio'), 'respira'
+    fija = cfg.get('emocion_fija', 'auto')
+    if fija in EMOCIONES_MON:
+        e = fija
+    return e, a
+
+
+def rumbo_mon(W, cfg, m, p, n):
+    """Hacia donde mira, en el plano tangente: la celda siguiente del camino; sin
+    camino, la direccion de su ultimo paso; sin paso, el este."""
+    c = m['celda']
+    if m['camino'] and m['camino'][0] != c:
+        d = _hacia(n, p, _mul(normal_i(m['camino'][0]), _len(p)))
+    elif m.get('de') is not None and m['de'] != c:
+        d = _hacia(n, _mul(normal_i(m['de']), _len(p)), p)
+    else:
+        d = (0.0, 0.0, 0.0)
+    if _len(d) < 1e-6:
+        d = tangents(n)[0]
+    return d
+
+
+def filas_trumpzilla(W, cfg, m, now):
+    """El sprite del monstruo y su sombra (filas de 'trumpzilla'). Ahogado, se
+    hunde T_HUNDE s (sin sombra) y desaparece."""
+    if m['celda'] is None or m['estado'] == 'espera':
+        return []
+    f = 0.0
+    if m['estado'] == 'muere':
+        f = (now - (m['t_muerte'] if m['t_muerte'] is not None else now)) / T_HUNDE
+        if f >= 1.0:
+            return []
+    e, a = emocion_mon(W, cfg, m, now)
+    p, n = pos_monstruo(W, cfg, m)
+    cw, cl = _cell_sizes(_len(p), m['celda'])
+    h = max(0.05, m['tam']) * cfg.get('alto_sprite', 1.6) * min(cw, cl)
+    w = h * ASPECTO_SPRITE
+    d = rumbo_mon(W, cfg, m, p, n)
+    X = _cross(n, d)
+    marco = (X, n, d, _euler_xyz(X, n, d))
+    k = 1.0
+    if cfg['nivel'] >= 28:                      # la noche (fase 28) tambien lo apaga
+        k = 0.35 + 0.65 * (1.0 - noche_nivel(W, cfg, now))
+    rows = []
+    if f <= 0.0:
+        rows.append(_fila_m(_add(p, n, 0.01 * h), marco, 0.42 * w, 0.01 * h, 0.42 * w,
+                            (SOMBRA_OPACIDAD, 0.0, 0.0)) + [float(SPRITE_SOMBRA)])
+    rows.append(_fila_m(_add(p, n, -f * h), marco, w, h, w, (k, k, k))
+                + [float(EMOCIONES_MON.index(e) + 16 * ANIMS_MON.index(a))])
+    return rows
+
+
+def sprite_reloj(frame=None):
+    """El reloj de mat_sprite (s): el tiempo del mundo, para las animaciones."""
+    try:
+        return float(world().get('t') or 0.0)
+    except Exception:
+        return 0.0
+
+
 # --- el rescate simulado y la leyenda -------------------------------------------
 
 def casillas_hacia(W, cfg, celdas, evitar=()):
@@ -15402,10 +15555,13 @@ def _legend_monstruo(W, c):
                 int(round(construida_visible(W, c) * 100)), int(round(c['umbral_aparicion'] * 100)))
         return '  MONSTRUO #%d  %s%s' % (m['n'], m['estado'], extra)
     ritmo = int(c['ritmo_grande'] if grande(m) else c['ritmo_devora'])
-    return '  MONSTRUO #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d  x%d%s' % (
+    cara = ''
+    if c['nivel'] >= 38 and c.get('sprite_mon', 1):        # fase 38: la cara de Trumpzilla
+        cara = '   cara %s' % emocion_mon(W, c, m, W.get('t') or 0.0)[0]
+    return '  MONSTRUO #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d  x%d%s%s' % (
         m['n'], m['estado'], m['celda'], m['objetivo'] if m['objetivo'] is not None else '-', m['tam'],
         min(m['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), ritmo,
-        '   GRANDE' if grande(m) else '')
+        '   GRANDE' if grande(m) else '', cara)
 
 
 def _legend_zanja(W, c):
@@ -15497,6 +15653,7 @@ def chop_names(c=None):
     extra += ['i_marcas'] if c['nivel'] >= 32 else []                           # fases 32 a 34: el juego
     extra += ['i_monstruo', 'i_tocon', 'i_brotes_mal'] if c['nivel'] >= 33 else []
     extra += ['i_agua_juego'] if c['nivel'] >= 34 else []
+    extra += ['i_trumpzilla'] if c['nivel'] >= 38 else []                       # fase 38: el sprite
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -15937,6 +16094,11 @@ def cfg():
                  t_piedra=max(0.0, _p('Tpiedra', c['t_piedra'])), prof_grito=max(1, int(_p('Profgrito', c['prof_grito']))),
                  recarga_grito=max(0.0, _p('Recargagrito', c['recarga_grito'])),
                  t_aturdido=max(0.0, _p('Taturdido', c['t_aturdido'])))
+    if c['nivel'] >= 38:                # fase 38: Trumpzilla
+        fija = _p('Emocion', 'auto')
+        c.update(sprite_mon=int(bool(_p('Spritemonstruo', True))),
+                 emocion_fija=fija if fija in EMOCIONES_MON else 'auto',
+                 alto_sprite=max(0.2, min(4.0, _p('Altosprite', c['alto_sprite']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -17848,6 +18010,7 @@ def canales_frame(spec, frame=None):
     amp, vto, _ = viento_reloj(frame)          # motor v77: el vaiven del dosel, en la GPU
     out.append(('viento_amp', amp))
     out.append(('viento_lfo', vto))
+    out.append(('sprite_t', sprite_reloj(frame)))     # motor v112: el reloj de mat_sprite (fase 38)
     for canal, tipo, nombre, k in spec or ():
         try:
             if tipo == 'piel':
