@@ -2,7 +2,7 @@
 Ejecuta los scripts de fase en un TouchDesigner simulado y resume lo que
 dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
-    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 31 (las que haya)
+    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 38 (las que haya)
     python3 pruebas/correr_fases.py --hasta=fase24   # solo hasta esa fase
     python3 pruebas/correr_fases.py -v         # con todo el Textport
 
@@ -10,6 +10,11 @@ Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
 camino del MIDI real, fotograma a fotograma; desde la fase 21, onsets del
 microfono: palmadas de la sala virtual, que la sesion oye por su microfono
 virtual) y evalua todas las expresiones.
+Desde la fase 35, una partida del juego «El devorador» (fases 32 a 37): dos
+rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
+ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
+la tabla de la sala simulada); al final, el recuento y las dos conchas con el
+mal donde toca.
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
 Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
@@ -32,7 +37,9 @@ FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_espec
          'fase13_tejido.py', 'fase14_destructores.py', 'fase15_era.py', 'fase16_cortes.py', 'fase17_tiempo.py', 'fase18_escenas.py', 'fase19_modular.py',
          'fase21_microfono.py', 'fase22_camara.py', 'fase23_sala.py', 'fase24_personas.py',
          'fase25_huella.py', 'fase26_borrado.py', 'fase27_clasificacion.py', 'fase28_noche.py',
-         'fase29_fila.py', 'fase30_relampago.py', 'fase31_historico.py']
+         'fase29_fila.py', 'fase30_relampago.py', 'fase31_historico.py',
+         'fase32_juego.py', 'fase33_monstruo.py', 'fase34_zanjas.py', 'fase35_rescate.py', 'fase36_luzjuego.py',
+         'fase37_armas.py', 'fase38_trumpzilla.py']
 SALA = 'sala_virtual.py'           # no es una fase: la maqueta de la instalacion
 
 
@@ -103,6 +110,148 @@ def sesion(sim, compases=48, fps=30.0):
     return sim.expresiones()
 
 
+def partida(sim, fps=30.0, ronda=60.0):
+    """La partida de dos rondas. Un director mira el estado del juego y pone a las
+    personas en la tabla sala_personas: una fila de 3 sobre la celda del monstruo
+    (cae), luego una de 4 (se llena de agua y se ahoga), un rescate de un brote y
+    notas del SEQ1 en otro brote (crece). Devuelve lo que paso."""
+    base = sim.op('/project1/FASE1')
+    m = base.op('motor').module
+    mm = base.op('midi_callbacks').module
+    tb = base.op('sala_personas')
+    base.par.Fuente = 'simulada'
+    base.par.Probllegada = 0.0
+    base.par.Duracionronda = ronda
+    base.par.Rondas = 2
+    base.par.Modojuego = True
+    tfila = base.par.Tfila.eval()
+    base.par.Tfila = 1.0                # las filas cavan al segundo: el monstruo sigue en su celda
+    paso = 60.0 / 120.0 / 4
+    fpp = fps * paso
+    notas = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76]
+    hechos = dict(caidas=0, muertes=0, rescates=0, crece=0, cuatro=0, tres=0, conchas_mal=[])
+    fase = ['espera']
+    t_fase = [0.0]
+    pend = []
+    brote_crece = [None, 0]
+
+    def poner(casillas):
+        tb.clear()
+        tb.appendRow(list(m.SALA_COLS))
+        c = m.cfg()
+        for k in casillas:
+            x, y = m.casilla_xy(c, k)
+            tb.appendRow(['%.3f' % x, '%.3f' % y, '1.70'])
+
+    def fila_en(c, W, celda, n):
+        k0 = m.casilla_de_celda(c, celda)
+        if k0 is None:
+            return None
+        cols, filas = m.rejilla_sala(c)
+        col, fil = k0 % cols, k0 // cols
+        ks = [fil * cols + min(cols - 1, max(0, col + d)) for d in range(-(n // 2), n - n // 2)]
+        return sorted(set(ks)) if len(set(ks)) == n else None
+
+    poner([])
+    n_frames = int(2 * ronda * fps) + int(fps)
+    for f in range(n_frames):
+        for b in pend:
+            mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes(b))
+        pend = []
+        if f % int(fpp) == 0:
+            p = f // int(fpp)
+            n1 = notas[p % len(notas)]
+            mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes([0x9C, n1, 100]))
+            pend.append([0x8C, n1, 0])
+        sim.fotograma(1.0 / fps)
+        W, c = m.world(), m.cfg()
+        J = W.get('juego')
+        if not J:
+            continue
+        now = W.get('t') or 0.0
+        mo = J['mon']
+        vivo = mo['estado'] not in ('espera', 'muere') and mo['celda'] is not None
+        libre = vivo and mo['estado'] == 'devora' and mo['celda'] not in J['zanjas'] \
+            and mo['celda'] not in (W.get('bloqueadas') or {}) and m.casilla_de_celda(c, mo['celda']) is not None
+        brotes = [i for i in range(m.N) if W['occ'][i] > 0 and W['sp'][i] == m.MAL
+                  and m.casilla_de_celda(c, i) is not None and i not in J['zanjas']]
+        if J['estado'] != 'juego':
+            fase[0] = 'acabada'
+        elif fase[0] == 'espera' and vivo:     # ya aparecio solo (Umbralaparicion)
+            fase[0] = 'tres'
+            t_fase[0] = now
+        elif fase[0] in ('espera', 'reaparece', 'fin') and not vivo and now - J['t0'] > 4.0 \
+                and mo['estado'] == 'espera' and m.celda_aparicion(W, c) is not None:
+            base.par.Simceldamon = m.celda_aparicion(W, c)      # vacia, fuera de las zanjas
+            base.par.Simmonstruo.pulse()
+            fase[0] = 'tres' if fase[0] == 'espera' else 'fin'
+            t_fase[0] = now
+        elif fase[0] in ('tres', 'cuatro') and libre and now - t_fase[0] > 1.0:
+            n = 3 if fase[0] == 'tres' else 4
+            ks = fila_en(c, W, mo['celda'], n)
+            if ks:
+                poner(ks)
+                hechos[fase[0]] += 1
+                fase[0] = 'fila%d' % n
+                t_fase[0] = now
+        elif fase[0] == 'fila3' and now - t_fase[0] > c['t_fila'] + 1.0:
+            poner([])
+            fase[0] = 'rescate'
+            t_fase[0] = now
+        elif fase[0] == 'rescate' and brotes and now - t_fase[0] > 1.0:
+            b = brotes[0]
+            k0 = m.casilla_de_celda(c, b)
+            ks = [k0] + m.casillas_hacia(W, c, m.NEIGH[b], evitar=[k0])[:int(c['aliados'])]
+            base.par.Tfila = 60.0           # los cuatro del rescate no cavan
+            poner(ks)
+            hechos.setdefault('log', []).append(('rescate', round(now - J['t0'], 1), b, ks,
+                                                 [m.celda_de_casilla(W, c, k) for k in ks]))
+            fase[0] = 'rescatando'
+            t_fase[0] = now
+        elif fase[0] == 'rescatando' and now - t_fase[0] > c['t_aliados'] + 1.0:
+            poner([])
+            base.par.Tfila = 1.0
+            fase[0] = 'cuatro'
+            t_fase[0] = now
+        elif fase[0] == 'fila4' and (mo['estado'] == 'muere' or now - t_fase[0] > c['t_fila'] + 8.0):
+            poner([])
+            fase[0] = 'reaparece'
+            t_fase[0] = now
+        if brote_crece[0] is None and brotes and fase[0] not in ('rescate', 'rescatando'):
+            brote_crece[0], brote_crece[1] = brotes[-1], W['occ'][brotes[-1]]
+        if brote_crece[0] is not None and f % int(fpp) == 1:
+            x = brote_crece[0]
+            if W['sp'][x] == m.MAL and W['occ'][x] > 0:
+                mm.onReceiveMIDI(None, 0, 'raw', 0, 0, 0, True, bytes([0x9C, m.cell_note(x), 100]))
+                pend.append([0x8C, m.cell_note(x), 0])
+                hechos['crece'] = max(hechos['crece'], W['occ'][x] - brote_crece[1])
+            else:
+                brote_crece[0] = None
+        hechos['caidas'] = max(hechos['caidas'], mo.get('caidas', 0))
+        if mo['estado'] == 'muere' and mo.get('t_muerte') == now:
+            hechos['muertes'] += 1
+        hechos['rescates'] = J['rescatados']
+        if J['ev'].get('ronda') and J['ev']['ronda'].get('t') == now:
+            fase[0] = 'espera'
+            brote_crece[0] = None
+            poner([])
+            base.par.Tfila = 1.0
+            hechos['conchas_mal'].append(sorted(i for i, x in enumerate(W['shells'][-1]['sp'])
+                                                if x == m.MAL and W['shells'][-1]['occ'][i] > 0))
+    W = m.world()
+    J = W['juego']
+    hechos['resultados'] = [dict(r) for r in J['resultados']]
+    hechos['estado'] = J['estado']
+    base.par.Modojuego = False
+    base.par.Tfila = tfila
+    poner([])
+    for _ in range(int((base.par.Noche.eval() + 1.0) * fps)):     # que acabe la noche del ultimo entierro
+        sim.fotograma(1.0 / fps)
+    m.sala_reset()                      # la sala, como estaba: sin densidad ni personas de la partida
+    m._SALA['t_img'] = -99.0
+    return hechos
+
+
 def main():
     # las rutas de Windows de los scripts (C:/...) no existen aqui: lo que alguno cree con
     # una ruta asi (la carpeta historico de la fase 31) cae en una carpeta temporal, no en
@@ -136,6 +285,22 @@ def main():
     print('%-6s sesion simulada: %d expresiones con error' % ('OK' if not malas else 'FALLO', len(malas)))
     for m_ in malas[:10]:
         print('         %s.%s: %s' % m_)
+    if m.cfg()['nivel'] >= 35:          # fases 32 a 37: una partida de dos rondas
+        with contextlib.redirect_stdout(io.StringIO()):
+            h = partida(sim)
+        rs = h['resultados']
+        bien = (h['estado'] == 'espera' and len(rs) == 2 and h['tres'] and h['cuatro'] and h['caidas'] >= 1
+                and h['muertes'] >= 1 and h['rescates'] >= 1 and h['crece'] >= 1 and len(h['conchas_mal']) == 2
+                and all(len(x) == r['mal'] > 0 for x, r in zip(h['conchas_mal'], rs)))
+        todo = todo and bien
+        print('%-6s partida simulada: %s   caidas %d, ahogados %d, rescates %d, brote +%d, conchas con mal %s'
+              % ('OK' if bien else 'FALLO', '  '.join('ronda %d publico %d mal %d (%s)' % (
+                  r['ronda'], r['publico'], r['mal'], r['gana']) for r in rs) or 'sin rondas',
+                 h['caidas'], h['muertes'], h['rescates'], h['crece'],
+                 '/'.join(str(len(x)) for x in h['conchas_mal'])))
+        if not bien:
+            print('         %s' % dict((k, v) for k, v in h.items() if k != 'resultados'))
+        W = m.world()
     # relanzar sobre el proyecto avanzado: el mundo no se pierde
     antes = (m.occupied(W), list(W['occ']))
     print('relanzando las fases sobre el proyecto en el nivel %d' % m.cfg()['nivel'])

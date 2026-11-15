@@ -14,8 +14,9 @@ aceptan los parametros que tienen en TouchDesigner: un nombre equivocado
 devuelve None, como alli, y el script lo avisa con '..'. Los demas SOP, MAT,
 TOP, CHOP y DAT aceptan cualquier nombre (no comprobamos sus parametros).
 
-Camara (fase 22): el Orbbec TOP y el Kinect TOP no tienen aparato (un error,
-como en un ordenador sin camara; Sim.camaras = True lo quita), y un GLSL TOP no
+Camara (fase 22): el Orbbec TOP y el Kinect TOP no tienen aparato (el Orbbec,
+un error; el Kinect, como en TouchDesigner, ningun error y una imagen de 128 x
+128; Sim.camaras = True los enchufa, 640 x 576 y 512 x 424), y un GLSL TOP no
 calcula nada. Un Script TOP guarda lo que le copian (copyNumpyArray), y
 Resolution, Null y Switch TOP dejan pasar la imagen de su entrada, asi que la
 sala simulada (un Script TOP) llega al motor por el mismo camino que la camara.
@@ -28,6 +29,12 @@ numSamples (deja el aviso de TouchDesigner en Sim.avisos) salvo que ponga
 isTimeSlice = False. numpyArray() da las muestras de un CHOP (canales x
 muestras): un Script CHOP se cocina antes, una vez por fotograma, y un
 Switch pasa la entrada de su index. En un TOP, lo que se le copio.
+
+Geometria (la esfera de la sala virtual): una Sphere SOP en malla da sus
+puntos y un uv por vertice; un Script SOP cocina su onCook al pedirle la
+geometria (clear, copy, appendPoint, appendPoly y atributos de punto y de
+vertice); los demas SOP dejan pasar la de su entrada. Como en TouchDesigner,
+solo los SOP y los COMP tienen la bandera render (un DAT no).
 
 Lo que no puede comprobar: el aspecto de la imagen, los nombres exactos de
 los parametros de SOP y MAT, y el rendimiento real.
@@ -119,8 +126,15 @@ _MENUS_SALA = dict(driver=['default', 'asio'],
 # los menus que cambian de un operador a otro (tipo, parametro)
 _MENUS_TIPO = {('kinectTOP', 'image'): ['color', 'depth', 'infrared', 'playerindex', 'colorpointcloud',
                                         'depthpointcloud'],
-               ('kinectTOP', 'hwversion'): ['version1', 'version2']}
+               ('kinectTOP', 'hwversion'): ['version1', 'version2'],
+               # el tipo de la Sphere SOP: las etiquetas son las de TouchDesigner; los nombres, sin comprobar
+               ('sphereSOP', 'type'): ['prim', 'poly', 'polymesh', 'mesh', 'nurbs', 'bezier']}
+_ETIQUETAS_TIPO = {('sphereSOP', 'type'): ['Primitive', 'Polygon', 'Polygon Mesh', 'Mesh', 'NURBS', 'Bezier']}
 _CAMARAS = ('orbbecTOP', 'kinectTOP')
+# su imagen (ancho, alto) sin aparato y con el: el Kinect TOP sin Kinect no da error,
+# saca una imagen de relleno de 128 x 128 (TouchDesigner, 15 de noviembre de 2026)
+_CAMARA_PX = {'orbbecTOP': {False: (256, 256), True: (640, 576)},
+              'kinectTOP': {False: (128, 128), True: (512, 424)}}
 
 
 class AbsTime(object):
@@ -266,6 +280,11 @@ class ParCollection(object):
             p = Par(self._owner, name, _DEFAULTS.get(name, 0.0), kind='any')
             if name in _MENUS:
                 p._val = _DEFAULTS.get(name, _MENUS[name][0])
+            menu = _MENUS_TIPO.get((self._owner.OPType, name))
+            if menu is not None:                # un menu propio de este tipo de operador
+                p.menuNames = list(menu)
+                p.menuLabels = list(_ETIQUETAS_TIPO.get((self._owner.OPType, name), menu))
+                p._val = menu[0]
             self._pars[name] = p
         if p is None:
             raise AttributeError(name)
@@ -418,6 +437,193 @@ class Channel(object):
         return float(self._vals[0]) if self._vals else 0.0
 
 
+# -----------------------------------------------------------------------------
+# GEOMETRIA DE LOS SOP (lo justo: la Sphere SOP y el Script SOP)
+# -----------------------------------------------------------------------------
+# Una Sphere SOP en malla (polymesh, mesh, polygon) da rows x cols puntos con un
+# uv por vertice, como en TouchDesigner; la primitiva (prim, por defecto) un solo
+# punto. Un Script SOP llama a onCook de su DAT de callbacks: clear, copy,
+# appendPoint, appendPoly, points, prims y los atributos de punto y de vertice
+# (crear un uv de punto si ya hay uno de vertice da el error de TouchDesigner).
+# Los demas SOP dejan pasar la geometria de su entrada, o ninguna.
+
+_MALLA = ('polymesh', 'mesh', 'polygon', 'poly')
+
+
+class _Attrib(object):
+    def __init__(self, name, default):
+        self.name, self.default = name, tuple(default) if isinstance(default, (list, tuple)) else default
+
+
+class _Attribs(object):
+    def __init__(self, geo, clase):
+        self._geo, self._clase, self._lista = geo, clase, []
+
+    def create(self, name, default=0.0):
+        for otra in ('point', 'vertex', 'prim'):
+            if otra != self._clase and name in getattr(self._geo, otra + 'Attribs'):
+                raise Exception('%s%s Attribute with that name already exists'
+                                % (otra[0].upper(), otra[1:]))
+        a = next((x for x in self._lista if x.name == name), None)
+        if a is None:
+            a = _Attrib(name, default)
+            self._lista.append(a)
+            for e in self._geo._elementos(self._clase):
+                e._attrs.setdefault(name, a.default)
+        return a
+
+    def __contains__(self, name):
+        return any(a.name == name for a in self._lista)
+
+    def __iter__(self):
+        return iter(list(self._lista))
+
+    def __len__(self):
+        return len(self._lista)
+
+
+class _Elemento(object):
+    _clase = ''
+
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        attrs = self.__dict__.get('_attrs', {})
+        if name in attrs:
+            return attrs[name]
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        if name.startswith('_') or name in type(self).__dict__ or name in ('index', 'point', 'closed'):
+            object.__setattr__(self, name, value)
+            return
+        if name not in self._attrs:
+            raise AttributeError('%s attribute %s does not exist' % (self._clase, name))
+        self._attrs[name] = tuple(value) if isinstance(value, (list, tuple)) else value
+
+
+class _Punto(_Elemento):
+    _clase = 'point'
+
+    def __init__(self, geo, index, pos=(0.0, 0.0, 0.0)):
+        object.__setattr__(self, '_attrs', {a.name: a.default for a in geo.pointAttribs})
+        self._pos = [float(v) for v in pos]
+        self.index = index
+
+    x = property(lambda s: s._pos[0], lambda s, v: s._pos.__setitem__(0, float(v)))
+    y = property(lambda s: s._pos[1], lambda s, v: s._pos.__setitem__(1, float(v)))
+    z = property(lambda s: s._pos[2], lambda s, v: s._pos.__setitem__(2, float(v)))
+
+    @property
+    def P(self):
+        return tuple(self._pos)
+
+    @P.setter
+    def P(self, v):
+        self._pos = [float(c) for c in v][:3]
+
+
+class _Vertice(_Elemento):
+    _clase = 'vertex'
+
+    def __init__(self, geo, punto):
+        object.__setattr__(self, '_attrs', {a.name: a.default for a in geo.vertexAttribs})
+        self.point = punto
+
+
+class _Prim(_Elemento):
+    _clase = 'prim'
+
+    def __init__(self, geo, n, closed=True):
+        object.__setattr__(self, '_attrs', {a.name: a.default for a in geo.primAttribs})
+        self._v = [_Vertice(geo, None) for _ in range(n)]
+        self.closed = closed
+
+    def __iter__(self):
+        return iter(self._v)
+
+    def __len__(self):
+        return len(self._v)
+
+    def __getitem__(self, i):
+        return self._v[i]
+
+
+class _Geo(object):
+    def __init__(self):
+        self.points, self.prims = [], []
+        self.pointAttribs = _Attribs(self, 'point')
+        self.vertexAttribs = _Attribs(self, 'vertex')
+        self.primAttribs = _Attribs(self, 'prim')
+
+    def _elementos(self, clase):
+        if clase == 'point':
+            return self.points
+        if clase == 'prim':
+            return self.prims
+        return [v for pr in self.prims for v in pr]
+
+    def punto(self, pos=(0.0, 0.0, 0.0)):
+        q = _Punto(self, len(self.points), pos)
+        self.points.append(q)
+        return q
+
+    def poly(self, n, closed=True, puntos=None):
+        pr = _Prim(self, n, closed)
+        for k, v in enumerate(pr):
+            v.point = puntos[k] if puntos else self.punto()
+        self.prims.append(pr)
+        return pr
+
+    def copia(self):
+        g = _Geo()
+        for clase in ('point', 'vertex', 'prim'):
+            for a in getattr(self, clase + 'Attribs'):
+                getattr(g, clase + 'Attribs')._lista.append(_Attrib(a.name, a.default))
+        for q in self.points:
+            g.punto(q.P)._attrs.update(q._attrs)
+        for pr in self.prims:
+            nuevo = g.poly(len(pr), pr.closed, [g.points[v.point.index] for v in pr])
+            nuevo._attrs.update(pr._attrs)
+            for v, w in zip(pr, nuevo):
+                w._attrs.update(v._attrs)
+        return g
+
+
+def _esfera(op):
+    """La geometria de una Sphere SOP: en malla, rows x cols puntos (de polo a polo)
+    con un uv por vertice; si no, la esfera primitiva, de un punto."""
+    def num(nm, d):
+        try:
+            v = float(getattr(op.par, nm).eval())
+            return v if v else d
+        except Exception:
+            return d
+    g = _Geo()
+    r = (num('radx', 1.0), num('rady', 1.0), num('radz', 1.0))
+    c = (num('tx', 0.0), num('ty', 0.0), num('tz', 0.0))
+    if str(op.par.type.eval()) not in _MALLA:
+        g.punto(c)
+        g.poly(1, True, [g.points[0]])
+        return g
+    import math
+    filas, cols = max(2, int(num('rows', 10))), max(3, int(num('cols', 10)))
+    for i in range(filas):
+        th = math.pi * i / (filas - 1)
+        for j in range(cols):
+            ph = 2.0 * math.pi * j / cols
+            g.punto((c[0] + r[0] * math.sin(th) * math.cos(ph), c[1] + r[1] * math.cos(th),
+                     c[2] + r[2] * math.sin(th) * math.sin(ph)))
+    g.vertexAttribs.create('uv', (0.0, 0.0, 0.0))
+    for i in range(filas - 1):
+        for j in range(cols):
+            k = [i * cols + j, i * cols + (j + 1) % cols, (i + 1) * cols + (j + 1) % cols, (i + 1) * cols + j]
+            pr = g.poly(4, True, [g.points[q] for q in k])
+            for v, (di, dj) in zip(pr, ((0, 0), (0, 1), (1, 1), (1, 0))):
+                v.uv = ((j + dj) / float(cols), 1.0 - (i + di) / float(filas - 1), 0.0)
+    return g
+
+
 class OP(object):
     def __init__(self, sim, optype, name, parent):
         self.sim, self.OPType = sim, optype
@@ -436,7 +642,8 @@ class OP(object):
         self._cocinado = None
         self._timeslice = None              # None: lo decide su entrada
         self.nodeX = self.nodeY = 0
-        self.render = self.display = True
+        self._render = self.display = True
+        self._geo = None                    # la geometria de un SOP (al pedirla)
         self.allowCooking = True
         self.cooks = 0
         self.destroyed = False
@@ -448,6 +655,88 @@ class OP(object):
 
     def __repr__(self):
         return '<%s %s>' % (self.OPType, self.path)
+
+    # la bandera render: solo los SOP y los COMP, como en TouchDesigner (un DAT no tiene)
+    def _sin_render(self):
+        return self.OPType[-3:] in ('DAT', 'TOP', 'MAT') or self.OPType.endswith('CHOP')
+
+    @property
+    def render(self):
+        if self._sin_render():
+            raise AttributeError("'td.%s' object has no attribute 'render'" % self.OPType)
+        return self._render
+
+    @render.setter
+    def render(self, v):
+        if self._sin_render():
+            raise AttributeError("'td.%s' object has no attribute 'render'" % self.OPType)
+        self._render = bool(v)
+
+    # geometria de los SOP
+    def _geometria(self):
+        if not self.OPType.endswith('SOP'):
+            raise AttributeError('solo un SOP tiene geometria')
+        if self._geo is None:
+            if self.OPType == 'sphereSOP':
+                self._geo = _esfera(self)
+            elif self.OPType == 'scriptSOP':
+                self._geo = _Geo()
+                self._cocinar_script()
+            else:
+                ins = [i for i in self.inputs if i.OPType.endswith('SOP')]
+                self._geo = ins[0]._geometria().copia() if ins else _Geo()
+        return self._geo
+
+    @property
+    def points(self):
+        return list(self._geometria().points)
+
+    @property
+    def prims(self):
+        return list(self._geometria().prims)
+
+    @property
+    def pointAttribs(self):
+        return self._geometria().pointAttribs
+
+    @property
+    def vertexAttribs(self):
+        return self._geometria().vertexAttribs
+
+    @property
+    def primAttribs(self):
+        return self._geometria().primAttribs
+
+    def copy(self, sop, **kw):
+        """En un Script SOP: copia la geometria de otro SOP (en un COMP, TouchDesigner
+        copiaria el operador: aqui no hace falta)."""
+        if not self.OPType.endswith('SOP'):
+            raise AttributeError('copy: solo en un Script SOP')
+        self._geo = sop._geometria().copia()
+
+    def appendPoint(self):
+        return self._geometria().punto()
+
+    def appendPoly(self, n, closed=True, addPoints=True):
+        g = self._geometria()
+        pr = g.poly(int(n), closed, None if addPoints else [None] * int(n))
+        return pr
+
+    def _cocinar_script(self):
+        dat = None
+        for nm in ('callbacks', 'callbackdat', 'dat'):
+            p = self.par._pars.get(nm)
+            if p is not None and p.eval():
+                dat = self._op_hermano(p.eval())
+                break
+        if dat is None:
+            return
+        try:
+            dat.module.onCook(self)
+        except Exception as e:
+            self._errors.append('%s: %s' % (self.OPType, e))
+            if self.sim.estricto:
+                raise
 
     def __str__(self):
         return self.path
@@ -603,7 +892,7 @@ class OP(object):
     # errores
     def errors(self, recurse=False):
         err = list(self._errors[-3:])
-        if self.OPType in _CAMARAS and not getattr(self.sim, 'camaras', False):
+        if self.OPType in _CAMARAS and not getattr(self.sim, 'camaras', False) and self.OPType != 'kinectTOP':
             err.insert(0, '%s: no encuentro el aparato (simulado)' % self.OPType)
         return '\n'.join(err)
 
@@ -648,6 +937,9 @@ class OP(object):
         del self._rows[r]
 
     def clear(self, keepSize=False, keepFirstRow=False, keepFirstCol=False):
+        if self.OPType.endswith('SOP'):
+            self._geo = _Geo()
+            return
         if self.OPType.endswith('CHOP'):
             self._chans = []
             return
@@ -715,8 +1007,8 @@ class OP(object):
     def numChans(self):
         return len(self._chans)
 
-    @property
-    def chans(self):
+    def chans(self, *patrones):
+        # como en TouchDesigner: un metodo (o.chans()), no una lista
         return list(self._chans)
 
     def appendChan(self, name):
@@ -728,6 +1020,9 @@ class OP(object):
     def cook(self, force=False, recurse=False):
         self.cooks += 1
         self._cocinado = self.sim.absTime.frame
+        if self.OPType.endswith('SOP'):
+            self._geo = None                # se rehace (un Script SOP, su onCook) al pedirla
+            return
         if self.OPType in ('scriptCHOP', 'scriptTOP'):
             dat = None
             for nm in ('callbacks', 'callbackdat', 'dat'):
@@ -785,10 +1080,14 @@ class OP(object):
 
     @property
     def width(self):
+        if self.OPType in _CAMARAS:
+            return _CAMARA_PX[self.OPType][bool(getattr(self.sim, 'camaras', False))][0]
         return int(float(self.par.resolutionw.eval()))
 
     @property
     def height(self):
+        if self.OPType in _CAMARAS:
+            return _CAMARA_PX[self.OPType][bool(getattr(self.sim, 'camaras', False))][1]
         return int(float(self.par.resolutionh.eval()))
 
     # expresiones y callbacks

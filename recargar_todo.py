@@ -14,7 +14,7 @@ QUE HACE
 --------
   - Si no existe /project1/FASE1 (proyecto nuevo), empieza por fase12_base.py.
     Si ya existe, NO la lanza (es la que crea el proyecto desde cero).
-  - Lanza fase3 ... fase31 en orden, las que haya en la carpeta (las que no
+  - Lanza fase3 ... fase38 en orden, las que haya en la carpeta (las que no
     existan todavia se saltan en silencio).
   - Relanza /project1/SALA con sala_virtual.py solo si ya estaba montada
     (poner SALA = True para montarla tambien si no lo estaba).
@@ -43,7 +43,9 @@ FASES_ORDEN = ['fase3_semilla.py', 'fase4_desborde.py', 'fase5_especies.py',
                'fase18_escenas.py', 'fase19_modular.py', 'fase21_microfono.py',
                'fase22_camara.py', 'fase23_sala.py', 'fase24_personas.py', 'fase25_huella.py',
                'fase26_borrado.py', 'fase27_clasificacion.py', 'fase28_noche.py', 'fase29_fila.py',
-               'fase30_relampago.py', 'fase31_historico.py']
+               'fase30_relampago.py', 'fase31_historico.py', 'fase32_juego.py', 'fase33_monstruo.py',
+               'fase34_zanjas.py', 'fase35_rescate.py', 'fase36_luzjuego.py', 'fase37_armas.py',
+               'fase38_trumpzilla.py']
 
 
 class _Eco(object):
@@ -112,10 +114,12 @@ def _recargar():
         plan.append('sala_virtual.py')
 
     resumen = []
+    faltan = []
     for archivo in plan:
         src = _lee(archivo)
         if src is None:
-            continue                       # esa fase todavia no existe
+            faltan.append(archivo)         # no esta en la carpeta: se salta, pero se dice al final
+            continue
         print('\n>>>>>> %s' % archivo)
         bien, version, motivo = _lanza(archivo, src)
         resumen.append((bien, archivo, version, motivo))
@@ -128,11 +132,18 @@ def _recargar():
         print('%-6s %-24s %s' % ('OK' if bien else 'FALLO', archivo, version[:60]))
         if not bien:
             print('         %s' % motivo)
+    if faltan:
+        print('NO ESTAN en %s (saltadas): %s' % (CARPETA, ' '.join(faltan)))
+        print('         descargalas del repositorio a esa carpeta y vuelve a lanzar')
     if all(r[0] for r in resumen) and resumen:
         print('RECARGAR TODO OK: %d scripts' % len(resumen))
     else:
         print('RECARGAR TODO PARADO en %s: arregla eso y vuelve a lanzar.'
               % (resumen[-1][1] if resumen else '(nada que lanzar)'))
+    try:
+        print('NIVEL de FASE1: %d (la ultima fase aplicada)' % int(op('/project1/FASE1').par.Nivel.eval()))
+    except Exception:
+        pass
     print('=' * 70)
     return resumen
 

@@ -67,7 +67,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase23 v1  (luz de sala por DMX: balance, bano, estroboscopio, noche y colapso)'
+VERSION = 'fase23 v3  (dmx_canales sin filas recupera la de fabrica; la autoprueba del DMX dice por que falla)'
 banner(VERSION)
 
 base = require_base(23)
@@ -129,18 +129,53 @@ def onCook(scriptOp):
 
 X0, Y0 = -1320, 1500
 tabla = get_or_make(base, 'tableDAT', 'dmx_canales', X0, Y0)
-if tabla.numRows == 0:
+if tabla.numRows == 0 or not m.dmx_filas():
+    # v3: vacia o solo con la cabecera (sin ninguna fila que se lea) es como no tenerla:
+    # dmx_valores salia sin canales
+    tabla.clear()
     tabla.appendRow(list(m.DMX_COLS))
     for fila in m.DMX_DEFECTO:
         tabla.appendRow(fila)
     ok('dmx_canales: 4 focos de bano de 4 canales (dimmer, rojo, verde, azul: 1 a 16) y el '
        'estroboscopio en el 17. Editala con tus aparatos: relanzar no la pisa')
 else:
-    ok('dmx_canales: se conserva (%d canales)' % (tabla.numRows - 1))
+    ok('dmx_canales: se conserva (%d canales)' % len(m.dmx_filas()))
 cb = get_or_make(base, 'textDAT', 'dmx_valores_callbacks', X0 + 220, Y0 + 140)
 cb.text = DMX_CB
 vals = get_or_make(base, 'scriptCHOP', 'dmx_valores', X0 + 220, Y0)
-setp_any(vals, ['callbacks', 'callbackdat', 'dat'], 'dmx_valores_callbacks')
+if not setp_any(vals, ['callbacks', 'callbackdat', 'dat'], 'dmx_valores_callbacks'):
+    fail('dmx_valores: no encontre su parametro Callbacks DAT; pon a mano dmx_valores_callbacks')
+
+
+def estado_dmx_valores(o):
+    """v3: (canales, texto) de dmx_valores tras cocinarlo, con sus errores si los tiene."""
+    if o is None:
+        return 0, 'no existe'
+    try:
+        o.cook(force=True)
+    except Exception as e:
+        return 0, 'al cocinar: %s' % e
+    texto = []
+    try:
+        cb = o.par.callbacks.eval()
+        texto.append('callbacks %s' % (getattr(cb, 'name', cb) or '-'))
+    except Exception:
+        pass
+    for que in ('errors', 'warnings'):
+        try:
+            e = getattr(o, que)()
+            if e:
+                texto.append('%s: %s' % (que, str(e).strip().replace('\n', ' | ')[:300]))
+        except Exception:
+            pass
+    return o.numChans, '; '.join(texto)
+
+
+n_dmx, txt_dmx = estado_dmx_valores(vals)
+if n_dmx:
+    ok('dmx_valores: %d canales' % n_dmx)
+else:
+    fail('dmx_valores: sin canales (%s)' % (txt_dmx or 'sin errores'))
 try:
     dmx = get_or_make(base, 'dmxoutCHOP', 'dmx_out', X0 + 440, Y0)
 except Exception as e:
@@ -429,11 +464,12 @@ def _prueba(t, m):
     # 8. la tabla de ciclos, el DMX y la leyenda
     tb = base.op('ciclos')
     cab = [tb[0, k].val for k in range(tb.numCols)] if tb is not None and tb.numRows else []
-    n0 = tb.numRows if tb is not None else 0
     W, c = nuevo(1.5)
     pasa(W, c, 1.0)
     m.registrar_ciclo(W, c, m.close_cycle(W, c, reloj[0], 'forzado'))
-    fila = dict(zip(cab, [x.val for x in tb.row(tb.numRows - 1)])) if tb is not None and tb.numRows > n0 else {}
+    # v2: la fila nueva es siempre la ultima; con la tabla llena (CICLOS_MAX ciclos, un proyecto
+    # con muchas sesiones) entra al final y sale la mas antigua, asi que no crece
+    fila = dict(zip(cab, [x.val for x in tb.row(tb.numRows - 1)])) if tb is not None and tb.numRows > 1 else {}
     t.check('la tabla ciclos tiene la columna balance, con el valor al cerrar',
             'balance' in cab and fila.get('balance') == '1.50' and fila.get('motivo') == 'forzado', str(fila))
     cab2 = ['ciclo', 'motivo']
@@ -459,13 +495,15 @@ def _prueba(t, m):
     v_fl = m.valores_dmx(W, c, reloj[0], filas)
     v_no = m.valores_dmx(W, c, reloj[0] + 0.2, filas)
     por = dict((f[1], k) for k, f in enumerate(filas))
-    o = base.op('dmx_valores')
-    o.cook(force=True)
-    t.check('dmx_canales (17 canales por defecto) -> dmx_valores: el estroboscopio a 255 durante el destello '
-            'y a 0 despues; el bano, entre 0 y 255',
-            len(filas) == 17 and v_fl[por['estrobo']] == 255 and v_no[por['estrobo']] == 0
-            and 0 < v_fl[por['bano_dimmer']] <= 255 and all(0 <= x <= 255 for x in v_fl)
-            and o.numChans == 17 and base.op('dmx_out') is not None, 'canales %d' % o.numChans)
+    # v3: la tabla puede estar editada con tus focos: se prueba lo que tenga (con estrobo y un bano)
+    t.check('dmx_canales: el estroboscopio a 255 durante el destello y a 0 despues; el bano, entre 0 y 255',
+            filas and 'estrobo' in por and v_fl[por['estrobo']] == 255 and v_no[por['estrobo']] == 0
+            and all(0 <= x <= 255 for x in v_fl) and any(v_fl[por[k]] > 0 for k in por if k.startswith('bano')),
+            '%d filas, funciones %s' % (len(filas), ' '.join(sorted(por))))
+    n, txt = estado_dmx_valores(base.op('dmx_valores'))
+    t.check('dmx_valores: un canal por canal DMX (hasta el mayor de dmx_canales); dmx_out existe',
+            n == max([f[0] for f in filas] or [0]) > 0 and base.op('dmx_out') is not None,
+            'canales %d de %d%s' % (n, max([f[0] for f in filas] or [0]), ('; ' + txt) if txt else ''))
     leg = m.legend()
     t.check('leyenda SALA', 'SALA     balance 10.00 (30 s, forzado)   erosion dominante' in leg
             and 'destellos ' in leg and 'dmx' in leg, ' '.join(l.strip() for l in leg.splitlines() if 'SALA' in l))

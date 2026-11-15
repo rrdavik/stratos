@@ -134,7 +134,7 @@ Comprueba, con la señal sintética y sin micrófono:
 | ¿Encima de qué fase? (D1) | De la 19 o de la 20 (POPs, sin fusionar): `require_base(21)` acepta las dos y lo dice en el informe. Nada del motor se activa con `Nivel` 20 |
 | ¿Cuánto baja un onset? (D3) | Un escalón entero de ocupación (`Reduccionmic`, 1), no una nota: queda al principio del escalón de abajo |
 | ¿Es un arañazo? (D9) | Sí: el pad 9 no corta ni es impulso, así que la fase 14 lo trata como arañazo (accidente y escalada) |
-| ¿Su color? (D10) | Gris cálido claro (`#D8CCB8`): no es el blanco del SEQ1, ni el ámbar del SEQ2, ni el cian de las cicatrices |
+| ¿Su color? (D10) | Gris cálido claro (`#D8CCB8`): no es el verde menta del SEQ1 (blanco hasta el motor v104), ni el ámbar del SEQ2, ni el cian de las cicatrices |
 | ¿Cómo se detecta? | Flujo espectral en 16 bandas en dB contra el máximo de los tres bloques anteriores, sin ventana (un clic al principio del bloque cuenta), calculado con numpy en el motor. Sin Audio Spectrum CHOP, para poder probarlo en el simulador |
 | ¿Dónde va el objetivo? (D2) | Como los pads (`Objetivo`) hasta la fase 22; desde ella, la casilla más ocupada |
 | ¿Dispositivo y canal? | El dispositivo, en el parámetro Device de `mic_in` (es un menú de los que hay en el ordenador); el canal, con `Canalmic` |
@@ -278,6 +278,12 @@ Las casillas se numeran por filas desde la pantalla: la 0 es la de la izquierda 
 2. Que `alturas_sala` da la altura en metros (míralo con el visor: una persona, en torno a 1,7).
 3. Las pruebas «en sala» de la especificación: con el estroboscopio disparando y la sala vacía la densidad sigue a cero, y la cadena no baja los fotogramas del render.
 4. `Subida`, `Bajada` y `Cuanto`, para que la presencia se note sin parpadear.
+
+---
+
+### El Kinect TOP sin Kinect (motor v106)
+
+En TouchDesigner el Kinect TOP sin Kinect enchufado no da ningún error: saca una imagen de relleno de 128 × 128. El motor (`camara_encontrada`) solo pedía una imagen de más de un píxel, así que la tomaba por una cámara. La autoprueba de la fase 22 fallaba con `FALLO  con camara (Sensor = kinect, kinect1 128 x 128): la leyenda dice kinect 30 fps` y `recargar_todo.py` se paraba ahí, sin llegar a las fases 23 a 31 (el proyecto se quedaba en el nivel que ya tuviera). Ahora una imagen menor de 256 × 192 (`CAM_MIN`) es «sin aparato»: el aparato más pequeño, la Femto en NFOV binned, da 320 × 288, y la Kinect v2, 512 × 424. La leyenda dice `kinect (sin camara)` y el informe, `kinect1: imagen de 128 x 128, sin aparato`. El simulador imita ese Kinect TOP.
 
 ---
 

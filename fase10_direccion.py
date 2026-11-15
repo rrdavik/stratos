@@ -23,10 +23,14 @@ QUE HACE
                  planeta ensenan todas sus caras.
      superficie  la camara de la fase 10 v4: orbita lenta (Camvel) a
                  Camaltura de la superficie, mirando al horizonte.
+               (v16) La autoprueba mide el globo y la superficie con el
+               peso de la rasante a cero: con Modocamara en rasante la
+               camara seguia a ras de suelo y fallaba (float infinity).
                (v15, motor v96) CADA CAMARA CON SUS AJUSTES: al elegir
-               Modocamara se ponen los de ese modo (motor: CAMARAS). Globo y
-               superficie: Camfov 45, Encuadre 0,85, Camsuave 3, Camaltura
-               1,7 y Camvel 0,6. Rasante: Rasaltura 0,77, Rasfov 120,
+               Modocamara se ponen los de ese modo (motor: CAMARAS). Globo:
+               Camfov 45, Encuadre 0,85, Camsuave 3, Camaltura 1,7 y Camvel
+               0,6. Superficie: Camfov 89,5, Encuadre 0,877, Camsuave 3,
+               Camaltura 15 y Camvel 0,6. Rasante: Rasaltura 0,77, Rasfov 120,
                Rasmirada -13,6, Rasvel 3,52 y Rasanillo 6. Lo que se toque
                despues vale hasta que se vuelva a elegir el modo. Rasojo
                (ojo de pez) queda apagado de fabrica.
@@ -71,7 +75,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v15  (cada camara con sus ajustes: al elegir Modocamara se ponen los de ese modo; ojo de pez con Rasojo)'
+VERSION = 'fase10 v16  (autoprueba: el globo y la superficie se miden sin el peso de la rasante; antes, con Modocamara en rasante, fallaba)'
 banner(VERSION)
 
 base = require_base(10)
@@ -248,6 +252,7 @@ def prueba(t):
     m._CACHE['sin_ajustes'] = True         # v15: la autoprueba cambia de camara sin tocar tus ajustes
     m.cam_reset()
     m._CACHE.pop('cam_w', None)
+    m._CACHE['cam_wr'] = 0.0               # v16: sin el peso de la rasante (si estabas en rasante)
     modo0 = str(base.par.Modocamara.eval())
     base.par.Modocamara = 'globo'
     st = m.camera_state()
@@ -257,12 +262,13 @@ def prueba(t):
             abs(p[0]) < 1e-9 and abs(p[1]) < 1e-9 and max(abs(x) for x in st['tgt']) < 1e-9
             and abs(m.fraccion_cuadro(st['Re'], dist, st['theta']) - st['encuadre']) < 1e-6,
             'dist %.2f, planeta %.2f, %d%% del cuadro' % (dist, st['Re'],
-                                                         round(100 * m.fraccion_cuadro(st['Re'], dist, st['theta']))))
+                                                         round(100 * min(9.99, m.fraccion_cuadro(st['Re'], dist, st['theta'])))))
     t.check('planos de recorte', st['far'] >= dist + 2 * st['Re'] and 0 < st['near'] < dist - st['Re'])
     _encuadre_cercano(t, m)
     # superficie como modo (sin transicion, para medirla)
     base.par.Modocamara = 'superficie'
     m._CACHE['cam_w'] = 1.0
+    m._CACHE['cam_wr'] = 0.0
     m._CACHE.pop('cam_frame', None)
     st = m.camera_state()
     R = st['R']
@@ -278,8 +284,8 @@ def prueba(t):
     t.check('v12 superficie: el giro del motor mira al objetivo con el horizonte nivelado (como el Look At)',
             m._dot(de_, mira) > 1 - 1e-9 and ar_[1] > 0 and abs(m.ejes_de_giro(*st['rot'])[0][1]) < 1e-9)
     base.par.Modocamara = modo0
-    m._CACHE.pop('cam_w', None)
-    m._CACHE.pop('cam_frame', None)
+    for k_ in ('cam_w', 'cam_wr', 'cam_frame'):
+        m._CACHE.pop(k_, None)
     _rasante(t, m)
     m._CACHE.pop('sin_ajustes', None)
     t.check('leyenda CAMARA', 'CAMARA' in m.legend())
@@ -425,10 +431,11 @@ def _rasante(t, m):
     m.on_value('Modocamara', 'globo')
     cla_ = dict((n, float(getattr(base.par, n))) for n, _ in m.CAMARAS['globo'])
     t.check('v15: al elegir Modocamara se ponen los ajustes de ese modo (rasante: los de la prueba; globo y '
-            'superficie: los de antes)',
+            'superficie: los suyos)',
             ras_ == dict(Rasaltura=0.77, Rasfov=120.0, Rasmirada=-13.6, Rasvel=3.52, Rasanillo=6.0)
             and cla_ == dict(Camfov=45.0, Encuadre=0.85, Camsuave=3.0, Camaltura=1.7, Camvel=0.6)
-            and m.CAMARAS['superficie'] == m.CAMARAS['globo']
+            and dict(m.CAMARAS['superficie']) == dict(Camfov=89.5, Encuadre=0.877, Camsuave=3.0, Camaltura=15.0,
+                                                     Camvel=0.6)
             and all(abs(float(getattr(base.par, n)) - v) < 1e-9 for n, v in ras_.items())
             and "'Modocamara'" in base.op('pulsos').text, '%s  %s' % (ras_, cla_))
     m._CACHE['sin_ajustes'] = True
