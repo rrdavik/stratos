@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v80'
+VERSION_COMUN = 'comun v81'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2553,13 +2553,22 @@ def humo_al_dia(base, crear=False):
         geo = base.op('humo')
     if not setp_any(geo, ['instancea'], 'a'):
         info('humo: pon a mano Instance 2 -> Color A = a (el desfase de cada bocanada)')
-    setexpr(geo, 'material', con_boceto(base, 'humo', "'mat_particulas' if parent().par.Materialrespaldo "
-                                                    "else 'mat_humo'"))
+    setexpr(geo, 'material', con_boceto(base, 'humo', _con_respaldo(base, 'mat_humo', 'mat_particulas')))
     if bien:
         ok('humo: en la GPU (mat_humo, GLSL): bocanadas suaves que suben y se funden, a saltos')
     else:
         fail('mat_humo: no pude enlazar los DAT (humo_vertex, humo_pixel) o el uniforme uHumo')
     return bien
+
+
+def _con_respaldo(base, mat, respaldo='mat_respaldo'):
+    """comun v81: la expresion del material con la rama de Materialrespaldo, solo si el
+    parametro ya existe (lo crea la fase 12). Antes, el material tal cual: la fase 11
+    ponia la rama y la expresion daba error hasta aplicar la fase 12 (la fase 12
+    vuelve a llamar a particulas_al_dia y humo_al_dia tras crearlo)."""
+    if not has_par(base, 'Materialrespaldo'):
+        return "'%s'" % mat
+    return "'%s' if parent().par.Materialrespaldo else '%s'" % (respaldo, mat)
 
 
 def _transparente(mat):
@@ -2662,8 +2671,7 @@ def particulas_al_dia(base, crear=False):
     if crear or geo is None or geo.op('lamina') is None:
         make_instanced(base, 'particulas', 520, 860, 'mat_motas', sop='rect', quiet=True)
         geo = base.op('particulas')
-    setexpr(geo, 'material', con_boceto(base, 'particulas', "'mat_particulas' if parent().par.Materialrespaldo "
-                                                          "else 'mat_motas'"))
+    setexpr(geo, 'material', con_boceto(base, 'particulas', _con_respaldo(base, 'mat_motas', 'mat_particulas')))
     if crear or base.op('vagones') is None:
         make_instanced(base, 'vagones', 520, 1020, 'mat_particulas', quiet=True)
     if bien:

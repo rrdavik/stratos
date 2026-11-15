@@ -53,7 +53,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v8  (la fachada de la ciudad en el shader: biblioteca de edificios de la fase 11 v10)'
+VERSION = 'fase12 v9  (las particulas y el humo, con Materialrespaldo en cuanto existe: sin expresiones con error)'
 banner(VERSION)
 
 base = require_base(12)
@@ -75,6 +75,9 @@ add_par(base, page, 'float', 'Gateprueba', 'Gate de los botones de prueba (pasos
 add_par(base, page, 'toggle', 'Materialrespaldo', 'Material de respaldo (Phong, si el shader falla)', False)
 ok('pagina Fase12: Materialmodo (continuo), Rugmin 0,05, Rugmax 0,85, Vigormax 1,5, Plantasligado 2, '
    'Gateprueba 0,5, Materialrespaldo')
+# v9: las particulas y el humo (fase 11) ganan la rama de Materialrespaldo ahora que existe
+particulas_al_dia(base)
+humo_al_dia(base)
 
 # -----------------------------------------------------------------------------
 # GEOMETRIAS: una por modelo, con el shader de la piel
@@ -256,7 +259,17 @@ def _prueba(t, m):
     g0 = next(g for g, mo, _ in geos if not mo.startswith('ciu_'))
     t.check('Materialrespaldo: todas las geometrias a mat_respaldo (Phong), alfa 1',
             nombre_op(base.op(g0).par.material.eval()) == 'mat_respaldo' and fr and fr[12] == 1.0)
+    # v9: las particulas y el humo tambien siguen a Materialrespaldo, sin expresiones con error
+    mats = {}
+    for nm in ('particulas', 'humo'):
+        if base.op(nm) is not None:
+            mats[nm] = [nombre_op(base.op(nm).par.material.eval())]
     base.par.Materialrespaldo = False
+    for nm in mats:
+        mats[nm].append(nombre_op(base.op(nm).par.material.eval()))
+    t.check('particulas y humo: mat_particulas con Materialrespaldo, su GLSL sin el',
+            all(a == 'mat_particulas' and b in ('mat_motas', 'mat_humo') for a, b in mats.values()),
+            str(mats))
     t.check('sin respaldo vuelve el shader', nombre_op(base.op(g0).par.material.eval()).startswith('mat_piel_'))
     # 7. por el camino real: el Script CHOP con su canal a, y la leyenda
     W, inst, _ = sembrar(97, 6, 1.6)
