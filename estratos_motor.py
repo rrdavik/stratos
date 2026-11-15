@@ -153,7 +153,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v103'
+MOTOR_VERSION = 'motor v104'
 
 import math
 import time as _time
@@ -15583,10 +15583,16 @@ def sala_tick(W, c, now):
     viva = sim or camara_encontrada(c)[0]
     if viva:
         try:
-            o = parent().op('alturas_sala')
-            if not sim and (_SALA.get('purgar', True) or _SALA.get('fuente') != c['fuente_sala']):
-                _top_array(o)
-            alt = _top_array(o, diferida=not sim)
+            if sim:
+                # motor v104: la sala simulada, de Python (la misma imagen que sube sala_sim y que
+                # alturas_sala deja igual: misma resolucion). Leerla de la GPU al momento obligaba a
+                # esperar a que la tarjeta acabara todo lo pendiente (el render entero) en cada lectura
+                alt = sala_sim_imagen(c, sala_personas())
+            else:
+                o = parent().op('alturas_sala')
+                if _SALA.get('purgar', True) or _SALA.get('fuente') != c['fuente_sala']:
+                    _top_array(o)
+                alt = _top_array(o, diferida=True)
         except Exception as e:
             _say('alturas_sala', 'AVISO  camara: %s' % e)
     _SALA.update(alt=alt, purgar=not viva, fuente=c['fuente_sala'])
