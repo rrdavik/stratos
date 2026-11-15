@@ -281,6 +281,12 @@ Las casillas se numeran por filas desde la pantalla: la 0 es la de la izquierda 
 
 ---
 
+### El Kinect TOP sin Kinect (motor v106)
+
+En TouchDesigner el Kinect TOP sin Kinect enchufado no da ningún error: saca una imagen de relleno de 128 × 128. El motor (`camara_encontrada`) solo pedía una imagen de más de un píxel, así que la tomaba por una cámara. La autoprueba de la fase 22 fallaba con `FALLO  con camara (Sensor = kinect, kinect1 128 x 128): la leyenda dice kinect 30 fps` y `recargar_todo.py` se paraba ahí, sin llegar a las fases 23 a 31 (el proyecto se quedaba en el nivel que ya tuviera). Ahora una imagen menor de 256 × 192 (`CAM_MIN`) es «sin aparato»: el aparato más pequeño, la Femto en NFOV binned, da 320 × 288, y la Kinect v2, 512 × 424. La leyenda dice `kinect (sin camara)` y el informe, `kinect1: imagen de 128 x 128, sin aparato`. El simulador imita ese Kinect TOP.
+
+---
+
 ## FASE 23 · Luz de sala por DMX
 
 ```python

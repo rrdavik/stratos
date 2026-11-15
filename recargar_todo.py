@@ -114,10 +114,12 @@ def _recargar():
         plan.append('sala_virtual.py')
 
     resumen = []
+    faltan = []
     for archivo in plan:
         src = _lee(archivo)
         if src is None:
-            continue                       # esa fase todavia no existe
+            faltan.append(archivo)         # no esta en la carpeta: se salta, pero se dice al final
+            continue
         print('\n>>>>>> %s' % archivo)
         bien, version, motivo = _lanza(archivo, src)
         resumen.append((bien, archivo, version, motivo))
@@ -130,11 +132,18 @@ def _recargar():
         print('%-6s %-24s %s' % ('OK' if bien else 'FALLO', archivo, version[:60]))
         if not bien:
             print('         %s' % motivo)
+    if faltan:
+        print('NO ESTAN en %s (saltadas): %s' % (CARPETA, ' '.join(faltan)))
+        print('         descargalas del repositorio a esa carpeta y vuelve a lanzar')
     if all(r[0] for r in resumen) and resumen:
         print('RECARGAR TODO OK: %d scripts' % len(resumen))
     else:
         print('RECARGAR TODO PARADO en %s: arregla eso y vuelve a lanzar.'
               % (resumen[-1][1] if resumen else '(nada que lanzar)'))
+    try:
+        print('NIVEL de FASE1: %d (la ultima fase aplicada)' % int(op('/project1/FASE1').par.Nivel.eval()))
+    except Exception:
+        pass
     print('=' * 70)
     return resumen
 
