@@ -57,7 +57,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase24 v1  (personas: cabezas, seguimiento, casillas ocupadas y la celda que miran)'
+VERSION = 'fase24 v2  (autoprueba: personas_chop.chans() es un metodo en TouchDesigner)'
 banner(VERSION)
 
 base = require_base(24)
@@ -282,7 +282,7 @@ def _prueba(t, m):
     o = base.op('personas_chop')
     o.cook(force=True)
     t.check('personas_chop: personas, casillas y nuevas',
-            o.numChans == 3 and [float(ch[0]) for ch in o.chans] == [4.0, 4.0, 4.0])
+            o.numChans == 3 and [float(ch[0]) for ch in o.chans()] == [4.0, 4.0, 4.0])
     m.on_pulse('Simvaciar')
     imagen(W, c, 1)
     t.check('Simvaciar: nadie en la sala', not m.personas_en_sala() and not m._SALA['casillas']

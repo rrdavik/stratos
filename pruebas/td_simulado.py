@@ -1007,8 +1007,8 @@ class OP(object):
     def numChans(self):
         return len(self._chans)
 
-    @property
-    def chans(self):
+    def chans(self, *patrones):
+        # como en TouchDesigner: un metodo (o.chans()), no una lista
         return list(self._chans)
 
     def appendChan(self, name):
