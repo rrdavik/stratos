@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v81'
+VERSION_COMUN = 'comun v82'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -994,7 +994,7 @@ void main()
 """
 
 PIEL_PIXEL = r"""// Estratos - piel (fase 12; tierra, agua y borde, fase 11 v5): pixel shader
-uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio, 9 mal
 uniform vec4 uLuz0;         // posicion de luz_principal
 uniform vec4 uLuz0Col;      // su color x dimmer
 uniform vec4 uLuz1;         // luz_relleno
@@ -1219,6 +1219,9 @@ void main()
     bool agua = fam > 3.5 && fam < 4.5;
     bool plastico = fam > 4.5 && fam < 5.5;     // fase 25: las inclusiones de las personas
     bool vidrio = fam > 5.5 && fam < 6.5;       // fase 29: la fulgurita de una escision
+    bool malo = fam > 8.5 && fam < 9.5;         // fase 33 (provisional): 0 velo, 1 cuerpo, 2 ojos, 3 tocon
+    if (malo)
+        estrato = false;
     float parte = 0.0;                          // 0 pared de arena fundida, 1 vidrio, 2 nucleo
     // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
@@ -1638,6 +1641,19 @@ void main()
         wrap = 0.35;
         amb = 1.3;
         sombra = 0.0;
+    } else if (malo) {
+        // fase 33: el mal, casi negro y de croma baja, con un brillo propio debil que
+        // late despacio (provisional: se sustituye con la imagineria)
+        parte = nivelv;
+        float lat = 0.5 + 0.5 * sin(uGlitch.y * 2.1 + float(iVert.inst) * 1.7);
+        base *= 0.85 + 0.30 * ruido(iVert.pPos * 60.0);
+        emis = base * (parte > 2.5 ? 0.0 : (0.6 + 0.6 * lat)) + vec3(0.018, 0.010, 0.022) * lat;
+        if (parte > 1.5 && parte < 2.5)
+            emis = base * 1.4;                  // los ojos
+        rug = parte > 2.5 ? 0.9 : clamp(rug, 0.3, 0.8);
+        expo = mix(120.0, 6.0, rug);
+        ks = mix(0.6, 0.03, rug);
+        sombra = 0.0;
     } else if (vidrio) {
         // fase 29: la fulgurita. El alfa trae rugosidad + 2 x parte
         parte = nivelv;
@@ -1744,6 +1760,8 @@ void main()
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
         float tras = pow(max(dot(-l0, v), 0.0), 2.0);
         col += 0.30 * tras * base * uLuz0Col.rgb + fres * 0.25 * (base + vec3(0.2));
+    } else if (malo) {
+        col += emis + fres * 0.10 * (base + vec3(0.04, 0.02, 0.05));
     } else if (vidrio) {
         // fase 29: el nucleo emite el color de su escision (paleta humana, nunca cian);
         // el vidrio deja pasar esa luz y brilla en el borde; la pared, mate
@@ -3816,9 +3834,10 @@ PIEL_UNIFORMES = [
 ] + [('uVolcan%d' % k, tuple(PIEL_U % ('uVolcan%d' % k, q) for q in range(4))) for k in range(3)]
 # comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio', 'pradera',     # comun v77: 7, la pradera
-                 'estrato']                         # comun v78: 8, las conchas como capas de tierra
+                 'estrato',                         # comun v78: 8, las conchas como capas de tierra
+                 'mal']                             # comun v82 (fase 33): 9, el juego (brotes del mal y monstruo)
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
-SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio')
+SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio', 'mal')
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
 
 
@@ -4021,7 +4040,7 @@ def materiales_piel(base):
              % ', '.join(malos))
     else:
         ok('shader de la piel: mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad, mat_piel_tierra, '
-           'mat_piel_agua, mat_piel_plastico y mat_piel_vidrio (GLSL), mat_respaldo (Phong)')
+           'mat_piel_agua, mat_piel_plastico, mat_piel_vidrio y mat_piel_mal (GLSL), mat_respaldo (Phong)')
     if sin_rampa:
         info('%s: no pude enlazar los samplers sAlturas (TOP alturas) y sRampa (TOP rampa_hipso) en la '
              'pagina Samplers; sin ellos no se levanta el relieve' % ', '.join(sin_rampa[:2]))
@@ -4861,3 +4880,80 @@ def run_test(base, fn):
             except Exception:
                 pass
     return t.finish()
+
+
+# --- las autopruebas del juego (fases 32 a 37) -------------------------------------
+
+class SalaJuego(object):
+    """comun v82: el mundo y la sala simulada de las autopruebas del juego. El reloj
+    avanza a mano; una semicorchea son SEMI s (120 BPM)."""
+    SEMI = 0.125
+
+    def __init__(self, base, m, t0):
+        self.base, self.m = base, m
+        self.reloj = [float(t0)]
+        self.tb = base.op('sala_personas')
+
+    @property
+    def now(self):
+        return self.reloj[0]
+
+    def nuevo(self, conchas=8, juego=True):
+        """Un mundo vacio con 'conchas' conchas enterradas y, con juego, Modojuego y
+        la ronda 1 empezando ahora."""
+        m = self.m
+        m.reset_world()
+        m.sala_reset()
+        if self.tb is not None:
+            self.tb.clear()
+            self.tb.appendRow(list(m.SALA_COLS))
+        try:
+            self.base.par.Modojuego = False
+        except Exception:
+            pass
+        W, c = m.world(), m.cfg()
+        for _ in range(conchas):
+            m.end_cycle(W, c, self.reloj[0])
+            self.reloj[0] += 1.0
+        if juego:
+            self.base.par.Modojuego = True
+            c = m.cfg()
+            m.juego_al_dia(W, c, self.reloj[0])
+        return W, c
+
+    def camara(self, W, c, casillas, seg=None, n=1, juego=False):
+        """Imagenes de la camara con una persona en el centro de cada casilla; con
+        juego, el juego avanza lo que dura cada imagen."""
+        m = self.m
+        dt = 1.0 / m.CAM_FPS
+        mx = [m.casilla_xy(c, k) + (1.7,) for k in casillas]
+        out = None
+        for _ in range(n if seg is None else int(round(seg * m.CAM_FPS))):
+            self.reloj[0] += dt
+            m.sala_mundo(W, c, self.reloj[0], m.tick_personas(W, c, self.reloj[0], mx))
+            if juego:
+                out = m.juego_avanzar(W, c, self.reloj[0], dt / self.SEMI) or out
+        return out
+
+    def semis(self, W, c, k, casillas=None):
+        """k semicorcheas de juego, una a una (con casillas, la camara las ve)."""
+        m = self.m
+        out = None
+        for _ in range(int(k)):
+            self.reloj[0] += self.SEMI
+            if casillas is not None:
+                mx = [m.casilla_xy(c, q) + (1.7,) for q in casillas]
+                m.sala_mundo(W, c, self.reloj[0], m.tick_personas(W, c, self.reloj[0], mx))
+            out = m.juego_avanzar(W, c, self.reloj[0], 1.0) or out
+        return out
+
+    def pasos(self, W, c, k, casillas=None):
+        """k pasos de juego (Pasojuego semicorcheas cada uno)."""
+        return self.semis(W, c, int(k) * int(c['paso_juego']), casillas)
+
+    def sembrar(self, W, c, celda, occ, s=1):
+        """La celda, con la ocupacion occ (subir_escalon, como Sembrarzona)."""
+        m = self.m
+        while W['occ'][celda] < occ:
+            m.subir_escalon(W, c, s, celda, 100, self.reloj[0])
+        return W['occ'][celda]
