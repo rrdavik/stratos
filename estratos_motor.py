@@ -142,6 +142,14 @@
 #                 el del suelo mas bajo (nivel_mar): una celda con sedimento y sin nada encima
 #                 es tierra desnuda, no agua. Las conchas se dibujan como capas de tierra
 #                 (Tierra: mat_piel_estrato) y la celda que suena ilumina su suelo.
+#                 Motor v106 a v111, fases 32 a 37: el juego «El devorador», un modo
+#                 encima del mundo (Modojuego; apagado, todo como antes). v106 (32):
+#                 la ronda, el recuento del globo, Herenciamal y la marca de jugador;
+#                 v107 (33): el monstruo y los brotes del mal (sp = MAL); v108 (34):
+#                 las zanjas de las filas y el agua; v109 (35): el rescate; v110 (36):
+#                 la luz de juego; v111 (37): las armas opcionales. Motor v112
+#                 (fase 38): Trumpzilla, el monstruo en sprite (un atlas de diez
+#                 emociones) que cambia de cara con su estado; la logica, igual.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -153,7 +161,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v106'
+MOTOR_VERSION = 'motor v112'
 
 import math
 import time as _time
@@ -384,6 +392,17 @@ DEFAULT_CFG = dict(
     min_fila=3, t_fila=5.0, modo_fila=0, conchas_persona=1,
     # fase 31: las escisiones en el historico
     carpeta_historico='',
+    # fases 32 a 37: el juego «El devorador» (lo apagado por defecto: Modojuego y las armas)
+    modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1,
+    umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3,
+    paso_monstruo=16, paso_grande=8, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
+    sim_celda_mon=0,
+    zanja_juego=1, profundidad_agua=4, ritmo_agua=4, desborde_agua=2, ahoga=0.5,
+    aliados=3, t_aliados=3.0, luz_juego=1,
+    arma_cerco=0, arma_pison=0, arma_estatuas=0, arma_grito=0, arma_relampago=0,
+    hambre=1, n_pison=3, encoge=0.05, t_quietud=4.0, umbral_silencio=0.3, t_piedra=6.0, prof_grito=2,
+    recarga_grito=30.0, t_aturdido=4.0,
+    sprite_mon=1, emocion_fija='auto', alto_sprite=1.6,
 )
 
 
@@ -975,7 +994,7 @@ def _mark(W, i, s):
     b = _bit(s)
     if not (W['traza'][i] & b):
         W['traza'][i] |= b
-        if W['own'][i] != s:
+        if W['own'][i] != s and W['sp'][i] != MAL:     # fase 33: el mal no hibrida
             W['sp'][i] = HIB                # colonizacion
 
 
@@ -1071,6 +1090,9 @@ def overflow(W, cfg, i, s, vel, now):
     nb = NEIGH[i]
     k = int(vel) if cfg['neigh_mode'] == 0 else int(vel) + W['occ'][i]
     j = nb[k % len(nb)]
+    if W['sp'][i] == MAL:               # fase 33 (D4): el desborde del mal no entra en el publico
+        W['ev']['desborde'] = dict(de=i, a=j, tipo=desborde_mal(W, cfg, i, j, vel, now), t=now)
+        return j
     lim = limit(cfg)
     grow_h = cfg['grow_frac'] * lim
     o = W['occ'][j]
@@ -1152,6 +1174,8 @@ def note_on(W, cfg, s, note, vel, now, tempo=120.0):
                                  carga=W['carga'][i], coste=cost(cfg, W['occ'][i]))
         return dict(estado='no prende', inc=0.0, celda=i, trigger=False)
     W.setdefault('terr', {})[i] = W.get('bar_n', 0)
+    if cfg['nivel'] >= 35 and s in (GEO, ARQ) and juego_on(W, cfg):    # fase 35: el ultimo secuenciador
+        W['juego']['ultimoseq'][i] = 'geo' if s == GEO else 'arq'
     W['ruina'][i] = 0                   # fase 14: construir sobre la huella la borra
     W['rebrote'][i] = 0                 # fase 15: una nota completa el rebrote
     if cfg['nivel'] >= 12:              # fase 12: la velocidad da el material
@@ -1408,7 +1432,7 @@ def cycle_tick(W, cfg, now, dt, tempo, playing):
     while W['beats'] >= bpb:
         W['beats'] -= bpb
         motivo = bar_tick(W, cfg)
-        if motivo:
+        if motivo and not juego_on(W, cfg):     # fase 32: en modo juego entierra la ronda
             W['beats'] = min(W['beats'], bpb - 1e-6)
             return close_cycle(W, cfg, now, motivo)
     return None
@@ -2143,9 +2167,10 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
         vaciar_inclusiones(W)
         W['incl_n'] = dict(llegadas=0, paradas=0)
     her = cfg['herencia']
+    juego = juego_on(W, cfg)
     for i in range(N):
         W['carga'][i] = 0
-        x = W['occ'][i] * her + W['resto'][i]
+        x = W['occ'][i] * (cfg['herencia_mal'] if juego and W['sp'][i] == MAL else her) + W['resto'][i]
         n = int(math.floor(x + 1e-9))
         W['resto'][i] = x - n
         if n > 0 and W['own'][i]:
@@ -2160,6 +2185,8 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
         W['vh'][i] = 0.0           # lo heredado vuelve a brotar de la superficie
         W['huella'][i] = 0.0
     W['pend'] = {}
+    if juego:                           # fase 32: zanjas, agua y bloqueadas, enterradas con el mundo
+        juego_al_enterrar(W, cfg, now)
     cerrar_obras(W, cfg)                # y lo heredado empieza sin obras a medias
     if reg:
         herencia_tematica(W, cfg, now, reg)
@@ -2244,8 +2271,12 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
     if cfg['nivel'] >= 28:              # fase 28: la noche acaba (y las losetas dejan de emitir)
         noche_tick(W, cfg, now)
     if cfg['nivel'] >= 23:              # fase 23: la luz de la sala y el colapso
-        if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo']:
+        if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo'] and not juego_on(W, cfg):
             out['ciclo'] = close_cycle(W, cfg, now, 'colapso')
+    if cfg['nivel'] >= 32:              # fase 32: el juego (con Modojuego)
+        r = juego_tick(W, cfg, now)
+        if r and not out['ciclo']:
+            out['ciclo'] = r
     giro_step(W, cfg, dt, tempo)
     return out
 
@@ -2582,6 +2613,8 @@ def _build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False
         build_inclusiones(W, cfg, now, out)
     if lvl >= 29:                   # fase 29: las fulguritas de las escisiones
         build_fulguritas(W, cfg, now, out)
+    if lvl >= 32:                   # fases 32 a 34: el juego (marcas, monstruo, tocon, brotes del mal, agua)
+        build_juego(W, cfg, now, out)
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -12953,6 +12986,8 @@ def sala_mundo(W, cfg, now, res):
         res['paradas'] = paradas(W, cfg, res['casillas'], now)
     if cfg['nivel'] >= 29:              # fase 29: las filas y sus escisiones
         res['filas'] = tick_filas(W, cfg, now)
+    if cfg['nivel'] >= 35 and juego_on(W, cfg):     # fase 35: el rescate de los brotes
+        res['rescates'] = tick_rescates(W, cfg, now)
     return res
 
 
@@ -13552,23 +13587,41 @@ def tick_filas(W, cfg, now):
              and (not recta or es_recta(f['casillas'], cols))]
     prev = _SALA.get('filas') or []
     usadas, filas = set(), []
+    zanja = cfg['nivel'] >= 34 and cfg.get('zanja_juego', 1) and juego_on(W, cfg)    # fase 34
     for f in comps:
         cs = set(f['casillas'])
         ant = next((p for p in prev if id(p) not in usadas and p['casillas'] & cs), None)
+        antes = None
         if ant is None:
             _SALA['fila_id'] = _SALA.get('fila_id', 0) + 1
             ant = dict(id=_SALA['fila_id'], t0=now, max=0, escision=None)
         else:
             usadas.add(id(ant))
+            antes = set(ant['casillas'])
         ant.update(casillas=cs, personas=f['personas'], origen=f['origen'], max=max(ant['max'], f['personas']))
         filas.append(ant)
+        zj = zanja_estado(W, cfg, ant, antes, now) if zanja else None
         if ant['escision'] is None:
-            if now - ant['t0'] >= cfg['t_fila'] - 1e-9:
+            if zj is not None:          # fase 34: parada Tfila y con el origen en una celda libre
+                k0 = origen_libre(W, cfg, ant) if zj['lista'] else None
+                if k0 is not None:
+                    e = abrir_escision(W, cfg, ant, k0, now)
+                    ant['escision'] = e['id']
+                    registrar_zanja(W, cfg, e['origen'], len(e['cortadas']), now)
+                    if e['origen'] in W['juego']['zanjas']:
+                        zj['celdas'].add(e['origen'])
+            elif now - ant['t0'] >= cfg['t_fila'] - 1e-9:
                 ant['escision'] = abrir_escision(W, cfg, ant, f['origen'], now)['id']
         else:
             e = escision_de(W, ant['escision'])
-            if e is not None:
+            if e is not None and not (zanja and e['origen'] in (W.get('bloqueadas') or {})):
                 profundizar_escision(W, cfg, e, ant['max'], now)
+                if zanja and e['origen'] in W['juego']['zanjas']:
+                    W['juego']['zanjas'][e['origen']] = max(W['juego']['zanjas'][e['origen']], len(e['cortadas']))
+        if zj is not None and zj['lista']:
+            zanja_cavar(W, cfg, ant, zj, now)
+    if zanja:                           # fase 34: las filas que se deshacen fijan su zanja
+        zanjas_filas_fin(W, cfg, set(f['id'] for f in filas))
     for p in prev:                      # la fila se deshace: su escision se cierra
         if id(p) not in usadas and p.get('escision') is not None:
             e = escision_de(W, p['escision'])
@@ -14073,17 +14126,20 @@ def sala_luz_tick(W, cfg, now):
             s['cedidos'] += 1
             s['estrobo_t'] = now
     s['hz'] = hz_estrobo(cfg, b) if est == DOMINANTE and not noche else 0.0
+    jl = luz_juego_on(W, cfg)           # fase 36: en modo juego, la luz cuenta la partida
+    if jl:
+        s['hz'] = hz_juego(W, cfg, noche)
     if s['hz'] > 0.0 and now - s['estrobo_t'] >= 1.0 / s['hz'] - 1e-9:
         if limitador_destellos(W, cfg, now, 'estrobo'):
             s['estrobo_t'] = now
     # el bano persigue a su estado
-    obj = _bano_objetivo(W, cfg, now, b, est, noche)
+    obj = bano_juego(W, cfg, now, noche) if jl else _bano_objetivo(W, cfg, now, b, est, noche)
     dt = 0.0 if s['t_luz'] is None else max(0.0, min(0.25, now - s['t_luz']))
     s['t_luz'] = now
     a = 1.0 if noche or s['bano'] == [0.0, 0.0, 0.0, 0.0] else 1.0 - math.exp(-dt / BANO_SUAVE)
     s['bano'] = [x + (o - x) * a for x, o in zip(s['bano'], obj)]
     # colapso (D8)
-    if cfg['colapso_on'] and b > BALANCE_COLAPSO and not noche:
+    if cfg['colapso_on'] and b > BALANCE_COLAPSO and not noche and not jl:
         if s['desde'] is None:
             s['desde'] = now
         if now - s['desde'] >= cfg['max_erosion']:
@@ -14153,6 +14209,1432 @@ def valores_dmx(W, cfg, now, filas):
 
 
 
+# =============================================================================
+# 1. NUCLEO - el juego «El devorador» (fases 32 a 37)
+# =============================================================================
+# Turf War de toda la sala contra un monstruo. Es un MODO encima del mundo: lee
+# y escribe W con las funciones de siempre y todo se activa con Modojuego (y el
+# Nivel). Con Modojuego apagado el mundo se comporta exactamente como antes:
+# W no tiene 'juego' ni 'bloqueadas'.
+#   FASE 32  la ronda (Duracionronda s; al acabar, recuento y entierro con
+#            close_cycle, el camino de Forzarciclo), el recuento sobre TODO el
+#            globo (publico: occ > 0 y sp != MAL; mal: occ > 0 y sp == MAL; en
+#            empate gana el publico), Herenciamal al enterrar y la marca de cada
+#            jugador (un anillo en la celda que mira su casilla).
+#   FASE 33  el monstruo: aparece al construirse Umbralaparicion de la cara
+#            visible, por el borde por el que entran las celdas con el giro;
+#            elige su objetivo con un Dijkstra (occ / (1 + coste)); avanza una
+#            celda cada Pasomonstruo semicorcheas; devora Ritmodevora escalones
+#            por paso de juego con _undo_note (lo ultimo construido primero, sin
+#            pasar por erosion(): fuera del balance de la fase 23); crece con lo
+#            devorado y en forma grande va mas deprisa y puede con fusiones y
+#            coronas. Cada celda vaciada deja un BROTE DEL MAL (occ 1, sp MAL),
+#            que crece con los triggers como cualquier celda; su desborde no
+#            entra en celdas del publico (D4).
+#   FASE 34  las zanjas: en modo juego una fila corta en TODAS sus celdas; el
+#            monstruo cae en ellas (acum 0, media celda) y el agua lo ahoga.
+#   FASE 35  el rescate: una persona en un brote y Aliados en sus vecinas,
+#            Taliados s: el brote pasa a la especie del ultimo secuenciador.
+#   FASE 36  la luz de sala cuenta la partida.
+#   FASE 37  las armas opcionales (cerco, pisoton, estatuas, grito, relampago).
+# UNIDAD DE RITMO: un paso de juego son Pasojuego semicorcheas del pulso (fase 17:
+# master_beat o el tempo). Se avanza semicorchea a semicorchea, asi que el
+# resultado no depende de los fotogramas (determinismo). Sin random: los
+# desempates usan _hash01.
+# ESPECIE: sp = MAL marca el mal. own guarda la especie de la celda devorada (la
+# geometria del brote es la de su especie de origen); la familia de material mal
+# la pone su velo (brotes_mal). Lo visual es provisional y va en geometrias
+# propias (monstruo, tocon, brotes_mal, marcas, agua_juego): se cambian sin tocar
+# la logica.
+
+MAL = 4
+SPECIES_NAME[MAL] = 'mal'
+ESTADOS_MON = ('espera', 'aparece', 'busca', 'devora', 'cae', 'muere')
+# casi negro, croma baja (lejos del cian, el ambar, los verdes, el azul y la paleta humana)
+COL_MAL = (0.050, 0.044, 0.056)
+COL_MONSTRUO = (0.085, 0.060, 0.095)
+COL_OJOS = (0.95, 0.90, 0.84)
+COL_TOCON = (0.34, 0.24, 0.20)
+MARCA_K = 0.86                  # la semilla de la paleta humana de la marca de jugador (una para toda la sala)
+MARCA_SEGMENTOS = 8
+MAL_PARTE = dict(velo=0, cuerpo=1, ojos=2, tocon=3)    # en el alfa del shader mal: rugosidad + 2 x parte
+SEMIS_MAX = 64                  # semicorcheas como mucho por fotograma (un salto del pulso no se come la ronda)
+
+
+# --- estado ------------------------------------------------------------------
+
+def mon_nuevo(n=0, tam=0.5):
+    return dict(estado='espera', celda=None, tam=float(tam), acum=0, objetivo=None, camino=[], mov=0.0,
+                t_muerte=None, n=int(n), de=None, recalc=0, t_estado=None, comidos=0, caidas=0,
+                piedra=None, aturdido=None, acorralado=False, pisoton=False, quietud=None)
+
+
+def juego_nuevo(cfg, now):
+    return dict(activo=True, estado='juego', ronda=1, rondas=int(cfg.get('rondas', 4)), t0=float(now),
+                paso=0, semis=0, semi_f=0.0, beat=None, lon=None, giro=1.0,
+                mon=mon_nuevo(0, cfg.get('tam_inicial', 0.5)),
+                zanjas={}, agua={}, rescates={}, ultimoseq={},
+                recuento=dict(publico=0, mal=0), resultados=[], filas={}, rescatados=0, brotes=0,
+                armas=dict(cortes=None, t_grito=-1e9, rayos=0, gritos=0, piedras=0),
+                luz=dict(t_muerte=None), ev={})
+
+
+def juego_on(W, cfg):
+    """El modo de juego esta activo (fase 32 y Modojuego)."""
+    return cfg['nivel'] >= 32 and bool(cfg.get('modo_juego')) and bool(W.get('juego'))
+
+
+def es_mal(W, i):
+    return W['sp'][i] == MAL
+
+
+def juego_al_dia(W, cfg, now):
+    """Modojuego encendido: W['juego'] (ronda 1). Apagado: lo vacia (juego_apagar)."""
+    if cfg['nivel'] < 32:
+        return None
+    if cfg.get('modo_juego'):
+        if not W.get('juego'):
+            W['juego'] = juego_nuevo(cfg, now)
+            W['aviso'] = 'modo juego: ronda 1 de %d' % int(cfg['rondas'])
+        return W['juego']
+    if 'juego' in W or 'bloqueadas' in W:
+        juego_apagar(W, cfg)
+    return None
+
+
+def juego_apagar(W, cfg):
+    """Quita el monstruo, los brotes del mal, las zanjas y el agua de juego. El
+    resto del mundo se queda como esta (el hueco de una zanja ya es geologia, como
+    el de una escision: deja de ser zanja, sin agua ni coste)."""
+    for i in range(N):
+        if W['sp'][i] == MAL:
+            _clear_cell(W, i)
+            W['sp'][i] = W['own'][i] = W['traza'][i] = 0
+            W['h'][i] = W['vh'][i] = 0.0
+    W.pop('juego', None)
+    W.pop('bloqueadas', None)
+    W['dirty'] = True
+
+
+def nueva_partida(W, cfg, now):
+    """Nuevapartida: ronda 1, recuento a cero, sin monstruo."""
+    viejo = W.get('juego') or {}
+    J = W['juego'] = juego_nuevo(cfg, now)
+    J['ultimoseq'] = dict(viejo.get('ultimoseq', {}))
+    W['aviso'] = 'nueva partida: ronda 1 de %d' % int(cfg['rondas'])
+    return J
+
+
+def recuento(W):
+    """(publico, mal) sobre TODAS las celdas del globo (D3)."""
+    pub = mal = 0
+    for i in range(N):
+        if W['occ'][i] > 0:
+            if W['sp'][i] == MAL:
+                mal += 1
+            else:
+                pub += 1
+    return pub, mal
+
+
+def ganador(pub, mal):
+    return 'mal' if mal > pub else 'publico'
+
+
+def tiempo_ronda(W, cfg, now):
+    J = W.get('juego') or {}
+    return max(0.0, cfg['duracion_ronda'] - max(0.0, now - J.get('t0', now)))
+
+
+def fin_de_ronda(W, cfg, now):
+    """El recuento, el entierro forzado (close_cycle: la concha, la clasificacion
+    y la noche de la fase 28) y la ronda siguiente; tras Rondas, espera."""
+    J = W['juego']
+    pub, mal = recuento(W)
+    J['resultados'].append(dict(ronda=J['ronda'], publico=pub, mal=mal, gana=ganador(pub, mal), t=now))
+    ev = close_cycle(W, cfg, now, 'ronda')
+    ev['juego'] = dict(J['resultados'][-1])
+    J['recuento'] = dict(publico=0, mal=0)
+    J['mon'] = mon_nuevo(0, cfg['tam_inicial'])
+    J['rescates'] = {}
+    J['rescate_cas'] = {}
+    J['paso'] = 0
+    J['t0'] = now
+    if J['ronda'] >= int(cfg['rondas']):
+        J['estado'] = 'espera'
+        r = resultado_partida(J)
+        W['aviso'] = 'fin de la partida: gana %s %d-%d' % (r['gana'], r['publico'], r['mal'])
+    else:
+        J['ronda'] += 1
+        W['aviso'] = 'ronda %d de %d (la %d: publico %d, mal %d)' % (
+            J['ronda'], int(cfg['rondas']), J['ronda'] - 1, pub, mal)
+    J['ev']['ronda'] = dict(J['resultados'][-1])
+    return ev
+
+
+def resultado_partida(J):
+    """Rondas ganadas por cada bando (en empate de rondas, gana el publico)."""
+    rs = J.get('resultados', [])
+    p = sum(1 for r in rs if r['gana'] == 'publico')
+    m = len(rs) - p
+    return dict(publico=p, mal=m, gana='mal' if m > p else 'publico')
+
+
+def juego_al_enterrar(W, cfg, now):
+    """end_cycle en modo juego, tras la herencia: las zanjas, el agua y las celdas
+    bloqueadas se quedan en el mundo enterrado (la concha nueva las tapiza); los
+    brotes que no se heredan quedan vacios."""
+    J = W['juego']
+    for i in range(N):
+        if W['sp'][i] == MAL and W['occ'][i] <= 0:
+            W['sp'][i] = W['own'][i] = W['traza'][i] = 0
+    J['zanjas'] = {}
+    J['agua'] = {}
+    J['rescates'] = {}
+    J['rescate_cas'] = {}
+    J['filas'] = {}
+    W.pop('bloqueadas', None)
+    m = J['mon']
+    m['objetivo'], m['camino'], m['mov'] = None, [], 0.0
+    m['recalc'] = 10 ** 6                   # recalcula en el paso siguiente
+
+
+# --- el paso de juego --------------------------------------------------------
+
+def semis_juego(W, cfg, now):
+    """Semicorcheas del pulso (fase 17) desde el fotograma anterior."""
+    J = W['juego']
+    p = W.get('pulso') or {}
+    b = p.get('beat')
+    if b is None or p.get('parado'):
+        J['beat'] = b
+        return 0.0
+    if J.get('beat') is None or b < J['beat']:
+        J['beat'] = b
+        return 0.0
+    d = (b - J['beat']) * max(1, int(cfg['steps_per_beat']))
+    J['beat'] = b
+    return min(float(SEMIS_MAX), max(0.0, d))
+
+
+def juego_tick(W, cfg, now):
+    """Cada fotograma (tick): el modo, el reloj de la ronda y las semicorcheas.
+    Devuelve el fin de ciclo de la ronda, o None."""
+    if juego_al_dia(W, cfg, now) is None or not juego_on(W, cfg):
+        return None
+    return juego_avanzar(W, cfg, now, semis_juego(W, cfg, now))
+
+
+def juego_avanzar(W, cfg, now, semis):
+    """El juego avanza 'semis' semicorcheas (puede ser fraccion) en el instante now."""
+    J = W['juego']
+    J['rondas'] = int(cfg['rondas'])
+    _giro_juego(W, cfg)
+    if J['estado'] != 'juego':
+        return None
+    if now - J['t0'] >= cfg['duracion_ronda'] - 1e-9:
+        return fin_de_ronda(W, cfg, now)
+    if cfg['nivel'] >= 33:
+        monstruo_reloj(W, cfg, now)
+    J['semi_f'] += max(0.0, float(semis))
+    k = 0
+    while J['semi_f'] >= 1.0 - 1e-9 and k < SEMIS_MAX:
+        J['semi_f'] -= 1.0
+        k += 1
+        semicorchea_juego(W, cfg, now)
+    J['semi_f'] = max(0.0, J['semi_f'])
+    pub, mal = recuento(W)
+    J['recuento'] = dict(publico=pub, mal=mal)
+    return None
+
+
+def semicorchea_juego(W, cfg, now):
+    J = W['juego']
+    J['semis'] += 1
+    if cfg['nivel'] >= 33:
+        mover_monstruo(W, cfg, now)
+        if cfg['nivel'] >= 37:
+            hambre_cerco(W, cfg)
+    if J['semis'] % max(1, int(cfg['paso_juego'])) == 0:
+        J['paso'] += 1
+        paso_de_juego(W, cfg, now)
+
+
+def paso_de_juego(W, cfg, now):
+    """Un paso de juego: el agua (fase 34), el monstruo (33) y las armas (37)."""
+    if cfg['nivel'] >= 37:
+        armas_paso(W, cfg, now)
+    if cfg['nivel'] >= 34:
+        inundar(W, cfg, now)
+    if cfg['nivel'] >= 33:
+        monstruo_paso(W, cfg, now)
+
+
+def _giro_juego(W, cfg):
+    """El sentido del giro: hacia donde avanza Loncentral (las celdas entran por
+    el borde de las longitudes que crecen si sube)."""
+    J = W['juego']
+    lon = float(cfg.get('lon_central', 0.0))
+    if J.get('lon') is not None:
+        d = (lon - J['lon'] + 180.0) % 360.0 - 180.0
+        if abs(d) > 1e-6:
+            J['giro'] = 1.0 if d > 0 else -1.0
+    J['lon'] = lon
+
+
+# --- el monstruo (fase 33) -----------------------------------------------------
+
+def cara_visible(cfg):
+    """Las celdas que miran a la sala (las que tienen casilla)."""
+    return [i for i in range(N) if casilla_de_celda(cfg, i) is not None]
+
+
+def construida_visible(W, cfg, vis=None):
+    vis = cara_visible(cfg) if vis is None else vis
+    if not vis:
+        return 0.0
+    return sum(1 for i in vis if W['occ'][i] > 0 and W['sp'][i] != MAL) / float(len(vis))
+
+
+def celda_aparicion(W, cfg, vis=None):
+    """La celda vacia de la cara visible mas cercana al borde por el que entran
+    las celdas con el giro (desempate _hash01). None si no hay ninguna vacia."""
+    J = W['juego']
+    vis = cara_visible(cfg) if vis is None else vis
+    libre = [i for i in vis if W['occ'][i] <= 0 and i not in J['zanjas']]
+    if not libre:
+        libre = [i for i in range(N) if W['occ'][i] <= 0 and i not in J['zanjas']]
+    if not libre:
+        return None
+    lon0 = float(cfg.get('lon_central', 0.0))
+    sg = J.get('giro', 1.0)
+
+    def borde(i):
+        d = (lonlat_celda(i)[1] - lon0 + 180.0) % 360.0 - 180.0
+        return (sg * d, _hash01(i, J['mon']['n'] + 1, 33))
+    return max(libre, key=borde)
+
+
+def aparecer(W, cfg, now, celda):
+    J = W['juego']
+    n = J['mon']['n'] + 1
+    m = J['mon'] = mon_nuevo(n, cfg['tam_inicial'])
+    m.update(estado='aparece', celda=int(celda), t_estado=now)
+    recalcular_objetivo(W, cfg, m, now)
+    J['ev']['aparece'] = dict(t=now, celda=int(celda), n=n)
+    W['aviso'] = 'monstruo #%d en la celda %d' % (n, celda)
+    W['dirty'] = True
+    return m
+
+
+def es_fusion(W, cfg, c):
+    return W['occ'][c] >= cfg['th_fusion']
+
+
+def es_corona(W, cfg, c):
+    return W['occ'][c] >= cfg['th_crown']
+
+
+def grande(m):
+    return m['tam'] >= 1.0 - 1e-9
+
+
+def comestible(W, cfg, m, c):
+    if W['occ'][c] <= 0 or W['sp'][c] == MAL:
+        return False
+    if not grande(m) and (es_fusion(W, cfg, c) or es_corona(W, cfg, c)):
+        return False                    # el pequeno no puede con ellas
+    return True
+
+
+def muros_cerco(W, cfg, now):
+    """Fase 37 (cerco): las celdas con una persona quieta Tparada son muro."""
+    if cfg['nivel'] < 37 or not cfg.get('arma_cerco'):
+        return set()
+    out = set()
+    for k, v in (_SALA.get('casillas') or {}).items():
+        if now - v.get('t_ocupada', now) >= cfg['t_parada'] - 1e-9:
+            out.add(celda_de_casilla(W, cfg, k))
+    return out
+
+
+def dijkstra_mon(W, cfg, src, muro=()):
+    """(coste, previa) de cada celda alcanzable desde src por vecinas6: entrar en
+    una zanja cuesta Costezanja; no entra en el agua ni en el muro."""
+    import heapq
+    J = W['juego']
+    zj, agua = J['zanjas'], J['agua']
+    cz = max(1.0, float(cfg['coste_zanja']))
+    dist, prev = {src: 0.0}, {}
+    heap = [(0.0, src)]
+    while heap:
+        d, u = heapq.heappop(heap)
+        if d > dist.get(u, 1e18) + 1e-12:
+            continue
+        for v in NEIGH[u]:
+            if v in muro or agua.get(v, 0) > 0:
+                continue
+            nd = d + (cz if v in zj else 1.0)
+            if nd < dist.get(v, 1e18) - 1e-12:
+                dist[v] = nd
+                prev[v] = u
+                heapq.heappush(heap, (nd, v))
+    return dist, prev
+
+
+def objetivo(W, cfg, m, muro=()):
+    """(celda objetivo, camino) con mayor occ / (1 + coste); desempate _hash01."""
+    if m['celda'] is None:
+        return None, []
+    dist, prev = dijkstra_mon(W, cfg, m['celda'], muro)
+    cand = [c for c in dist if comestible(W, cfg, m, c)]
+    if not cand:
+        return None, []
+    t = max(cand, key=lambda c: (W['occ'][c] / (1.0 + dist[c]), _hash01(c)))
+    camino = []
+    x = t
+    while x != m['celda']:
+        camino.append(x)
+        x = prev[x]
+    return t, camino[::-1]
+
+
+def recalcular_objetivo(W, cfg, m, now=None):
+    m['recalc'] = 0
+    now = (W.get('t') or 0.0) if now is None else now
+    muro = muros_cerco(W, cfg, now)
+    t, camino = objetivo(W, cfg, m, muro)
+    m['acorralado'] = False
+    if t is None and muro:              # fase 37: sin objetivo alcanzable por el cerco
+        t2, _ = objetivo(W, cfg, m)
+        m['acorralado'] = t2 is not None
+    m['objetivo'], m['camino'] = t, camino
+    if m['estado'] in ('busca', 'devora'):
+        m['estado'] = 'devora' if t is not None and t == m['celda'] else 'busca'
+    return t
+
+
+def actualizar_tam(cfg, m):
+    ti = max(0.1, min(1.0, cfg['tam_inicial']))
+    om = max(1, int(cfg['ocupacion_max']))
+    m['tam'] = ti + (1.0 - ti) * min(1.0, m['acum'] / float(om))
+    return m['tam']
+
+
+def devorar_escalon(W, cfg, i):
+    """Un escalon de ocupacion de la celda i, en el orden de la erosion: primero
+    los satelites, luego la altura; con _undo_note (las inclusiones de encima se
+    borran). No pasa por erosion(): no cuenta en el balance."""
+    sats = satellites_of(W, i)
+    j = max(sats, key=lambda x: (W['occ'][x], -x)) if sats else i
+    o0 = W['occ'][j]
+    if o0 <= 0:
+        return False
+    for _ in range(64):
+        if not _undo_note(W, cfg, j) or W['occ'][j] < o0:
+            break
+    if W['sp'][i] == HIB:
+        _quitar_colona(W, i, W.get('t'))
+    return True
+
+
+def brote_mal(W, cfg, i, now):
+    """La celda devorada recibe un brote del mal: occ 1, sp MAL. own conserva la
+    especie de la celda (la geometria de su especie de origen)."""
+    own = W['own'][i] if W['own'][i] in (GEO, ARQ) else GEO
+    _clear_cell(W, i)
+    W['occ'][i] = 1
+    W['carga'][i] = 0
+    W['lat'][i] = now
+    W['lat_s'][i] = own
+    W['own'][i] = own
+    W['sp'][i] = MAL
+    W['traza'][i] = _bit(own)
+    W['par'][i] = -1
+    W['h'][i] = cfg['seed_frac'] * limit(cfg)
+    W['huella'][i] = 0.0
+    W['t_nac'][i] = now
+    W['vig'][i] = 1.0
+    W['ruina'][i] = 0
+    W['juego']['brotes'] += 1
+    W['juego']['ev']['brote'] = dict(t=now, celda=int(i))
+    W['dirty'] = True
+
+
+def parado(W, cfg, m, now):
+    """Fase 37: petrificado o aturdido (ni se mueve ni devora)."""
+    return (m.get('piedra') is not None and now < m['piedra']) or \
+        (m.get('aturdido') is not None and now < m['aturdido'])
+
+
+def factor_ruido(W, cfg):
+    """Fase 37 (estatuas): el ruido de sala multiplica la velocidad hasta x2."""
+    if cfg['nivel'] < 37 or not cfg.get('arma_estatuas'):
+        return 1.0
+    r = (W.get('ruido') or {}).get('total', 0.0) or 0.0
+    return 1.0 + max(0.0, min(1.0, r / max(1e-6, cfg['umbral_corte'])))
+
+
+def paso_mon(cfg, m):
+    return max(1, int(cfg['paso_grande'] if grande(m) else cfg['paso_monstruo']))
+
+
+def mover_monstruo(W, cfg, now):
+    """Una semicorchea: el monstruo avanza por su camino una celda cada
+    Pasomonstruo (Pasogrande) semicorcheas; entrar en una zanja, o salir de su
+    fondo, cuesta Costezanja veces mas."""
+    J = W['juego']
+    m = J['mon']
+    if m['estado'] not in ('aparece', 'busca', 'devora', 'cae') or m['celda'] is None:
+        return
+    if parado(W, cfg, m, now) or not m['camino']:
+        m['mov'] = 0.0
+        return
+    nxt = m['camino'][0]
+    if J['agua'].get(nxt, 0) > 0 or nxt not in NEIGH[m['celda']]:
+        recalcular_objetivo(W, cfg, m, now)         # el agua corto el camino
+        return
+    zj = J['zanjas']
+    k = max(1.0, float(cfg['coste_zanja'])) if (nxt in zj or m['celda'] in zj) else 1.0
+    need = paso_mon(cfg, m) * k
+    m['mov'] += factor_ruido(W, cfg)
+    if m['mov'] + 1e-9 < need:
+        return
+    m['mov'] = 0.0
+    entrar_celda(W, cfg, m, nxt, now)
+
+
+def entrar_celda(W, cfg, m, nxt, now):
+    J = W['juego']
+    de = m['celda']
+    m['de'] = de
+    m['celda'] = int(nxt)
+    if m['camino'] and m['camino'][0] == nxt:
+        m['camino'].pop(0)
+    if nxt in J['zanjas'] and (de not in J['zanjas'] or m['acum'] > 0):
+        caer(W, cfg, m, now)
+    elif m['objetivo'] == nxt:
+        m['estado'] = 'devora'
+    W['dirty'] = True
+
+
+def caer(W, cfg, m, now):
+    """Fase 34: cae en una zanja: acum 0, tamano inicial, forma pequena."""
+    m['estado'] = 'cae'
+    m['acum'] = 0
+    actualizar_tam(cfg, m)
+    m['mov'] = 0.0
+    m['caidas'] = m.get('caidas', 0) + 1
+    m['t_estado'] = now
+    m['cae_paso'] = W['juego']['paso']      # se queda en 'cae' hasta el paso de juego siguiente
+    W['juego']['ev']['caida'] = dict(t=now, celda=m['celda'])
+    recalcular_objetivo(W, cfg, m, now)
+    m['estado'] = 'cae'
+
+
+def monstruo_paso(W, cfg, now):
+    """Un paso de juego del monstruo: el recalculo (cada Recalculo pasos y
+    siempre que vacia una celda) y el devorar (Ritmodevora o Ritmogrande
+    escalones de su objetivo, cuando esta en el)."""
+    J = W['juego']
+    m = J['mon']
+    if m['estado'] in ('espera', 'muere') or m['celda'] is None:
+        return
+    if m['estado'] == 'cae' and m.get('cae_paso') == J['paso']:
+        return                          # acaba de caer en este paso
+    if m['estado'] in ('aparece', 'cae'):
+        m['estado'] = 'busca'
+    m['recalc'] += 1
+    t = m['objetivo']
+    if m['recalc'] >= max(1, int(cfg['recalculo'])) or t is None or not comestible(W, cfg, m, t):
+        recalcular_objetivo(W, cfg, m, now)
+    if m['objetivo'] is None or m['celda'] != m['objetivo']:
+        return
+    m['estado'] = 'devora'
+    if parado(W, cfg, m, now) or m.get('pisoton') or m.get('acorralado'):
+        return
+    c = m['celda']
+    ritmo = int(cfg['ritmo_grande'] if grande(m) else cfg['ritmo_devora'])
+    for _ in range(max(0, ritmo)):
+        if W['occ'][c] <= 0:
+            break
+        if devorar_escalon(W, cfg, c):
+            m['acum'] += 1
+            m['comidos'] = m.get('comidos', 0) + 1
+    actualizar_tam(cfg, m)
+    W['dirty'] = True
+    if W['occ'][c] <= 0:
+        brote_mal(W, cfg, c, now)
+        m['estado'] = 'busca'
+        recalcular_objetivo(W, cfg, m, now)
+
+
+def monstruo_reloj(W, cfg, now):
+    """Lo que va por segundos: la reaparicion tras Esperamonstruo y la aparicion
+    al pasar Umbralaparicion."""
+    J = W['juego']
+    m = J['mon']
+    if m['estado'] == 'muere':
+        if m['t_muerte'] is None or now - m['t_muerte'] >= cfg['espera_monstruo'] - 1e-9:
+            m['estado'] = 'espera'
+            m['celda'] = None
+    if m['estado'] == 'espera':
+        vis = cara_visible(cfg)
+        if construida_visible(W, cfg, vis) >= cfg['umbral_aparicion'] - 1e-9:
+            c = celda_aparicion(W, cfg, vis)
+            if c is not None:
+                aparecer(W, cfg, now, c)
+
+
+def morir(W, cfg, m, now):
+    """Fase 34: ahogado. Esperamonstruo s despues aparece otro."""
+    J = W['juego']
+    J['ev']['muerte'] = dict(t=now, celda=m['celda'], n=m['n'])
+    m.update(estado='muere', t_muerte=now, objetivo=None, camino=[], mov=0.0)
+    W['aviso'] = 'el monstruo #%d se ahoga en la celda %s' % (m['n'], m['celda'])
+    if cfg['nivel'] >= 36 and cfg.get('luz_juego'):
+        destello_muerte(W, cfg, now)
+    W['dirty'] = True
+
+
+def sim_monstruo(W, cfg, now, celda=None):
+    """Simmonstruo: aparece ya, en Simceldamon."""
+    if not juego_on(W, cfg):
+        return 'MONSTRUO  enciende antes Modojuego'
+    c = int(cfg['sim_celda_mon'] if celda is None else celda)
+    c = max(0, min(N - 1, c))
+    m = aparecer(W, cfg, now, c)
+    return 'MONSTRUO  #%d aparece en la celda %d   objetivo %s' % (
+        m['n'], c, m['objetivo'] if m['objetivo'] is not None else '-')
+
+
+# --- el desborde del mal (D4) -------------------------------------------------
+
+def desborde_mal(W, cfg, i, j, vel, now):
+    """El desborde de una celda del mal: en una vecina vacia, un satelite del mal;
+    en la suya, crece; en otra del mal, presion; sobre una del publico se pierde
+    (no hibrida). Devuelve el tipo."""
+    lim = limit(cfg)
+    o = W['occ'][j]
+    if o == 0:
+        W['occ'][j] = 1
+        W['carga'][j] = 0
+        W['lat'][j] = now
+        W['par'][j] = i
+        W['own'][j] = W['own'][i]
+        W['sp'][j] = MAL
+        W['traza'][j] = _bit(W['own'][i])
+        W['vel'][j] = int(vel)
+        W['h'][j] = cfg['seed_frac'] * lim
+        W['huella'][j] = 0.0
+        W['t_nac'][j] = now
+        W['vig'][j] = 1.0
+        return 'satelite del mal'
+    if W['sp'][j] != MAL:
+        return 'perdido'                # D4: sobre el publico se pierde
+    if W['par'][j] == i:
+        W['occ'][j] = o + 1
+        W['lat'][j] = now
+        W['h'][j] = min(cfg['sat_limit'] * lim, W['h'][j] + cfg['grow_frac'] * lim)
+        return 'satelite crece'
+    _charge(W, cfg, j, now)
+    return 'presion'
+
+
+# --- la marca de jugador y la geometria (provisional) -----------------------------
+
+def build_juego(W, cfg, now, out):
+    """Las geometrias del juego: marcas (fase 32), monstruo, tocon y brotes_mal
+    (33), agua_juego (34) y trumpzilla (38: con Spritemonstruo, en lugar de
+    monstruo). Vacias con el modo apagado."""
+    lvl = cfg['nivel']
+    out['marcas'] = []
+    if lvl >= 33:
+        out['monstruo'], out['tocon'], out['brotes_mal'] = [], [], []
+    if lvl >= 34:
+        out['agua_juego'] = []
+    if lvl >= 38:
+        out['trumpzilla'] = []
+    if not juego_on(W, cfg):
+        return out
+    J = W['juego']
+    if cfg.get('marca_jugador', 1):
+        col = paleta_humana(cfg, MARCA_K)
+        for p in personas_en_sala():
+            if p.get('casilla') is None:
+                continue
+            out['marcas'] += filas_anillo(W, cfg, celda_de_casilla(W, cfg, p['casilla']), col)
+    if lvl >= 33:
+        lim = limit(cfg)
+        for i in range(N):
+            if W['occ'][i] > 0 and W['sp'][i] == MAL:
+                r0 = base_radius(W, cfg, i)
+                n = normal_i(i)
+                cw, cl = _cell_sizes(r0, i)
+                alto = max(0.12 * lim, W['vh'][i] * 1.05, height_for(cfg, W['occ'][i]) * 0.6)
+                k = 0.46 if W['par'][i] < 0 else 0.34
+                out['brotes_mal'].append(_row(_mul(n, r0), n, k * cw, alto, k * cl, COL_MAL)
+                                         + [0.6 + 2 * MAL_PARTE['velo']])
+        m = J['mon']
+        sprite = lvl >= 38 and cfg.get('sprite_mon', 1)
+        if m['celda'] is not None and m['estado'] not in ('espera', 'muere') and not sprite:
+            out['monstruo'] = filas_monstruo(W, cfg, m)
+        if sprite:                      # fase 38: el sprite en lugar del cuerpo provisional
+            out['trumpzilla'] = filas_trumpzilla(W, cfg, m, now)
+        if cfg.get('ver_objetivo', 1) and m['objetivo'] is not None and m['estado'] not in ('espera', 'muere'):
+            c = m['objetivo']
+            r0 = base_radius(W, cfg, c)
+            n = normal_i(c)
+            cw, cl = _cell_sizes(r0, c)
+            top = _mul(n, r0 + max(W['vh'][c], 0.02))
+            out['tocon'].append(_row(top, n, 0.16 * cw, 0.10 * lim, 0.16 * cw, COL_TOCON)
+                                + [0.9 + 2 * MAL_PARTE['tocon']])
+    if lvl >= 34:
+        col = color_rio(cfg)
+        for c, a in J['agua'].items():
+            prof = J['zanjas'].get(c, 0)
+            if a <= 0 or prof <= 0:
+                continue
+            fondo, borde = hueco_escision(W, cfg, c)
+            h = (borde - fondo) * min(1.0, a / float(max(1, prof * int(cfg['ocupacion_max']))))
+            if h <= 1e-4:
+                continue
+            cw, cl = _cell_sizes(fondo, c)
+            out['agua_juego'].append(_row(_mul(normal_i(c), fondo), normal_i(c), 0.98 * cw, h, 0.98 * cl, col)
+                                     + [RUG_RIO])
+    return out
+
+
+def filas_anillo(W, cfg, c, col):
+    """Un anillo de MARCA_SEGMENTOS listones sobre el suelo de la celda c."""
+    r0 = base_radius(W, cfg, c)
+    n = normal_i(c)
+    cw, cl = _cell_sizes(r0, c)
+    rad = 0.40 * min(cw, cl)
+    seg = 2.0 * rad * math.tan(math.pi / MARCA_SEGMENTOS) * 1.05
+    rows = []
+    for k in range(MARCA_SEGMENTOS):
+        ang = 360.0 * k / MARCA_SEGMENTOS
+        mr = _marco(c, ang)
+        p = _add(_mul(n, r0 + 0.01), mr[2], rad)
+        rows.append(_fila_m(p, mr, seg, 0.03, 0.035 * min(cw, cl), col) + [0.15])
+    return rows
+
+
+def pos_monstruo(W, cfg, m):
+    """(punto, normal) del monstruo: entre su celda y la siguiente del camino."""
+    c = m['celda']
+    n = normal_i(c)
+    r = base_radius(W, cfg, c)
+    if m['camino'] and m['estado'] not in ('cae',):
+        nx = m['camino'][0]
+        J = W['juego']
+        k = max(1.0, float(cfg['coste_zanja'])) if (nx in J['zanjas'] or c in J['zanjas']) else 1.0
+        f = max(0.0, min(0.95, m['mov'] / (paso_mon(cfg, m) * k)))
+        n = _norm(_mix(n, normal_i(nx), f))
+        r = r + (base_radius(W, cfg, nx) - r) * f
+    return _mul(n, r), n
+
+
+def filas_monstruo(W, cfg, m):
+    """El monstruo (provisional): un cuerpo y dos ojos, escalados por tam. La
+    geometria es una esfera en su COMP 'monstruo' (se cambia por un sprite)."""
+    p, n = pos_monstruo(W, cfg, m)
+    c = m['celda']
+    cw, cl = _cell_sizes(_len(p), c)
+    s = max(0.05, m['tam']) * 0.5 * min(cw, cl)
+    centro = _add(p, n, s * 0.9)
+    rows = [_row(centro, n, s, s * 0.9, s, COL_MONSTRUO) + [0.5 + 2 * MAL_PARTE['cuerpo']]]
+    e, t = tangents(n)
+    for lado in (-1.0, 1.0):
+        q = _add(_add(_add(centro, n, 0.35 * s), e, lado * 0.35 * s), t, 0.80 * s)
+        rows.append(_row(q, n, 0.16 * s, 0.16 * s, 0.16 * s, COL_OJOS) + [0.2 + 2 * MAL_PARTE['ojos']])
+    return rows
+
+
+# --- zanjas y agua (fase 34) -----------------------------------------------------
+
+def bloqueadas_de(W):
+    return W.setdefault('bloqueadas', {})
+
+
+def cavar_zanja(W, cfg, c, prof, now):
+    """La celda c, zanja de prof conchas (con el nucleo como tope), como una
+    escision: quita losetas, vacia la celda y borra sus inclusiones; sin cicatriz,
+    y la concha siguiente la tapiza. Una celda bloqueada no se cava. Devuelve las
+    losetas quitadas ahora."""
+    J = W['juego']
+    if c is None or c in bloqueadas_de(W):
+        return 0
+    ya = J['zanjas'].get(c, 0)
+    k = int(prof) - ya
+    if k <= 0:
+        return 0
+    fuera = _quitar_losetas(W, c, k)
+    if not fuera:
+        return 0
+    nueva = c not in J['zanjas']
+    J['zanjas'][c] = ya + len(fuera)
+    if nueva:
+        _clear_cell(W, c)
+        W['sp'][c] = W['own'][c] = W['traza'][c] = 0
+        W['huella'][c] = 0.0
+        W['ruina'][c] = 0
+        for j in NEIGH[c]:
+            if W['par'][j] == c:
+                W['par'][j] = -1
+        if cfg['nivel'] >= 25:
+            borrar_inclusiones(W, c, 'escision')
+        esc = W.setdefault('esc_celdas', {})
+        esc[c] = esc.get(c, 0) + 1
+        J['rescates'].pop(c, None)
+    m = J['mon']
+    if m['celda'] == c and m['estado'] not in ('espera', 'muere'):
+        caer(W, cfg, m, now)
+    elif m['objetivo'] == c:
+        m['recalc'] = 10 ** 6
+    J['ev']['zanja'] = dict(t=now, celda=int(c), prof=J['zanjas'][c])
+    W['dirty'] = True
+    return len(fuera)
+
+
+def fijar_zanja(W, zj):
+    """La zanja de una fila queda fijada: sus celdas, bloqueadas hasta el ciclo siguiente."""
+    b = bloqueadas_de(W)
+    for c in zj['celdas']:
+        b[c] = True
+    zj['celdas'] = set()
+    zj['fijada'] = True
+
+
+def zanja_estado(W, cfg, fila, antes, now):
+    """Fase 34: el estado de la zanja de una fila en modo juego. antes: sus
+    casillas en la imagen anterior (None si es nueva). Si alguien se mueve
+    (pierde una casilla), la zanja queda fijada y la fila tiene que volver a estar
+    parada Tfila para cavar otra, solo en celdas libres. 'lista': parada Tfila."""
+    J = W['juego']
+    zj = J['filas'].get(fila['id'])
+    if zj is None:
+        zj = J['filas'][fila['id']] = dict(t_quieta=fila['t0'], celdas=set(), fijada=False, abierta=False,
+                                           lista=False, cas={})
+    if antes is not None and (antes - fila['casillas']):
+        if zj['celdas']:
+            fijar_zanja(W, zj)
+        zj['t_quieta'] = now
+        zj['abierta'] = False
+        zj['cas'] = {}
+    zj['lista'] = now - zj['t_quieta'] >= cfg['t_fila'] - 1e-9
+    return zj
+
+
+def registrar_zanja(W, cfg, c, prof, now):
+    """La celda de origen de una escision abierta en modo juego: ya cortada por
+    abrir_escision, se apunta como zanja (y el monstruo que este en ella cae)."""
+    J = W['juego']
+    if prof <= 0:
+        return
+    J['zanjas'][c] = max(int(prof), J['zanjas'].get(c, 0))
+    m = J['mon']
+    if m['celda'] == c and m['estado'] not in ('espera', 'muere', 'cae'):
+        caer(W, cfg, m, now)
+    elif m['objetivo'] == c:
+        m['recalc'] = 10 ** 6
+
+
+def zanja_cavar(W, cfg, fila, zj, now):
+    """Parada Tfila: cava todas las celdas que miran a sus casillas (las libres);
+    si llega gente, las nuevas se anaden y todas bajan a personas x
+    Conchasporpersona (con el nucleo como tope). La celda de cada casilla queda
+    fija desde que empieza a cavar (como el origen de la escision): con el planeta
+    girando, una fila quieta cava sus celdas, no una franja."""
+    J = W['juego']
+    prof = int(fila['max']) * max(1, int(cfg['conchas_persona']))
+    cas = zj.setdefault('cas', {})
+    celdas = []
+    for k in sorted(fila['casillas']):
+        if k not in cas:                # la celda de cada casilla, la de cuando empieza a cavar:
+            cas[k] = celda_de_casilla(W, cfg, k)    # el planeta gira, y una fila quieta no ara
+        if cas[k] not in celdas:
+            celdas.append(cas[k])
+    empieza = not zj['abierta']
+    zj['abierta'] = True
+    for c in celdas:
+        if c in bloqueadas_de(W):
+            continue
+        if cavar_zanja(W, cfg, c, prof, now) or c in J['zanjas']:
+            zj['celdas'].add(c)
+    if empieza and zj['celdas']:
+        J['ev']['zanja_fila'] = dict(t=now, fila=fila['id'], celdas=sorted(zj['celdas']), prof=prof)
+        if cfg['nivel'] >= 37:
+            rayo_relampago(W, cfg, zj['celdas'], now)
+    return zj
+
+
+def zanjas_filas_fin(W, cfg, vivas):
+    """Las filas que se deshacen: su zanja queda fijada."""
+    J = W['juego']
+    for fid in [f for f in J['filas'] if f not in vivas]:
+        zj = J['filas'].pop(fid)
+        if zj['celdas']:
+            fijar_zanja(W, zj)
+
+
+def origen_libre(W, cfg, fila):
+    """En modo juego, la casilla de origen de la escision cuya celda no esta
+    bloqueada (la mas antigua de las libres), o None."""
+    cas = _SALA.get('casillas', {})
+    b = W.get('bloqueadas') or {}
+    libres = [k for k in fila['casillas'] if celda_de_casilla(W, cfg, k) not in b]
+    if not libres:
+        return None
+    return min(libres, key=lambda k: (cas.get(k, {}).get('t_ocupada', 0.0), k))
+
+
+def sim_zanja(W, cfg, now):
+    """Simzanja: zanja de Simfila celdas desde Simcasilla, sin esperar a Tfila
+    (fijada en el acto)."""
+    if not juego_on(W, cfg):
+        return 'ZANJA  enciende antes Modojuego'
+    n = max(1, int(cfg['sim_fila']))
+    prof = n * max(1, int(cfg['conchas_persona']))
+    celdas = []
+    for k in casillas_fila_sim(cfg, _sim_casilla(cfg), n):
+        c = celda_de_casilla(W, cfg, k)
+        if c not in celdas:
+            celdas.append(c)
+    hechas = set()
+    for c in celdas:
+        if cavar_zanja(W, cfg, c, prof, now) or c in W['juego']['zanjas']:
+            hechas.add(c)
+    if cfg['nivel'] >= 37:
+        rayo_relampago(W, cfg, hechas, now)
+    fijar_zanja(W, dict(celdas=set(hechas), fijada=False))
+    return 'ZANJA  %d celdas (%s) de %d conchas, fijada' % (
+        len(hechas), ' '.join(str(c) for c in sorted(hechas)), prof)
+
+
+def celdas_agua_dulce(W, cfg):
+    """Las celdas de rio y de lago de la fase 13 (naturaleza)."""
+    if cfg['nivel'] < 13 or tema_de(cfg) != 'naturaleza' or not cfg.get('rios', 1):
+        return set()
+    out = set()
+    try:
+        for r in tejido(W, cfg)['rios']:
+            out.update(r)
+        out.update(cauces(W, cfg)['lagos'])
+    except Exception:
+        pass
+    return out
+
+
+def toca_rio_o_lago(W, cfg, c, dulce=None):
+    dulce = celdas_agua_dulce(W, cfg) if dulce is None else dulce
+    return c in dulce or any(j in dulce for j in NEIGH[c])
+
+
+def inundar(W, cfg, now):
+    """Un paso de juego del agua: aflora (profundidad >= Profundidadagua) o entra
+    desde un rio o un lago vecino (x Ritmoagua) y desborda (x Desbordeagua) hacia
+    las zanjas vecinas mas bajas, sin pasar de su capacidad (profundidad x
+    Ocupacionmax). El monstruo muere con el agua por encima de Ahoga."""
+    J = W['juego']
+    if not J['zanjas']:
+        return
+    om = max(1, int(cfg['ocupacion_max']))
+    dulce = celdas_agua_dulce(W, cfg)
+    for c, prof in list(J['zanjas'].items()):
+        cap = prof * om
+        if prof >= int(cfg['profundidad_agua']) or toca_rio_o_lago(W, cfg, c, dulce):
+            J['agua'][c] = min(cap, J['agua'].get(c, 0) + int(cfg['ritmo_agua']))
+        for v in NEIGH[c]:
+            if v in J['zanjas'] and J['agua'].get(c, 0) > J['agua'].get(v, 0):
+                capv = J['zanjas'][v] * om
+                J['agua'][v] = min(capv, J['agua'].get(v, 0) + int(cfg['desborde_agua']))
+    W['dirty'] = True
+    m = J['mon']
+    c = m['celda']
+    if c is not None and m['estado'] not in ('espera', 'muere') and c in J['agua'] and c in J['zanjas'] \
+            and J['agua'][c] >= cfg['ahoga'] * J['zanjas'][c] * om - 1e-9:
+        morir(W, cfg, m, now)
+
+
+# --- el rescate (fase 35) ------------------------------------------------------
+
+def personas_por_celda(W, cfg):
+    """{celda: personas} de las casillas ocupadas (la celda que mira cada una ahora)."""
+    out = {}
+    for k, v in (_SALA.get('casillas') or {}).items():
+        c = celda_de_casilla(W, cfg, k)
+        out[c] = out.get(c, 0) + int(v.get('personas', 1))
+    return out
+
+
+def tick_rescates(W, cfg, now):
+    """Cada imagen de la camara: una persona en un brote del mal y Aliados o mas en
+    sus vecinas lo rescatan si aguantan Taliados s. Las casillas de esas personas
+    quedan fijas al empezar (la ocupacion binaria es por casilla: con el planeta
+    girando, la celda que mira cada una cambia); si alguna se vacia antes, el
+    rescate vuelve a cero. Devuelve las celdas rescatadas."""
+    J = W['juego']
+    rc = J.setdefault('rescate_cas', {})
+    cas = _SALA.get('casillas') or {}
+    hechas = []
+    for c in list(J['rescates']):
+        if W['occ'][c] <= 0 or W['sp'][c] != MAL or any(k not in cas for k in rc.get(c, ())):
+            J['rescates'].pop(c, None)
+            rc.pop(c, None)
+    ocupadas = None
+    for c in range(N):
+        if W['occ'][c] <= 0 or W['sp'][c] != MAL:
+            continue
+        if c not in J['rescates']:
+            if ocupadas is None:
+                ocupadas = [(k, celda_de_casilla(W, cfg, k)) for k in sorted(cas)]
+            en = [k for k, x in ocupadas if x == c]
+            al = [k for k, x in ocupadas if x in NEIGH[c]]
+            if not en or sum(int(cas[k].get('personas', 1)) for k in al) < int(cfg['aliados']):
+                continue
+            J['rescates'][c] = now
+            rc[c] = en[:1] + al
+        if now - J['rescates'][c] >= cfg['t_aliados'] - 1e-9:
+            rescatar(W, cfg, c, now)
+            hechas.append(c)
+    return hechas
+
+
+def rescatar(W, cfg, c, now):
+    """El brote pasa a la especie del ultimo secuenciador que lo toco (geologia si
+    ninguno): conserva occ y carga; own, la nueva especie."""
+    J = W['juego']
+    s = ARQ if J['ultimoseq'].get(c) == 'arq' else GEO
+    W['sp'][c] = W['own'][c] = s
+    W['traza'][c] = _bit(s)
+    for j in NEIGH[c]:                  # sus satelites del mal, con ella
+        if W['par'][j] == c and W['sp'][j] == MAL:
+            W['sp'][j] = W['own'][j] = s
+            W['traza'][j] = _bit(s)
+    J['rescates'].pop(c, None)
+    J.setdefault('rescate_cas', {}).pop(c, None)
+    J['rescatados'] += 1
+    J['ev']['rescate'] = dict(t=now, celda=int(c), especie=SPECIES_NAME[s])
+    W['aviso'] = 'rescate: la celda %d vuelve a %s' % (c, SPECIES_NAME[s])
+    W['dirty'] = True
+
+
+# --- la luz de juego (fase 36) ----------------------------------------------------
+
+def parte_mal(W):
+    J = W.get('juego') or {}
+    r = J.get('recuento') or {}
+    p, m = r.get('publico', 0), r.get('mal', 0)
+    return m / float(p + m) if p + m > 0 else 0.0
+
+
+def luz_juego_on(W, cfg):
+    return cfg['nivel'] >= 36 and cfg.get('luz_juego', 1) and juego_on(W, cfg) and W['juego']['estado'] == 'juego'
+
+
+def bano_juego(W, cfg, now, noche):
+    """El bano sigue la parte del mal en el globo: del ambar (el publico) al frio
+    (el mal); un pulso del bano al morir el monstruo si no hay relampago."""
+    if noche:
+        return [0.0, 0.0, 0.0, 0.0]
+    x = parte_mal(W)
+    obj = [a + (f - a) * x for a, f in zip(COL_AMBAR, COL_FRIO)] + [0.08 + 0.62 * x]
+    t = (W['juego'].get('luz') or {}).get('t_muerte')
+    if t is not None:
+        obj[3] = min(1.0, obj[3] + 0.6 * math.exp(-max(0.0, now - t) / 0.3))
+    return obj
+
+
+def hz_juego(W, cfg, noche):
+    """El estroboscopio, mientras el monstruo esta en forma grande."""
+    m = W['juego']['mon']
+    if noche or m['estado'] in ('espera', 'muere') or not grande(m):
+        return 0.0
+    return min(float(DESTELLOS_MAX), max(0.0, cfg['max_hz']))
+
+
+def destello_muerte(W, cfg, now):
+    """La muerte del monstruo: el relampago de la fase 30 (por el limitador comun,
+    con prioridad); sin el, un pulso del bano."""
+    W['juego'].setdefault('luz', {})['t_muerte'] = now
+    if cfg['nivel'] >= 30:
+        return relampago(W, cfg, now)
+    return False
+
+
+# --- las armas opcionales (fase 37) ------------------------------------------------
+
+def hambre_cerco(W, cfg):
+    """Cerco: acorralado, pierde Hambre escalones de acum por compas."""
+    J = W['juego']
+    m = J['mon']
+    if not cfg.get('arma_cerco') or not m.get('acorralado'):
+        return
+    compas = max(1, int(cfg['steps_per_beat']) * int(cfg['beats_per_bar']))
+    if J['semis'] % compas == 0 and m['acum'] > 0:
+        m['acum'] = max(0, m['acum'] - int(cfg['hambre']))
+        actualizar_tam(cfg, m)
+
+
+def armas_paso(W, cfg, now):
+    """Pisoton, estatuas y grito, en cada paso de juego."""
+    J = W['juego']
+    m = J['mon']
+    vivo = m['estado'] not in ('espera', 'muere') and m['celda'] is not None
+    # pisoton: Npison personas en casillas que miran a su celda
+    m['pisoton'] = False
+    if cfg.get('arma_pison') and vivo:
+        n = personas_por_celda(W, cfg).get(m['celda'], 0)
+        if n >= int(cfg['n_pison']):
+            m['pisoton'] = True
+            ti = max(0.1, min(1.0, cfg['tam_inicial']))
+            m['tam'] = max(0.1, m['tam'] - cfg['encoge'])
+            om = max(1, int(cfg['ocupacion_max']))
+            m['acum'] = min(m['acum'], int(math.floor(max(0.0, (m['tam'] - ti) / max(1e-6, 1.0 - ti)) * om + 1e-9)))
+    # estatuas: todos quietos y en silencio Tquietud s
+    A = J['armas']
+    if cfg.get('arma_estatuas') and vivo:
+        cas = _SALA.get('casillas') or {}
+        firma = tuple(sorted(cas))
+        silencio = float((W.get('mic') or {}).get('flujo', 0.0) or 0.0) < cfg['umbral_silencio']
+        if not cas or not silencio or A.get('firma') != firma:
+            A['firma'] = firma
+            A['t_quietud'] = now
+        elif now - A.get('t_quietud', now) >= cfg['t_quietud'] - 1e-9 and not parado(W, cfg, m, now):
+            m['piedra'] = now + cfg['t_piedra']
+            A['t_quietud'] = now + cfg['t_piedra']
+            A['piedras'] = A.get('piedras', 0) + 1
+            J['ev']['piedra'] = dict(t=now, celda=m['celda'])
+    # grito: el ruido de sala abre un corte (fase 21): una zanja en su celda
+    cortes = (W.get('ruido') or {}).get('cortes', 0)
+    if A.get('cortes') is None:
+        A['cortes'] = cortes
+    if cortes != A['cortes']:
+        A['cortes'] = cortes
+        if cfg.get('arma_grito') and vivo and now - A.get('t_grito', -1e9) >= cfg['recarga_grito'] - 1e-9:
+            A['t_grito'] = now
+            A['gritos'] = A.get('gritos', 0) + 1
+            c = m['celda']
+            cavar_zanja(W, cfg, c, J['zanjas'].get(c, 0) + int(cfg['prof_grito']), now)
+            fijar_zanja(W, dict(celdas={c} if c in J['zanjas'] else set(), fijada=False))
+            J['ev']['grito'] = dict(t=now, celda=c)
+
+
+def rayo_relampago(W, cfg, celdas, now):
+    """Relampago: una fila abre su zanja a una celda o menos del monstruo: aturdido."""
+    m = W['juego']['mon']
+    if not cfg.get('arma_relampago') or m['celda'] is None or m['estado'] in ('espera', 'muere'):
+        return False
+    cerca = set([m['celda']]) | set(NEIGH[m['celda']])
+    if not (set(celdas) & cerca):
+        return False
+    m['aturdido'] = now + cfg['t_aturdido']
+    W['juego']['armas']['rayos'] = W['juego']['armas'].get('rayos', 0) + 1
+    W['juego']['ev']['aturdido'] = dict(t=now, celda=m['celda'])
+    return True
+
+
+# --- fase 38: Trumpzilla, el monstruo en sprite con emociones ---------------------
+# Lo visual del monstruo (provisional en la fase 33: un cuerpo y dos ojos) pasa a un
+# sprite: el atlas sprites/trumpzilla_emociones.png (EMOCIONES_MON, de arriba a la
+# izquierda) en una lamina que mira a la camara de pie sobre su celda, con su sombra
+# en el suelo (geometria 'trumpzilla', mat_sprite: el shader la gira, la anima con
+# sprite_t de frame_u y la voltea hacia donde camina). La emocion sale del estado del
+# monstruo; la logica no cambia. Lo que recuerda la vista (cuando cayo, cuando comio)
+# va en _VISTA_MON, fuera del mundo.
+#
+# Cada fila de 'trumpzilla' lleva en el alfa la cara y la animacion:
+#   cara + 16 x animacion           el sprite: sx el ancho, sy el alto, sz el ancho; el
+#                                   eje z local, hacia donde camina; rgb el tinte
+#   SPRITE_SOMBRA (+ nada)          la sombra: una elipse de sx por sz en el suelo; r
+#                                   su opacidad
+
+EMOCIONES_MON = ('serio', 'enfado', 'furia', 'rie', 'carcajada', 'susto', 'mueca', 'llora', 'panico', 'calma')
+ATLAS_MON = (4, 3)              # columnas y filas del atlas (celdas de 192 x 256)
+ASPECTO_SPRITE = 0.75           # ancho / alto de una celda del atlas
+ANIMS_MON = ('respira', 'camina', 'devora', 'tiembla', 'hunde', 'piedra', 'aturdido')
+SPRITE_SOMBRA = 256
+SOMBRA_OPACIDAD = 0.45
+T_SUSTO = 1.5                   # s con cara de susto tras caer en una zanja
+T_RISA = 1.2                    # s riendo tras tragar un escalon
+T_HUNDE = 2.0                   # s que tarda en hundirse al ahogarse
+_VISTA_MON = {}
+
+
+def _vista_mon(m, now):
+    """Lo que recuerda la vista del monstruo m: cuando cayo y cuando comio por
+    ultima vez (de sus contadores caidas y comidos). Un monstruo nuevo la vacia."""
+    v = _VISTA_MON
+    if v.get('n') != m['n'] or now < v.get('t', now):
+        v.clear()
+        v.update(n=m['n'], caidas=m.get('caidas', 0), comidos=m.get('comidos', 0), t_caida=-1e9, t_comio=-1e9)
+    if m.get('caidas', 0) > v['caidas']:
+        v['t_caida'] = now
+    if m.get('comidos', 0) > v['comidos']:
+        v['t_comio'] = now
+    v.update(caidas=m.get('caidas', 0), comidos=m.get('comidos', 0), t=now)
+    return v
+
+
+def emocion_mon(W, cfg, m, now):
+    """(emocion, animacion) del monstruo, la primera que vale:
+      se ahoga (muere)        panico     hunde      se hunde T_HUNDE s
+      petrificado (37)        calma      piedra     gris y quieto
+      aturdido (37)           mueca      aturdido
+      cae, o hace < T_SUSTO   susto      tiembla
+      su zanja tiene agua     panico     tiembla
+      en una zanja            llora      respira
+      pisoton (37)            llora      tiembla
+      acorralado (37)         panico     tiembla
+      devora, o < T_RISA      rie        devora     carcajada si es grande
+      aparece                 serio      respira
+      busca y anda            enfado     camina     furia si es grande
+      quieto                  serio      respira    furia si es grande
+    Con Emocion distinta de auto, esa cara con la animacion del estado."""
+    J = W['juego']
+    v = _vista_mon(m, now)
+    c = m['celda']
+    big = grande(m)
+    if m['estado'] == 'muere':
+        e, a = 'panico', 'hunde'
+    elif m.get('piedra') is not None and now < m['piedra']:
+        e, a = 'calma', 'piedra'
+    elif m.get('aturdido') is not None and now < m['aturdido']:
+        e, a = 'mueca', 'aturdido'
+    elif m['estado'] == 'cae' or now - v['t_caida'] < T_SUSTO:
+        e, a = 'susto', 'tiembla'
+    elif J['agua'].get(c, 0) > 0:
+        e, a = 'panico', 'tiembla'
+    elif c in J['zanjas']:
+        e, a = 'llora', 'respira'
+    elif m.get('pisoton'):
+        e, a = 'llora', 'tiembla'
+    elif m.get('acorralado'):
+        e, a = 'panico', 'tiembla'
+    elif m['estado'] == 'devora' or now - v['t_comio'] < T_RISA:
+        e, a = ('carcajada' if big else 'rie'), 'devora'
+    elif m['estado'] == 'aparece':
+        e, a = 'serio', 'respira'
+    elif m['camino'] and m['camino'][0] != c:
+        e, a = ('furia' if big else 'enfado'), 'camina'
+    else:
+        e, a = ('furia' if big else 'serio'), 'respira'
+    fija = cfg.get('emocion_fija', 'auto')
+    if fija in EMOCIONES_MON:
+        e = fija
+    return e, a
+
+
+def rumbo_mon(W, cfg, m, p, n):
+    """Hacia donde mira, en el plano tangente: la celda siguiente del camino; sin
+    camino, la direccion de su ultimo paso; sin paso, el este."""
+    c = m['celda']
+    if m['camino'] and m['camino'][0] != c:
+        d = _hacia(n, p, _mul(normal_i(m['camino'][0]), _len(p)))
+    elif m.get('de') is not None and m['de'] != c:
+        d = _hacia(n, _mul(normal_i(m['de']), _len(p)), p)
+    else:
+        d = (0.0, 0.0, 0.0)
+    if _len(d) < 1e-6:
+        d = tangents(n)[0]
+    return d
+
+
+def filas_trumpzilla(W, cfg, m, now):
+    """El sprite del monstruo y su sombra (filas de 'trumpzilla'). Ahogado, se
+    hunde T_HUNDE s (sin sombra) y desaparece."""
+    if m['celda'] is None or m['estado'] == 'espera':
+        return []
+    f = 0.0
+    if m['estado'] == 'muere':
+        f = (now - (m['t_muerte'] if m['t_muerte'] is not None else now)) / T_HUNDE
+        if f >= 1.0:
+            return []
+    e, a = emocion_mon(W, cfg, m, now)
+    p, n = pos_monstruo(W, cfg, m)
+    cw, cl = _cell_sizes(_len(p), m['celda'])
+    h = max(0.05, m['tam']) * cfg.get('alto_sprite', 1.6) * min(cw, cl)
+    w = h * ASPECTO_SPRITE
+    d = rumbo_mon(W, cfg, m, p, n)
+    X = _cross(n, d)
+    marco = (X, n, d, _euler_xyz(X, n, d))
+    k = 1.0
+    if cfg['nivel'] >= 28:                      # la noche (fase 28) tambien lo apaga
+        k = 0.35 + 0.65 * (1.0 - noche_nivel(W, cfg, now))
+    rows = []
+    if f <= 0.0:
+        rows.append(_fila_m(_add(p, n, 0.01 * h), marco, 0.42 * w, 0.01 * h, 0.42 * w,
+                            (SOMBRA_OPACIDAD, 0.0, 0.0)) + [float(SPRITE_SOMBRA)])
+    rows.append(_fila_m(_add(p, n, -f * h), marco, w, h, w, (k, k, k))
+                + [float(EMOCIONES_MON.index(e) + 16 * ANIMS_MON.index(a))])
+    return rows
+
+
+def sprite_reloj(frame=None):
+    """El reloj de mat_sprite (s): el tiempo del mundo, para las animaciones."""
+    try:
+        return float(world().get('t') or 0.0)
+    except Exception:
+        return 0.0
+
+
+# --- el rescate simulado y la leyenda -------------------------------------------
+
+def casillas_hacia(W, cfg, celdas, evitar=()):
+    """Casillas que miran a cada celda de 'celdas' (la mas cercana al centro de la
+    sala), sin repetir y sin las de 'evitar'."""
+    cols, filas = rejilla_sala(cfg)
+    por = {}
+    for k in range(cols * filas):
+        por.setdefault(celda_de_casilla(W, cfg, k), []).append(k)
+    out, usadas = [], set(evitar)
+    for c in celdas:
+        ks = [k for k in por.get(c, []) if k not in usadas]
+        if ks:
+            k = min(ks, key=lambda k: (abs(k % cols - cols // 2) + abs(k // cols - filas // 2), k))
+            out.append(k)
+            usadas.add(k)
+    return out
+
+
+def sim_rescate(W, cfg, now):
+    """Simrescate: una persona en la casilla de Simcasilla y Aliados en casillas que
+    miran a vecinas de su celda (en la tabla sala_personas)."""
+    t = parent().op('sala_personas')
+    if t is None:
+        return 'RESCATE  no esta la tabla sala_personas: relanza fase22_camara.py'
+    if t.numRows == 0:
+        t.appendRow(SALA_COLS)
+    k0 = _sim_casilla(cfg)
+    c0 = celda_de_casilla(W, cfg, k0)
+    n = max(1, int(cfg['aliados']))
+    vec = list(NEIGH[c0])
+    ks = casillas_hacia(W, cfg, vec, evitar=[k0])[:n]
+    for k in [k0] + ks:
+        x, y = casilla_xy(cfg, k)
+        t.appendRow(['%.3f' % x, '%.3f' % y, '%.2f' % ALTURA_SIM])
+    _SALA['t_img'] = -99.0
+    return 'RESCATE  una persona en la casilla %d (celda %d) y %d aliados en %s%s' % (
+        k0, c0, len(ks), ' '.join(str(k) for k in ks),
+        '' if c0 is not None and W['sp'][c0] == MAL else '   (la celda %d no es del mal)' % c0)
+
+
+def _mmss(s):
+    s = max(0, int(math.ceil(s - 1e-9)))
+    return '%d:%02d' % (s // 60, s % 60)
+
+
+def _legend_juego(W, c):
+    """JUEGO (fase 32): la ronda, el tiempo que queda y el recuento del globo."""
+    J = W.get('juego')
+    if not c.get('modo_juego') or not J:
+        return '  JUEGO    apagado (Modojuego)'
+    r = J['recuento']
+    if J['estado'] != 'juego':
+        rp = resultado_partida(J)
+        ult = J['resultados'][-1] if J['resultados'] else dict(publico=0, mal=0)
+        return '  JUEGO    fin   gana %s %d-%d   (ronda %d: publico %d   mal %d)   Nuevapartida' % (
+            rp['gana'], rp['publico'], rp['mal'], J['ronda'], ult['publico'], ult['mal'])
+    return '  JUEGO    ronda %d/%d   %s   publico %d   mal %d   (globo)' % (
+        J['ronda'], int(c['rondas']), _mmss(tiempo_ronda(W, c, W.get('t') or 0.0)), r['publico'], r['mal'])
+
+
+def _legend_monstruo(W, c):
+    """MONSTRUO (fase 33): el estado, la celda, el objetivo, el tamano y lo devorado."""
+    J = W.get('juego')
+    if not J:
+        return '  MONSTRUO -'
+    m = J['mon']
+    if m['estado'] in ('espera', 'muere'):
+        extra = ''
+        if m['estado'] == 'muere' and m['t_muerte'] is not None:
+            extra = '   reaparece en %.1f s' % max(0.0, c['espera_monstruo'] - ((W.get('t') or 0.0) - m['t_muerte']))
+        else:
+            extra = '   cara visible %d%% (aparece al %d%%)' % (
+                int(round(construida_visible(W, c) * 100)), int(round(c['umbral_aparicion'] * 100)))
+        return '  MONSTRUO #%d  %s%s' % (m['n'], m['estado'], extra)
+    ritmo = int(c['ritmo_grande'] if grande(m) else c['ritmo_devora'])
+    cara = ''
+    if c['nivel'] >= 38 and c.get('sprite_mon', 1):        # fase 38: la cara de Trumpzilla
+        cara = '   cara %s' % emocion_mon(W, c, m, W.get('t') or 0.0)[0]
+    return '  MONSTRUO #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d  x%d%s%s' % (
+        m['n'], m['estado'], m['celda'], m['objetivo'] if m['objetivo'] is not None else '-', m['tam'],
+        min(m['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), ritmo,
+        '   GRANDE' if grande(m) else '', cara)
+
+
+def _legend_zanja(W, c):
+    """ZANJA (fase 34): las celdas de zanja, la profundidad mayor, el agua y el monstruo."""
+    J = W.get('juego')
+    if not J or not J['zanjas']:
+        return '  ZANJA    -'
+    zj = J['zanjas']
+    om = max(1, int(c['ocupacion_max']))
+    cap = sum(p * om for p in zj.values())
+    agua = sum(min(J['agua'].get(x, 0), zj[x] * om) for x in zj)
+    dentro = J['mon']['celda'] in zj and J['mon']['estado'] not in ('espera', 'muere')
+    return '  ZANJA    %d celdas   prof %d   agua %d%%   %s' % (
+        len(zj), max(zj.values()), int(round(100.0 * agua / max(1, cap))),
+        'monstruo dentro' if dentro else 'monstruo fuera')
+
+
+def _legend_rescate(W, c):
+    """RESCATE (fase 35): el rescate en curso mas avanzado."""
+    J = W.get('juego')
+    if not J or not J['rescates']:
+        return '  RESCATE  -   (rescatados %d)' % (J['rescatados'] if J else 0)
+    now = _SALA.get('t_personas') or W.get('t') or 0.0
+    cel, t0 = min(J['rescates'].items(), key=lambda x: (x[1], x[0]))
+    al = max(0, len(J.get('rescate_cas', {}).get(cel, ())) - 1)
+    return '  RESCATE  celda %d   aliados %d/%d   %.1f/%.1f s' % (
+        cel, min(al, int(c['aliados'])), int(c['aliados']), min(c['t_aliados'], max(0.0, now - t0)), c['t_aliados'])
+
+
+def _legend_luzjuego(W, c):
+    """LUZJUEGO (fase 36): el bano (la parte del mal), el estroboscopio y los destellos."""
+    if not luz_juego_on(W, c):
+        return '  LUZJUEGO apagada (Luzjuego o Modojuego)'
+    s = sala_de(W)
+    now = W.get('t') or 0.0
+    return '  LUZJUEGO bano %.2f   estrobo %s   destellos %d/s' % (
+        parte_mal(W), 'si' if s.get('hz', 0.0) > 0.0 else 'no', destellos_ventana(W, now))
+
+
+def _legend_armas(W, c):
+    """ARMAS (fase 37): cada arma, encendida o no, y su estado."""
+    J = W.get('juego')
+    if not J:
+        return '  ARMAS    -'
+    m = J['mon']
+    A = J['armas']
+    now = W.get('t') or 0.0
+    partes = ['cerco %s' % (('on (acorralado)' if m.get('acorralado') else 'on') if c.get('arma_cerco') else 'off')]
+    if c.get('arma_pison'):
+        n = personas_por_celda(W, c).get(m['celda'], 0) if m['celda'] is not None else 0
+        partes.append('pison %d/%d' % (n, int(c['n_pison'])))
+    else:
+        partes.append('pison off')
+    if c.get('arma_estatuas'):
+        if m.get('piedra') is not None and now < m['piedra']:
+            partes.append('estatuas piedra %.1f s' % (m['piedra'] - now))
+        else:
+            partes.append('estatuas %.1f/%.1f s' % (min(c['t_quietud'], max(0.0, now - A.get('t_quietud', now))),
+                                                    c['t_quietud']))
+    else:
+        partes.append('estatuas off')
+    if c.get('arma_grito'):
+        falta = c['recarga_grito'] - (now - A.get('t_grito', -1e9))
+        partes.append('grito listo' if falta <= 0 else 'grito %.0f s' % falta)
+    else:
+        partes.append('grito off')
+    partes.append('relampago %s' % (('aturdido' if m.get('aturdido') is not None and now < m['aturdido'] else 'on')
+                                     if c.get('arma_relampago') else 'off'))
+    return '  ARMAS    ' + '   '.join(partes)
+
+
+
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
@@ -14169,6 +15651,10 @@ def chop_names(c=None):
     extra += ['i_luz_local', 'i_diagnostico'] if c['nivel'] >= 18 else []
     extra += ['i_inclusiones'] if c['nivel'] >= 25 else []
     extra += ['i_fulguritas'] if c['nivel'] >= 29 else []
+    extra += ['i_marcas'] if c['nivel'] >= 32 else []                           # fases 32 a 34: el juego
+    extra += ['i_monstruo', 'i_tocon', 'i_brotes_mal'] if c['nivel'] >= 33 else []
+    extra += ['i_agua_juego'] if c['nivel'] >= 34 else []
+    extra += ['i_trumpzilla'] if c['nivel'] >= 38 else []                       # fase 38: el sprite
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -14568,6 +16054,52 @@ def cfg():
                  conchas_persona=max(1, int(_p('Conchasporpersona', c['conchas_persona']))))
     if c['nivel'] >= 31:
         c.update(carpeta_historico=str(_p('Carpetahistorico', '')).strip())
+    if c['nivel'] >= 32:                # fases 32 a 37: el juego «El devorador»
+        c.update(modo_juego=int(bool(_p('Modojuego', False))),
+                 duracion_ronda=max(1.0, _p('Duracionronda', c['duracion_ronda'])),
+                 rondas=max(1, int(_p('Rondas', c['rondas']))),
+                 paso_juego=max(1, int(_p('Pasojuego', c['paso_juego']))),
+                 herencia_mal=max(0.0, min(1.0, _p('Herenciamal', c['herencia_mal']))),
+                 marca_jugador=int(bool(_p('Marcajugador', True))))
+    if c['nivel'] >= 33:
+        c.update(umbral_aparicion=max(0.0, min(1.0, _p('Umbralaparicion', c['umbral_aparicion']))),
+                 tam_inicial=max(0.1, min(1.0, _p('Tamanoinicial', c['tam_inicial']))),
+                 ocupacion_max=max(1, int(_p('Ocupacionmax', c['ocupacion_max']))),
+                 ritmo_devora=max(0, int(_p('Ritmodevora', c['ritmo_devora']))),
+                 ritmo_grande=max(0, int(_p('Ritmogrande', c['ritmo_grande']))),
+                 paso_monstruo=max(1, int(_p('Pasomonstruo', c['paso_monstruo']))),
+                 paso_grande=max(1, int(_p('Pasogrande', c['paso_grande']))),
+                 coste_zanja=max(1.0, _p('Costezanja', c['coste_zanja'])),
+                 recalculo=max(1, int(_p('Recalculo', c['recalculo']))),
+                 espera_monstruo=max(0.0, _p('Esperamonstruo', c['espera_monstruo'])),
+                 ver_objetivo=int(bool(_p('Verobjetivo', True))),
+                 sim_celda_mon=max(0, int(_p('Simceldamon', 0))))
+    if c['nivel'] >= 34:
+        c.update(zanja_juego=int(bool(_p('Zanjajuego', True))),
+                 profundidad_agua=max(1, int(_p('Profundidadagua', c['profundidad_agua']))),
+                 ritmo_agua=max(0, int(_p('Ritmoagua', c['ritmo_agua']))),
+                 desborde_agua=max(0, int(_p('Desbordeagua', c['desborde_agua']))),
+                 ahoga=max(0.01, min(1.0, _p('Ahoga', c['ahoga']))))
+    if c['nivel'] >= 35:
+        c.update(aliados=max(1, int(_p('Aliados', c['aliados']))),
+                 t_aliados=max(0.0, _p('Taliados', c['t_aliados'])))
+    if c['nivel'] >= 36:
+        c.update(luz_juego=int(bool(_p('Luzjuego', True))))
+    if c['nivel'] >= 37:
+        c.update(arma_cerco=int(bool(_p('Armacerco', False))), arma_pison=int(bool(_p('Armapison', False))),
+                 arma_estatuas=int(bool(_p('Armaestatuas', False))), arma_grito=int(bool(_p('Armagrito', False))),
+                 arma_relampago=int(bool(_p('Armarelampago', False))),
+                 hambre=max(0, int(_p('Hambre', c['hambre']))), n_pison=max(1, int(_p('Npison', c['n_pison']))),
+                 encoge=max(0.0, _p('Encoge', c['encoge'])), t_quietud=max(0.0, _p('Tquietud', c['t_quietud'])),
+                 umbral_silencio=max(0.0, _p('Umbralsilencio', c['umbral_silencio'])),
+                 t_piedra=max(0.0, _p('Tpiedra', c['t_piedra'])), prof_grito=max(1, int(_p('Profgrito', c['prof_grito']))),
+                 recarga_grito=max(0.0, _p('Recargagrito', c['recarga_grito'])),
+                 t_aturdido=max(0.0, _p('Taturdido', c['t_aturdido'])))
+    if c['nivel'] >= 38:                # fase 38: Trumpzilla
+        fija = _p('Emocion', 'auto')
+        c.update(sprite_mon=int(bool(_p('Spritemonstruo', True))),
+                 emocion_fija=fija if fija in EMOCIONES_MON else 'auto',
+                 alto_sprite=max(0.2, min(4.0, _p('Altosprite', c['alto_sprite']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -15364,6 +16896,20 @@ def on_pulse(name):
         print(sala_sumar_pulso(W, c))
     elif name == 'Exportartestigo':     # fase 31: la seccion de la ultima escision y la columna de hoy
         print(exportar_pulso(W, c))
+    elif name == 'Nuevapartida':        # fase 32: ronda 1, recuento a cero
+        if juego_al_dia(W, c, now) is None:
+            print('JUEGO  enciende antes Modojuego')
+        else:
+            nueva_partida(W, c, now)
+            print('JUEGO  nueva partida: ronda 1 de %d, %d s' % (int(c['rondas']), int(c['duracion_ronda'])))
+    elif name == 'Simmonstruo':         # fase 33: el monstruo aparece ya
+        juego_al_dia(W, c, now)
+        print(sim_monstruo(W, c, now))
+    elif name == 'Simzanja':            # fase 34: una zanja sin esperar a Tfila
+        juego_al_dia(W, c, now)
+        print(sim_zanja(W, c, now))
+    elif name == 'Simrescate':          # fase 35: una persona en la celda y sus aliados en las vecinas
+        print(sim_rescate(W, c, now))
     elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
         print(capturar_fondo(c))
     elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
@@ -16469,6 +18015,7 @@ def canales_frame(spec, frame=None):
     amp, vto, _ = viento_reloj(frame)          # motor v77: el vaiven del dosel, en la GPU
     out.append(('viento_amp', amp))
     out.append(('viento_lfo', vto))
+    out.append(('sprite_t', sprite_reloj(frame)))     # motor v112: el reloj de mat_sprite (fase 38)
     for canal, tipo, nombre, k in spec or ():
         try:
             if tipo == 'piel':
@@ -17473,6 +19020,18 @@ def _legend():
         lines.append(_legend_relampago(W, c))
     if lvl >= 31:
         lines.append(_legend_historico(W, c))
+    if lvl >= 32:                       # fases 32 a 37: el juego
+        lines.append(_legend_juego(W, c))
+    if lvl >= 33:
+        lines.append(_legend_monstruo(W, c))
+    if lvl >= 34:
+        lines.append(_legend_zanja(W, c))
+    if lvl >= 35:
+        lines.append(_legend_rescate(W, c))
+    if lvl >= 36:
+        lines.append(_legend_luzjuego(W, c))
+    if lvl >= 37:
+        lines.append(_legend_armas(W, c))
     return '\n'.join(lines)
 
 

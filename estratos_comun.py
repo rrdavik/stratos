@@ -31,11 +31,15 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v81'
+VERSION_COMUN = 'comun v83'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
-                'coronas', 'inclusiones', 'fulguritas', 'vagones', 'diagnostico', 'particulas', 'humo',
+                'coronas', 'inclusiones', 'fulguritas', 'vagones', 'diagnostico',
+                # comun v83: las geometrias del juego (fases 32 a 34) no estaban: el render no las dibujaba;
+                # trumpzilla (fase 38), el monstruo en sprite
+                'marcas', 'brotes_mal', 'tocon', 'monstruo', 'agua_juego', 'trumpzilla',
+                'particulas', 'humo',
                 'luz_celda', 'luz_conchas',
                 'luz_local']                    # lo transparente (motas, humo) y las capas aditivas, al final
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
@@ -994,7 +998,7 @@ void main()
 """
 
 PIEL_PIXEL = r"""// Estratos - piel (fase 12; tierra, agua y borde, fase 11 v5): pixel shader
-uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio
+uniform vec4 uFamilia;      // x: 0 mineral, 1 dosel, 2 ciudad, 3 tierra, 4 agua, 5 plastico, 6 vidrio, 9 mal
 uniform vec4 uLuz0;         // posicion de luz_principal
 uniform vec4 uLuz0Col;      // su color x dimmer
 uniform vec4 uLuz1;         // luz_relleno
@@ -1219,6 +1223,9 @@ void main()
     bool agua = fam > 3.5 && fam < 4.5;
     bool plastico = fam > 4.5 && fam < 5.5;     // fase 25: las inclusiones de las personas
     bool vidrio = fam > 5.5 && fam < 6.5;       // fase 29: la fulgurita de una escision
+    bool malo = fam > 8.5 && fam < 9.5;         // fase 33 (provisional): 0 velo, 1 cuerpo, 2 ojos, 3 tocon
+    if (malo)
+        estrato = false;
     float parte = 0.0;                          // 0 pared de arena fundida, 1 vidrio, 2 nucleo
     // fase 11 v10: un edificio de la biblioteca de la ciudad (uv.x >= 10)
     bool edificio = fam > 1.5 && fam < 2.5 && iVert.hoja.x > 9.5;
@@ -1638,6 +1645,19 @@ void main()
         wrap = 0.35;
         amb = 1.3;
         sombra = 0.0;
+    } else if (malo) {
+        // fase 33: el mal, casi negro y de croma baja, con un brillo propio debil que
+        // late despacio (provisional: se sustituye con la imagineria)
+        parte = nivelv;
+        float lat = 0.5 + 0.5 * sin(uGlitch.y * 2.1 + float(iVert.inst) * 1.7);
+        base *= 0.85 + 0.30 * ruido(iVert.pPos * 60.0);
+        emis = base * (parte > 2.5 ? 0.0 : (0.6 + 0.6 * lat)) + vec3(0.018, 0.010, 0.022) * lat;
+        if (parte > 1.5 && parte < 2.5)
+            emis = base * 1.4;                  // los ojos
+        rug = parte > 2.5 ? 0.9 : clamp(rug, 0.3, 0.8);
+        expo = mix(120.0, 6.0, rug);
+        ks = mix(0.6, 0.03, rug);
+        sombra = 0.0;
     } else if (vidrio) {
         // fase 29: la fulgurita. El alfa trae rugosidad + 2 x parte
         parte = nivelv;
@@ -1744,6 +1764,8 @@ void main()
         vec3 l0 = normalize(uLuz0.xyz - iVert.wPos);
         float tras = pow(max(dot(-l0, v), 0.0), 2.0);
         col += 0.30 * tras * base * uLuz0Col.rgb + fres * 0.25 * (base + vec3(0.2));
+    } else if (malo) {
+        col += emis + fres * 0.10 * (base + vec3(0.04, 0.02, 0.05));
     } else if (vidrio) {
         // fase 29: el nucleo emite el color de su escision (paleta humana, nunca cian);
         // el vidrio deja pasar esa luz y brilla en el borde; la pared, mate
@@ -2399,6 +2421,8 @@ def install_core(base, carpeta, fase):
     motas = particulas_al_dia(base)     # comun v54: las particulas, motas suaves
     if humo_al_dia(base) or motas:      # comun v53: el humo en la GPU
         set_render(base)
+    if base.op('trumpzilla') is not None:      # comun v83 (fase 38): el sprite, al dia con el motor
+        trumpzilla_al_dia(base, carpeta)
     try:
         motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
     except Exception:
@@ -2678,6 +2702,249 @@ def particulas_al_dia(base, crear=False):
         ok('particulas: motas suaves (mat_motas, GLSL) que miran a la camara; los trenes, en vagones')
     else:
         fail('mat_motas: no pude enlazar los DAT (motas_vertex, motas_pixel)')
+    return bien
+
+
+# --- Trumpzilla: el monstruo en sprite (comun v83, fase 38, motor v112) -------------
+SPRITE_ATLAS = 'sprites/trumpzilla_emociones.png'
+SPRITE_U = "parent().op('frame_u')['sprite_t']"
+
+SPRITE_VERTEX = r"""// Estratos - Trumpzilla (fase 38, comun v83): vertex shader. Cada instancia de
+// 'trumpzilla' es el sprite del monstruo o su sombra (motor: filas_trumpzilla).
+// En el alfa: cara + 16 x animacion (el sprite) o 256 (la sombra).
+//   sprite  una lamina de pie en su celda (los pies en la instancia) que mira a la
+//           camara. Su arriba es el de la pantalla, inclinado hacia la normal del
+//           planeta (de pie hacia fuera) Inclinasprite grados como mucho: en el
+//           borde del globo o en el hemisferio sur no se tumba ni queda boca abajo
+//           (con la camara rasante, la normal ya es el arriba). Si se aparta de la
+//           normal, se acerca a la camara para no hundirse en el planeta. sx el
+//           ancho, sy el alto; el eje z local es hacia donde camina: si va a la
+//           derecha de la pantalla se voltea (los dibujos miran a la izquierda).
+//           rgb, el tinte.
+//   sombra  una elipse en el suelo de sx por sz; r, su opacidad.
+uniform vec4 uSprite;       // x el reloj (s), y el pixelado (filas; 0 tal cual), z w columnas y filas del atlas
+uniform vec4 uSpriteInc;    // x la inclinacion maxima hacia la normal (grados; 180, siempre la normal)
+
+out Vertex {
+    vec4 color;
+    vec2 uv;
+    flat int cara;
+    flat int anim;
+    flat int sombra;
+    flat int camIndex;
+} oVert;
+
+void main()
+{
+    vec4 c0 = TDDeform(vec3(0.0));
+    vec3 ex = TDDeform(vec3(1.0, 0.0, 0.0)).xyz - c0.xyz;
+    vec3 ey = TDDeform(vec3(0.0, 1.0, 0.0)).xyz - c0.xyz;
+    vec3 ez = TDDeform(vec3(0.0, 0.0, 1.0)).xyz - c0.xyz;
+    vec4 col = TDInstanceColor(Cd);
+    float code = floor(col.a + 0.5);
+    int sombra = code >= 255.5 ? 1 : 0;
+    float resto = mod(code, 256.0);
+    int anim = int(floor(resto / 16.0 + 1e-3));
+    int cara = int(resto - 16.0 * float(anim) + 0.5);
+    mat4 ci = uTDMats[TDCameraIndex()].camInverse;
+    vec3 pos;
+    vec2 uv;
+    if (sombra == 1) {
+        pos = c0.xyz + ez * (2.0 * P.x) + ex * (2.0 * P.y);
+        uv = P.xy * 2.0;
+    } else {
+        float w = length(ex);
+        float h = length(ey);
+        vec3 v = normalize(ci[3].xyz - c0.xyz);
+        vec3 eje = ey / max(h, 1e-6);
+        vec3 arr = eje - dot(eje, v) * v;
+        float lado = length(arr);
+        vec3 up = ci[1].xyz - dot(ci[1].xyz, v) * v;
+        up = length(up) > 1e-4 ? normalize(up) : arr / max(lado, 1e-6);
+        vec3 a1 = lado > 1e-4 ? arr / lado : up;
+        vec3 lat = cross(v, up);
+        float ang = atan(dot(a1, lat), dot(a1, up));        // de la vertical de la pantalla a la normal
+        float inc = radians(clamp(uSpriteInc.x, 0.0, 180.0));
+        ang = clamp(ang, -inc, inc) * smoothstep(0.15, 0.45, lado);
+        arr = up * cos(ang) + lat * sin(ang);
+        float aparte = 0.5 * (1.0 - dot(arr, a1)) * step(0.15, lado);
+        vec3 der = normalize(cross(arr, v));
+        float voltea = dot(ez, der) > 0.0 ? -1.0 : 1.0;
+        float t = uSprite.x + 1.7 * float(TDInstanceID());
+        vec2 k = vec2(1.0);
+        vec2 d = vec2(0.0);
+        float rot = 0.0;
+        if (anim == 0) {                                    // respira
+            k = vec2(1.0 - 0.012 * sin(t * 2.4), 1.0 + 0.025 * sin(t * 2.4));
+        } else if (anim == 1) {                             // camina: bambolea y bota
+            d.y = 0.035 * abs(sin(t * 6.0));
+            rot = 0.07 * sin(t * 6.0);
+        } else if (anim == 2) {                             // devora: mastica
+            float m = sin(t * 9.0);
+            k = vec2(1.0 - 0.04 * m, 1.0 + 0.06 * m);
+        } else if (anim == 3 || anim == 4) {                // tiembla; hunde (el motor lo baja)
+            d = vec2(0.025 * sin(t * 47.0), 0.010 * sin(t * 31.0));
+        } else if (anim == 6) {                             // aturdido: se tambalea
+            rot = 0.15 * sin(t * 3.0);
+        }                                                   // piedra (5): quieto
+        vec2 q = vec2(P.x * k.x * w, (P.y + 0.5) * k.y * h);
+        q = vec2(q.x * cos(rot) - q.y * sin(rot), q.x * sin(rot) + q.y * cos(rot));
+        q += d * vec2(w, h);
+        vec3 pie = c0.xyz + v * (0.35 * w + 0.9 * h * aparte);    // delante de su sombra y del suelo
+        pos = pie + der * q.x + arr * q.y;
+        uv = vec2(P.x * voltea + 0.5, P.y + 0.5);
+    }
+    gl_Position = TDWorldToProj(vec4(pos, 1.0));
+#ifndef TD_PICKING_ACTIVE
+    oVert.camIndex = TDCameraIndex();
+    oVert.color = col;
+    oVert.uv = uv;
+    oVert.cara = cara;
+    oVert.anim = anim;
+    oVert.sombra = sombra;
+#else
+    TDWritePickingValues();
+#endif
+}
+"""
+
+SPRITE_PIXEL = r"""// Estratos - Trumpzilla (fase 38, comun v83): pixel shader. El sprite lee su cara
+// del atlas pixel a pixel (texelFetch: sin suavizar), descarta lo transparente y,
+// con pixelado, agranda los pixeles; petrificado, gris piedra; aturdido, parpadea.
+// La sombra, una mancha suave.
+uniform vec4 uSprite;
+uniform sampler2D sAtlas;
+
+in Vertex {
+    vec4 color;
+    vec2 uv;
+    flat int cara;
+    flat int anim;
+    flat int sombra;
+    flat int camIndex;
+} iVert;
+
+layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
+
+void main()
+{
+    TDCheckDiscard();
+    if (iVert.sombra == 1) {
+        float a = iVert.color.r * (1.0 - smoothstep(0.45, 1.0, length(iVert.uv)));
+        if (a < 0.01)
+            discard;
+        oFragColor[0] = TDOutputSwizzle(vec4(0.0, 0.0, 0.0, a));
+        return;
+    }
+    vec2 uv = iVert.uv;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        discard;
+    vec2 tam = vec2(textureSize(sAtlas, 0));
+    vec2 rej = max(uSprite.zw, vec2(1.0));
+    vec2 celda = tam / rej;
+    if (uSprite.y > 0.5) {
+        vec2 n = vec2(uSprite.y * celda.x / celda.y, uSprite.y);
+        uv = (floor(uv * n) + 0.5) / n;
+    }
+    float cols = rej.x;
+    float c = float(iVert.cara);
+    float col = mod(c, cols);
+    float fila = floor(c / cols + 1e-3);
+    vec2 px = (vec2(col, rej.y - 1.0 - fila) + uv) * celda;    // la fila 0 del atlas, arriba
+    vec4 t = texelFetch(sAtlas, ivec2(clamp(px, vec2(0.0), tam - 1.0)), 0);
+    if (t.a < 0.5)
+        discard;
+    vec3 rgb = t.rgb / t.a;
+    if (iVert.anim == 5) {
+        float l = dot(rgb, vec3(0.30, 0.59, 0.11));
+        rgb = vec3(l) * vec3(0.80, 0.78, 0.74);
+    } else if (iVert.anim == 6) {
+        rgb = mix(rgb, vec3(1.0), 0.35 * step(0.5, fract(uSprite.x * 3.0)));
+    }
+    oFragColor[0] = TDOutputSwizzle(vec4(rgb * iVert.color.rgb, 1.0));
+}
+"""
+
+
+def _png_medidas(ruta):
+    """(ancho, alto) de un PNG leyendo su cabecera, o None si no se puede abrir."""
+    try:
+        with open(ruta, 'rb') as f:
+            cab = f.read(24)
+    except Exception:
+        return None
+    if len(cab) < 24 or cab[:8] != b'\x89PNG\r\n\x1a\n':
+        return None
+    return (int.from_bytes(cab[16:20], 'big'), int.from_bytes(cab[20:24], 'big'))
+
+
+def trumpzilla_al_dia(base, carpeta, crear=False):
+    """comun v83 (fase 38): el monstruo en sprite. La geometria 'trumpzilla' (una
+    lamina instanciada desde i_trumpzilla: el sprite y su sombra) con el GLSL MAT
+    mat_sprite (sprite_vertex y sprite_pixel), que lee las caras del atlas
+    sprites/trumpzilla_emociones.png (Movie File In TOP trumpzilla_atlas, sampler
+    sAtlas) y se anima con sprite_t de frame_u. Escribe profundidad (el sprite es
+    opaco, recortado por alfa) y mezcla con alfa premultiplicado (la sombra).
+    Con Materialrespaldo, mat_respaldo. Devuelve True si quedo todo enlazado."""
+    m = base.op('motor').module
+    cols, filas = m.ATLAS_MON
+    ruta = carpeta + '/' + SPRITE_ATLAS
+    atlas = get_or_make(base, 'moviefileinTOP', 'trumpzilla_atlas', 1180, 300)
+    bien = bool(setp_any(atlas, ['file'], ruta))
+    setmenu(atlas, ['inputfiltertype'], ['nearest'])
+    med = _png_medidas(ruta)
+    if med is None:
+        fail('trumpzilla_atlas: no encuentro %s (copia la carpeta sprites del repositorio en %s)'
+             % (SPRITE_ATLAS, carpeta))
+        bien = False
+    vdat = get_or_make(base, 'textDAT', 'sprite_vertex', 1180, 220)
+    vdat.text = SPRITE_VERTEX
+    pdat = get_or_make(base, 'textDAT', 'sprite_pixel', 1180, 140)
+    pdat.text = SPRITE_PIXEL
+    mat = get_or_make(base, 'glslMAT', 'mat_sprite', 1400, 260)
+    bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'sprite_vertex')) and bien
+    bien = bool(setp_any(mat, ['pdat', 'pixeldat'], 'sprite_pixel')) and bien
+    for seq in ('sampler', 'vec'):
+        try:                             # TouchDesigner 2022+: Samplers y Vectors son secuencias
+            sec = getattr(mat.seq, seq)
+            if sec.numBlocks < 1:
+                sec.numBlocks = 1
+        except Exception:
+            pass
+    muestra = bool(setp(mat, 'sampler0name', 'sAtlas'))
+    muestra = bool(setp_any(mat, ['sampler0top'], 'trumpzilla_atlas')) and muestra
+    if not muestra:
+        info('mat_sprite: pon a mano en Samplers: sAtlas -> trumpzilla_atlas')
+    pix = 'parent().par.Pixelsprite' if has_par(base, 'Pixelsprite') else '0'
+    inc = 'parent().par.Inclinasprite' if has_par(base, 'Inclinasprite') else '30'
+    try:
+        if mat.seq.vec.numBlocks < 2:
+            mat.seq.vec.numBlocks = 2
+    except Exception:
+        pass
+    bien = _uniforme(mat, 0, 'uSprite', (SPRITE_U, pix, str(cols), str(filas))) and muestra and bien
+    bien = _uniforme(mat, 1, 'uSpriteInc', (inc, '0', '0', '0')) and bien
+    mezcla = bool(setp_any(mat, ['blending'], True))
+    mezcla = setmenu(mat, ['srcblend'], ['one']) and mezcla
+    mezcla = setmenu(mat, ['destblend'], ['omsa', 'oneminussrcalpha', 'one_minus_src_alpha']) and mezcla
+    setp_any(mat, ['depthwriting', 'depthwrite', 'writedepth'], True)
+    setmenu(mat, ['cullface'], ['neither'])
+    if not mezcla:
+        info('mat_sprite: pon a mano en Common: Blending on, Source Color One, Destination Color '
+             'One Minus Source Alpha (la sombra)')
+    geo = base.op('trumpzilla')
+    if geo is None or crear:
+        make_instanced(base, 'trumpzilla', -440, 2780, 'mat_sprite', sop='rect', quiet=True)
+        geo = base.op('trumpzilla')
+    if not setp_any(geo, ['instancea'], 'a'):
+        info('trumpzilla: pon a mano Instance 2 -> Color A = a (la cara y la animacion)')
+        bien = False
+    setexpr(geo, 'material', _con_respaldo(base, 'mat_sprite'))
+    if bien:
+        ok('trumpzilla: el monstruo en sprite (mat_sprite, GLSL) con su sombra; atlas %s (%d x %d, %d x %d '
+           'caras)' % (SPRITE_ATLAS, med[0], med[1], cols, filas))
+    else:
+        fail('trumpzilla: algo no quedo enlazado (atlas, DAT de los shaders, sampler sAtlas o uSprite)')
     return bien
 
 
@@ -3816,9 +4083,10 @@ PIEL_UNIFORMES = [
 ] + [('uVolcan%d' % k, tuple(PIEL_U % ('uVolcan%d' % k, q) for q in range(4))) for k in range(3)]
 # comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio', 'pradera',     # comun v77: 7, la pradera
-                 'estrato']                         # comun v78: 8, las conchas como capas de tierra
+                 'estrato',                         # comun v78: 8, las conchas como capas de tierra
+                 'mal']                             # comun v82 (fase 33): 9, el juego (brotes del mal y monstruo)
 # familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
-SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio')
+SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio', 'mal')
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
 
 
@@ -4021,7 +4289,7 @@ def materiales_piel(base):
              % ', '.join(malos))
     else:
         ok('shader de la piel: mat_piel_mineral, mat_piel_dosel, mat_piel_ciudad, mat_piel_tierra, '
-           'mat_piel_agua, mat_piel_plastico y mat_piel_vidrio (GLSL), mat_respaldo (Phong)')
+           'mat_piel_agua, mat_piel_plastico, mat_piel_vidrio y mat_piel_mal (GLSL), mat_respaldo (Phong)')
     if sin_rampa:
         info('%s: no pude enlazar los samplers sAlturas (TOP alturas) y sRampa (TOP rampa_hipso) en la '
              'pagina Samplers; sin ellos no se levanta el relieve' % ', '.join(sin_rampa[:2]))
@@ -4861,3 +5129,80 @@ def run_test(base, fn):
             except Exception:
                 pass
     return t.finish()
+
+
+# --- las autopruebas del juego (fases 32 a 37) -------------------------------------
+
+class SalaJuego(object):
+    """comun v82: el mundo y la sala simulada de las autopruebas del juego. El reloj
+    avanza a mano; una semicorchea son SEMI s (120 BPM)."""
+    SEMI = 0.125
+
+    def __init__(self, base, m, t0):
+        self.base, self.m = base, m
+        self.reloj = [float(t0)]
+        self.tb = base.op('sala_personas')
+
+    @property
+    def now(self):
+        return self.reloj[0]
+
+    def nuevo(self, conchas=8, juego=True):
+        """Un mundo vacio con 'conchas' conchas enterradas y, con juego, Modojuego y
+        la ronda 1 empezando ahora."""
+        m = self.m
+        m.reset_world()
+        m.sala_reset()
+        if self.tb is not None:
+            self.tb.clear()
+            self.tb.appendRow(list(m.SALA_COLS))
+        try:
+            self.base.par.Modojuego = False
+        except Exception:
+            pass
+        W, c = m.world(), m.cfg()
+        for _ in range(conchas):
+            m.end_cycle(W, c, self.reloj[0])
+            self.reloj[0] += 1.0
+        if juego:
+            self.base.par.Modojuego = True
+            c = m.cfg()
+            m.juego_al_dia(W, c, self.reloj[0])
+        return W, c
+
+    def camara(self, W, c, casillas, seg=None, n=1, juego=False):
+        """Imagenes de la camara con una persona en el centro de cada casilla; con
+        juego, el juego avanza lo que dura cada imagen."""
+        m = self.m
+        dt = 1.0 / m.CAM_FPS
+        mx = [m.casilla_xy(c, k) + (1.7,) for k in casillas]
+        out = None
+        for _ in range(n if seg is None else int(round(seg * m.CAM_FPS))):
+            self.reloj[0] += dt
+            m.sala_mundo(W, c, self.reloj[0], m.tick_personas(W, c, self.reloj[0], mx))
+            if juego:
+                out = m.juego_avanzar(W, c, self.reloj[0], dt / self.SEMI) or out
+        return out
+
+    def semis(self, W, c, k, casillas=None):
+        """k semicorcheas de juego, una a una (con casillas, la camara las ve)."""
+        m = self.m
+        out = None
+        for _ in range(int(k)):
+            self.reloj[0] += self.SEMI
+            if casillas is not None:
+                mx = [m.casilla_xy(c, q) + (1.7,) for q in casillas]
+                m.sala_mundo(W, c, self.reloj[0], m.tick_personas(W, c, self.reloj[0], mx))
+            out = m.juego_avanzar(W, c, self.reloj[0], 1.0) or out
+        return out
+
+    def pasos(self, W, c, k, casillas=None):
+        """k pasos de juego (Pasojuego semicorcheas cada uno)."""
+        return self.semis(W, c, int(k) * int(c['paso_juego']), casillas)
+
+    def sembrar(self, W, c, celda, occ, s=1):
+        """La celda, con la ocupacion occ (subir_escalon, como Sembrarzona)."""
+        m = self.m
+        while W['occ'][celda] < occ:
+            m.subir_escalon(W, c, s, celda, 100, self.reloj[0])
+        return W['occ'][celda]
