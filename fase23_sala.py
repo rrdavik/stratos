@@ -67,7 +67,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase23 v1  (luz de sala por DMX: balance, bano, estroboscopio, noche y colapso)'
+VERSION = 'fase23 v2  (autoprueba: la tabla ciclos llena, en un proyecto con muchas sesiones)'
 banner(VERSION)
 
 base = require_base(23)
@@ -429,11 +429,12 @@ def _prueba(t, m):
     # 8. la tabla de ciclos, el DMX y la leyenda
     tb = base.op('ciclos')
     cab = [tb[0, k].val for k in range(tb.numCols)] if tb is not None and tb.numRows else []
-    n0 = tb.numRows if tb is not None else 0
     W, c = nuevo(1.5)
     pasa(W, c, 1.0)
     m.registrar_ciclo(W, c, m.close_cycle(W, c, reloj[0], 'forzado'))
-    fila = dict(zip(cab, [x.val for x in tb.row(tb.numRows - 1)])) if tb is not None and tb.numRows > n0 else {}
+    # v2: la fila nueva es siempre la ultima; con la tabla llena (CICLOS_MAX ciclos, un proyecto
+    # con muchas sesiones) entra al final y sale la mas antigua, asi que no crece
+    fila = dict(zip(cab, [x.val for x in tb.row(tb.numRows - 1)])) if tb is not None and tb.numRows > 1 else {}
     t.check('la tabla ciclos tiene la columna balance, con el valor al cerrar',
             'balance' in cab and fila.get('balance') == '1.50' and fila.get('motivo') == 'forzado', str(fila))
     cab2 = ['ciclo', 'motivo']
