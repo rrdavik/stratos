@@ -174,6 +174,11 @@
 #                 edificios se apoyan en ella (el mar los tapaba y solo quedaban los
 #                 emblemas); el coloso, a la escala del planeta; Trumpzilla solo anda por
 #                 tierra (Montierra): no entra en el mar ni en las hondonadas inundadas.
+#                 Motor v119 (sala v13): guion_demo, el guion de la demo GENoZilla de
+#                 la sala virtual. Prepara cada capitulo (el mundo de cero, siembras,
+#                 brotes, un monstruo ya grande, una zanja hecha, el fin de ronda) y
+#                 pone la musica de la demo. Solo actua con Demo = genozilla en SALA;
+#                 el juego no cambia.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -185,7 +190,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v118'
+MOTOR_VERSION = 'motor v119'
 
 import math
 import time as _time
@@ -16418,6 +16423,422 @@ def sim_rescate(W, cfg, now):
     return 'RESCATE  una persona en la casilla %d (celda %d) y %d aliados en %s%s' % (
         k0, c0, len(ks), ' '.join(str(k) for k in ks),
         '' if c0 is not None and W['sp'][c0] == MAL else '   (la celda %d no es del mal)' % c0)
+
+
+# --- la demo GENoZilla de la sala virtual (motor v119) ---------------------------------
+# La sala virtual (sala v13, Demo = genozilla en /project1/SALA) juega a GENoZilla
+# capitulo a capitulo. El juego lo juega el motor como siempre: la sala solo mueve a la
+# gente, que FASE1 ve por su sala simulada (la misma imagen de alturas que da la camara).
+# Con su parametro Guion, la sala prepara cada capitulo con guion_demo: las mismas
+# funciones que los pulsos de prueba (Resetmundo, Sembrar, Simmal, Simmonstruo,
+# Nuevapartida, Forzarciclo) y lo que no se puede preparar con ellos (un monstruo ya
+# grande, una zanja hecha, el fin de ronda a los 3 s). Solo actua con Demo = genozilla.
+#
+# Los sitios de cada capitulo (demo_refs) se eligen en casillas de la rejilla de la sala
+# (columna, fila, en las casillas de la demo web: 11 x 9) y se pasan a celdas con el
+# mapeo de la fase 22 en el momento: la coreografia sigue al planeta aunque gire.
+
+DEMO_CAPITULOS = 13
+DEMO_REJILLA = (11, 9)          # las casillas de la demo web: los sitios se escalan a la rejilla de verdad
+DEMO_CONCHAS = 6                # conchas enterradas antes de los capitulos con zanjas (las cava la fila)
+DEMO_NOTA_CADA = 0.25           # s entre dos notas de la musica de la demo, por persona quieta
+DEMO_QUIETO = 0.8               # s en su casilla antes de que su celda suene
+DEMO_MUSICA = (0, 1, 3, 4, 5)   # capitulos con musica: notas del SEQ1 en las celdas de la gente quieta
+_GUION = dict(cap=None, hechos=set(), t_nota=None, sueltas=[], refs={}, muertes=0)
+
+
+def demo_genozilla():
+    """La sala virtual esta en la demo GENoZilla (Demo = genozilla en /project1/SALA)."""
+    try:
+        s = op('/project1/SALA')
+        return s is not None and str(s.par.Demo.eval()) == 'genozilla'
+    except Exception:
+        return False
+
+
+def celda_desplazada(c, db, dl):
+    """La celda c desplazada db bandas (anillos; + hacia el norte) y dl meridianos
+    (+ hacia las longitudes que crecen). Pasado un polo, el polo."""
+    if c is None:
+        return None
+    c = int(c)
+    nr = len(RINGS)
+    if c == POLE_S:
+        r = -1
+    elif c == POLE_N:
+        r = nr
+    else:
+        r = RING_OF[c]
+    r2 = r + int(db)
+    if r2 < 0:
+        return POLE_S
+    if r2 >= nr:
+        return POLE_N
+    lon = lonlat_celda(c)[1]
+    anillo = sorted(RINGS[r2], key=lambda k: lonlat_celda(k)[1])
+    j = min(range(len(anillo)), key=lambda q: abs((lonlat_celda(anillo[q])[1] - lon + 180.0) % 360.0 - 180.0))
+    return anillo[(j + int(dl)) % len(anillo)]
+
+
+def demo_casilla(cfg, cx, cy):
+    """La casilla de la rejilla de la sala en (columna, fila) de la demo web (11 x 9)."""
+    cols, filas = rejilla_sala(cfg)
+    c = int(round(float(cx) * (cols - 1) / float(DEMO_REJILLA[0] - 1)))
+    f = int(round(float(cy) * (filas - 1) / float(DEMO_REJILLA[1] - 1)))
+    return max(0, min(filas - 1, f)) * cols + max(0, min(cols - 1, c))
+
+
+def _cas_libre(cfg, k, libres=None, fuera=()):
+    """La casilla libre (alcanzable por el publico) mas cercana a k, sin las de 'fuera'."""
+    if libres is None or (k in libres and k not in fuera):
+        return k
+    cols, _ = rejilla_sala(cfg)
+    cand = [q for q in libres if q not in fuera] or list(libres) or [k]
+    return min(cand, key=lambda q: ((q % cols - k % cols) ** 2 + (q // cols - k // cols) ** 2, q))
+
+
+def demo_celda(W, cfg, cx, cy, libres=None, fuera=()):
+    """La celda que mira a la casilla (columna, fila) de la demo web (o a la libre mas cercana)."""
+    return celda_de_casilla(W, cfg, _cas_libre(cfg, demo_casilla(cfg, cx, cy), libres, fuera))
+
+
+def casillas_de_celda(W, cfg, c, libres=None):
+    """Las casillas que miran a la celda c (las libres, si se dan), de la mas cercana a su centro."""
+    cols, filas = rejilla_sala(cfg)
+    k0 = casilla_de_celda(cfg, c)
+    ks = [k for k in range(cols * filas) if celda_de_casilla(W, cfg, k) == c
+          and (libres is None or k in libres)]
+    if k0 is None:
+        return ks
+    return sorted(ks, key=lambda k: ((k % cols - k0 % cols) ** 2 + (k // cols - k0 // cols) ** 2, k))
+
+
+def _vecinas_a_la_vista(W, cfg, c, n, libres=None):
+    """n vecinas de la celda c con casilla libre, de la mas cercana al centro de la sala."""
+    cols, filas = rejilla_sala(cfg)
+    out = []
+    for v in NEIGH[c]:
+        ks = casillas_de_celda(W, cfg, v, libres)
+        if ks:
+            k = ks[0]
+            out.append((abs(k % cols - cols // 2) + abs(k // cols - filas // 2), v))
+    return [v for _, v in sorted(out)[:n]]
+
+
+def demo_refs(W, cfg, cap, libres=None):
+    """Los sitios con nombre de un capitulo (solo lee): celdas y casillas que usan su
+    coreografia de la sala y su guion. libres: las casillas a las que llega el publico."""
+    cols, filas = rejilla_sala(cfg)
+    r = dict(cap=int(cap))
+    cel = lambda cx, cy: demo_celda(W, cfg, cx, cy, libres)      # noqa: E731
+    if cap == 0:
+        r['siembra'] = [(cel(5.5, 2.0), 3), (cel(7.0, 4.0), 4), (cel(8.5, 5.0), 2), (cel(8.5, 1.5), 5),
+                        (cel(3.0, 6.5), 2)]
+    elif cap == 2:
+        r['siembra'] = [(cel(4.0, 2.5), 4), (cel(2.5, 5.0), 3), (cel(5.5, 4.0), 5), (cel(7.0, 4.0), 9),
+                        (cel(7.0, 5.0), 7), (cel(5.5, 7.0), 2), (cel(9.0, 3.5), 3)]
+    elif cap in (3, 4):
+        r['brote'] = cel(6.0, 4.0)
+        r['musica'] = [r['brote']]
+        if cap == 3:
+            r['siembra'] = [(cel(8.5, 6.5), 4)]
+        else:
+            r['aliadas'] = _vecinas_a_la_vista(W, cfg, r['brote'], max(1, int(cfg.get('aliados', 3))), libres)
+    elif cap == 5:
+        r['torre'] = cel(9.0, 4.0)      # a 130 grados: el camino corto pasa por la cara visible
+        r['salida'] = cel(1.0, 4.0)
+        r['fila'] = _fila_trampa(W, cfg, r['salida'], r['torre'], libres)
+        r['siembra'] = [(r['torre'], 4), (cel(8.0, 8.0), 2)]
+        r['musica'] = [r['torre']]      # solo engorda la torre (la fila no construye: cava)
+    elif cap == 6:
+        k = [_cas_libre(cfg, demo_casilla(cfg, c_, 5.0), libres) for c_ in (3.0, 4.0, 5.0, 6.0)]
+        r['fila'] = k
+        fila_cel = [celda_de_casilla(W, cfg, q) for q in k]
+        canal = []
+        for c_ in (1.0, 2.5, 4.0, 5.5, 7.0):      # la zanja: la banda de detras de la fila
+            x = celda_de_casilla(W, cfg, demo_casilla(cfg, c_, 4.0))
+            if x not in canal and x not in fila_cel:
+                canal.append(x)
+        r['canal'] = canal
+        junto = [x for x in canal if any(x in NEIGH[f] for f in fila_cel)]
+        r['monstruo'] = junto[0] if junto else (canal[0] if canal else None)
+        r['torre'] = cel(9.5, 4.0)
+    elif cap == 7:
+        r['monstruo'] = cel(6.0, 4.0)
+        r['muros'] = [celda_desplazada(r['monstruo'], db, dl) for db, dl in DEMO_CERCO]
+    elif cap == 8:
+        r['monstruo'] = cel(6.0, 4.0)
+        r['siembra'] = [(r['monstruo'], 16), (cel(3.0, 6.5), 4)]
+    elif cap == 9:
+        r['monstruo'] = cel(6.0, 4.5)
+        r['siembra'] = [(cel(4.0, 6.5), 5), (cel(8.5, 6.0), 4), (cel(9.0, 3.0), 5), (cel(2.5, 4.5), 3)]
+    elif cap == 10:
+        r['monstruo'] = cel(6.0, 3.5)
+        r['siembra'] = [(r['monstruo'], 13), (cel(8.5, 6.0), 4), (cel(3.0, 5.5), 3)]
+        r['corro'] = cel(5.0, 6.5)      # la gente que grita, en corro sobre una celda (su presencia la cuenta entera)
+    elif cap == 11:
+        m = cel(6.0, 5.0)
+        r['monstruo'] = m
+        k = demo_casilla(cfg, 6.0, 5.0)
+        mejor = None
+        for df in (-1, 1):                # la banda de al lado (primero la del norte)
+            f = k // cols + df
+            if not 0 <= f < filas:
+                continue
+            for c0 in range(max(0, k % cols - 2), min(cols - 2, k % cols + 1)):
+                ks = [f * cols + c0 + j for j in range(3)]
+                cs = [celda_de_casilla(W, cfg, q) for q in ks]
+                if m in cs or (libres is not None and any(q not in libres for q in ks)):
+                    continue
+                if any(x in NEIGH[m] for x in cs):
+                    mejor = ks
+                    break
+            if mejor:
+                break
+        r['fila'] = mejor or [demo_casilla(cfg, 5.0 + j, 4.0) for j in range(3)]
+        r['siembra'] = [(cel(2.0, 5.0), 5), (cel(9.0, 7.0), 3)]
+    return r
+
+
+DEMO_CERCO = ((0, -1), (0, 1), (1, 0), (-1, 0))     # las cuatro vecinas del cerco (bandas, meridianos)
+
+
+def _camino_demo(src, dst, zanjas=(), coste=2.0):
+    """Las celdas del camino mas barato de src a dst (entrar en una zanja cuesta
+    'coste', como en dijkstra_mon), sin src."""
+    import heapq
+    dist, prev, heap = {src: 0.0}, {}, [(0.0, src)]
+    while heap:
+        d, u = heapq.heappop(heap)
+        if u == dst:
+            break
+        if d > dist.get(u, 1e18) + 1e-12:
+            continue
+        for v in NEIGH[u]:
+            nd = d + (coste if v in zanjas else 1.0)
+            if nd < dist.get(v, 1e18) - 1e-12:
+                dist[v], prev[v] = nd, u
+                heapq.heappush(heap, (nd, v))
+    out, x = [], dst
+    while x != src and x in prev:
+        out.append(x)
+        x = prev[x]
+    return out[::-1]
+
+
+def _fila_trampa(W, cfg, salida, torre, libres=None):
+    """Cebo y zanja trampa: tres casillas en columna (una fila de 3) cuya zanja corta el
+    camino del monstruo de salida a la torre (con la zanja, sigue pasando por ella: rodearla
+    le costaria mas). La columna mas cercana a la mitad del camino."""
+    cols, filas = rejilla_sala(cfg)
+    cz = max(1.0, float(cfg.get('coste_zanja', 2.0)))
+    mejor = None
+    for c0 in sorted(range(1, cols - 1), key=lambda q: abs(q - 0.6 * (cols - 1))):
+        for f0 in sorted(range(1, filas - 1), key=lambda q: abs(q - 0.45 * (filas - 1))):
+            ks = [(f0 + d) * cols + c0 for d in (-1, 0, 1)]
+            if libres is not None and any(k not in libres for k in ks):
+                continue
+            zj = set(celda_de_casilla(W, cfg, k) for k in ks)
+            if salida in zj or torre in zj:
+                continue
+            if zj & set(_camino_demo(salida, torre, zj, cz)):
+                mejor = ks
+                break
+        if mejor:
+            break
+    return mejor or [_cas_libre(cfg, demo_casilla(cfg, 6.0, f), libres) for f in (3.0, 4.0, 5.0)]
+
+
+def _demo_vaciar(W, cfg, now, conchas=0):
+    """Resetmundo en el sitio (el mismo diccionario W) y, con conchas, unas conchas vacias
+    enterradas debajo (para que las filas tengan que cavar). Sin la noche de esos entierros."""
+    sync_grid()
+    nuevo = new_world()
+    nuevo['grid'] = [GRID['lo'], GRID['hi']]
+    W.clear()
+    W.update(nuevo)
+    ensure(W)
+    seco = dict(cfg, oceano=0)          # todas las celdas dejan su loseta (con Oceano, solo lo creado)
+    for _ in range(int(conchas)):
+        end_cycle(W, seco, now)
+    W['noche'] = None
+    W['aviso'] = 'demo: el mundo, de cero'
+    W['dirty'] = True
+    _CACHE['inst'] = None
+    _CACHE['tiles'] = None
+    _CACHE['frame'] = None
+    return W
+
+
+def _demo_juego(W, cfg, now):
+    """Modojuego y Nuevapartida: la ronda 1 empieza ahora."""
+    if cfg['nivel'] < 32 or not cfg.get('modo_juego'):
+        return None
+    juego_al_dia(W, cfg, now)
+    return nueva_partida(W, cfg, now)
+
+
+def _demo_sembrar(W, cfg, celda, occ, now, s=GEO):
+    """Sembrar hasta la ocupacion occ (subir_escalon, como Sembrarzona)."""
+    if celda is None:
+        return 0
+    for _ in range(64):
+        if W['occ'][celda] >= occ:
+            break
+        o = W['occ'][celda]
+        subir_escalon(W, cfg, s, celda, 100, now)
+        if W['occ'][celda] == o:
+            break
+    return W['occ'][celda]
+
+
+def _demo_monstruo(W, cfg, now, celda, acum=0):
+    """Simmonstruo en la celda, con acum escalones ya comidos (8: forma grande)."""
+    if celda is None or not juego_on(W, cfg):
+        return None
+    m = aparecer(W, cfg, now, celda)
+    m['acum'] = int(acum)
+    actualizar_tam(cfg, m)
+    recalcular_objetivo(W, cfg, m, now)
+    return m
+
+
+def _demo_brote(W, cfg, celda, occ, now):
+    """Un brote del mal (como Simmal, de una celda) con la ocupacion occ."""
+    if celda is None or not juego_on(W, cfg):
+        return None
+    if W['occ'][celda] > 0:
+        _clear_cell(W, celda)
+    brote_mal(W, cfg, celda, now)
+    W['occ'][celda] = max(1, int(occ))
+    W['juego']['ultimoseq'][celda] = 'geo'
+    return celda
+
+
+def guion_demo(W, cfg, capitulo, evento='inicio', now=None, t=0.0, refs=None, libres=None):
+    """El guion de la demo GENoZilla (motor v119): con evento 'inicio' prepara FASE1
+    para el capitulo (al empezar su titulo); con 'tick', cada fotograma, lo que pasa a
+    su hora (t, s desde que acaba el titulo) y la musica de la demo. Solo actua con
+    Demo = genozilla. Devuelve los sitios del capitulo (demo_refs) o lo hecho."""
+    if not demo_genozilla():
+        return None
+    now = (W.get('t') or 0.0) if now is None else now
+    cap = int(capitulo) % DEMO_CAPITULOS
+    if evento == 'inicio':
+        refs = refs if refs is not None else demo_refs(W, cfg, cap, libres)
+        _GUION.update(cap=cap, hechos=set(), t_nota=None, sueltas=[], refs=refs, muertes=0)
+        _demo_inicio(W, cfg, cap, now, refs)
+        return refs
+    if _GUION.get('cap') != cap:
+        return None
+    return _demo_tick(W, cfg, cap, now, float(t), _GUION.get('refs') or {})
+
+
+def _demo_inicio(W, cfg, cap, now, r):
+    cfg = dict(cfg, presencia_activa=False)     # lo que siembra el guion prende entero (sin el sorteo de la fase 22)
+    conchas = DEMO_CONCHAS if cap in (5, 6, 10, 11) else 0
+    _demo_vaciar(W, cfg, now, conchas)
+    _demo_juego(W, cfg, now)
+    for celda, occ in r.get('siembra', ()):
+        _demo_sembrar(W, cfg, celda, occ, now, ARQ if (celda or 0) % 3 == 0 else GEO)
+    if cap in (3, 4):
+        _demo_brote(W, cfg, r.get('brote'), 1 if cap == 3 else 4, now)
+    elif cap == 6:
+        for c in r.get('canal', ()):
+            if juego_on(W, cfg):
+                cavar_zanja(W, cfg, c, 2, now)
+        _demo_sembrar(W, cfg, r.get('torre'), 5, now)
+    elif cap == 7:
+        for c in r.get('muros', ()):
+            if c is not None and c != r.get('monstruo'):
+                _demo_sembrar(W, cfg, c, 3, now)
+        m = _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=10)
+        if m is not None:               # quieto mientras le rodean (el titulo y 4,6 s)
+            m['aturdido'] = now + DEMO_TITULO + 4.6
+    elif cap == 9:
+        _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=9)
+    elif cap == 12:
+        for i in range(N):              # el globo entero: publico y mal
+            x = _hash01(i, 77, 12)
+            if x < 0.42:
+                _demo_sembrar(W, cfg, i, 1 + int(_hash01(i, 78) * 6), now, GEO if i % 2 else ARQ)
+            elif x < 0.62:
+                _demo_brote(W, cfg, i, 1 + int(_hash01(i, 79) * 4), now)
+    W['dirty'] = True
+
+
+DEMO_TITULO = 2.8               # s del titulo de cada capitulo (el guion empieza con el)
+
+
+def _una_vez(nombre):
+    if nombre in _GUION['hechos']:
+        return False
+    _GUION['hechos'].add(nombre)
+    return True
+
+
+def _demo_tick(W, cfg, cap, now, t, r):
+    hecho = []
+    J = W.get('juego') if juego_on(W, cfg) else None
+    if J is not None and t >= 0.0:
+        m = J['mon']
+        if cap == 2 and t >= 1.0 and _una_vez('aparece'):
+            c = celda_aparicion(W, cfg)
+            if _demo_monstruo(W, cfg, now, c) is not None:
+                hecho.append('aparece en %d' % c)
+        elif cap == 5 and t >= 6.0 and _una_vez('aparece'):
+            if _demo_monstruo(W, cfg, now, r.get('salida'), acum=8) is not None:
+                hecho.append('aparece en %s' % r.get('salida'))
+        elif cap == 6:
+            if _una_vez('aparece'):
+                if _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=3) is not None:
+                    hecho.append('aparece en la zanja, celda %s' % r.get('monstruo'))
+            elif m['estado'] == 'espera' and m['n'] >= 1 and _una_vez('reaparece'):
+                c = celda_aparicion(W, cfg)
+                if _demo_monstruo(W, cfg, now, c) is not None:
+                    hecho.append('reaparece en %d' % c)
+        elif cap == 8 and _una_vez('aparece'):
+            if _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=12) is not None:
+                hecho.append('devora la corona de la celda %s' % r.get('monstruo'))
+        elif cap == 11 and _una_vez('aparece'):
+            if _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=3) is not None:
+                hecho.append('aparece en %s, casi quieto' % r.get('monstruo'))
+        elif cap == 10 and _una_vez('aparece'):
+            if _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=10) is not None:
+                hecho.append('devora la corona de la celda %s' % r.get('monstruo'))
+        elif cap == 12 and t >= 3.0 and _una_vez('fin'):
+            J['t0'] = now - float(cfg['duracion_ronda'])    # el fin de ronda, ya
+            hecho.append('fin de ronda')
+    if cap in DEMO_MUSICA and t >= 0.0:
+        hecho += _demo_musica(W, cfg, now, r.get('musica'))
+    return hecho
+
+
+def _demo_musica(W, cfg, now, solo=None):
+    """La musica de la demo: una nota del SEQ1 cada DEMO_NOTA_CADA s por cada persona
+    quieta DEMO_QUIETO s en su casilla, en la celda que mira (pasa por el sorteo de la
+    presencia de la fase 22, como cualquier nota). Con solo, solo en esas celdas."""
+    out = []
+    for nota, t_off in list(_GUION['sueltas']):
+        if now >= t_off:
+            note_off(W, cfg, GEO, nota, now, tempo())
+            _GUION['sueltas'].remove((nota, t_off))
+    tn = _GUION.get('t_nota')
+    if tn is not None and now - tn < DEMO_NOTA_CADA - 1e-9:
+        return out
+    _GUION['t_nota'] = now
+    for k, v in sorted((_SALA.get('casillas') or {}).items()):
+        if now - v.get('t_ocupada', now) < DEMO_QUIETO - 1e-9:
+            continue
+        c = celda_de_casilla(W, cfg, k)
+        if solo is not None and c not in solo:
+            continue
+        nota = cell_note(c)
+        for _ in range(max(1, int(v.get('personas', 1)))):
+            note_on(W, cfg, GEO, nota, 100, now, tempo())
+        _GUION['sueltas'].append((nota, now + 0.5 * DEMO_NOTA_CADA))
+        out.append('nota en %d' % c)
+    return out
 
 
 def _mmss(s):

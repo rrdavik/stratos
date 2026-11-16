@@ -15,6 +15,10 @@ rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
 mal donde toca.
+Con la sala virtual (sala_virtual v24), la demo GENoZilla de principio a fin
+(Demo = genozilla, fotograma a fotograma): los 13 capitulos, la columna
+Comprobar de cada uno y, al acabar, FASE1 como estaba (el mundo, las armas,
+Fuente y Modojuego).
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
 Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
@@ -252,6 +256,43 @@ def partida(sim, fps=30.0, ronda=60.0):
     return hechos
 
 
+def firma_mundo(W):
+    """Lo que la demo no puede cambiar del mundo (el resto, W['t'] y lo del fotograma, si)."""
+    return (list(W['occ']), list(W['sp']), list(W['own']), len(W['shells']), len(W.get('escisiones', [])),
+            sorted(W.get('esc_celdas', {}).items()), 'juego' in W, W.get('ciclo_n'))
+
+
+def genozilla(sim, fps=30.0, fps_mic=60.0):
+    """La demo GENoZilla de la sala virtual de principio a fin, fotograma a fotograma
+    (el microfono a fps_mic en Estatuas y Grito, como en TouchDesigner). Devuelve
+    (resultados [(capitulo, bien, que)], FASE1 como estaba)."""
+    sala = sim.op('/project1/SALA')
+    base = sim.op('/project1/FASE1')
+    sm = sala.op('sala_motor').module
+    m = base.op('motor').module
+    pars = list(sm.ARMAS) + ['Fuente', 'Modojuego', 'Tfila', 'Barsperturn', 'Pasomonstruo', 'Noche', 'Oceano']
+    sim.fotograma(1.0 / fps)            # lo que FASE1 hace sola en un fotograma (limpiar celdas vacias) no es de la demo
+    antes = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars),
+             str(sala.par.Vista.eval()), str(sala.par.Modoluz.eval()))
+    demo0 = str(sala.par.Demo.eval())
+    sala.par.Buclecap = False
+    sala.par.Guion = True
+    sala.par.Capitulo = sm.CAP_NOMBRES[0]
+    sala.par.Demo = 'genozilla'
+    tope = int((sum(c['dur'] for c in sm.CAPITULOS) + len(sm.CAPITULOS) * sm.TITULO + 10.0) * fps_mic)
+    for _ in range(tope):
+        dt = 1.0 / (fps_mic if sm._GZ.get('cap') in sm.MIC_CAPS else fps)
+        sim.fotograma(dt)
+        if sm._GZ.get('acabada'):
+            break
+    res = list(sm._GZ.get('resultados') or [])
+    despues = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars),
+               str(sala.par.Vista.eval()), str(sala.par.Modoluz.eval()))
+    sala.par.Demo = demo0
+    sim.fotograma(1.0 / fps)
+    return res, antes == despues, antes, despues
+
+
 def duplicados():
     """Funciones de nivel de modulo definidas dos veces en el motor o en comun. Python se
     queda con la ultima sin avisar: al fusionar dos ramas, una funcion nueva con el nombre
@@ -322,6 +363,22 @@ def main():
                  '/'.join(str(len(x)) for x in h['conchas_mal'])))
         if not bien:
             print('         %s' % dict((k, v) for k, v in h.items() if k != 'resultados'))
+        W = m.world()
+    sala = sim.op('/project1/SALA')
+    if sala is not None and sala.op('sala_motor') is not None and hasattr(sala.op('sala_motor').module, 'CAPITULOS'):
+        with contextlib.redirect_stdout(io.StringIO()):
+            res, igual, antes, despues = genozilla(sim)
+        bien = len(res) == 13 and all(r[1] for r in res) and igual
+        todo = todo and bien
+        print('%-6s demo GENoZilla (sala virtual): %d/%d capitulos comprobados, FASE1 %s al salir'
+              % ('OK' if bien else 'FALLO', sum(1 for r in res if r[1]), len(res),
+                 'como estaba' if igual else 'CAMBIADA'))
+        for k, b, que in res:
+            if not b:
+                print('         capitulo %d: %s' % (k, que))
+        if not igual:
+            print('         antes   %s' % (antes[1:],))
+            print('         despues %s' % (despues[1:],))
         W = m.world()
     # relanzar sobre el proyecto avanzado: el mundo no se pierde
     antes = (m.occupied(W), list(W['occ']))
