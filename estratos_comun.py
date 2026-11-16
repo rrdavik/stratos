@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v87'
+VERSION_COMUN = 'comun v88'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -39,10 +39,12 @@ RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'r
                 # comun v83: las geometrias del juego (fases 32 a 34) no estaban: el render no las dibujaba;
                 # trumpzilla (fase 38), el monstruo en sprite
                 'marcas', 'brotes_mal', 'tocon', 'monstruo', 'agua_juego', 'trumpzilla',
-                'emblemas_mal',             # comun v87: los emblemas y demonios del mal (fase 39)
                 'particulas', 'humo',
                 'luz_celda', 'luz_conchas',
-                'luz_local']                    # lo transparente (motas, humo) y las capas aditivas, al final
+                'luz_local',                       # lo transparente (motas, humo) y las capas aditivas, al final
+                # comun v88: los emblemas y demonios del mal (fase 39), despues de todo: son neon
+                # opaco con luz propia (las capas aditivas, dibujadas encima, podian lavarlos)
+                'emblemas_mal']
 PIEL_PREFIJO = 'mod_'                # geometrias de los modelos (fase 11), tras las formas
 LIGHT_ORDER = ['luz_principal', 'luz_relleno', 'luz_destello']
 
@@ -3190,7 +3192,7 @@ void main()
     if (t.a < 0.5)
         discard;
     vec3 rgb = t.rgb / t.a;
-    float luz = iVert.color.r;
+    float luz = clamp(iVert.color.r, 0.0, 1.0);     // comun v88: nunca mas de encendido
     float tt = uEmblema.x;
     if (iVert.modo == 1) {                              // parpadeo de tubo que arranca
         float r = fract(sin(floor(tt * 13.0) * 12.9898 + iVert.semilla) * 43758.5453);

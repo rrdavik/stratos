@@ -44,6 +44,14 @@ QUE HACE
                pecho.
   RESCATE      (fase 35) mientras dura, el neon parpadea y se apaga; al
                completarse, la valla cae y la celda es del publico.
+  OCEANO       (v2) con Oceano, cada celda del mal tiene su isla, llana, y sus
+               edificios se apoyan en ella (sin ella el mar los tapaba y solo
+               quedaban los emblemas flotando). El coloso, como mucho un tercio
+               del radio del planeta.
+  TIERRA       (v2, Montierra) Trumpzilla solo anda por tierra: con Oceano no
+               entra en el mar (celda vacia a ras del nivel del mar) ni en las
+               hondonadas inundadas; aparece en tierra (si todo lo vacio es mar,
+               en una isla). Lo construido es isla; las zanjas, su trampa.
   LEYENDA      MAL      negocio 3  ocio 3  encierro 2  vallas 2   obras 1   demonio coloso (10 celdas)
 
 OPERADORES (en /project1/FASE1)
@@ -72,7 +80,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase39 v1  (la especie del mal: vallas, negocio, ocio y encierro, obra, emblemas y demonio)'
+VERSION = 'fase39 v2  (con Oceano el mal tiene su isla; el coloso a escala; Trumpzilla solo anda por tierra)'
 banner(VERSION)
 
 base = require_base(39)
@@ -87,13 +95,28 @@ page = get_page(base, 'Fase39')
 add_par(base, page, 'toggle', 'Especiemal', 'Especie del mal (sin: el velo provisional)', True)
 add_par(base, page, 'int', 'Vecinasencierro', 'Vecinas del mal para cerrarse (encierro)', 3, 1, 6, clamp=True)
 add_par(base, page, 'int', 'Pasosobramal', 'Pasos por paso de obra', 8, 1, 64, clamp=True)
-add_par(base, page, 'float', 'Tamanoemblema', 'Tamano del emblema (celdas)', 0.45, 0.05, 3.0, clamp=True)
+add_par(base, page, 'float', 'Tamanoemblema', 'Tamano del emblema (celdas)', 0.35, 0.05, 3.0, clamp=True)
 add_par(base, page, 'float', 'Brilloemblema', 'Brillo del emblema (neon)', 1.0, 0.1, 4.0, clamp=True)
 add_par(base, page, 'float', 'Altomal', 'Alto de los edificios del mal (x la planta)', 1.5, 0.5, 4.0, clamp=True)
 add_par(base, page, 'toggle', 'Demoniomal', 'El demonio de los clusters', True)
+add_par(base, page, 'toggle', 'Montierra', 'El monstruo solo anda por tierra (con Oceano)', True)
 add_par(base, page, 'pulse', 'Simmal', 'Simular cluster del mal')
-ok('pagina Fase39: Especiemal, Vecinasencierro 3, Pasosobramal 8, Tamanoemblema 0,45, Brilloemblema 1, '
-   'Altomal 1,5, Demoniomal, Simmal')
+ok('pagina Fase39: Especiemal, Vecinasencierro 3, Pasosobramal 8, Tamanoemblema 0,35, Brilloemblema 1, '
+   'Altomal 1,5, Demoniomal, Montierra, Simmal')
+
+# v2: los emblemas de la v1 (0,45) se veian grandes: un proyecto con 0,45 pasa a 0,35, una sola vez
+try:
+    _hechas = set(base.fetch('migraciones', [], search=False) or [])
+except Exception:
+    _hechas = set()
+if 'fase39:emblema0.35' not in _hechas:
+    if abs(float(base.par.Tamanoemblema.eval()) - 0.45) < 1e-6:
+        base.par.Tamanoemblema = 0.35
+        ok('Tamanoemblema: de 0,45 (la v1) a 0,35')
+    try:
+        base.store('migraciones', sorted(_hechas | {'fase39:emblema0.35'}))
+    except Exception:
+        pass
 
 # -----------------------------------------------------------------------------
 # OPERADORES
@@ -126,7 +149,8 @@ print_report()
 # -----------------------------------------------------------------------------
 
 PARS39 = ('Fuente', 'Probllegada', 'Temaenciclo', 'Modojuego', 'Umbralaparicion', 'Simbalance', 'Colapsoon',
-          'Especiemal', 'Vecinasencierro', 'Pasosobramal', 'Demoniomal', 'Altomal', 'Tamanoemblema')
+          'Especiemal', 'Vecinasencierro', 'Pasosobramal', 'Demoniomal', 'Altomal', 'Tamanoemblema', 'Tema',
+          'Oceano', 'Montierra')
 
 
 def prueba(t):
@@ -170,7 +194,8 @@ def _prueba(t, m, copy, time):
     base.par.Pasosobramal = 8
     base.par.Demoniomal = True
     base.par.Altomal = 1.5
-    base.par.Tamanoemblema = 0.45
+    base.par.Tamanoemblema = 0.35
+    base.par.Montierra = True
     S = SalaJuego(base, m, absTime.seconds + 5100.0)
     a = 40 if m.N > 50 else m.N // 2
     vec = list(m.NEIGH[a])
@@ -382,8 +407,40 @@ def _prueba(t, m, copy, time):
             len(sin['brotes_mal']) == 10 and sin['emblemas_mal'] == [] and nada.get('emblemas_mal') == [],
             '%d velos' % len(sin['brotes_mal']))
 
+    # 11. v2: con Oceano, Trumpzilla solo anda por tierra; el mal, sobre su isla
+    base.par.Tema = 'naturaleza'
+    base.par.Oceano = True
+    W, c = S.nuevo(4)
+    dist, _ = m.dijkstra_mon(dict(W, juego=dict(zanjas={}, agua={})), dict(c, nivel=38), a)
+    b = min(x for x in dist if abs(dist[x] - 2.0) < 1e-9)
+    puente = [x for x in m.NEIGH[a] if b in m.NEIGH[x]][0]
+    m.brote_mal(W, c, a, S.now)                     # su isla: un brote del mal (no se lo come)
+    S.sembrar(W, c, b, 3)
+    mar = m.mar_mon(W, c)
+    mo = m.aparecer(W, c, S.now, a)
+    sin_puente = (mo['objetivo'], list(mo['camino']))
+    S.sembrar(W, c, puente, 1)
+    m.recalcular_objetivo(W, c, mo, S.now)
+    con_puente = (mo['objetivo'], list(mo['camino']))
+    base.par.Montierra = False
+    m.recalcular_objetivo(W, c, mo, S.now)
+    sin_regla = m.mar_mon(W, m.cfg())
+    base.par.Montierra = True
+    c = m.cfg()
+    m.brote_mal(W, c, puente, S.now)
+    S.semis(W, c, 1)
+    ter = m.terreno(W, c)
+    suelo_m = m.suelo_mal(W, c, puente) - m.base_radius(W, c, puente)
+    t.check('con Oceano, Trumpzilla solo anda por tierra: con mar entre su isla y la presa no tiene objetivo; '
+            'con un puente de tierra va por el; Montierra apagado, todo es tierra. La celda del mal, sobre su isla',
+            puente in mar and a not in mar and b not in mar and sin_puente == (None, [])
+            and con_puente == (b, [puente, b]) and sin_regla == frozenset()
+            and suelo_m > 0.02 and abs(suelo_m - ter['centro'][puente]) < 1e-9,
+            'mar %d celdas; sin puente %s, con puente %s; isla %.3f' % (len(mar), sin_puente, con_puente, suelo_m))
+
 
 run_test(base, prueba)
 print('  Ahora: Modojuego y Simmal: un cluster de diez celdas en obra (vallas, negocio, ocio y encierro)')
+print('  Con Oceano, Trumpzilla solo anda por tierra (Montierra).')
 print('  que se enciende, con el coloso detras. Especiemal apagado: el velo provisional.')
 print('=' * 66)
