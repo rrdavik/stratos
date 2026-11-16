@@ -147,11 +147,28 @@ class AbsTime(object):
 # PARAMETROS
 # -----------------------------------------------------------------------------
 
+class ParMode(object):
+    """Los modos de un parametro, como td.ParMode."""
+    class _Modo(object):
+        def __init__(self, nombre):
+            self.name = nombre
+
+        def __repr__(self):
+            return 'ParMode.%s' % self.name
+        __str__ = __repr__
+
+    CONSTANT, EXPRESSION, EXPORT, BIND = _Modo('CONSTANT'), _Modo('EXPRESSION'), _Modo('EXPORT'), _Modo('BIND')
+
+
 class Par(object):
+    # Como en TouchDesigner: dar un valor (par.val = x) pone el parametro en modo
+    # CONSTANT y conserva el texto de su expresion; dar una expresion (par.expr = e)
+    # lo pone en EXPRESSION. eval() usa la expresion solo en modo EXPRESSION.
     def __init__(self, owner, name, val=0.0, page=None, custom=False, kind='float'):
         self.owner, self.name, self._val = owner, name, val
         self.page, self.custom, self.kind = page, custom, kind
-        self.expr = ''
+        self._expr = ''
+        self.mode = ParMode.CONSTANT
         self.default = val
         self.label = name
         self.normMin, self.normMax, self.min, self.max = 0.0, 1.0, 0.0, 1.0
@@ -159,6 +176,16 @@ class Par(object):
         self.readOnly = False
         self.menuNames = list(_MENUS.get(name, [])) if not custom else []
         self.menuLabels = list(self.menuNames)
+
+    @property
+    def expr(self):
+        return self._expr
+
+    @expr.setter
+    def expr(self, e):
+        self._expr = e or ''
+        if self._expr:
+            self.mode = ParMode.EXPRESSION
 
     # valor
     @property
@@ -185,6 +212,7 @@ class Par(object):
             if self.clampMax:
                 v = min(self.max, v)
         self._val = v
+        self.mode = ParMode.CONSTANT
         self.owner._valor_cambiado(self, prev)
 
     @property
@@ -199,7 +227,7 @@ class Par(object):
         self.val = self.menuNames[int(i)]
 
     def eval(self):
-        v = self.owner._eval_expr(self.expr, self) if self.expr else self._val
+        v = self.owner._eval_expr(self._expr, self) if self._expr and self.mode is ParMode.EXPRESSION else self._val
         if self.name in OP_PARS and not self.custom:
             if not v:
                 return None

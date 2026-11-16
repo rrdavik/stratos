@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v84'
+VERSION_COMUN = 'comun v85'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -325,6 +325,20 @@ def setexpr(o, name, expression):
     except Exception:
         pass
     return False
+
+
+def en_expresion(p, texto=''):
+    """comun v85: el parametro p usa de verdad una expresion (que contiene 'texto').
+    En TouchDesigner, dar un valor por script (par.val = x) lo pone en modo CONSTANT
+    y conserva el texto de la expresion: mirar solo .expr no basta."""
+    try:
+        e = p.expr or ''
+    except Exception:
+        return False
+    if not e or texto not in e:
+        return False
+    modo = getattr(p, 'mode', None)
+    return modo is None or 'EXPRESSION' in str(modo).upper()
 
 
 def setmenu(o, names, wanted, index=None):
@@ -5029,7 +5043,8 @@ DIA_EXPR = "parent().op('motor').module.dia(absTime.frame)"
 
 def noche_al_dia(base):
     """Desde la fase 28, el color de luz_relleno se multiplica por 1 - noche
-    (conserva el valor que tuviera). Devuelve si quedo enlazado."""
+    (conserva el valor que tuviera). Devuelve si quedo enlazado. comun v85: cuenta
+    como enlazado solo si la expresion esta en uso (modo EXPRESSION)."""
     if current_level(base) < 28:
         return False
     luz = base.op('luz_relleno')
@@ -5041,11 +5056,11 @@ def noche_al_dia(base):
             p = getattr(luz.par, pat % ch, None)
             if p is None:
                 continue
-            if DIA_EXPR in (getattr(p, 'expr', '') or ''):
+            if en_expresion(p, DIA_EXPR):
                 hechos += 1
                 break
-            try:
-                v = float(p.eval())
+            try:                     # comun v85: en modo constante (la fase 10 le da su color con
+                v = float(p.val)     # .val) la expresion vieja ya no cuenta: se vuelve a poner
             except Exception:
                 v = 1.0
             if setexpr(luz, pat % ch, '%.4f * %s' % (v, DIA_EXPR)):
