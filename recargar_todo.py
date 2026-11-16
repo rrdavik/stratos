@@ -45,7 +45,7 @@ FASES_ORDEN = ['fase3_semilla.py', 'fase4_desborde.py', 'fase5_especies.py',
                'fase26_borrado.py', 'fase27_clasificacion.py', 'fase28_noche.py', 'fase29_fila.py',
                'fase30_relampago.py', 'fase31_historico.py', 'fase32_juego.py', 'fase33_monstruo.py',
                'fase34_zanjas.py', 'fase35_rescate.py', 'fase36_luzjuego.py', 'fase37_armas.py',
-               'fase38_trumpzilla.py']
+               'fase38_trumpzilla.py', 'fase39_mal.py']
 
 
 class _Eco(object):
