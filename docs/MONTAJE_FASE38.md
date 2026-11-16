@@ -47,6 +47,7 @@ Para añadir caras: más celdas en `COLS × FILAS`, el nombre en `EMOCIONES` del
 ## Qué hace
 
 - **El sprite.** Una lámina de pie sobre la celda del monstruo, con los pies en el suelo, que mira siempre a la cámara. Su «arriba» es el de la pantalla, inclinado hacia la vertical del planeta como mucho `Inclinasprite` grados (30): así no se tumba en el borde del globo ni queda boca abajo en el hemisferio sur. Con la cámara rasante la vertical del planeta ya es la de la pantalla. Lleva una sombra redonda en el suelo, sigue el giro del planeta, avanza entre celdas como el monstruo y **se voltea hacia donde camina**. Mide `Altosprite` celdas por `tam` (crece con lo que devora); el ancho, 3/4 del alto.
+- **La luz (v2).** Lo iluminan las mismas luces que la piel del planeta (`luz_principal`, `luz_relleno`, `luz_destello` y el ambiente, con las expresiones de `mat_piel_mineral`): se ve con la luz de Stratos y se apaga con la noche. La luz envuelve un poco para que de lado no quede negro. `Brillosprite` lo ajusta. En la v1 iba sin luz y, junto al planeta iluminado, salía casi blanco.
 - **Las emociones.** Salen del estado del monstruo; vale la primera de la lista:
 
 | Situación | Cara | Animación |
@@ -72,7 +73,7 @@ Para añadir caras: más celdas en `COLS × FILAS`, el nombre en `EMOCIONES` del
 | Operador | Tipo | Qué es |
 |---|---|---|
 | `trumpzilla`, `i_trumpzilla` | Geometry COMP + Script CHOP | Una lámina (Rectangle SOP 1 × 1) instanciada: la sombra y el sprite |
-| `mat_sprite` | GLSL MAT | `sprite_vertex` y `sprite_pixel`; sampler `sAtlas`; uniformes `uSprite` (reloj `sprite_t` de `frame_u`, `Pixelsprite`, columnas y filas) y `uSpriteInc` (`Inclinasprite`). Blending One / One Minus Source Alpha, escribe profundidad, sin culling |
+| `mat_sprite` | GLSL MAT | `sprite_vertex` y `sprite_pixel`; sampler `sAtlas`; uniformes `uSprite` (reloj `sprite_t` de `frame_u`, `Pixelsprite`, columnas y filas) `uSpriteInc` (`Inclinasprite`, `Brillosprite`) y las luces de la piel (`uLuz0` a `uLuz2Col`, `uAmbiente`). Blending One / One Minus Source Alpha, escribe profundidad, sin culling |
 | `trumpzilla_atlas` | Movie File In TOP | `sprites/trumpzilla_emociones.png` |
 | `sprite_vertex`, `sprite_pixel` | Text DAT | Los shaders |
 
@@ -84,9 +85,10 @@ En cada fila de `trumpzilla`, el alfa lleva `cara + 16 × animación` (el sprite
 |---|---|---|
 | `Spritemonstruo` | encendido | Trumpzilla en lugar del cuerpo provisional de la fase 33 |
 | `Emocion` | auto | Fija una cara (ensayo o función); auto, la del estado |
-| `Altosprite` | 1,6 | Alto en celdas, por `tam` |
+| `Altosprite` | 0,8 | Alto en celdas, por `tam` (la v1 tenía 1,6: un proyecto con 1,6 pasa a 0,8 una sola vez) |
 | `Pixelsprite` | 0 | Filas de píxeles de alto (96 o 64: arcade de 8 bits); 0, el atlas tal cual |
 | `Inclinasprite` | 30 | Grados que se inclina hacia la vertical del planeta (180: del todo) |
+| `Brillosprite` | 1 | Multiplica la luz que recibe (0,1 a 3) |
 
 ---
 
@@ -101,6 +103,7 @@ En cada fila de `trumpzilla`, el alfa lleva `cara + 16 × animación` (el sprite
 ## Qué ajustar en sala
 
 - **`Altosprite`** según la distancia del público y el tamaño de las celdas: que se lea la cara sin tapar las construcciones que devora.
+- **`Brillosprite`**: si se ve apagado o quemado frente al planeta.
 - **`Pixelsprite`**: con el proyector, 0 puede verse ruidoso de lejos; 96 da un aire arcade y se lee mejor.
 - **`Inclinasprite`**: 30 es el término medio en la vista de globo; si molesta que se incline, 0.
 

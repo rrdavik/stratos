@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v85'
+VERSION_COMUN = 'comun v86'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2733,6 +2733,7 @@ def particulas_al_dia(base, crear=False):
 # --- Trumpzilla: el monstruo en sprite (comun v83, fase 38, motor v112) -------------
 SPRITE_ATLAS = 'sprites/trumpzilla_emociones.png'
 SPRITE_U = "parent().op('frame_u')['sprite_t']"
+LUCES_SPRITE = ('uLuz0', 'uLuz0Col', 'uLuz1', 'uLuz1Col', 'uLuz2', 'uLuz2Col', 'uAmbiente')   # comun v86
 
 SPRITE_VERTEX = r"""// Estratos - Trumpzilla (fase 38, comun v83): vertex shader. Cada instancia de
 // 'trumpzilla' es el sprite del monstruo o su sombra (motor: filas_trumpzilla).
@@ -2745,14 +2746,18 @@ SPRITE_VERTEX = r"""// Estratos - Trumpzilla (fase 38, comun v83): vertex shader
 //           normal, se acerca a la camara para no hundirse en el planeta. sx el
 //           ancho, sy el alto; el eje z local es hacia donde camina: si va a la
 //           derecha de la pantalla se voltea (los dibujos miran a la izquierda).
-//           rgb, el tinte.
+//           rgb, el tinte. comun v86: lo iluminan las luces de la piel; su normal
+//           mira a la camara, inclinada hacia la vertical del planeta.
 //   sombra  una elipse en el suelo de sx por sz; r, su opacidad.
 uniform vec4 uSprite;       // x el reloj (s), y el pixelado (filas; 0 tal cual), z w columnas y filas del atlas
-uniform vec4 uSpriteInc;    // x la inclinacion maxima hacia la normal (grados; 180, siempre la normal)
+uniform vec4 uSpriteInc;    // x la inclinacion maxima hacia la normal (grados; 180, siempre la normal),
+                            // y el brillo (Brillosprite)
 
 out Vertex {
     vec4 color;
     vec2 uv;
+    vec3 wPos;
+    vec3 wNorm;
     flat int cara;
     flat int anim;
     flat int sombra;
@@ -2774,6 +2779,7 @@ void main()
     mat4 ci = uTDMats[TDCameraIndex()].camInverse;
     vec3 pos;
     vec2 uv;
+    vec3 nrm = normalize(ey);
     if (sombra == 1) {
         pos = c0.xyz + ez * (2.0 * P.x) + ex * (2.0 * P.y);
         uv = P.xy * 2.0;
@@ -2818,12 +2824,15 @@ void main()
         vec3 pie = c0.xyz + v * (0.35 * w + 0.9 * h * aparte);    // delante de su sombra y del suelo
         pos = pie + der * q.x + arr * q.y;
         uv = vec2(P.x * voltea + 0.5, P.y + 0.5);
+        nrm = normalize(0.6 * v + 0.4 * eje);
     }
     gl_Position = TDWorldToProj(vec4(pos, 1.0));
 #ifndef TD_PICKING_ACTIVE
     oVert.camIndex = TDCameraIndex();
     oVert.color = col;
     oVert.uv = uv;
+    oVert.wPos = pos;
+    oVert.wNorm = nrm;
     oVert.cara = cara;
     oVert.anim = anim;
     oVert.sombra = sombra;
@@ -2836,13 +2845,26 @@ void main()
 SPRITE_PIXEL = r"""// Estratos - Trumpzilla (fase 38, comun v83): pixel shader. El sprite lee su cara
 // del atlas pixel a pixel (texelFetch: sin suavizar), descarta lo transparente y,
 // con pixelado, agranda los pixeles; petrificado, gris piedra; aturdido, parpadea.
+// comun v86: lo iluminan las mismas luces que la piel (luz_principal, luz_relleno y
+// luz_destello, con el ambiente), asi que se ve como el planeta y se apaga con la
+// noche; la luz envuelve (wrap) para que de lado no quede negro. x Brillosprite.
 // La sombra, una mancha suave.
 uniform vec4 uSprite;
+uniform vec4 uSpriteInc;
+uniform vec4 uLuz0;
+uniform vec4 uLuz0Col;
+uniform vec4 uLuz1;
+uniform vec4 uLuz1Col;
+uniform vec4 uLuz2;
+uniform vec4 uLuz2Col;
+uniform vec4 uAmbiente;
 uniform sampler2D sAtlas;
 
 in Vertex {
     vec4 color;
     vec2 uv;
+    vec3 wPos;
+    vec3 wNorm;
     flat int cara;
     flat int anim;
     flat int sombra;
@@ -2850,6 +2872,12 @@ in Vertex {
 } iVert;
 
 layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
+
+vec3 luzSprite(vec3 pos, vec3 col, vec3 p, vec3 n)
+{
+    vec3 l = normalize(pos - p);
+    return col * max((dot(n, l) + 0.5) / 1.5, 0.0);
+}
 
 void main()
 {
@@ -2886,7 +2914,13 @@ void main()
     } else if (iVert.anim == 6) {
         rgb = mix(rgb, vec3(1.0), 0.35 * step(0.5, fract(uSprite.x * 3.0)));
     }
-    oFragColor[0] = TDOutputSwizzle(vec4(rgb * iVert.color.rgb, 1.0));
+    vec3 n = normalize(iVert.wNorm);
+    vec3 luz = uAmbiente.rgb + luzSprite(uLuz0.xyz, uLuz0Col.rgb, iVert.wPos, n)
+             + luzSprite(uLuz1.xyz, uLuz1Col.rgb, iVert.wPos, n) + luzSprite(uLuz2.xyz, uLuz2Col.rgb, iVert.wPos, n);
+    if (dot(uAmbiente.rgb, vec3(1.0)) < 1e-5)
+        luz = vec3(1.0);                            // sin las luces enlazadas: como antes, sin luz
+    float brillo = uSpriteInc.y > 0.0 ? uSpriteInc.y : 1.0;
+    oFragColor[0] = TDOutputSwizzle(vec4(rgb * luz * brillo * iVert.color.rgb, 1.0));
 }
 """
 
@@ -2942,13 +2976,28 @@ def trumpzilla_al_dia(base, carpeta, crear=False):
         info('mat_sprite: pon a mano en Samplers: sAtlas -> trumpzilla_atlas')
     pix = 'parent().par.Pixelsprite' if has_par(base, 'Pixelsprite') else '0'
     inc = 'parent().par.Inclinasprite' if has_par(base, 'Inclinasprite') else '30'
+    bri = 'parent().par.Brillosprite' if has_par(base, 'Brillosprite') else '1'
     try:
-        if mat.seq.vec.numBlocks < 2:
-            mat.seq.vec.numBlocks = 2
+        if mat.seq.vec.numBlocks < 2 + len(LUCES_SPRITE):
+            mat.seq.vec.numBlocks = 2 + len(LUCES_SPRITE)
     except Exception:
         pass
     bien = _uniforme(mat, 0, 'uSprite', (SPRITE_U, pix, str(cols), str(filas))) and muestra and bien
-    bien = _uniforme(mat, 1, 'uSpriteInc', (inc, '0', '0', '0')) and bien
+    bien = _uniforme(mat, 1, 'uSpriteInc', (inc, bri, '0', '0')) and bien
+    # comun v86: las luces de la piel, con las mismas expresiones que mat_piel_mineral (las que
+    # leen frame_u); sin el, las de PIEL_UNIFORMES
+    piel = base.op('mat_piel_mineral')
+    nombres = [nm for nm, _ in PIEL_UNIFORMES]
+    for j, nombre in enumerate(LUCES_SPRITE):
+        q = nombres.index(nombre)
+        vals = []
+        for comp, defecto in zip('xyzw', PIEL_UNIFORMES[q][1]):
+            p = getattr(piel.par, 'vec%dvalue%s' % (q, comp), None) if piel is not None else None
+            if p is not None and str(getattr(piel.par, 'vec%dname' % q).eval()) == nombre:
+                vals.append(p.expr if en_expresion(p) else str(p.eval()))
+            else:
+                vals.append(defecto)
+        bien = _uniforme(mat, 2 + j, nombre, vals) and bien
     mezcla = bool(setp_any(mat, ['blending'], True))
     mezcla = setmenu(mat, ['srcblend'], ['one']) and mezcla
     mezcla = setmenu(mat, ['destblend'], ['omsa', 'oneminussrcalpha', 'one_minus_src_alpha']) and mezcla

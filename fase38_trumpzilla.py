@@ -15,7 +15,10 @@ QUE HACE
                del globo o en el sur no se tumba ni queda boca abajo; 180, siempre
                la vertical del planeta. Sigue el giro del planeta, avanza entre
                celdas como el monstruo y se voltea hacia donde camina. Su alto,
-               Altosprite celdas por tam (crece con lo que devora).
+               Altosprite celdas por tam (0,8; crece con lo que devora). v2: lo
+               iluminan las luces del planeta (principal, relleno, destello y el
+               ambiente, como la piel), asi que se apaga con la noche; Brillosprite
+               lo ajusta.
   EMOCIONES    la cara sale del estado del monstruo (la primera que vale):
                  se ahoga            panico     se hunde 2 s y desaparece
                  petrificado (37)    calma      gris piedra, quieto
@@ -64,7 +67,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase38 v1  (el devorador: Trumpzilla, el monstruo en sprite con diez emociones)'
+VERSION = 'fase38 v2  (Trumpzilla mas pequeno e iluminado por las luces del planeta; Brillosprite)'
 banner(VERSION)
 
 base = require_base(38)
@@ -79,11 +82,28 @@ page = get_page(base, 'Fase38')
 add_par(base, page, 'toggle', 'Spritemonstruo', 'Monstruo en sprite (Trumpzilla)', True)
 add_par(base, page, 'menu', 'Emocion', 'Emocion', 'auto', menu=['auto'] + list(m.EMOCIONES_MON),
         menu_labels=['Auto (por su estado)'] + [e.capitalize() for e in m.EMOCIONES_MON])
-add_par(base, page, 'float', 'Altosprite', 'Alto del sprite (celdas, por tam)', 1.6, 0.2, 4.0, clamp=True)
+add_par(base, page, 'float', 'Altosprite', 'Alto del sprite (celdas, por tam)', 0.8, 0.2, 4.0, clamp=True)
 add_par(base, page, 'int', 'Pixelsprite', 'Pixelado (filas de pixeles; 0 tal cual)', 0, 0, 256, clamp=True)
 add_par(base, page, 'float', 'Inclinasprite', 'Inclinacion maxima hacia la normal (grados)', 30.0, 0.0, 180.0,
         clamp=True)
-ok('pagina Fase38: Spritemonstruo, Emocion (auto), Altosprite 1,6, Pixelsprite 0, Inclinasprite 30')
+add_par(base, page, 'float', 'Brillosprite', 'Brillo del sprite (bajo las luces del planeta)', 1.0, 0.1, 3.0,
+        clamp=True)
+ok('pagina Fase38: Spritemonstruo, Emocion (auto), Altosprite 0,8, Pixelsprite 0, Inclinasprite 30, '
+   'Brillosprite 1')
+
+# v2: la mitad de alto. Un proyecto con el Altosprite de la v1 (1,6) pasa a 0,8, una sola vez
+try:
+    _hechas = set(base.fetch('migraciones', [], search=False) or [])
+except Exception:
+    _hechas = set()
+if 'fase38:altosprite0.8' not in _hechas:
+    if abs(float(base.par.Altosprite.eval()) - 1.6) < 1e-6:
+        base.par.Altosprite = 0.8
+        ok('Altosprite: de 1,6 (la v1) a 0,8, la mitad de alto')
+    try:
+        base.store('migraciones', sorted(_hechas | {'fase38:altosprite0.8'}))
+    except Exception:
+        pass
 
 # -----------------------------------------------------------------------------
 # OPERADORES
@@ -112,7 +132,7 @@ print_report()
 # -----------------------------------------------------------------------------
 
 PARS38 = ('Fuente', 'Probllegada', 'Temaenciclo', 'Modojuego', 'Umbralaparicion', 'Simbalance', 'Colapsoon',
-          'Spritemonstruo', 'Emocion', 'Altosprite')
+          'Spritemonstruo', 'Emocion', 'Altosprite', 'Brillosprite')
 
 
 def prueba(t):
@@ -146,7 +166,8 @@ def _prueba(t, m, copy):
     base.par.Umbralaparicion = 1.0          # que no aparezca solo mientras se prepara el mundo
     base.par.Spritemonstruo = True
     base.par.Emocion = 'auto'
-    base.par.Altosprite = 1.6
+    base.par.Altosprite = 0.8
+    base.par.Brillosprite = 1.0
     S = SalaJuego(base, m, absTime.seconds + 4100.0)
     E = m.EMOCIONES_MON
 
@@ -158,12 +179,15 @@ def _prueba(t, m, copy):
             and base.op('trumpzilla_atlas') is not None, '%s' % (med,))
     mat = base.op('mat_sprite')
     nombres = str(base.op('render').par.geometry.val).split()
-    t.check('trumpzilla, i_trumpzilla y mat_sprite (sampler sAtlas, uniformes uSprite con sprite_t y uSpriteInc '
-            'con Inclinasprite); el render dibuja trumpzilla y las geometrias del juego',
+    luces = [str(getattr(mat.par, 'vec%dname' % (2 + j)).eval()) for j in range(len(LUCES_SPRITE))] if mat else []
+    t.check('trumpzilla, i_trumpzilla y mat_sprite (sampler sAtlas, uniformes uSprite con sprite_t, uSpriteInc '
+            'con Inclinasprite y Brillosprite, y las luces de la piel); el render dibuja trumpzilla y las '
+            'geometrias del juego',
             all(base.op(n) is not None for n in ('trumpzilla', 'i_trumpzilla', 'sprite_vertex', 'sprite_pixel'))
             and mat is not None and str(mat.par.sampler0name.eval()) == 'sAtlas'
             and str(mat.par.vec0name.eval()) == 'uSprite' and str(mat.par.vec1name.eval()) == 'uSpriteInc'
-            and 'Inclinasprite' in (mat.par.vec1valuex.expr or '')
+            and 'Inclinasprite' in (mat.par.vec1valuex.expr or '') and 'Brillosprite' in (mat.par.vec1valuey.expr or '')
+            and luces == list(LUCES_SPRITE) and 'luz_principal' in (mat.par.vec2valuex.expr or '')
             and all(n in nombres for n in ('trumpzilla', 'monstruo', 'tocon', 'brotes_mal', 'marcas', 'agua_juego'))
             and 'sprite_t' in dict(m.canales_frame([])), ' '.join(nombres[-12:]))
 

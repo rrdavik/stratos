@@ -161,6 +161,8 @@
 #                 inundar_zanjas. Se llamaba inundar, como el agua que se desborda de la
 #                 v101, y al fusionar las dos ramas la del juego tapaba a la otra: tick la
 #                 llamaba en cada fotograma y fallaba sin partida (KeyError: 'juego').
+#                 Motor v116 (fase 38 v2): Trumpzilla mas pequeno (Altosprite 0,8) y sin
+#                 el tinte de noche: lo iluminan las luces de la piel (mat_sprite).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -172,7 +174,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v115'
+MOTOR_VERSION = 'motor v116'
 
 import math
 import time as _time
@@ -414,7 +416,7 @@ DEFAULT_CFG = dict(
     arma_cerco=0, arma_pison=0, arma_estatuas=0, arma_grito=0, arma_relampago=0,
     hambre=1, n_pison=3, encoge=0.05, t_quietud=4.0, umbral_silencio=0.3, t_piedra=6.0, prof_grito=2,
     recarga_grito=30.0, t_aturdido=4.0,
-    sprite_mon=1, emocion_fija='auto', alto_sprite=1.6,
+    sprite_mon=1, emocion_fija='auto', alto_sprite=0.8,
 )
 
 
@@ -15570,14 +15572,12 @@ def filas_trumpzilla(W, cfg, m, now):
     e, a = emocion_mon(W, cfg, m, now)
     p, n = pos_monstruo(W, cfg, m)
     cw, cl = _cell_sizes(_len(p), m['celda'])
-    h = max(0.05, m['tam']) * cfg.get('alto_sprite', 1.6) * min(cw, cl)
+    h = max(0.05, m['tam']) * cfg.get('alto_sprite', 0.8) * min(cw, cl)
     w = h * ASPECTO_SPRITE
     d = rumbo_mon(W, cfg, m, p, n)
     X = _cross(n, d)
     marco = (X, n, d, _euler_xyz(X, n, d))
-    k = 1.0
-    if cfg['nivel'] >= 28:                      # la noche (fase 28) tambien lo apaga
-        k = 0.35 + 0.65 * (1.0 - noche_nivel(W, cfg, now))
+    k = 1.0                     # motor v116: la noche lo apaga por las luces (mat_sprite las lee)
     rows = []
     if f <= 0.0:
         rows.append(_fila_m(_add(p, n, 0.01 * h), marco, 0.42 * w, 0.01 * h, 0.42 * w,
