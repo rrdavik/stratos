@@ -53,7 +53,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v9  (las particulas y el humo, con Materialrespaldo en cuanto existe: sin expresiones con error)'
+VERSION = 'fase12 v10  (autoprueba: los remates del mal solo cuentan desde la fase 39)'
 banner(VERSION)
 
 base = require_base(12)
@@ -131,7 +131,8 @@ def _prueba(t, m):
     dobles = [o.name for o in base.children if o.name.startswith('mod_')
               and (o.name.endswith('_pul') or o.name.endswith('_por'))]
     t.check('una geometria por modelo (%d), sin las pulidas y porosas de la fase 11' % len(geos),
-            len(geos) == len(m.MODELOS) + len(m.ejemplares_de(c)) + len(m.edificios_de(c))  # y las bibliotecas
+            len(geos) == len([mo for mo in m.MODELOS if c['nivel'] >= 39 or mo not in getattr(m, 'MODELOS_MAL', {})])
+            + len(m.ejemplares_de(c)) + len(m.edificios_de(c))  # y las bibliotecas (v10: el mal, desde la 39)
             and all(base.op(g) is not None for g, _, _ in geos) and not dobles,
             '%d duplicadas' % len(dobles))
     malas = []

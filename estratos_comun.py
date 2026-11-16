@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v86'
+VERSION_COMUN = 'comun v87'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -39,6 +39,7 @@ RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'r
                 # comun v83: las geometrias del juego (fases 32 a 34) no estaban: el render no las dibujaba;
                 # trumpzilla (fase 38), el monstruo en sprite
                 'marcas', 'brotes_mal', 'tocon', 'monstruo', 'agua_juego', 'trumpzilla',
+                'emblemas_mal',             # comun v87: los emblemas y demonios del mal (fase 39)
                 'particulas', 'humo',
                 'luz_celda', 'luz_conchas',
                 'luz_local']                    # lo transparente (motas, humo) y las capas aditivas, al final
@@ -1182,7 +1183,9 @@ vec3 foco(vec4 t, vec4 c, vec3 d)
 // 0-3 las plantas informales, 4 cubierta, 5 cuerpo planificado, 6 piedra o zocalo,
 // 7 estructura. Sin el azul de los rios ni el cian de las cicatrices. Fase 11 v11: las
 // filas 3-5 son la industria por epoca (vapor, acero, quimica), sin el violeta de la red.
-const vec3 PALETA[48] = vec3[48](
+// Comun v87 (fase 39): la fila 6, el mal (casi negro, gris, hormigon, barracon, cubierta,
+// hueso rosado, malla y estructura).
+const vec3 PALETA[56] = vec3[56](
     vec3(0.62, 0.63, 0.62), vec3(0.52, 0.32, 0.22), vec3(0.72, 0.58, 0.36), vec3(0.62, 0.24, 0.19),
     vec3(0.30, 0.30, 0.31), vec3(0.66, 0.64, 0.60), vec3(0.46, 0.45, 0.43), vec3(0.34, 0.34, 0.35),
     vec3(0.62, 0.32, 0.22), vec3(0.55, 0.55, 0.53), vec3(0.80, 0.56, 0.52), vec3(0.56, 0.60, 0.38),
@@ -1194,11 +1197,13 @@ const vec3 PALETA[48] = vec3[48](
     vec3(0.60, 0.59, 0.56), vec3(0.42, 0.44, 0.40), vec3(0.52, 0.30, 0.18), vec3(0.78, 0.77, 0.74),
     vec3(0.28, 0.28, 0.29), vec3(0.55, 0.56, 0.54), vec3(0.78, 0.24, 0.20), vec3(0.85, 0.70, 0.20),
     vec3(0.88, 0.88, 0.86), vec3(0.78, 0.79, 0.80), vec3(0.55, 0.33, 0.20), vec3(0.90, 0.90, 0.88),
-    vec3(0.60, 0.61, 0.62), vec3(0.92, 0.92, 0.90), vec3(0.85, 0.26, 0.20), vec3(0.90, 0.50, 0.15));
+    vec3(0.60, 0.61, 0.62), vec3(0.92, 0.92, 0.90), vec3(0.85, 0.26, 0.20), vec3(0.90, 0.50, 0.15),
+    vec3(0.075, 0.068, 0.082), vec3(0.15, 0.14, 0.16), vec3(0.42, 0.42, 0.43), vec3(0.29, 0.29, 0.31),
+    vec3(0.055, 0.052, 0.062), vec3(0.93, 0.84, 0.88), vec3(0.52, 0.52, 0.54), vec3(0.19, 0.19, 0.21));
 
 vec3 paleta(int leng, int slot)
 {
-    return PALETA[clamp(leng, 0, 5) * 8 + clamp(slot, 0, 7)];
+    return PALETA[clamp(leng, 0, 6) * 8 + clamp(slot, 0, 7)];
 }
 
 // fase 27: la paleta humana (la del motor, paleta_humana, en (j + 0,5) / 8)
@@ -1515,8 +1520,9 @@ void main()
         nivelv = floor(a * 0.5 + 0.0001);
         rug = clamp(a - 2.0 * nivelv, 0.02, 1.0);
         luces = min(1.0, nivelv * 0.25);
-        int leng = int(clamp(lg, 0.0, 5.0));
-        bool industria = leng >= 3;     // fase 11 v11: la industria (3 + epoca)
+        int leng = int(clamp(lg, 0.0, 6.0));
+        bool industria = leng >= 3 && leng <= 5;    // fase 11 v11: la industria (3 + epoca)
+        bool mal = leng == 6;           // comun v87 (fase 39): la especie del mal
         // r: el tinte de la nota (secuenciador + intensidad); g: lo visible (x 1000) y lo
         // terminado (fraccion); b: el modo de obra (1 esqueleto, 2 bloque gris) + sombra
         float sq = floor(iVert.color.r + 0.0001);
@@ -1577,12 +1583,51 @@ void main()
             }
         } else if (cubierta) {
             base *= 0.72;               // la cubierta (la losa de la azotea)
+        } else if (mal && fach > 10.5) {
+            // comun v87 (fase 39): el mal. Cuerpos casi negros; el neon rosa solo con la
+            // obra terminada y encendida (las ventanas: 4 encendido, 0 apagado); la nota lo aviva
+            vec3 rosa = vec3(1.0, 0.16, 0.55);
+            float neon = luces * (0.88 + 0.12 * sin(uGlitch.y * 3.0 + float(iVert.inst) * 1.3));
+            float pb = 1.0 - step(hp, bp.y);                    // la planta baja
+            if (fach < 11.5) {
+                // neon: escaparate rosa en la planta baja y una linea de neon en cada forjado
+                float esc = pb * step(0.08, g.x) * step(g.x, 0.92) * step(0.12, g.y) * step(g.y, 0.80)
+                    * step(0.05, hueco);
+                float linea = (1.0 - pb) * step(0.88, g.y) * step(g.y, 0.95);
+                float ven = (1.0 - pb) * step(0.30, g.x) * step(g.x, 0.30 + 0.4 * hueco) * step(0.3, g.y)
+                    * step(g.y, 0.7) * step(0.5, h1);
+                base = mix(base, vec3(0.03, 0.02, 0.03), max(esc, ven));
+                base = mix(base, rosa * 0.45, linea);
+                emis += rosa * neon * (1.1 * esc + 1.6 * linea + 0.7 * ven);
+            } else if (fach < 12.5) {
+                // torre de neon: reticula de ventanas, unas rosas y otras blancas
+                float ven = step(0.22, g.x) * step(g.x, 0.78) * step(0.2, g.y) * step(g.y, 0.8);
+                float lit = step(1.0 - hueco, h1);
+                vec3 lc = h2 < 0.5 ? rosa : vec3(1.0, 0.86, 0.93);
+                base = mix(base, vec3(0.035), ven);
+                base = mix(base, base * 0.6, step(0.92, g.y));
+                emis += ven * lit * lc * neon * 0.95;
+            } else if (fach < 13.5) {
+                // muro: paneles de hormigon con juntas, sin un hueco
+                float junta = step(0.94, fract(fx * 0.5)) + 0.5 * step(0.95, g.y);
+                base *= 1.0 - 0.25 * min(1.0, junta);
+                rug = 0.95;
+            } else {
+                // barracon: chapa ondulada y una fila de ventanucos oscuros
+                base *= 0.86 + 0.14 * sin(fx * 18.0);
+                float ven = step(0.42, g.y) * step(g.y, 0.64) * step(0.32, g.x) * step(g.x, 0.6) * step(0.3, h1);
+                base = mix(base, vec3(0.04), ven);
+                rug = 0.9;
+            }
+            if (tin > 0.001)
+                emis *= 1.0 + 1.5 * tin;
         } else if (fach > 8.5 && fach < 9.5) {
             // industria: chimenea con bandas (rojo y blanco, o anillos de ladrillo)
             float banda = step(0.5, fract(bp.y / max(1e-4, 2.5 * uCiudad.x)));
             base = mix(base, leng == 3 ? base * 0.75 : vec3(0.92, 0.91, 0.89), banda * step(0.6, yrel));
-        } else if (fach > 9.5) {
-            // industria: celosia (castilletes, bastidores): rombos huecos entre perfiles
+        } else if (fach > 9.5 && fach < 10.5) {
+            // industria: celosia (castilletes, bastidores): rombos huecos entre perfiles;
+            // fase 39: tambien la malla de las vallas del mal
             vec2 cg = vec2(fract((u + bp.y) / max(1e-4, 0.6 * vano)), fract((u - bp.y) / max(1e-4, 0.6 * vano)));
             float perfil = 1.0 - step(0.16, min(min(cg.x, 1.0 - cg.x), min(cg.y, 1.0 - cg.y)));
             if (perfil < 0.5)
@@ -2448,6 +2493,8 @@ def install_core(base, carpeta, fase):
         set_render(base)
     if base.op('trumpzilla') is not None:      # comun v83 (fase 38): el sprite, al dia con el motor
         trumpzilla_al_dia(base, carpeta)
+    if base.op('emblemas_mal') is not None:    # comun v87 (fase 39): los emblemas del mal
+        emblemas_al_dia(base, carpeta)
     try:
         motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
     except Exception:
@@ -3019,6 +3066,198 @@ def trumpzilla_al_dia(base, carpeta, crear=False):
            'caras)' % (SPRITE_ATLAS, med[0], med[1], cols, filas))
     else:
         fail('trumpzilla: algo no quedo enlazado (atlas, DAT de los shaders, sampler sAtlas o uSprite)')
+    return bien
+
+
+# -----------------------------------------------------------------------------
+# LOS EMBLEMAS DEL MAL (fase 39, comun v87)
+# -----------------------------------------------------------------------------
+# La geometria 'emblemas_mal' (una lamina instanciada desde i_emblemas_mal) con el GLSL
+# MAT mat_emblema (emblema_vertex y emblema_pixel), que lee los emblemas del atlas
+# sprites/mal_emblemas.png (Movie File In TOP mal_atlas, sampler sAtlas). Cada emblema
+# flota sobre su celda y mira a la camara (como el sprite de Trumpzilla, con su misma
+# inclinacion hacia la vertical del planeta), y tiene luz propia: es neon, la noche no
+# lo apaga. Los demonios de los clusters son emblemas grandes que se apartan de la
+# camara (asoman detras).
+
+MAL_ATLAS = 'sprites/mal_emblemas.png'
+
+EMBLEMA_VERTEX = r"""// Estratos - los emblemas del mal (fase 39, comun v87): vertex shader. Cada instancia
+// de 'emblemas_mal' es un emblema o un demonio (motor: build_mal). En el alfa:
+// emblema + 32 x modo (0 fijo, 1 parpadeo, 2 detras, 3 late). Una lamina 2:1 de pie en
+// la instancia (sx ancho, sy alto) que mira a la camara; su arriba es el de la pantalla,
+// inclinado hacia la vertical del planeta (la y local) uEmblemaInc.x grados como mucho.
+// Se acerca a la camara un cuarto de su alto (para no hundirse en el tejado); detras,
+// se aparta sz (el demonio asoma por detras del cluster). r, la luz (0 apagado, 1 encendido).
+uniform vec4 uEmblema;      // x el reloj (s), y el pixelado (filas; 0 tal cual), z w columnas y filas del atlas
+uniform vec4 uEmblemaInc;   // x la inclinacion maxima hacia la normal (grados), y el brillo
+
+out Vertex {
+    vec4 color;
+    vec2 st;
+    flat int icono;
+    flat int modo;
+    flat float semilla;
+    flat int camIndex;
+} oVert;
+
+void main()
+{
+    vec4 c0 = TDDeform(vec3(0.0));
+    vec3 ex = TDDeform(vec3(1.0, 0.0, 0.0)).xyz - c0.xyz;
+    vec3 ey = TDDeform(vec3(0.0, 1.0, 0.0)).xyz - c0.xyz;
+    vec3 ez = TDDeform(vec3(0.0, 0.0, 1.0)).xyz - c0.xyz;
+    vec4 col = TDInstanceColor(Cd);
+    float code = floor(col.a + 0.5);
+    int modo = int(floor(code / 32.0 + 1e-3));
+    int icono = int(code - 32.0 * float(modo) + 0.5);
+    mat4 ci = uTDMats[TDCameraIndex()].camInverse;
+    float w = length(ex);
+    float h = length(ey);
+    float atras = length(ez);
+    vec3 v = normalize(ci[3].xyz - c0.xyz);
+    vec3 eje = ey / max(h, 1e-6);
+    vec3 arr = eje - dot(eje, v) * v;
+    float lado = length(arr);
+    vec3 up = ci[1].xyz - dot(ci[1].xyz, v) * v;
+    up = length(up) > 1e-4 ? normalize(up) : arr / max(lado, 1e-6);
+    vec3 a1 = lado > 1e-4 ? arr / lado : up;
+    vec3 lat = cross(v, up);
+    float ang = atan(dot(a1, lat), dot(a1, up));
+    float inc = radians(clamp(uEmblemaInc.x, 0.0, 180.0));
+    ang = clamp(ang, -inc, inc) * smoothstep(0.15, 0.45, lado);
+    arr = up * cos(ang) + lat * sin(ang);
+    vec3 der = normalize(cross(arr, v));
+    float t = uEmblema.x + 1.7 * float(TDInstanceID());
+    float k = 1.0;
+    if (modo == 3 || icono == 15)                       // late (y el coloso respira)
+        k = 1.0 + 0.035 * sin(t * 2.2);
+    vec2 q = vec2(P.x * w * k, (P.y + 0.5) * h * k);
+    float empuje = modo == 2 ? -atras : 0.25 * h;
+    vec3 pos = c0.xyz + v * empuje + der * q.x + arr * q.y;
+    gl_Position = TDWorldToProj(vec4(pos, 1.0));
+#ifndef TD_PICKING_ACTIVE
+    oVert.camIndex = TDCameraIndex();
+    oVert.color = col;
+    oVert.st = vec2(P.x + 0.5, P.y + 0.5);
+    oVert.icono = icono;
+    oVert.modo = modo;
+    oVert.semilla = float(TDInstanceID()) * 7.31;
+#else
+    TDWritePickingValues();
+#endif
+}
+"""
+
+EMBLEMA_PIXEL = r"""// Estratos - los emblemas del mal (fase 39, comun v87): pixel shader. Lee el emblema
+// del atlas pixel a pixel (texelFetch: sin suavizar) y descarta lo transparente. Luz
+// propia (el neon): ni las luces ni la noche lo cambian; r de la instancia, encendido
+// (1) o a oscuras (0,14). Parpadeo: la puesta en marcha y el rescate; late: la
+// calavera, el magnate y el diamante. x uEmblemaInc.y (Brilloemblema).
+uniform vec4 uEmblema;
+uniform vec4 uEmblemaInc;
+uniform sampler2D sAtlas;
+
+in Vertex {
+    vec4 color;
+    vec2 st;
+    flat int icono;
+    flat int modo;
+    flat float semilla;
+    flat int camIndex;
+} iVert;
+
+layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
+
+void main()
+{
+    TDCheckDiscard();
+    vec2 uv = iVert.st;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
+        discard;
+    vec2 tam = vec2(textureSize(sAtlas, 0));
+    vec2 rej = max(uEmblema.zw, vec2(1.0));
+    vec2 celda = tam / rej;
+    if (uEmblema.y > 0.5) {
+        vec2 n = vec2(uEmblema.y * celda.x / celda.y, uEmblema.y);
+        uv = (floor(uv * n) + 0.5) / n;
+    }
+    float c = float(iVert.icono);
+    float col = mod(c, rej.x);
+    float fila = floor(c / rej.x + 1e-3);
+    vec2 px = (vec2(col, rej.y - 1.0 - fila) + uv) * celda;    // la fila 0 del atlas, arriba
+    vec4 t = texelFetch(sAtlas, ivec2(clamp(px, vec2(0.0), tam - 1.0)), 0);
+    if (t.a < 0.5)
+        discard;
+    vec3 rgb = t.rgb / t.a;
+    float luz = iVert.color.r;
+    float tt = uEmblema.x;
+    if (iVert.modo == 1) {                              // parpadeo de tubo que arranca
+        float r = fract(sin(floor(tt * 13.0) * 12.9898 + iVert.semilla) * 43758.5453);
+        luz *= r < 0.35 ? 0.15 : 1.0;
+    } else if (iVert.modo == 3) {
+        luz *= 0.82 + 0.18 * sin(tt * 2.6 + iVert.semilla);
+    }
+    float brillo = uEmblemaInc.y > 0.0 ? uEmblemaInc.y : 1.0;
+    oFragColor[0] = TDOutputSwizzle(vec4(rgb * max(luz, 0.05) * brillo, 1.0));
+}
+"""
+
+
+def emblemas_al_dia(base, carpeta, crear=False):
+    """comun v87 (fase 39): los emblemas del mal. La geometria 'emblemas_mal' (una lamina
+    instanciada desde i_emblemas_mal) con el GLSL MAT mat_emblema (emblema_vertex y
+    emblema_pixel), que lee sprites/mal_emblemas.png (Movie File In TOP mal_atlas,
+    sampler sAtlas) y se anima con sprite_t de frame_u. Opaco, recortado por alfa,
+    escribe profundidad. Con Materialrespaldo, mat_respaldo. True si quedo enlazado."""
+    m = base.op('motor').module
+    cols, filas = m.ATLAS_MAL
+    ruta = carpeta + '/' + MAL_ATLAS
+    atlas = get_or_make(base, 'moviefileinTOP', 'mal_atlas', 1180, 420)
+    bien = bool(setp_any(atlas, ['file'], ruta))
+    setmenu(atlas, ['inputfiltertype'], ['nearest'])
+    med = _png_medidas(ruta)
+    if med is None:
+        fail('mal_atlas: no encuentro %s (copia la carpeta sprites del repositorio en %s)' % (MAL_ATLAS, carpeta))
+        bien = False
+    vdat = get_or_make(base, 'textDAT', 'emblema_vertex', 1180, 380)
+    vdat.text = EMBLEMA_VERTEX
+    pdat = get_or_make(base, 'textDAT', 'emblema_pixel', 1180, 340)
+    pdat.text = EMBLEMA_PIXEL
+    mat = get_or_make(base, 'glslMAT', 'mat_emblema', 1400, 380)
+    bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'emblema_vertex')) and bien
+    bien = bool(setp_any(mat, ['pdat', 'pixeldat'], 'emblema_pixel')) and bien
+    for seq in ('sampler', 'vec'):
+        try:
+            sec = getattr(mat.seq, seq)
+            if sec.numBlocks < (1 if seq == 'sampler' else 2):
+                sec.numBlocks = 1 if seq == 'sampler' else 2
+        except Exception:
+            pass
+    muestra = bool(setp(mat, 'sampler0name', 'sAtlas'))
+    muestra = bool(setp_any(mat, ['sampler0top'], 'mal_atlas')) and muestra
+    if not muestra:
+        info('mat_emblema: pon a mano en Samplers: sAtlas -> mal_atlas')
+    inc = 'parent().par.Inclinasprite' if has_par(base, 'Inclinasprite') else '30'
+    bri = 'parent().par.Brilloemblema' if has_par(base, 'Brilloemblema') else '1'
+    bien = _uniforme(mat, 0, 'uEmblema', (SPRITE_U, '0', str(cols), str(filas))) and muestra and bien
+    bien = _uniforme(mat, 1, 'uEmblemaInc', (inc, bri, '0', '0')) and bien
+    setp_any(mat, ['blending'], False)
+    setp_any(mat, ['depthwriting', 'depthwrite', 'writedepth'], True)
+    setmenu(mat, ['cullface'], ['neither'])
+    geo = base.op('emblemas_mal')
+    if geo is None or crear:
+        make_instanced(base, 'emblemas_mal', -440, 2900, 'mat_emblema', sop='rect', quiet=True)
+        geo = base.op('emblemas_mal')
+    if not setp_any(geo, ['instancea'], 'a'):
+        info('emblemas_mal: pon a mano Instance 2 -> Color A = a (el emblema y su modo)')
+        bien = False
+    setexpr(geo, 'material', _con_respaldo(base, 'mat_emblema'))
+    if bien:
+        ok('emblemas_mal: los emblemas y demonios del mal en sprite (mat_emblema, GLSL, luz propia); atlas %s '
+           '(%d x %d, %d x %d)' % (MAL_ATLAS, med[0], med[1], cols, filas))
+    else:
+        fail('emblemas_mal: algo no quedo enlazado (atlas, DAT de los shaders, sampler sAtlas o uEmblema)')
     return bien
 
 

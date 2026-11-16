@@ -65,7 +65,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v2  (autoprueba: con la fase 38, el cuerpo provisional con Spritemonstruo apagado)'
+VERSION = 'fase33 v3  (autoprueba: con la fase 39, el velo provisional con Especiemal apagado)'
 banner(VERSION)
 
 base = require_base(33)
@@ -131,7 +131,8 @@ print_report()
 # -----------------------------------------------------------------------------
 
 PARS33 = ('Fuente', 'Simcasilla', 'Probllegada', 'Tparada', 'Temaenciclo', 'Modojuego', 'Duracionronda',
-          'Umbralaparicion', 'Simceldamon', 'Simbalance', 'Colapsoon', 'Loncentral', 'Spritemonstruo')
+          'Umbralaparicion', 'Simceldamon', 'Simbalance', 'Colapsoon', 'Loncentral', 'Spritemonstruo',
+          'Especiemal')
 
 
 def prueba(t):
@@ -168,6 +169,8 @@ def _prueba(t, m, copy):
     base.par.Umbralaparicion = 1.0          # que no aparezca solo mientras se prepara el mundo
     if has_par(base, 'Spritemonstruo'):     # v2: con la fase 38, se prueba el cuerpo provisional
         base.par.Spritemonstruo = False
+    if has_par(base, 'Especiemal'):         # v3: con la fase 39, el velo provisional de los brotes
+        base.par.Especiemal = False
     S = SalaJuego(base, m, absTime.seconds + 1500.0)
 
     # 1. el objetivo

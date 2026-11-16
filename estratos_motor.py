@@ -163,6 +163,13 @@
 #                 llamaba en cada fotograma y fallaba sin partida (KeyError: 'juego').
 #                 Motor v116 (fase 38 v2): Trumpzilla mas pequeno (Altosprite 0,8) y sin
 #                 el tinte de noche: lo iluminan las luces de la piel (mat_sprite).
+#                 Motor v117 (fase 39): la ESPECIE DEL MAL. El brote es una valla; si la
+#                 alimenta el SEQ1 abre negocio, si el SEQ2 ocio, si crece rodeada por el
+#                 mal se cierra (encierro). Su biblioteca (la gramatica de la ciudad, con
+#                 la fila 6 de la paleta y cuatro fachadas: neon, torre de neon, muro y
+#                 barracon), la obra que termina encendiendo el neon, los emblemas
+#                 (sprites que flotan encima) y el demonio de cada cluster. Va en
+#                 cualquier tema y no entra en la piel del publico.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -174,7 +181,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v116'
+MOTOR_VERSION = 'motor v117'
 
 import math
 import time as _time
@@ -417,6 +424,8 @@ DEFAULT_CFG = dict(
     hambre=1, n_pison=3, encoge=0.05, t_quietud=4.0, umbral_silencio=0.3, t_piedra=6.0, prof_grito=2,
     recarga_grito=30.0, t_aturdido=4.0,
     sprite_mon=1, emocion_fija='auto', alto_sprite=0.8,
+    # fase 39: la especie del mal
+    especie_mal=1, vecinas_encierro=3, pasos_obra_mal=8, tam_emblema=0.45, demonio_mal=1, alto_mal=1.5,
 )
 
 
@@ -4974,6 +4983,283 @@ _GEN_EDI = dict(chabola=_gen_chabola, contenedor=_gen_contenedor, cubo=_gen_cubo
                 cerda=_gen_cerda, peine=_gen_peine, podio=_gen_podio, deco=_gen_deco, tubos=_gen_tubos,
                 torsion=_gen_torsion, prisma=_gen_prisma)
 _GEN_EDI.update(_GEN_IND)
+
+
+# --- la especie del mal (fase 39, motor v117): su biblioteca ---------------------------
+# La lamina «Mal, lamina de una especie nueva». El brote es una VALLA (cercar es el
+# primer gesto). Si la alimenta el SEQ1 abre NEGOCIO (tienda, supermercado, centro
+# comercial, gran superficie); si el SEQ2, OCIO (bar, sala de fiestas, casino-hotel,
+# resort); si al abrir tiene Vecinasencierro vecinas del mal o mas, se CIERRA (recinto,
+# muro, centro de internamiento, campo). Los mismos umbrales que la planificada: 1 la
+# valla, 2-3, 4-5, 6-7 y 8+ (con los de fabrica de la fase 4). Cuerpos casi negros con
+# neon rosa (dinero), rojo (vigilancia y demonios) y hueso (la calavera); de lejos se lee
+# el EMBLEMA (un sprite que flota encima), no el edificio. Disenos de la misma gramatica
+# que la ciudad (volumenes con datos de fachada y remates): van al final de DISENOS, asi
+# que las semillas de los de antes no cambian.
+
+TIPOS_MAL = dict(negocio=['valla', 'tienda', 'supermercado', 'centrocomercial', 'gransuperficie'],
+                 ocio=['valla', 'bar', 'salafiestas', 'casino', 'resort'],
+                 encierro=['valla', 'recinto', 'muro', 'internamiento', 'campo'])
+RAMAS_MAL = ['negocio', 'ocio', 'encierro']
+VALLAS_MAL = ['vallaobra', 'vallatorsion', 'vallacartel']
+DISENOS_TIPO_MAL = dict(valla=VALLAS_MAL, tienda=['tienda'], supermercado=['supermercado'],
+                        centrocomercial=['centrocomercial'], gransuperficie=['gransuperficie'], bar=['bar'],
+                        salafiestas=['salafiestas'], casino=['casino'], resort=['resort'],
+                        recinto=['recinto'], muro=['muro'], internamiento=['internamiento'], campo=['campo'])
+TIPOS.update(TIPOS_MAL)
+DISENOS_TIPO.update(DISENOS_TIPO_MAL)
+DISENOS_MAL = list(VALLAS_MAL) + [d for r in RAMAS_MAL for t in TIPOS_MAL[r][1:] for d in DISENOS_TIPO_MAL[t]]
+TIPO_DE_DISENO.update((d, t) for t, ds in DISENOS_TIPO_MAL.items() for d in ds)
+DISENOS = DISENOS + DISENOS_MAL
+MALES = set(DISENOS_MAL)
+# fachadas del mal (el shader de la ciudad, con el lenguaje 6): escaparate con neon,
+# torre de ventanas rosas y blancas, muro de hormigon y barracon de chapa
+FACHADAS += ['neon', 'torreneon', 'muro', 'barracon']
+F_NEON, F_TORRENEON, F_MURO, F_BARRACON = 11, 12, 13, 14
+PALETA_MAL = 6               # la fila del mal en PALETA_CIUDAD (y en el shader)
+# materias del mal: casi negro, gris oscuro, hormigon, barracon, cubierta, hueso rosado
+# (el resort), malla de valla, estructura
+SL_NEGRO, SL_GRIS, SL_HORMIGON, SL_BARRACON, SL_CUBIERTA, SL_HUESO, SL_MALLA, SL_ESTRUCTURA = range(8)
+PALETA_CIUDAD = PALETA_CIUDAD + (
+    ((0.075, 0.068, 0.082), (0.15, 0.14, 0.16), (0.42, 0.42, 0.43), (0.29, 0.29, 0.31),
+     (0.055, 0.052, 0.062), (0.93, 0.84, 0.88), (0.52, 0.52, 0.54), (0.19, 0.19, 0.21)),)
+ROSA_MAL = (0.98, 0.20, 0.56)            # el neon del dinero
+ROJO_MAL = (0.90, 0.10, 0.12)            # vigilancia y demonios
+HUESO_MAL = (0.93, 0.89, 0.80)           # la calavera
+# los remates del mal: tipo -> (modelo, color)
+MAL_REM = dict(pie=('ciu_caja', (0.56, 0.55, 0.53)), senal=('ciu_caja', (0.92, 0.18, 0.30)),
+               poste=('ciu_caja', (0.30, 0.30, 0.32)), alambre=('ciu_caja', (0.22, 0.22, 0.24)),
+               placa=('ciu_caja', (0.90, 0.88, 0.84)), cartelera=('ciu_cartelera', (0.10, 0.09, 0.11)),
+               toldo=('ciu_toldo', ROSA_MAL), rotulo=('ciu_caja', ROSA_MAL),
+               totem=('ciu_totem', (0.12, 0.11, 0.13)), farola=('ciu_farola', (0.20, 0.20, 0.22)),
+               coche=('ciu_coche', (0.21, 0.21, 0.24)), bandera=('ciu_bandera', ROSA_MAL),
+               sombrilla=('ciu_sombrilla', (0.92, 0.86, 0.90)), foco=('ciu_foco', (0.40, 0.08, 0.22)),
+               barrera=('ciu_caja', (0.62, 0.60, 0.57)), marquesina=('ciu_caja', (0.98, 0.70, 0.62)),
+               palmera=('ciu_palmera', (0.17, 0.16, 0.18)), fuente=('ciu_fuente', ROSA_MAL),
+               helipuerto=('ciu_helipuerto', (0.86, 0.83, 0.85)), yate=('ciu_yate', (0.92, 0.92, 0.94)),
+               concertina=('ciu_concertina', (0.56, 0.56, 0.59)), torrevigia=('ciu_torrevigia', (0.24, 0.24, 0.26)),
+               tejado=('ciu_dosaguas', (0.34, 0.34, 0.36)), porton=('ciu_porton', (0.30, 0.30, 0.32)),
+               garita=('ciu_caja', (0.36, 0.36, 0.38)))
+REMATES_LOD_MAL = ('pie', 'alambre', 'placa', 'farola', 'coche', 'barrera', 'senal')
+
+
+def _vallado(G, r, alto, fach=F_CELOSIA, slot=SL_MALLA, g=0.018, y0=0.0, vm=0.4, hueco=0.5):
+    """Cuatro panos de valla en cuadrado de semilado r, de y0 a alto plantas."""
+    return [G.add(_v(x, z, w, d, y0, alto, fach=fach, slot=slot, hueco=hueco, vm=vm))
+            for x, z, w, d in ((0.0, -r, 2 * r, g), (0.0, r, 2 * r, g), (-r, 0.0, g, 2 * r - g),
+                               (r, 0.0, g, 2 * r - g))]
+
+
+def _coronar(G, r, y, tipo, s=0.12):
+    """Un remate corrido (alambre, concertina) sobre los cuatro lados del vallado."""
+    for x, z, giro in ((0.0, -r, 0.0), (0.0, r, 0.0), (-r, 0.0, 90.0), (r, 0.0, 90.0)):
+        G.rem.append(_rem(tipo, x, y, z, s=2 * r, alto=s, giro=giro, largo=s if tipo == 'concertina' else 0.012))
+
+
+def _gen_vallaobra(G):
+    """Valla de obra: paneles de malla sobre pies de hormigon y la senal de prohibido."""
+    r = G.u(0.36, 0.42)
+    _vallado(G, r, 0.75, y0=0.12, vm=0.45)
+    for x in (-r, 0.0, r):
+        for z in (-r, r):
+            G.rem.append(_rem('pie', x, 0.0, z, s=0.08, alto=0.12, largo=0.05))
+    G.rem.append(_rem('senal', G.u(-0.12, 0.12), 0.35, r + 0.014, s=0.11, alto=0.22, largo=0.012))
+
+
+def _gen_vallatorsion(G):
+    """Valla de torsion: postes, malla, alambre de espino y la placa de «privado»."""
+    r = G.u(0.38, 0.44)
+    _vallado(G, r, 0.9, vm=0.32)
+    for x in (-r, 0.0, r):
+        for z in (-r, r):
+            G.rem.append(_rem('poste', x, 0.0, z, s=0.025, alto=1.05, largo=0.025))
+    _coronar(G, r, 0.95, 'alambre', s=0.02)
+    G.rem.append(_rem('placa', 0.0, 0.45, r + 0.012, s=0.18, alto=0.14, largo=0.01))
+
+
+def _gen_vallacartel(G):
+    """Valla con cartel: el solar tapiado y una cartelera que anuncia lo que viene."""
+    r = G.u(0.36, 0.42)
+    _vallado(G, r, 0.7, fach=F_MURO, slot=SL_GRIS, g=0.02)
+    G.rem.append(_rem('cartelera', G.u(-0.08, 0.08), 0.0, 0.05, s=0.5, alto=1.9, largo=0.06))
+
+
+def _gen_tienda(G):
+    """Tienda: toldo, escaparate, el dolar en el tejado (el emblema)."""
+    w, d = G.u(0.34, 0.40), G.u(0.26, 0.30)
+    G.add(_v(-0.04, 0.02, w, d, 0.0, 1.0, fach=F_NEON, slot=SL_NEGRO, hueco=0.7))
+    G.rem.append(_rem('toldo', -0.04, 0.78, 0.02 + d / 2 + 0.035, s=w * 0.95, alto=0.14, largo=0.08))
+    G.add(_v(-0.04 + w / 2 + 0.09, 0.02, 0.12, 0.2, 0.0, 0.5, fach=F_CELOSIA, slot=SL_MALLA, vm=0.4))
+
+
+def _gen_supermercado(G):
+    """Supermercado: escaparate corrido, rotulo, totem, farolas y coches."""
+    w, d = G.u(0.72, 0.80), G.u(0.42, 0.48)
+    z0 = -0.08
+    G.add(_v(0.0, z0, w, d, 0.0, 1.3, fach=F_NEON, slot=SL_NEGRO, hueco=0.9))
+    G.rem += [_rem('rotulo', 0.0, 1.05, z0 + d / 2 + 0.01, s=w * 0.45, alto=0.2, largo=0.02),
+              _rem('totem', w / 2 + 0.04, 0.0, 0.32, s=0.1, alto=2.6, largo=0.04),
+              _rem('farola', -0.3, 0.0, 0.36, s=0.03, alto=1.4), _rem('farola', 0.1, 0.0, 0.36, s=0.03, alto=1.4)]
+    for k in range(3):
+        G.rem.append(_rem('coche', -0.22 + 0.16 * k, 0.0, 0.42, s=0.09, alto=0.26, largo=0.05, giro=90.0))
+
+
+def _gen_centrocomercial(G):
+    """Centro comercial: dos alas con neon, el atrio en torre entre ellas y el
+    aparcamiento en altura."""
+    G.add(_v(-0.25, -0.04, 0.32, 0.56, 0.0, 1.6, fach=F_NEON, slot=SL_NEGRO, hueco=0.8))
+    G.add(_v(0.21, -0.04, 0.26, 0.56, 0.0, 1.6, fach=F_NEON, slot=SL_NEGRO, hueco=0.8))
+    G.add(_v(-0.04, -0.04, 0.16, 0.2, 0.0, 4.2, fach=F_TORRENEON, slot=SL_NEGRO, hueco=0.6))
+    G.add(_v(0.40, 0.34, 0.18, 0.28, 0.0, 1.8, fach=F_BARRACON, slot=SL_GRIS, hueco=0.9, hm=0.6))
+    G.rem.append(_rem('totem', -0.44, 0.0, 0.38, s=0.1, alto=3.4, largo=0.04))
+    for k in range(4):
+        G.rem.append(_rem('bandera', -0.36 + 0.07 * k, 1.6, -0.28, s=0.03, alto=0.55, largo=0.02))
+
+
+def _gen_gransuperficie(G):
+    """Gran superficie del magnate: nave ciega con su cornisa de neon, banderas en la
+    cubierta, el totem MEGA y un mar de coches."""
+    G.add(_v(0.0, -0.08, 0.9, 0.6, 0.0, 2.0, fach=F_NEON, slot=SL_NEGRO, hueco=0.1))
+    for k in range(5):
+        G.rem.append(_rem('bandera', -0.38 + 0.08 * k, 2.0, -0.32, s=0.03, alto=0.6, largo=0.02))
+    G.rem.append(_rem('totem', -0.44, 0.0, 0.42, s=0.1, alto=6.0, largo=0.04))
+    for k in range(7):
+        G.rem.append(_rem('coche', -0.3 + 0.1 * k, 0.0, 0.33 + 0.08 * (k % 2), s=0.08, alto=0.24, largo=0.045,
+                          giro=90.0))
+
+
+def _gen_bar(G):
+    """Bar: neon, la copa en el tejado (el emblema) y la terraza."""
+    G.add(_v(-0.06, -0.02, 0.26, 0.22, 0.0, 1.0, fach=F_NEON, slot=SL_NEGRO, hueco=0.5))
+    G.rem += [_rem('sombrilla', 0.16, 0.0, 0.08, s=0.12, alto=0.6), _rem('sombrilla', 0.2, 0.0, -0.12, s=0.12,
+                                                                           alto=0.6)]
+
+
+def _gen_salafiestas(G):
+    """Sala de fiestas: caja ciega con cornisa de neon, focos al cielo y la cola."""
+    G.add(_v(0.0, -0.04, 0.5, 0.4, 0.0, 2.0, fach=F_NEON, slot=SL_NEGRO, hueco=0.0))
+    G.rem += [_rem('rotulo', 0.0, 1.55, 0.17, s=0.22, alto=0.25, largo=0.02),
+              _rem('foco', -0.16, 2.0, -0.04, s=0.1, alto=6.0, giro=-1.0),
+              _rem('foco', 0.16, 2.0, -0.04, s=0.1, alto=6.0, giro=1.0),
+              _rem('barrera', 0.1, 0.0, 0.26, s=0.3, alto=0.18, largo=0.015)]
+
+
+def _gen_casino(G):
+    """Casino-hotel: marquesina de bombillas, la torre de ventanas rosas, palmeras,
+    fuente rosa y focos."""
+    G.add(_v(0.0, 0.1, 0.84, 0.34, 0.0, 1.0, fach=F_NEON, slot=SL_NEGRO, hueco=0.8))
+    G.add(_v(0.0, -0.17, 0.4, 0.3, 1.0, 7.0, fach=F_TORRENEON, slot=SL_NEGRO, hueco=0.55))
+    G.rem += [_rem('marquesina', 0.0, 0.85, 0.28, s=0.6, alto=0.12, largo=0.08),
+              _rem('rotulo', 0.0, 6.0, -0.01, s=0.3, alto=0.4, largo=0.02),
+              _rem('palmera', -0.45, 0.0, 0.38, s=0.14, alto=1.8), _rem('palmera', 0.45, 0.0, 0.38, s=0.14, alto=1.8),
+              _rem('fuente', 0.3, 0.0, 0.44, s=0.12, alto=0.32),
+              _rem('foco', -0.14, 7.0, -0.17, s=0.1, alto=6.0, giro=-1.0),
+              _rem('foco', 0.14, 7.0, -0.17, s=0.1, alto=6.0, giro=1.0)]
+
+
+def _gen_resort(G):
+    """Resort de superlujo: terrazas escalonadas (con piscina), la torre con
+    helipuerto, el yate y las palmeras."""
+    for k in range(4):
+        G.add(_v(-0.1, 0.04, 0.78 - 0.14 * k, 0.6 - 0.1 * k, float(k), float(k + 1), fach=F_TORRENEON,
+                 slot=SL_HUESO, hueco=0.55))
+    G.add(_v(0.38, -0.3, 0.14, 0.14, 0.0, 10.0, fach=F_TORRENEON, slot=SL_HUESO, hueco=0.7, forma='cil'))
+    G.rem += [_rem('helipuerto', 0.38, 10.0, -0.3, s=0.24, alto=0.12),
+              _rem('yate', -0.34, 0.0, 0.44, s=0.22, alto=0.3, largo=0.07),
+              _rem('palmera', 0.42, 0.0, 0.36, s=0.14, alto=1.8), _rem('palmera', -0.46, 0.0, -0.3, s=0.14, alto=1.8)]
+
+
+def _gen_recinto(G):
+    """Recinto: doble valla con concertina, garita y barrera, el candado."""
+    _vallado(G, 0.43, 0.9, vm=0.34)
+    _vallado(G, 0.34, 0.9, vm=0.34)
+    _coronar(G, 0.43, 0.9, 'concertina', s=0.1)
+    G.add(_v(0.18, 0.18, 0.12, 0.12, 0.0, 1.1, fach=F_MURO, slot=SL_GRIS))
+    G.rem.append(_rem('barrera', -0.1, 0.0, 0.46, s=0.24, alto=0.2, largo=0.015))
+
+
+def _gen_muro(G):
+    """Muro: hormigon alrededor de una superficie vacia, una torre y el ojo."""
+    r, g = 0.43, 0.06
+    _vallado(G, r, 1.6, fach=F_MURO, slot=SL_HORMIGON, g=g)
+    G.rem.append(_rem('torrevigia', r, 0.0, -r, s=0.14, alto=2.6))
+
+
+def _gen_internamiento(G):
+    """Centro de internamiento: barracones tras el muro, dos torres y la sirena."""
+    r = 0.44
+    _vallado(G, r, 1.0, fach=F_MURO, slot=SL_HORMIGON, g=0.05)
+    for z in (-0.22, 0.0, 0.22):
+        G.add(_v(0.0, z, 0.6, 0.14, 0.0, 1.2, fach=F_BARRACON, slot=SL_BARRACON, hueco=0.5))
+        G.rem.append(_rem('tejado', 0.0, 1.2, z, s=0.6, alto=0.3, largo=0.16))
+    G.rem += [_rem('torrevigia', -r, 0.0, -r, s=0.14, alto=2.6), _rem('torrevigia', r, 0.0, -r, s=0.14, alto=2.6),
+              _rem('porton', 0.0, 0.0, r, s=0.2, alto=1.2, largo=0.05)]
+
+
+def _gen_campo(G):
+    """Campo: filas de barracones, alambrada con concertina, torres en las
+    esquinas, la puerta (la calavera, encima)."""
+    r = 0.46
+    _vallado(G, r, 1.0, vm=0.3)
+    _coronar(G, r, 1.0, 'concertina', s=0.1)
+    for x in (-0.2, 0.2):
+        for z in (-0.28, -0.06, 0.16):
+            G.add(_v(x, z, 0.34, 0.12, 0.0, 1.0, fach=F_BARRACON, slot=SL_BARRACON, hueco=0.5))
+            G.rem.append(_rem('tejado', x, 1.0, z, s=0.34, alto=0.26, largo=0.14))
+    for x in (-r, r):
+        for z in (-r, r):
+            G.rem.append(_rem('torrevigia', x, 0.0, z, s=0.13, alto=2.8))
+    G.rem.append(_rem('porton', 0.0, 0.0, r, s=0.24, alto=1.5, largo=0.05))
+
+
+_GEN_MAL = dict(vallaobra=_gen_vallaobra, vallatorsion=_gen_vallatorsion, vallacartel=_gen_vallacartel,
+                tienda=_gen_tienda, supermercado=_gen_supermercado, centrocomercial=_gen_centrocomercial,
+                gransuperficie=_gen_gransuperficie, bar=_gen_bar, salafiestas=_gen_salafiestas, casino=_gen_casino,
+                resort=_gen_resort, recinto=_gen_recinto, muro=_gen_muro, internamiento=_gen_internamiento,
+                campo=_gen_campo)
+_GEN_EDI.update(_GEN_MAL)
+
+
+def _modelos_mal():
+    """Los remates del mal (instancias 'ciu_', color por instancia)."""
+    M = {}
+    M['ciu_caja'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
+    M['ciu_cartelera'] = [_losa(-0.36, -0.3, 0.0, 0.5, -0.1, 0.1), _losa(0.3, 0.36, 0.0, 0.5, -0.1, 0.1),
+                          _losa(-0.5, 0.5, 0.45, 1.0, -0.5, 0.5)]
+    M['ciu_totem'] = [_losa(-0.12, 0.12, 0.0, 0.8, -0.12, 0.12), _losa(-0.5, 0.5, 0.8, 1.0, -0.5, 0.5),
+                      _losa(-0.4, 0.4, 0.62, 0.78, -0.4, 0.4)]
+    M['ciu_farola'] = [_losa(-0.1, 0.1, 0.0, 1.0, -0.1, 0.1), _losa(-0.5, 0.5, 0.92, 1.0, -0.2, 0.2)]
+    M['ciu_coche'] = [_losa(-0.5, 0.5, 0.0, 0.55, -0.5, 0.5), _losa(-0.25, 0.3, 0.55, 1.0, -0.45, 0.45)]
+    M['ciu_bandera'] = [_losa(-0.08, 0.08, 0.0, 1.0, -0.08, 0.08), _losa(0.08, 0.9, 0.62, 0.95, -0.04, 0.04)]
+    M['ciu_sombrilla'] = [_losa(-0.05, 0.05, 0.0, 0.8, -0.05, 0.05), _cono(0.0, 0.85, 0.0, 1.0, 0.3)]
+    M['ciu_foco'] = [_cono(0.0, 0.5, 0.0, 1.0, 1.0, 180.0, 0.0, 0.0)]     # el haz se abre hacia arriba
+    top = (0.04, 0.82, 0.0)
+    M['ciu_palmera'] = [_tramo((0.0, 0.0, 0.0), top, 0.1)] + [
+        _tramo(top, (0.45 * math.cos(a), 0.6, 0.45 * math.sin(a)), 0.1)
+        for a in (2 * math.pi * k / 5 + 0.3 for k in range(5))]
+    M['ciu_fuente'] = [_hexa(0.0, 0.15, 0.0, 1.0, 0.3), _cono(0.0, 0.6, 0.0, 0.35, 0.8)]
+    M['ciu_helipuerto'] = [_hexa(0.0, 0.5, 0.0, 1.0, 1.0)]
+    M['ciu_yate'] = [_losa(-0.5, 0.5, 0.0, 0.45, -0.5, 0.5), _losa(-0.3, 0.25, 0.45, 0.75, -0.35, 0.35),
+                     _losa(-0.2, 0.1, 0.75, 1.0, -0.25, 0.25)]
+    M['ciu_concertina'] = [_hexa(0.0, 0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 90.0)]
+    M['ciu_torrevigia'] = [_tramo((sx * 0.42, 0.0, sz * 0.42), (sx * 0.3, 0.72, sz * 0.3), 0.06)
+                           for sx in (-1, 1) for sz in (-1, 1)] + \
+        [_losa(-0.38, 0.38, 0.72, 0.9, -0.38, 0.38), _losa(-0.48, 0.48, 0.9, 1.0, -0.48, 0.48)]
+    M['ciu_porton'] = [_losa(-0.5, -0.38, 0.0, 1.0, -0.5, 0.5), _losa(0.38, 0.5, 0.0, 1.0, -0.5, 0.5),
+                       _losa(-0.5, 0.5, 0.85, 1.0, -0.5, 0.5)] + \
+        [_losa(x - 0.02, x + 0.02, 0.0, 0.85, -0.15, 0.15) for x in (-0.24, -0.08, 0.08, 0.24)]
+    for k, prims in M.items():
+        b = _caja_modelo(prims)
+        if b[2] < -1e-6 or b[3] > 1.0 + 1e-6:
+            M[k] = _a_alto_uno(prims)
+    return M
+
+
+MODELOS_MAL = _modelos_mal()
+MODELOS.update(MODELOS_MAL)
+for _m in MODELOS_MAL:                  # como se apoyan (las mide el motor: build_mal)
+    PIE[_m] = ('esbelto', 0.9)
+    ANCHO[_m] = _ancho_natural(_m)
 _EDIFICIOS = {}
 
 
@@ -5068,7 +5354,8 @@ def nombre_edificio(diseno, var):
 
 def edificios_de(cfg):
     """Los nombres de los ejemplares de la ciudad que necesita TD."""
-    return [nombre_edificio(d, v) for d in DISENOS for v in range(variantes_de(cfg, d))]
+    mal = cfg['nivel'] >= 39            # fase 39: la biblioteca del mal, solo desde su fase
+    return [nombre_edificio(d, v) for d in DISENOS if mal or d not in MALES for v in range(variantes_de(cfg, d))]
 
 
 def es_edificio(nombre):
@@ -5380,7 +5667,8 @@ def clusters(W, cfg):
     """Formaciones fundidas (se guarda el ultimo calculo: mismo mundo, mismo
     resultado; no lo modifiques)."""
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), cfg['umbral_vecindad'],
-             cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'])
+             cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'],
+             tuple(W['sp']) if cfg['nivel'] >= 39 and mal_propio(W, cfg) else None)
     if _CLUSTERS.get('clave') != clave:
         _CLUSTERS['clave'], _CLUSTERS['cl'] = clave, _clusters(W, cfg)
     return _CLUSTERS['cl']
@@ -5395,6 +5683,7 @@ def _clusters(W, cfg):
     U = cfg['umbral_vecindad']
     P = [presion(W, cfg, i) for i in range(N)]
     padre = list(range(N))
+    malp = cfg['nivel'] >= 39 and mal_propio(W, cfg)     # fase 39: el mal no se funde con el publico
 
     def raiz(a):
         while padre[a] != a:
@@ -5403,10 +5692,10 @@ def _clusters(W, cfg):
         return a
     enlaces = []
     for i in range(N):
-        if W['occ'][i] <= 0 or not W['own'][i]:
+        if W['occ'][i] <= 0 or not W['own'][i] or (malp and W['sp'][i] == MAL):
             continue
         for j in NEIGH[i]:
-            if j <= i or W['occ'][j] <= 0 or W['own'][j] != W['own'][i]:
+            if j <= i or W['occ'][j] <= 0 or W['own'][j] != W['own'][i] or (malp and W['sp'][j] == MAL):
                 continue
             vec = P[i] >= U and P[j] >= U
             des = (W['par'][j] == i and W['occ'][i] >= cfg['th_fusion']) or \
@@ -5785,13 +6074,15 @@ def geometrias_piel(cfg=None):
     su familia."""
     cfg = cfg or DEFAULT_CFG
     clave = (cfg['nivel'] < 12, variantes(cfg), VARIANTES_TD, variantes_ciudad(cfg), VARIANTES_CIU_TD,
-             variantes_ind(cfg), VARIANTES_IND_TD)
+             variantes_ind(cfg), VARIANTES_IND_TD, cfg['nivel'] >= 39)
     v = _GEOS_CACHE.get(clave)
     if v is not None:
         return v
     doble = cfg['nivel'] < 12
     out = []
     for mo in sorted(MODELOS):
+        if mo in MODELOS_MAL and cfg['nivel'] < 39:
+            continue                    # fase 39: los remates del mal, solo desde su fase
         if mo.startswith('ciu_'):
             out.append((geometria_de(mo), mo, 'mat_poroso'))
         elif doble:
@@ -6023,6 +6314,7 @@ def _piel_ctx(W, cfg, now):
     (ciudad e industria). P['celdas']: las celdas que se dibujan, en orden."""
     tema = tema_de(cfg)
     paso = W.get('paso') or 0.125
+    malp = cfg['nivel'] >= 39 and mal_propio(W, cfg)
     cl = clusters(W, cfg)
     tf, tc = objetivos(W, cfg, cl)
     suelos = [base_radius(W, cfg, i) for i in range(N)]
@@ -6048,7 +6340,8 @@ def _piel_ctx(W, cfg, now):
                    res=dict(hojas=0, todas=0, ejemplares=0, emergentes=0, frutales={},
                             biomas=dict((b, 0) for b in BIOMAS)))
         P.update(ter=ter, cult=cult, ctx=ctx)
-        P['celdas'] = [i for i in range(N) if W['vh'][i] > 0.005 and W['own'][i]]
+        P['celdas'] = [i for i in range(N) if W['vh'][i] > 0.005 and W['own'][i]
+                       and not (malp and W['sp'][i] == MAL)]     # fase 39: el mal se dibuja aparte
     else:                               # fase 11 v10: la ciudad legible (build_ciudad)
         P['ctx'] = _ciudad_ctx(W, cfg, now, cl, tf, bases, paso)
         P['celdas'] = sorted(P['ctx']['info'])
@@ -8047,8 +8340,9 @@ def _ciudad_ctx(W, cfg, now, cl, tf, bases, paso):
     respaldo = doce and cfg.get('respaldo', 0)
     info = {}
     ck = (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi'])
+    malp = cfg['nivel'] >= 39 and mal_propio(W, cfg)      # fase 39: el mal se dibuja aparte
     for i in range(N):
-        if W['occ'][i] > 0 and W['own'][i] and W['vh'][i] > 0.005:
+        if W['occ'][i] > 0 and W['own'][i] and W['vh'][i] > 0.005 and not (malp and W['sp'][i] == MAL):
             info[i] = info_ciudad(W, cfg, i, cl, ck)
     cerca = {}
     if cfg.get('superficie'):
@@ -8400,9 +8694,14 @@ def rasgos_terreno(W, cfg, cl=None):
              tuple(W['vel']) if cfg.get('volcanes', 0.0) > 0 else None, cfg['umbral_vecindad'], cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], cfg['th_branch'],
              cfg['sat_size'], cfg['umbral_monte'], cfg['altura_monte'], limit(cfg), cfg['seed_frac'],
              cfg['grow_frac'])
+    malp = cfg['nivel'] >= 39 and mal_propio(W, cfg)
+    if malp:                            # fase 39: el mal no levanta el relieve (su especie va encima)
+        clave = clave + (tuple(W['sp']),)
     v = _TERRENO.get('rasgos')
     if v is not None and v[0] == clave:
         return v[1]
+    if malp:
+        W = dict(W, occ=[0 if W['sp'][i] == MAL else W['occ'][i] for i in range(N)])
     v = _rasgos_terreno(W, cfg, cl)
     _TERRENO['rasgos'] = (clave, v)
     return v
@@ -14560,6 +14859,8 @@ def juego_avanzar(W, cfg, now, semis):
         k += 1
         semicorchea_juego(W, cfg, now)
     J['semi_f'] = max(0.0, J['semi_f'])
+    if mal_propio(W, cfg):              # fase 39: la rama y la obra de cada celda del mal
+        mal_tick(W, cfg, now)
     pub, mal = recuento(W)
     J['recuento'] = dict(publico=pub, mal=mal)
     return None
@@ -14972,6 +15273,8 @@ def build_juego(W, cfg, now, out):
         out['agua_juego'] = []
     if lvl >= 38:
         out['trumpzilla'] = []
+    if lvl >= 39:
+        out['emblemas_mal'] = []
     if not juego_on(W, cfg):
         return out
     J = W['juego']
@@ -14981,10 +15284,12 @@ def build_juego(W, cfg, now, out):
             if p.get('casilla') is None:
                 continue
             out['marcas'] += filas_anillo(W, cfg, celda_de_casilla(W, cfg, p['casilla']), col)
+    if lvl >= 39:                       # fase 39: el mal con su especie (sin el velo provisional)
+        J['mal_res'] = build_mal(W, cfg, now, out)
     if lvl >= 33:
         lim = limit(cfg)
         for i in range(N):
-            if W['occ'][i] > 0 and W['sp'][i] == MAL:
+            if W['occ'][i] > 0 and W['sp'][i] == MAL and not mal_propio(W, cfg):
                 r0 = base_radius(W, cfg, i)
                 n = normal_i(i)
                 cw, cl = _cell_sizes(r0, i)
@@ -15595,6 +15900,419 @@ def sprite_reloj(frame=None):
         return 0.0
 
 
+# =============================================================================
+# 1. NUCLEO - la especie del mal (fase 39, motor v117)
+# =============================================================================
+# Lo visual del mal deja de ser provisional (fase 33: la geometria de su especie de
+# origen bajo un velo casi negro). Con Especiemal, una celda del mal se dibuja con su
+# propia biblioteca (DISENOS_MAL, la gramatica de la ciudad) en cualquier tema, y no
+# entra en la piel del publico (ni en sus clusters ni en el relieve).
+#   BROTE      occ 1: una valla (de obra, de torsion o con cartel), la que diga la celda.
+#   RAMA       se decide al ABRIR la valla (la primera vez que pasa de 1): con
+#              Vecinasencierro vecinas del mal o mas, ENCIERRO; si no, la del ultimo
+#              secuenciador que la toco (fase 35, o el del latido): SEQ1 NEGOCIO, SEQ2
+#              OCIO. Se queda hasta que la celda vuelve a ser valla o deja de ser del mal.
+#   ETAPAS     las de la planificada (1, 2-3, 4-5, 6-7, 8+ con los umbrales de fabrica).
+#   OBRA       terminada = se enciende: cada etapa nueva pasa por el cartel sobre la
+#              valla, la estructura con su grua, terminada a oscuras y la puesta en
+#              marcha (el neon se enciende); Pasosobramal pasos cada una.
+#   EMBLEMA    un sprite (atlas sprites/mal_emblemas.png) que flota sobre cada celda y
+#              mira a la camara: de lejos se lee el signo, no el edificio.
+#   DEMONIO    un cluster del mal de 4 celdas o mas invoca a su demonio: 4-6 un
+#              diablillo sentado en la pieza mas alta, 7-9 una cabeza que asoma detras,
+#              10+ un coloso que abraza el cluster con la calavera en el pecho.
+#   RESCATE    mientras dura (fase 35), el neon parpadea y se apaga; al completarse la
+#              valla cae (T_CAIDA_MAL s) y la celda es del publico.
+# Todo va en W['juego']['mal'] (se vacia con el modo) y en geometrias propias: los
+# edificios en las de la biblioteca (mod_edi_...), los remates en las 'ciu_' y los
+# emblemas y demonios en 'emblemas_mal'.
+
+EMBLEMAS_MAL = ('prohibido', 'dolar', 'dolar_demonio', 'dolar_demonio_dolar', 'magnate', 'copa', 'diamante',
+                'candado', 'ojo', 'sirena', 'calavera', 'proximamente', 'demonio', 'diablillo', 'cabeza', 'coloso')
+ATLAS_MAL = (4, 4)              # columnas x filas del atlas (celdas 2:1, de 256 x 128)
+EMBLEMA_DE = dict(negocio=(None, 'dolar', 'dolar_demonio', 'dolar_demonio_dolar', 'magnate'),
+                  ocio=(None, 'copa', 'dolar', 'dolar_demonio', 'diamante'),
+                  encierro=(None, 'candado', 'ojo', 'sirena', 'calavera'))
+MODOS_EMBLEMA = ('fijo', 'parpadeo', 'detras', 'late')
+EMBLEMA_MODO_K = 32             # en el alfa de cada fila: emblema + 32 x modo
+PASOS_OBRA_MAL = ('cartel', 'estructura', 'oscuras')     # y despues, encendida
+DEMONIOS_MAL = ((10, 'coloso'), (7, 'cabeza'), (4, 'diablillo'))
+T_CAIDA_MAL = 1.2               # s que tarda en caer la valla de un brote rescatado
+LUZ_APAGADO = 0.14              # el emblema a oscuras (la obra terminada sin encender)
+
+
+def mal_propio(W, cfg):
+    """Fase 39: el mal tiene su especie (Especiemal) y hay partida."""
+    return cfg['nivel'] >= 39 and bool(cfg.get('especie_mal', 1)) and juego_on(W, cfg)
+
+
+def celdas_mal(W):
+    return [i for i in range(N) if W['occ'][i] > 0 and W['sp'][i] == MAL]
+
+
+def etapa_mal(cfg, occ, sat=False):
+    """1 la valla, 2 a 5 los tipos de su rama (los umbrales de la planificada)."""
+    e = etapa_ciudad(cfg, 'planificada', occ)
+    return min(e, 2) if sat else e
+
+
+def vecinas_mal(W, i):
+    return sum(1 for j in NEIGH[i] if W['occ'][j] > 0 and W['sp'][j] == MAL)
+
+
+def mal_estado(W):
+    J = W['juego']
+    E = J.get('mal')
+    if E is None:
+        E = J['mal'] = dict(rama={}, obra={}, caidas={})
+    return E
+
+
+def rama_al_abrir(W, cfg, i):
+    """La rama de una valla que abre: encierro si esta rodeada por el mal; si no, la
+    del ultimo secuenciador que la toco (SEQ1 negocio, SEQ2 ocio)."""
+    if vecinas_mal(W, i) >= int(cfg.get('vecinas_encierro', 3)):
+        return 'encierro'
+    u = W['juego'].get('ultimoseq', {}).get(i)
+    s = GEO if u == 'geo' else (ARQ if u == 'arq' else W['lat_s'][i])
+    return 'ocio' if s == ARQ else 'negocio'
+
+
+def mal_tick(W, cfg, now):
+    """Cada fotograma con partida: la rama de cada celda del mal, su obra (una etapa
+    nueva empieza obra; una bajada deja lo de abajo hecho) y las vallas que caen al
+    rescatar. Devuelve las celdas del mal."""
+    E = mal_estado(W)
+    rama, obra, caidas = E['rama'], E['obra'], E['caidas']
+    vivas = celdas_mal(W)
+    for i in vivas:
+        e = etapa_mal(cfg, W['occ'][i], W['par'][i] >= 0)
+        if e <= 1:
+            rama.pop(i, None)
+        elif i not in rama:
+            rama[i] = rama_al_abrir(W, cfg, i)
+        prev = obra.get(i)
+        if prev is None or e > prev[0]:
+            obra[i] = (e, float(now) if e > 1 else -1e9)
+        elif e < prev[0]:
+            obra[i] = (e, -1e9)
+    vs = set(vivas)
+    for i in [x for x in obra if x not in vs]:
+        if W['occ'][i] > 0 and W['sp'][i] != MAL:      # rescatada: la valla cae
+            caidas[i] = (float(now), rama.get(i), obra[i][0])
+        obra.pop(i, None)
+        rama.pop(i, None)
+    for i in [x for x, v in caidas.items() if now - v[0] > T_CAIDA_MAL]:
+        caidas.pop(i, None)
+    return vivas
+
+
+def paso_obra_mal(W, cfg, i, now, E=None):
+    """0 cartel, 1 estructura, 2 terminada a oscuras, 3 encendida."""
+    E = E or mal_estado(W)
+    o = E['obra'].get(i)
+    if o is None or o[0] <= 1:
+        return 3
+    dur = max(1, int(cfg.get('pasos_obra_mal', 8))) * (W.get('paso') or 0.125)
+    return max(0, min(3, int((now - o[1]) / max(1e-6, dur))))
+
+
+def info_mal(W, cfg, i, E=None):
+    """Lo que hace falta para dibujar la celda del mal i: rama, etapa, tipo, diseno,
+    variante, giro, ejemplar, alto (H, en el mundo), cima (fraccion de H: remates
+    altos), emblema y la valla de la celda (para el cartel de la obra y la caida)."""
+    E = E or mal_estado(W)
+    o = W['occ'][i]
+    e = etapa_mal(cfg, o, W['par'][i] >= 0)
+    rama = E['rama'].get(i, 'negocio') if e > 1 else None
+    tipo = TIPOS_MAL[rama or 'negocio'][e - 1]
+    lista = DISENOS_TIPO_MAL[tipo]
+    valla = VALLAS_MAL[int(_hash01(i, 389) * len(VALLAS_MAL)) % len(VALLAS_MAL)]
+    d = valla if e <= 1 else lista[int(_hash01(i, 391, W['vel'][i]) * len(lista)) % len(lista)]
+    nv = variantes_de(cfg, d)
+    v = int(_hash01(i, 393, e) * nv) % nv
+    ex = edificio(cfg, d, v)
+    hp = alto_planta(cfg)
+    k = max(0, o - occ_inicio(cfg, 'planificada', e)) if e > 1 else 0
+    H = min(H_TOPE * limit(cfg), ex['alto'] * hp * (1.0 + 0.08 * k) * float(cfg.get('alto_mal', 1.0)))
+    hp = hp * float(cfg.get('alto_mal', 1.0))          # Altomal: los remates, a la misma escala
+    cima = 1.0
+    for r in ex['rem']:
+        if r['tipo'] != 'foco':
+            cima = max(cima, r['y'] + r['alto'] * hp / max(1e-6, H))
+    em = EMBLEMA_DE[rama][e - 1] if rama else ('proximamente' if d == 'vallacartel' else 'prohibido')
+    return dict(rama=rama, etapa=e, tipo=tipo, diseno=d, var=v, ex=ex, H=H, cima=cima, hp=hp,
+                giro=90.0 * int(_hash01(i, 397) * 4), emblema=em, valla=valla)
+
+
+def _ctx_mal(cfg):
+    doce = cfg['nivel'] >= 12
+    return dict(doce=doce, respaldo=doce and cfg.get('respaldo', 0))
+
+
+def fila_emblema(p, marco, alto, nombre, luz=1.0, modo='fijo', atras=None):
+    """La fila de un emblema (o un demonio) en 'emblemas_mal': una lamina 2:1 de pie
+    en p, que mira a la camara; atras, lo que se aparta de la camara (modo detras)."""
+    q = EMBLEMAS_MAL.index(nombre) + EMBLEMA_MODO_K * MODOS_EMBLEMA.index(modo)
+    return _fila_m(p, marco, 2.0 * alto, alto, atras if atras is not None else alto, (luz, luz, luz)) + [float(q)]
+
+
+def _remates_mal(ctx, i, inf, ex, ej, p0, sx, sz, H, encendido, out, now):
+    """Los remates del ejemplar del mal en su sitio. Los focos, solo encendidos."""
+    k = 0
+    hp = inf['hp']
+    for r in ex['rem']:
+        mo, col = MAL_REM.get(r['tipo'], (None, None))
+        if mo is None or mo not in MODELOS:
+            continue
+        g = inf['giro']
+        if r['tipo'] == 'foco':
+            if not encendido:
+                continue
+            barre = round(14.0 * math.sin(0.7 * now + i) / 7.0) * 7.0       # barren el cielo, a saltos
+            mk = _marco(i, round(g), 16.0, round(g + (0.0 if r['giro'] > 0 else 180.0) + barre))
+        else:
+            mk = _marco(i, round(g + r['giro']))
+        p = _en_edi(p0, ej, r['x'] * sx, r['y'] * H, r['z'] * sz)
+        largo = r['largo'] if r['largo'] is not None else r['s']
+        out.setdefault(geometria_de(mo), []).append(
+            _fila_ciu(ctx, p, mk, (r['s'] * sx, r['alto'] * hp, largo * sz), col))
+        k += 1
+    return k
+
+
+def _edificio_mal(ctx, W, cfg, i, ex, ej, p0, sx, sz, H, luces, fin, modo, now, paso, out):
+    """El ejemplar del mal: la fachada la pinta el shader de la ciudad (lenguaje 6)."""
+    alb = PALETA_CIUDAD[PALETA_MAL][ex['vols'][-1]['slot']]
+    tinte = 0.0
+    if luces and W['lat_s'][i] in (1, 2):           # la nota aviva el neon
+        It = 1.0 - (now - W['t_gate'][i]) / max(1e-6, cfg.get('pasos_tinte', 4) * paso)
+        if 0.0 < It <= 1.0:
+            tinte = W['lat_s'][i] + 0.99 * It
+    out.setdefault(geometria_de(nombre_edificio(ex['diseno'], ex['var'])), []).append(
+        _fila_edi(ctx, p0, ej, (sx, H, sz), alb, 0.55, luces, PALETA_MAL, tinte, 1.0, fin, modo, 0.0))
+    return 1
+
+
+def dibujar_celda_mal(W, cfg, ctx, E, i, now, paso, out, res):
+    """Una celda del mal: su edificio (o su valla, o su obra), sus remates y su emblema."""
+    inf = info_mal(W, cfg, i, E)
+    n = normal_i(i)
+    p0 = _mul(n, base_radius(W, cfg, i))
+    cw, cl_ = _cell_sizes(_len(p0), i)
+    sx, sz = 0.94 * cw, 0.94 * cl_
+    ej = _marco(i, inf['giro'])
+    s = paso_obra_mal(W, cfg, i, now, E)
+    J = W['juego']
+    t_r = J.get('rescates', {}).get(i)
+    pr = max(0.0, min(1.0, (now - t_r) / max(1e-6, cfg.get('t_aliados', 3.0)))) if t_r is not None else 0.0
+    ex, H = inf['ex'], inf['H']
+    piezas = 0
+    em, luz, modo = inf['emblema'], 1.0, 'fijo'
+    if s == 0:                                  # el cartel sobre la valla
+        exv = edificio(cfg, 'vallacartel', inf['var'] % variantes_de(cfg, 'vallacartel'))
+        Hv = exv['alto'] * inf['hp']
+        piezas += _edificio_mal(ctx, W, cfg, i, exv, ej, p0, sx, sz, Hv, 0, 1.0, 0, now, paso, out)
+        piezas += _remates_mal(ctx, i, inf, exv, ej, p0, sx, sz, Hv, False, out, now)
+        em, H_em = 'proximamente', Hv * (1.0 + 1.9 * inf['hp'] / max(1e-6, Hv))
+    else:
+        encendido = s >= 3 and pr < 0.999
+        luces = 4 if encendido else 0
+        if t_r is not None and encendido and (pr > 0.75 or (pr > 0.25 and int(now * 11.0 + i) % 3 == 0)):
+            luces = 0                           # el rescate: el neon parpadea y se apaga
+        fin, modo_obra = (0.0, 1) if s == 1 else (1.0, 0)
+        piezas += _edificio_mal(ctx, W, cfg, i, ex, ej, p0, sx, sz, H, luces, fin, modo_obra, now, paso, out)
+        if s >= 2:
+            piezas += _remates_mal(ctx, i, inf, ex, ej, p0, sx, sz, H, luces > 0, out, now)
+        if s == 1:                              # la estructura y la grua
+            r = ex['radio']
+            pg = _en_edi(p0, ej, 0.78 * r * cw, 0.0, -0.5 * r * cl_)
+            hc = H * 1.18 + 0.1 * limit(cfg)
+            out.setdefault(geometria_de('ciu_grua'), []).append(
+                _fila_ciu(ctx, pg, _marco(i, 90.0), (0.5 * cw, hc, 0.5 * cl_), COL_OBRA['grua']))
+            piezas += 1
+            em = None
+        elif s == 2:
+            luz = LUZ_APAGADO
+        H_em = H * inf['cima']
+        if t_r is not None:
+            luz, modo = max(LUZ_APAGADO, 1.0 - pr), 'parpadeo'
+            res['rescate'] = max(res['rescate'], pr)
+        elif s >= 3:
+            o = E['obra'].get(i)
+            dur = max(1, int(cfg.get('pasos_obra_mal', 8))) * paso
+            if o is not None and o[0] > 1 and now - o[1] < 4.0 * dur:
+                modo = 'parpadeo'               # la puesta en marcha: el neon titubea
+            elif em in ('calavera', 'magnate', 'diamante'):
+                modo = 'late'
+    if em is not None:
+        m_ = min(cw, cl_)
+        alto = float(cfg.get('tam_emblema', 0.45)) * m_ * (0.75 + 0.12 * inf['etapa'])
+        p = _add(p0, n, H_em + 0.12 * m_)
+        out['emblemas_mal'].append(fila_emblema(p, _marco(i), alto, em, luz, modo))
+        res['emblemas'] += 1
+    res[inf['rama'] or 'vallas'] += 1
+    if s < 3 and inf['etapa'] > 1:
+        res['obras'] += 1
+    return piezas, H * inf['cima']
+
+
+def caida_mal(W, cfg, ctx, i, t0, now, out):
+    """La valla de un brote rescatado se cae (T_CAIDA_MAL s) y desaparece."""
+    q = (now - t0) / T_CAIDA_MAL
+    if not 0.0 <= q < 1.0:
+        return 0
+    d = VALLAS_MAL[int(_hash01(i, 389) * len(VALLAS_MAL)) % len(VALLAS_MAL)]
+    ex = edificio(cfg, d, 0)
+    n = normal_i(i)
+    p0 = _mul(n, base_radius(W, cfg, i))
+    cw, cl_ = _cell_sizes(_len(p0), i)
+    g = 90.0 * int(_hash01(i, 397) * 4)
+    incl = round(85.0 * q * q / 5.0) * 5.0
+    return _edificio_mal(ctx, W, cfg, i, ex, _marco(i, g, incl, g), p0, 0.94 * cw, 0.94 * cl_,
+                         ex['alto'] * alto_planta(cfg) * float(cfg.get('alto_mal', 1.0)), 0, 1.0, 0, now, 0.125, out)
+
+
+def componentes_mal(W):
+    """Los clusters del mal: celdas del mal vecinas, unidas. [[celdas], ...]."""
+    vistas, out = set(), []
+    for i in celdas_mal(W):
+        if i in vistas:
+            continue
+        pila, grupo = [i], []
+        vistas.add(i)
+        while pila:
+            a = pila.pop()
+            grupo.append(a)
+            for b in NEIGH[a]:
+                if b not in vistas and W['occ'][b] > 0 and W['sp'][b] == MAL:
+                    vistas.add(b)
+                    pila.append(b)
+        out.append(sorted(grupo))
+    return sorted(out, key=lambda g: (-len(g), g[0]))
+
+
+def demonio_de(n):
+    for umbral, nombre in DEMONIOS_MAL:
+        if n >= umbral:
+            return nombre
+    return None
+
+
+def demonios_mal(W, cfg, altos, out):
+    """El demonio de cada cluster de 4 celdas o mas: el diablillo, sentado en la
+    pieza mas alta; la cabeza, que asoma detras del cluster; el coloso, que lo abraza
+    (detras, mas alto que todo) con la calavera en el pecho. Devuelve [(nombre, celdas)]."""
+    hechos = []
+    for cs in componentes_mal(W):
+        nombre = demonio_de(len(cs))
+        if nombre is None:
+            continue
+        hechos.append((nombre, len(cs)))
+        alta = max(cs, key=lambda c: (altos.get(c, 0.0), -c))
+        hmax = max(altos.get(c, 0.0) for c in cs)
+        if nombre == 'diablillo':
+            n = normal_i(alta)
+            p0 = _mul(n, base_radius(W, cfg, alta))
+            m_ = min(_cell_sizes(_len(p0), alta))
+            out['emblemas_mal'].append(fila_emblema(_add(p0, n, altos.get(alta, 0.0)), _marco(alta), 0.42 * m_,
+                                                    'diablillo', 1.0, 'fijo', 0.05 * m_))
+            continue
+        ps = [_mul(normal_i(c), base_radius(W, cfg, c)) for c in cs]
+        g = (sum(p[0] for p in ps) / len(ps), sum(p[1] for p in ps) / len(ps), sum(p[2] for p in ps) / len(ps))
+        nc = _norm(g)
+        r0 = sum(_len(p) for p in ps) / len(ps)
+        pc = _mul(nc, r0)
+        radio = max(_len(_add(p, pc, -1.0)) for p in ps)
+        X, Y, Z = _ejes(nc)
+        marco = (X, Y, Z, _euler_xyz(X, Y, Z))
+        if nombre == 'cabeza':
+            alto = 1.3 * hmax + 0.45 * radio
+        else:
+            alto = 1.8 * hmax + 0.7 * radio
+        out['emblemas_mal'].append(fila_emblema(pc, marco, alto, nombre, 1.0, 'detras', 0.7 * radio))
+    return hechos
+
+
+def build_mal(W, cfg, now, out):
+    """Fase 39: las celdas del mal con su especie, sus emblemas, las vallas que caen y
+    los demonios. Devuelve el resumen (tambien en W['juego']['mal']['res'])."""
+    out['emblemas_mal'] = []
+    res = dict(negocio=0, ocio=0, encierro=0, vallas=0, obras=0, emblemas=0, piezas=0, rescate=0.0,
+               demonios=[])
+    if not mal_propio(W, cfg):
+        return res
+    E = mal_estado(W)
+    ctx = _ctx_mal(cfg)
+    paso = W.get('paso') or 0.125
+    altos = {}
+    for i in celdas_mal(W):
+        pz, alto = dibujar_celda_mal(W, cfg, ctx, E, i, now, paso, out, res)
+        res['piezas'] += pz
+        altos[i] = alto
+    for i, (t0, _, _) in sorted(E['caidas'].items()):
+        res['piezas'] += caida_mal(W, cfg, ctx, i, t0, now, out)
+    if cfg.get('demonio_mal', 1):
+        res['demonios'] = demonios_mal(W, cfg, altos, out)
+    E['res'] = res
+    return res
+
+
+def sim_mal(W, cfg, now, celda=None):
+    """Simmal: un cluster del mal de diez celdas alrededor de Simceldamon (el centro
+    y sus vecinas, y las de la segunda corona que hagan falta), con ocupaciones de
+    1 a 9 y secuenciadores alternos: vallas, negocio, ocio y encierro, en obra."""
+    if not juego_on(W, cfg):
+        return 'MAL      enciende antes Modojuego'
+    c0 = max(0, min(N - 1, int(cfg['sim_celda_mon'] if celda is None else celda)))
+    cs = [c0] + [j for j in NEIGH[c0]]
+    for j in list(cs):
+        for k in NEIGH[j]:
+            if len(cs) >= 10:
+                break
+            if k not in cs:
+                cs.append(k)
+    cs = cs[:10]
+    occs = (9, 2, 5, 7, 3, 6, 1, 8, 4, 1)
+    E = mal_estado(W)
+    for c in cs:                        # fuera del cluster mientras se siembra
+        if W['sp'][c] == MAL:
+            W['occ'][c] = 0
+        E['rama'].pop(c, None)
+        E['obra'].pop(c, None)
+    # de fuera adentro, como si hubiera crecido asi: lo de fuera abre comercio y ocio;
+    # el centro, ya rodeado, se cierra
+    for q in reversed(range(len(cs))):
+        c, o = cs[q], occs[q]
+        brote_mal(W, cfg, c, now)
+        W['occ'][c] = o
+        W['lat_s'][c] = GEO if q % 2 else ARQ
+        W['juego']['ultimoseq'][c] = 'geo' if q % 2 else 'arq'
+        mal_tick(W, cfg, now)
+    W['dirty'] = True
+    r = E['rama']
+    return 'MAL      %d celdas desde la %d: negocio %d  ocio %d  encierro %d  vallas %d' % (
+        len(cs), c0, sum(1 for c in cs if r.get(c) == 'negocio'), sum(1 for c in cs if r.get(c) == 'ocio'),
+        sum(1 for c in cs if r.get(c) == 'encierro'), sum(1 for c in cs if c not in r))
+
+
+def _legend_mal(W, c):
+    """MAL (fase 39): las celdas de cada rama, las obras, el rescate y el demonio."""
+    if not c.get('especie_mal', 1):
+        return '  MAL      provisional (Especiemal apagado: el velo de la fase 33)'
+    J = W.get('juego')
+    if not J or not juego_on(W, c):
+        return '  MAL      -'
+    res = (J.get('mal') or {}).get('res')
+    if not res:
+        return '  MAL      -'
+    dem = res['demonios'][0] if res['demonios'] else None
+    return '  MAL      negocio %d  ocio %d  encierro %d  vallas %d   obras %d%s   demonio %s' % (
+        res['negocio'], res['ocio'], res['encierro'], res['vallas'], res['obras'],
+        '   rescate %.0f%%' % (100 * res['rescate']) if res['rescate'] > 0 else '',
+        '%s (%d celdas)' % dem if dem else '-')
+
+
 # --- el rescate simulado y la leyenda -------------------------------------------
 
 def casillas_hacia(W, cfg, celdas, evitar=()):
@@ -15770,6 +16488,7 @@ def chop_names(c=None):
     extra += ['i_monstruo', 'i_tocon', 'i_brotes_mal'] if c['nivel'] >= 33 else []
     extra += ['i_agua_juego'] if c['nivel'] >= 34 else []
     extra += ['i_trumpzilla'] if c['nivel'] >= 38 else []                       # fase 38: el sprite
+    extra += ['i_emblemas_mal'] if c['nivel'] >= 39 else []                     # fase 39: emblemas y demonios
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -16217,6 +16936,13 @@ def cfg():
         c.update(sprite_mon=int(bool(_p('Spritemonstruo', True))),
                  emocion_fija=fija if fija in EMOCIONES_MON else 'auto',
                  alto_sprite=max(0.2, min(4.0, _p('Altosprite', c['alto_sprite']))))
+    if c['nivel'] >= 39:                # fase 39: la especie del mal
+        c.update(especie_mal=int(bool(_p('Especiemal', True))),
+                 vecinas_encierro=max(1, min(6, int(_p('Vecinasencierro', c['vecinas_encierro'])))),
+                 pasos_obra_mal=max(1, int(_p('Pasosobramal', c['pasos_obra_mal']))),
+                 tam_emblema=max(0.05, min(3.0, _p('Tamanoemblema', c['tam_emblema']))),
+                 demonio_mal=int(bool(_p('Demoniomal', True))),
+                 alto_mal=max(0.5, min(4.0, _p('Altomal', c['alto_mal']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -17028,6 +17754,9 @@ def on_pulse(name):
         print(sim_zanja(W, c, now))
     elif name == 'Simrescate':          # fase 35: una persona en la celda y sus aliados en las vecinas
         print(sim_rescate(W, c, now))
+    elif name == 'Simmal':              # fase 39: un cluster del mal de diez celdas, en obra
+        juego_al_dia(W, c, now)
+        print(sim_mal(W, c, now))
     elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
         print(capturar_fondo(c))
     elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
@@ -19150,6 +19879,8 @@ def _legend():
         lines.append(_legend_luzjuego(W, c))
     if lvl >= 37:
         lines.append(_legend_armas(W, c))
+    if lvl >= 39:
+        lines.append(_legend_mal(W, c))
     return '\n'.join(lines)
 
 
