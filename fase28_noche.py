@@ -48,7 +48,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase28 v1  (noche de enterramiento: la esfera se apaga y emiten las inclusiones horneadas)'
+VERSION = 'fase28 v2  (la luz de relleno se apaga de noche aunque la fase 10 le haya dado su color)'
 banner(VERSION)
 
 base = require_base(28)
@@ -153,7 +153,7 @@ def _prueba(t, m):
     W['noche'] = [t0, t0 + 4.0]
     t.check('y las luces a 0 (luz_principal, luz_relleno y luz_destello); de dia, encendidas',
             all(abs(v) < 1e-9 for v in luces) and fl[3] == 0.0 and all(v > 0.01 for v in dia_luces)
-            and DIA_EXPR in base.op('luz_relleno').par.cr.expr, 'de noche %s; de dia %s'
+            and en_expresion(base.op('luz_relleno').par.cr, DIA_EXPR), 'de noche %s; de dia %s'
             % (['%.2f' % v for v in luces[:6]], ['%.2f' % v for v in dia_luces]))
 
     # 3. lo que nace de noche se dibuja apagado; al acabar, vuelve
