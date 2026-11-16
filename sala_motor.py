@@ -64,9 +64,25 @@
 #               Inclinasfera lo retoca): antes parecia mirar al suelo.
 #   v12         la imagen de FASE1 va de frente sobre la bola (Script SOP
 #               'frente' en sala_virtual), no envuelta: se ve como en FASE1.
+#   v13         MONIGOTES: cada persona es un monigote de hombre (i par) o de
+#               mujer (i impar), como los letreros de los aseos, de piezas
+#               instanciadas (cabeza, cuerpo o vestido, brazos y piernas) con
+#               la misma altura y dentro de la huella del tronco de antes; las
+#               piernas se balancean al andar. Monigotes apagado vuelve al
+#               tronco. Arcoquietud: un arco ambar en el suelo que se completa
+#               en Tfila mientras la persona sigue quieta (el contador de la fila).
+#               DEMO GENOZILLA (Demo = genozilla): el publico juega a GENoZilla
+#               capitulo a capitulo, con su coreografia escrita (tramos [t,
+#               persona, destino]: un punto, una celda del planeta o algo
+#               relativo al monstruo, que se pasan a metros en el momento), un
+#               titulo al empezar cada capitulo, un rotulo que explica lo que
+#               pasa y la vista juego (la sala y la imagen de FASE1 lado a lado).
+#               La sala guarda la escena de FASE1 (y su mundo) al entrar y la
+#               devuelve al salir; con Guion, prepara cada capitulo con
+#               guion_demo del motor de FASE1 (motor v118).
 # =============================================================================
 
-SALA_VERSION = 'sala v12'
+SALA_VERSION = 'sala v13'
 
 import math
 
@@ -251,12 +267,13 @@ def _clave(cfg, evitar):
 
 
 # v4: demos de visita, a elegir con el parametro Demo de SALA
-DEMOS = ['paseo', 'grupo', 'llena', 'goteo', 'vacia']
+DEMOS = ['paseo', 'grupo', 'llena', 'goteo', 'vacia', 'genozilla']
 DEMOS_ETIQUETAS = ['Paseo: llegan de uno en uno (Llegada), pasean, se paran y se van',
                    'Grupo: entran juntos en fila, hacen corro ante la esfera y salen juntos',
                    'Llena: la sala se llena deprisa y el publico se queda casi quieto',
                    'Goteo: de uno en uno, van a la esfera, miran y se van',
-                   'Vacia: nadie']
+                   'Vacia: nadie',
+                   'GENoZilla: el publico juega capitulo a capitulo']
 CICLO_GRUPO = 90.0          # s: el grupo entra, se queda y sale; luego vuelve a entrar
 ESTANCIA_GRUPO = 55.0       # s desde que entra el primero hasta que sale el primero
 CORRO = 2.2                 # m de la esfera al corro del grupo
@@ -420,12 +437,14 @@ def plan(cfg, i, hasta, evitar=()):
     """Los tramos de la persona i hasta el instante 'hasta' (s desde que se
     abrio la sala): [t0, t1, (x0, z0), (x1, z1), dentro, andando]. v4: segun
     la demo (cfg['demo'], el parametro Demo)."""
+    demo = DEMOS[cfg.get('demo', 0) % len(DEMOS)]
+    if demo == 'genozilla':                 # v13: los tramos los pone la coreografia del capitulo
+        return tramos_demo(cfg, i, hasta)
     clave = _clave(cfg, evitar)
     pl = _PLANES.get(i)
     if pl is None or pl['clave'] != clave:
         pl = _PLANES[i] = dict(clave=clave, tramos=[], t=0.0, vuelta=0)
     fuera = (0.0, 0.5 * cfg['fondo'] + 1.0)
-    demo = DEMOS[cfg.get('demo', 0) % len(DEMOS)]
     tr = pl['tramos']
     if demo == 'vacia':
         tr[:] = [[0.0, hasta + 3600.0, fuera, fuera, False, False]]
@@ -468,10 +487,17 @@ def altura(i):
     return 1.55 + 0.40 * h01(i, 6)
 
 
+def n_personas(cfg):
+    """Las personas de la sala: Personas, o las GZ_PERSONAS de la demo GENoZilla."""
+    if DEMOS[cfg.get('demo', 0) % len(DEMOS)] == 'genozilla':
+        return GZ_PERSONAS
+    return int(cfg['personas'])
+
+
 def personas(cfg, t, evitar=()):
     """[(i, x, z, altura, andando)] de las personas dentro de la sala en t."""
     out = []
-    for i in range(int(cfg['personas'])):
+    for i in range(n_personas(cfg)):
         p = posicion(cfg, i, t, evitar)
         if p is not None:
             out.append((i, p[0], p[1], altura(i), p[2]))
@@ -565,16 +591,22 @@ def plantilla(np, tipo, n, rate, semilla):
                        + 0.3 * _ruido(np, j, semilla) * np.exp(-t / 0.005))
     if tipo == 'clic':
         return 0.6 * _ruido(np, j, semilla) * np.exp(-t / 0.0006)
+    if tipo in ('voz', 'grito'):        # v13: una vocal (habla) o un grito: armonicos y algo de aire
+        f0 = (110.0 if semilla % 2 == 0 else 190.0) * (1.0 + 0.15 * h01(semilla, 43))
+        env = np.minimum(1.0, t / 0.02) * np.exp(-t / (0.12 if tipo == 'voz' else 0.25))
+        x = sum(np.sin(2 * math.pi * f0 * h * t) / h for h in (1, 2, 3, 4, 5))
+        a = 0.08 if tipo == 'voz' else 0.2
+        return a * env * (0.9 * x / 2.3 + 0.1 * _ruido(np, j, semilla))
     return np.zeros(n)
 
 
-DURA = dict(palmada=0.03, tos=0.3, paso=0.12, clic=0.004)
+DURA = dict(palmada=0.03, tos=0.3, paso=0.12, clic=0.004, voz=0.35, grito=0.6)
 
 
 def eventos(cfg, ta, tb, evitar=()):
     """Los ruidos de la sala en [ta, tb): [(t, tipo, (x, y, z), semilla)]."""
     out = []
-    for i in range(int(cfg['personas'])):
+    for i in range(n_personas(cfg)):
         # los pasos: mientras anda, una pisada cada PASO s desde que echo a andar
         for s in plan(cfg, i, tb, evitar):
             if not (s[4] and s[5]) or s[1] <= ta or s[0] >= tb:
@@ -592,11 +624,47 @@ def eventos(cfg, ta, tb, evitar=()):
             if not ta <= t < tb:
                 continue
             tasa = cfg['ruido_publico'] * (cfg['reaccion'] if estrobo_activo(cfg, t) else 1.0)
+            modo = ruido_demo(t)        # v13: la demo GENoZilla habla, calla o grita en sus tramos
+            if modo == 'silencio':
+                continue
+            if modo == 'habla':
+                tasa = max(tasa, HABLA_TASA)
             if h01(i, k, 7) >= tasa * RANURA:
                 continue
             p = posicion(cfg, i, t, evitar)
             if p is not None:
-                out.append((t, 'palmada' if h01(i, k, 9) < 0.5 else 'tos', (p[0], BOCA, p[1]), i * 1000 + k))
+                tipo = 'voz' if modo == 'habla' else ('palmada' if h01(i, k, 9) < 0.5 else 'tos')
+                out.append((t, tipo, (p[0], BOCA, p[1]), i * 1000 + k))
+        out += eventos_grito(cfg, i, ta, tb, evitar)
+    return out
+
+
+HABLA_TASA = 0.9            # v13: voces por segundo y persona cuando la sala habla (demo GENoZilla)
+GRITO_HZ = 8.0              # palmadas por segundo de cada persona en el grito, todas a la vez
+GRITO_VOZ = 0.45            # s entre dos voces del grito de cada persona
+
+
+def eventos_grito(cfg, i, ta, tb, evitar=()):
+    """v13: el grito colectivo de la demo (capitulo Grito): palmadas al unisono, GRITO_HZ
+    por segundo, y voces de cada persona, con la ganancia del tramo (D4)."""
+    out = []
+    tr = [r for r in _GZ.get('ruido', ()) if r[2] == 'grito' and r[0] < tb and r[1] > ta]
+    for t0, t1, _ in tr:
+        a, b = max(ta, t0), min(tb, t1)
+        k = int(math.ceil((a - t0) * GRITO_HZ - 1e-9))
+        while t0 + k / GRITO_HZ < b:
+            t = t0 + k / GRITO_HZ + 0.012 * h01(i, k, 41)
+            p = posicion(cfg, i, t, evitar)
+            if p is not None and a <= t < b:
+                out.append((t, 'palmada', (p[0], BOCA, p[1]), -(i * 1000 + k + 1)))
+            k += 1
+        k = int(math.ceil((a - t0) / GRITO_VOZ - 1e-9))
+        while t0 + k * GRITO_VOZ < b:
+            t = t0 + k * GRITO_VOZ + 0.1 * h01(i, k, 42)
+            p = posicion(cfg, i, t, evitar)
+            if p is not None and a <= t < b:
+                out.append((t, 'grito', (p[0], BOCA, p[1]), -(i * 1000 + k + 501)))
+            k += 1
     return out
 
 
@@ -629,6 +697,8 @@ def bloque_audio(cfg, equipos, ta, n, rate, evs, mic=None):
         if k0 >= n or k0 + m <= 0:
             continue
         y = plantilla(np, tipo, m, rate, semilla) / d
+        if semilla < 0:                 # v13: el grito de la demo, con su ganancia (D4)
+            y = y * float(_GZ.get('ganancia', 1.0))
         a, b = max(0, k0), min(int(n), k0 + m)
         x[a:b] += y[a - k0:b - k0]
     return x
@@ -644,7 +714,8 @@ _SALA = dict(t0=None, frame=None, equipos=None, audio=None, t_audio=None, forzar
              col_esfera=None, col_frame=None, rotulo=None, rotulo_frame=None)
 ROTULO_CADA = 15            # v5: el rotulo se rehace cada 15 fotogramas (un cuarto de segundo)
 MODOS_LUZ = ['apagado', 'prueba']
-VISTAS = ['visitante', 'entrada', 'orbita', 'cenital']      # v2; hasta la v1, libre (= orbita) y cenital
+VISTAS = ['visitante', 'entrada', 'orbita', 'cenital', 'juego']   # v2; hasta la v1, libre (= orbita) y cenital
+# v13: juego, la sala desde la entrada a la izquierda y la imagen de FASE1 a la derecha
 
 
 def _p(name, default):
@@ -684,7 +755,12 @@ def cfg():
                 luz_casa=max(0.0, _p('Luzcasa', 0.06)), vista=_menu('Vista', VISTAS, 0),
                 bruma=max(0.0, min(1.0, _p('Bruma', 0.5))), demo=_menu('Demo', DEMOS, 0),
                 luz_esfera=max(0.0, _p('Luzesfera', 0.0)), giro_esfera=_p('Girosfera', 0.0),
-                inclina_esfera=_p('Inclinasfera', 0.0))
+                inclina_esfera=_p('Inclinasfera', 0.0),
+                monigotes=bool(_p('Monigotes', True)), arco_quietud=bool(_p('Arcoquietud', False)),
+                col_monigote=(_p('Colormonigoter', COL_MONIGOTE[0]), _p('Colormonigoteg', COL_MONIGOTE[1]),
+                              _p('Colormonigoteb', COL_MONIGOTE[2])),
+                capitulo=_menu('Capitulo', CAP_NOMBRES, 0), buclecap=bool(_p('Buclecap', True)),
+                guion=bool(_p('Guion', True)))
 
 
 def ahora():
@@ -776,7 +852,7 @@ def ojos(c=None, frame=None):
     if modo == 'visitante':
         x, z = paseo_visitante(c, ahora(), evitar_de(eq))
         return (x, OJOS, z), mira
-    if modo == 'entrada':
+    if modo in ('entrada', 'juego'):          # v13: juego, desde la entrada (a la izquierda del monitor)
         return vista_entrada(c, esf)
     if modo == 'cenital':
         cam = next((e for e in eq if e['tipo'] == 'camara'), None)
@@ -831,7 +907,7 @@ def vista(que, frame=None):
         p, m = ojos(c)
         if que == 'fov':
             modo = VISTAS[c['vista'] % len(VISTAS)]
-            return fov_cenital(c) if modo == 'cenital' else {'entrada': 80.0}.get(modo, 62.0)
+            return fov_cenital(c) if modo == 'cenital' else {'entrada': 80.0, 'juego': FOV_JUEGO}.get(modo, 62.0)
         if que in ('mx', 'my', 'mz'):
             return m[('mx', 'my', 'mz').index(que)]
         return p[('tx', 'ty', 'tz').index(que)]
@@ -1020,13 +1096,222 @@ def _filas_equipos(c, eq, t):
 
 
 def _filas_personas(c, eq, t):
-    """El cuerpo de cada persona: un tronco de toda su altura, de ropa oscura
-    (en una sala a oscuras el publico se lee a contraluz). v4: sin cabeza."""
+    """El cuerpo de cada persona. v13: con Monigotes, las cajas de su monigote (cuerpo,
+    brazos y piernas; ver piezas_personas); sin el, un tronco de toda su altura, de ropa
+    oscura (v4: sin cabeza)."""
+    if c.get('monigotes', True):
+        return piezas_personas(c, eq, t)['cajas']
     out = []
     for i, x, z, h, _ in personas(c, t, evitar_de(eq)):
         col = (0.10 + 0.22 * h01(i, 11), 0.10 + 0.22 * h01(i, 12), 0.10 + 0.22 * h01(i, 13))
-        out.append([x, 0.0, z, 0, 0, 0, 0.42, h, 0.26] + list(col))
+        out.append([x, 0.0, z, 0, 0, 0, TRONCO[0], h, TRONCO[1]] + list(col))
     return out
+
+
+# -----------------------------------------------------------------------------
+# v13: monigotes de hombre y de mujer (los letreros de los aseos)
+# -----------------------------------------------------------------------------
+# Un monigote es un punado de piezas instanciadas, con la coronilla a la altura de
+# la persona y dentro de la huella del tronco (TRONCO, 0,42 x 0,26 m, girado como
+# ella): la camara cenital y la fase 24 los ven igual. Las medidas del encargo son
+# para ALTURA_REF; lo vertical escala con la altura y lo ancho se encaje en el ancho
+# del tronco (los brazos del hombre, a sus lados, sumaban 0,52 m: ANCHO_K). Las
+# piernas se balancean BALANCEO grados con la fase de lo andado; quietos, rectas.
+
+TRONCO = (0.42, 0.26)       # m: ancho y fondo del tronco (y de la huella del monigote)
+ALTURA_REF = 1.75           # m: la altura de las medidas del monigote
+ANCHO_K = 0.42 / 0.52       # lo ancho, encajado en el tronco
+CABEZA = 0.22
+CUELLO = 0.02
+CUERPO = (0.36, 0.48, 0.20)             # hombre: caja de hombros redondeados
+HOMBROS = 0.10                          # alto de la elipse de los hombros
+VESTIDO = (0.16, 0.42, 0.52)            # mujer: cono truncado (arriba, abajo, alto)
+BRAZO = (0.08, 0.50, 0.08)
+BRAZO_MUJER = 0.42
+PIERNA = (0.10, 0.12)                   # hombre (ancho, fondo)
+PIERNA_MUJER = (0.06, 0.08)
+BALANCEO = 15.0             # grados de las piernas al andar
+ZANCADA = 2.0 * PASO * VELOCIDAD        # m de una vuelta del balanceo (dos pasos)
+COL_MONIGOTE = (0.93, 0.91, 0.86)
+ARCO_R = 0.34               # m: radio del arco de quietud
+ARCO_SEGS = 24
+ARCO_ANCHO = 0.035
+
+
+def estado_persona(cfg, i, t, evitar=()):
+    """dict(x, z, andando, rumbo, andado, quieto) de la persona i en t, o None fuera
+    de la sala. rumbo: hacia donde mira (radianes; 0 = +z), el de su ultimo tramo
+    andando (sin ninguno, al fondo de la sala); andado: metros desde que echo a andar
+    (la fase del balanceo); quieto: segundos parada en su sitio."""
+    tr = plan(cfg, i, t, evitar)
+    k = None
+    for j in range(len(tr) - 1, -1, -1):
+        if tr[j][0] <= t:
+            k = j
+            break
+    if k is None or not tr[k][4]:
+        return None
+    s = tr[k]
+    u = 0.0 if s[1] <= s[0] else max(0.0, min(1.0, (t - s[0]) / (s[1] - s[0])))
+    x, z = s[2][0] + (s[3][0] - s[2][0]) * u, s[2][1] + (s[3][1] - s[2][1]) * u
+    rumbo, andado, quieto = None, 0.0, 0.0
+    for j in range(k, -1, -1):          # mira hacia donde andaba la ultima vez
+        q = tr[j]
+        if not q[4]:
+            break
+        dx, dz = q[3][0] - q[2][0], q[3][1] - q[2][1]
+        if q[5] and dx * dx + dz * dz > 1e-8:
+            rumbo = math.atan2(dx, dz)
+            break
+    if s[5]:                            # andando: lo andado en este tramo y en los seguidos de antes
+        andado = math.hypot(s[3][0] - s[2][0], s[3][1] - s[2][1]) * u
+        for j in range(k - 1, -1, -1):
+            q = tr[j]
+            if not (q[4] and q[5]):
+                break
+            andado += math.hypot(q[3][0] - q[2][0], q[3][1] - q[2][1])
+    else:                               # parada: desde cuando, sin moverse de este sitio
+        quieto = t - s[0]
+        for j in range(k - 1, -1, -1):
+            q = tr[j]
+            if not q[4] or q[5] or q[2] != s[2]:
+                break
+            quieto = t - q[0]
+    return dict(x=x, z=z, andando=bool(s[5]), rumbo=math.pi if rumbo is None else rumbo,
+                andado=andado, quieto=quieto)
+
+
+def _fila_pieza(px, y, pz, rx, ry, sx, sy, sz, col):
+    return [px, y, pz, rx, ry, 0.0, sx, sy, sz] + list(col)
+
+
+def piezas_monigote(i, x, z, h, rumbo, andado, andando, col=COL_MONIGOTE):
+    """Las piezas del monigote de la persona i: dict(cajas, bolas, conos), filas de
+    instancia (tx ty tz rx ry rz sx sy sz r g b). Cajas y conos con la base en ty;
+    bolas centradas. Hombre si i es par; mujer si es impar."""
+    s = h / ALTURA_REF
+    ca, sa = math.cos(rumbo), math.sin(rumbo)
+    ry = math.degrees(rumbo)
+
+    def lado(d):                        # d metros a la derecha de la persona (su +x)
+        return x + d * ca, z - d * sa
+    th = BALANCEO * math.sin(2.0 * math.pi * andado / ZANCADA) if andando else 0.0
+    cajas, bolas, conos = [], [], []
+    cab = CABEZA * s
+    bolas.append(_fila_pieza(x, h - 0.5 * cab, z, 0.0, ry, cab, cab, cab, col))
+    arriba = h - cab - CUELLO * s                   # los hombros
+    if i % 2 == 0:                                  # hombre
+        w = CUERPO[0] * ANCHO_K
+        abajo = arriba - CUERPO[1] * s              # la cadera
+        cajas.append(_fila_pieza(x, abajo, z, 0.0, ry, w, arriba - abajo - 0.5 * HOMBROS * s, CUERPO[2], col))
+        bolas.append(_fila_pieza(x, arriba - 0.5 * HOMBROS * s, z, 0.0, ry, w, HOMBROS * s, CUERPO[2], col))
+        bw = BRAZO[0] * ANCHO_K
+        for sg in (-1.0, 1.0):
+            bx, bz = lado(sg * 0.5 * (w + bw))
+            cajas.append(_fila_pieza(bx, arriba - 0.03 * s - BRAZO[1] * s, bz, 0.0, ry, bw, BRAZO[1] * s, BRAZO[2], col))
+        pw, pf, sep = PIERNA[0] * ANCHO_K, PIERNA[1], 0.5 * w - 0.5 * PIERNA[0] * ANCHO_K - 0.01
+    else:                                           # mujer: el vestido
+        abajo = arriba - VESTIDO[2] * s             # el bajo del vestido
+        conos.append(_fila_pieza(x, abajo, z, 0.0, ry, VESTIDO[1] * ANCHO_K, VESTIDO[2] * s,
+                                 min(TRONCO[1], VESTIDO[1] * ANCHO_K), col))
+        bw = BRAZO[0] * ANCHO_K
+        for sg in (-1.0, 1.0):                      # los brazos salen del vestido
+            bx, bz = lado(sg * (0.5 * TRONCO[0] - 0.5 * bw - 0.025))
+            cajas.append(_fila_pieza(bx, arriba - 0.03 * s - BRAZO_MUJER * s, bz, 0.0, ry, bw, BRAZO_MUJER * s,
+                                     BRAZO[2], col))
+        pw, pf, sep = PIERNA_MUJER[0], PIERNA_MUJER[1], 0.06
+    for sg in (-1.0, 1.0):                          # las piernas, del suelo a la cadera (o al bajo)
+        hx, hz = lado(sg * sep)
+        a = math.radians(sg * th)
+        L = abajo
+        fx, fz = hx - L * math.sin(a) * sa, hz - L * math.sin(a) * ca
+        cajas.append(_fila_pieza(fx, abajo - L * math.cos(a), fz, sg * th, ry, pw, L, pf, col))
+    return dict(cajas=cajas, bolas=bolas, conos=conos)
+
+
+def filas_arco(x, z, frac, col=AMBAR):
+    """El arco de quietud: ARCO_SEGS cajas finas en el suelo, alrededor de los pies,
+    desde el fondo de la sala y en el sentido de las agujas del reloj (visto desde
+    arriba), las que cubre frac (0-1)."""
+    n = int(round(max(0.0, min(1.0, frac)) * ARCO_SEGS))
+    largo = 2.0 * math.pi * ARCO_R / ARCO_SEGS * 0.92
+    out = []
+    for j in range(n):
+        f = 2.0 * math.pi * (j + 0.5) / ARCO_SEGS
+        out.append([x + ARCO_R * math.sin(f), 0.004, z - ARCO_R * math.cos(f), 0.0, -math.degrees(f), 0.0,
+                    largo, 0.01, ARCO_ANCHO] + list(col))
+    return out
+
+
+_PIEZAS = dict(clave=None, out=None)
+
+
+def piezas_personas(c, eq, t, t_arco=None):
+    """Las piezas de todo el publico en t: dict(cajas, bolas, conos, arcos), una vez por
+    instante. Sin Monigotes, los troncos en cajas y nada mas."""
+    clave = (t, c.get('monigotes', True), c.get('arco_quietud', False), tuple(c.get('col_monigote', COL_MONIGOTE)),
+             n_personas(c), c.get('demo', 0), t_arco)
+    if _PIEZAS['clave'] == clave:
+        return _PIEZAS['out']
+    out = dict(cajas=[], bolas=[], conos=[], arcos=[])
+    ev = evitar_de(eq)
+    col = tuple(c.get('col_monigote', COL_MONIGOTE))
+    ta = t_arco if t_arco is not None else arco_segundos(c)
+    for i in range(n_personas(c)):
+        e = estado_persona(c, i, t, ev)
+        if e is None:
+            continue
+        h = altura(i)
+        if c.get('monigotes', True):
+            pz = piezas_monigote(i, e['x'], e['z'], h, e['rumbo'], e['andado'], e['andando'], col)
+            for k in ('cajas', 'bolas', 'conos'):
+                out[k] += pz[k]
+        else:
+            cl = (0.10 + 0.22 * h01(i, 11), 0.10 + 0.22 * h01(i, 12), 0.10 + 0.22 * h01(i, 13))
+            out['cajas'].append([e['x'], 0.0, e['z'], 0, 0, 0, TRONCO[0], h, TRONCO[1]] + list(cl))
+        if ta and not e['andando'] and e['quieto'] > 0.0:
+            out['arcos'] += filas_arco(e['x'], e['z'], e['quieto'] / ta)
+    _PIEZAS.update(clave=clave, out=out)
+    return out
+
+
+def _puntos_pieza(np, f, forma, px=0.02):
+    """Puntos de dentro de una pieza (fila de instancia) en el mundo, cada px/2 o menos:
+    caja y cono con la base en ty, bola centrada; giro rx y luego ry (el orden xyz de
+    las instancias)."""
+    n = [max(3, int(math.ceil(2.0 * abs(f[6 + k]) / px))) for k in range(3)]
+    u = (np.arange(n[0]) + 0.5) / n[0] - 0.5
+    v = (np.arange(n[1]) + 0.5) / n[1]
+    w = (np.arange(n[2]) + 0.5) / n[2] - 0.5
+    U, V, Wz = [a.ravel() for a in np.meshgrid(u, v, w, indexing='ij')]
+    if forma == 'bola':
+        V = V - 0.5
+        dentro = U * U + V * V + Wz * Wz <= 0.25
+        U, V, Wz = U[dentro], V[dentro], Wz[dentro]
+    elif forma == 'cono':               # el radio va de 0,5 abajo a VESTIDO[0] / VESTIDO[1] x 0,5 arriba
+        r = 0.5 + (0.5 * VESTIDO[0] / VESTIDO[1] - 0.5) * V
+        dentro = U * U + Wz * Wz <= r * r
+        U, V, Wz = U[dentro], V[dentro], Wz[dentro]
+    px, py, pz = U * f[6], V * f[7], Wz * f[8]
+    a, b = math.radians(f[3]), math.radians(f[4])
+    py, pz = py * math.cos(a) - pz * math.sin(a), py * math.sin(a) + pz * math.cos(a)
+    px, pz = px * math.cos(b) + pz * math.sin(b), -px * math.sin(b) + pz * math.cos(b)
+    return px + f[0], py + f[1], pz + f[2]
+
+
+def alturas_planta(np, piezas, x0, z0, ancho, fondo, px=0.02):
+    """La imagen de alturas (filas: z de z0 a z0 + fondo; columnas: x de x0 a x0 + ancho)
+    de las piezas {cajas, bolas, conos}: lo que ve una camara cenital de profundidad."""
+    w, h = int(round(ancho / px)), int(round(fondo / px))
+    img = np.zeros(h * w)
+    for k, forma in (('cajas', 'caja'), ('bolas', 'bola'), ('conos', 'cono')):
+        for f in piezas.get(k, ()):
+            X, Y, Z = _puntos_pieza(np, f, forma, px)
+            c = ((X - x0) / px).astype(int)
+            r = ((Z - z0) / px).astype(int)
+            ok = (c >= 0) & (c < w) & (r >= 0) & (r < h)
+            np.maximum.at(img, r[ok] * w + c[ok], Y[ok])
+    return img.reshape(h, w)
 
 
 def _filas_haces(c, eq, t):
@@ -1062,16 +1347,28 @@ def filas(nombre):
         return _filas_equipos(c, eq, t)
     if nombre == 'i_personas':
         return _filas_personas(c, eq, t) if c['activa'] else []
+    if nombre in ('i_personas_bolas', 'i_personas_conos', 'i_arcos'):     # v13: monigotes y arcos
+        if not c['activa']:
+            return []
+        pz = piezas_personas(c, eq, t)
+        return pz[{'i_personas_bolas': 'bolas', 'i_personas_conos': 'conos', 'i_arcos': 'arcos'}[nombre]]
     if nombre == 'i_haces':
         return _filas_haces(c, eq, t)
     return []
 
 
 def frame_tick():
-    """Cada fotograma (latido_sala): las personas y los aparatos se redibujan."""
+    """Cada fotograma (latido_sala): la demo GENoZilla (v13), y las personas y los
+    aparatos se redibujan."""
+    try:
+        demo_tick()
+    except Exception as e:
+        if not _SALA.get('err_demo'):
+            _SALA['err_demo'] = True
+            print('SALA  FALLO en la demo GENoZilla: %s' % e)
     if not _p('Activa', True):
         return
-    for nm in ('i_personas', 'i_equipos', 'i_haces'):
+    for nm in ('i_personas', 'i_personas_bolas', 'i_personas_conos', 'i_arcos', 'i_equipos', 'i_haces'):
         o = parent().op(nm)
         if o is not None:
             o.cook(force=True)
@@ -1176,6 +1473,10 @@ def on_pulse(nombre):
     elif nombre == 'Reiniciarsala':
         reiniciar()
         print('SALA  abierta de nuevo: las personas vuelven a entrar')
+    elif nombre == 'Siguientecap':              # v13: la demo GENoZilla salta al capitulo siguiente
+        _GZ['saltar'] = True
+        print('SALA  GENoZilla: al capitulo siguiente' if _GZ.get('activo') else
+              'SALA  GENoZilla: Siguientecap solo vale con Demo = genozilla')
 
 
 def texto_monitor(frame=None):
@@ -1218,6 +1519,8 @@ def _texto_monitor():
         lineas.append('%s   bruma %d%%   vista %s' % (luz, int(c['bruma'] * 100), modo))
     except Exception:
         pass
+    if _GZ.get('activo'):                       # v13: la demo GENoZilla
+        lineas.append(legend_demo())
     try:
         m = op('/project1/FASE1').op('motor').module
         mc = m.world().get('mic') or {}
@@ -1237,9 +1540,1085 @@ def legend(frame=None):
         ps = personas(c, t, evitar_de(eq))
         est = estado_prueba(t)[0] if c['modo_luz'] == 1 else 'apagada'
         return ('SALA  %gx%g m   personas %d/%d   luz %s%s   %d focos   microfono %s'
-                % (c['ancho'], c['fondo'], len(ps), c['personas'], est,
+                % (c['ancho'], c['fondo'], len(ps), n_personas(c), est,
                    ' (estrobo %.1f Hz)' % hz_estrobo(c) if est == 'erosion' else '',
                    sum(1 for e in eq if e['tipo'] == 'foco'),
                    'si' if any(e['tipo'] == 'micro' for e in eq) else 'no'))
     except Exception as e:
         return 'SALA  fallo en la leyenda: %s' % e
+
+
+# =============================================================================
+# v13: LA DEMO GENOZILLA (Demo = genozilla)
+# =============================================================================
+# El publico virtual juega a GENoZilla capitulo a capitulo (la demo web «GENoZilla ·
+# demo de sala»). El juego lo juega FASE1 de verdad (fases 32 a 39): la sala solo
+# mueve a la gente, que FASE1 ve por su sala simulada (Fuente = simulada: la tabla
+# sala_personas, la misma imagen de alturas que la camara), y con Guion le pide a su
+# motor que prepare cada capitulo (guion_demo, motor v118).
+#
+# Cada capitulo trae su coreografia: tramos [t, persona, destino], t en segundos desde
+# que acaba su titulo (negativo: donde esta al empezar el titulo, sin andar). Destinos:
+#   (x, z)                          un punto de la sala, en metros
+#   ('celda', c, dx, dz)            una celda del planeta (c, un numero o un sitio con
+#                                   nombre del guion): el centro de la casilla que la
+#                                   mira, mas (dx, dz) metros; se pasa a metros al
+#                                   empezar el tramo (casilla_de_celda y el mapeo de la
+#                                   fase 22, solo leyendo)
+#   ('monstruo', db, dl, dx, dz)    la celda del monstruo desplazada db bandas y dl
+#                                   meridianos (celda_desplazada del motor)
+#   ('casilla', sitio, j, dx, dz)   la casilla j de un sitio del guion (una fila)
+#   ('suelo', columna, fila)        un punto del suelo en casillas de la demo web
+#                                   (11 x 9; 0, 0 junto a la pantalla, a la izquierda)
+#   'fuera'                         sale por la puerta
+# Las personas andan a VELOCIDAD y se paran en el destino. Al acabar el capitulo, su
+# columna Comprobar (comprobar_capitulo) dice si FASE1 hizo lo que cuenta el rotulo.
+
+GZ_PERSONAS = 8
+TITULO = 2.8                # s del titulo de cada capitulo
+TITULO_ENTRA, TITULO_SALE = 0.35, 0.5
+VELO = 0.8                  # el velo oscuro del titulo
+SIGUE_MIN = 0.12            # m: un destino que se mueve menos no hace andar a nadie
+FOV_JUEGO = 75.0            # la vista juego: la sala, en un cuadrado de 720 x 720
+GZ_HUECO = 'antes_demo'     # la escena guardada de FASE1 (Guardarescena / Cargarescena)
+GANANCIA_MAX = 8.0          # D4: el grito sube su volumen hasta x8 si no pasa Umbralcorte
+GRITO_SUBE = 1.6            # cada segundo del grito sin corte, x1,6
+
+ARMAS = ('Armacerco', 'Armapison', 'Armaestatuas', 'Armagrito', 'Armarelampago')
+CAP_NOMBRES = ['genozilla', 'construir', 'aparece', 'brotes', 'rescate', 'cebo', 'canal', 'cerco', 'pisoton',
+               'estatuas', 'grito', 'relampago', 'fin']
+
+_FUERA = 'fuera'
+UMBRAL_SILENCIO_SALA = 0.5  # el drone de la sala virtual (el sub a 41 Hz) da un flujo de hasta 0,35:
+                            # en Estatuas, Umbralsilencio por encima (se fija en sala, encargo fase 37)
+
+
+def _sigue(i, destino, t0, t1, cada=3.0):
+    """Tramos que repiten el mismo destino cada 'cada' s (seguir a una celda que gira)."""
+    out, t = [], t0
+    while t < t1 - 1e-9:
+        out.append([t, i, destino])
+        t += cada
+    return out
+
+
+def _paseo(personas, t0, t1, cada=3.0, semilla=31):
+    """Un paseo sin azar: cada 'cada' s, cada persona va (o no) a otro punto del suelo."""
+    out = []
+    for k in range(int((t1 - t0) / cada) + 1):
+        for i in personas:
+            if h01(i, k, semilla) < 0.6:
+                out.append([t0 + k * cada, i, ('suelo', 0.5 + 9.5 * h01(i, k, semilla + 1),
+                                               0.5 + 7.5 * h01(i, k, semilla + 2))])
+    return out
+
+
+def _sitios(lista, t=-1.0):
+    return [[t, i, d] for i, d in enumerate(lista)]
+
+
+CAPITULOS = [
+    dict(nombre='GENoZilla', sub='Toda la sala, un solo equipo, contra un monstruo que devora lo construido.',
+         dur=14.0, pars=dict(Barsperturn=45.0),
+         coreo=_sitios([('suelo', 2, 6), ('suelo', 5, 3), ('suelo', 8, 5), ('suelo', 3, 2), ('suelo', 9, 7)])
+         + _paseo(range(5), 0.5, 13.0),
+         rotulos=[(0.0, 'La camara cenital situa a cada persona en una celda del planeta: un anillo en la pantalla.'),
+                  (5.0, 'El planeta gira con el tempo: aunque estes quieto, la celda bajo tus pies cambia.'),
+                  (10.0, 'El objetivo: que al acabar la ronda haya mas territorio del publico que del mal.')]),
+    dict(nombre='Construir quietos', sub='Moviendose, la presencia apenas cuenta. Quietos, se construye.',
+         dur=20.0, pars=dict(),
+         coreo=[[0.6 * k, i, ('suelo',) + d] for k, (i, d) in enumerate(
+             [(0, (6, 1)), (1, (9, 1)), (2, (4, 3)), (3, (8, 3)), (4, (2, 5)), (5, (6, 5)), (6, (9, 6)), (7, (4, 7))])]
+         + [[8.0, 6, ('suelo', 7, 5)], [8.0, 1, ('suelo', 1, 8)], [14.0, 1, ('suelo', 2, 7)]],
+         rotulos=[(0.0, 'Entran caminando: en movimiento, la probabilidad de que prendan las notas sube poco.'),
+                  (5.0, 'Se paran: cada nota que cae en su celda suma ocupacion.'),
+                  (11.0, 'Al llenarse, la celda desborda a las vecinas, se funde con ellas y llega a corona.')]),
+    dict(nombre='Aparece GENoZilla',
+         sub='Va a por lo mas prospero, devora a x2 sin esperar a los secuenciadores y deja brotes del mal.',
+         dur=24.0, pars=dict(),
+         coreo=_sitios([('suelo', 9, 8), ('suelo', 1, 7), ('suelo', 10, 1)]),
+         rotulos=[(0.0, 'Aparece con media celda de tamano cuando la cara visible tiene bastante construido.'),
+                  (2.5, 'El tocon marca su objetivo: la celda con mas ocupacion, pesando la distancia.'),
+                  (6.0, 'Devora a x2 por negra. Al vaciar la celda, deja un brote del mal y busca otra.'),
+                  (14.0, 'Con una celda entera devorada crece a forma grande: mas rapido, x3, y entra el '
+                         'estroboscopio.'),
+                  (18.0, 'Ya grande, puede con coronas y fusiones.')]),
+    dict(nombre='Brotes del mal', sub='Un brote crece con las mismas reglas que lo construido. Pararse encima lo '
+                                      'alimenta.',
+         dur=15.0, pars=dict(),
+         coreo=_sitios([('suelo', 4, 8.5), ('suelo', 5, 8.5), ('suelo', 9, 2)])
+         + [[0.0, 0, ('celda', 'brote', 0.0, 0.0, 0)], [0.0, 1, ('celda', 'brote', 0.0, 0.0, 1)]],
+         rotulos=[(0.0, 'Dos visitantes se paran sobre un brote del mal.'),
+                  (4.0, 'Su presencia sube la probabilidad de las notas en esa celda: el mal crece.'),
+                  (9.0, 'Y desborda a las vecinas: el mal se extiende solo.')]),
+    dict(nombre='Rescatar un brote', sub='Una persona encima y {aliados} aliados en las celdas vecinas durante '
+                                         '{taliados} s.',
+         dur=15.0, pars=dict(Tfila=60.0),
+         coreo=_sitios([('suelo', 4, 8.5), ('suelo', 2, 8.5), ('suelo', 7, 8.5), ('suelo', 3, 8.5)])
+         + [[0.0, 0, ('celda', 'brote', 0.0, 0.0)], [2.0, 1, ('celda', ('aliadas', 0), 0.0, 0.0)],
+            [2.2, 2, ('celda', ('aliadas', 1), 0.0, 0.0)], [2.4, 3, ('celda', ('aliadas', 2), 0.0, 0.0)]],
+         rotulos=[(0.0, 'Quien esta encima alimenta el mal mientras llegan los aliados.'),
+                  (4.0, 'Con los cuatro en su sitio empieza la cuenta de {taliados} segundos.'),
+                  (9.0, 'Rescatado: pasa a la especie del ultimo secuenciador y sigue creciendo al ritmo normal.')]),
+    dict(nombre='Cebo y zanja trampa',
+         sub='Una torre atrae al monstruo; una fila quieta {tfila} s cava una zanja en su camino.',
+         dur=21.0, pars=dict(Zanjajuego=True, Rios=False), arco=True,
+         coreo=_sitios([('suelo', 3, 7.5), ('suelo', 4, 7.5), ('suelo', 5, 7.5), ('suelo', 9, 7.5),
+                        ('suelo', 10, 7.5)])
+         + [[0.0, j, ('casilla', 'fila', j)] for j in range(3)]
+         + [[0.0, 3, ('celda', 'torre', 0.0, 0.0, 0)], [0.0, 4, ('celda', 'torre', 0.0, 0.0, 1)],
+            [15.0, 0, ('suelo', 2, 8.6)], [15.2, 1, ('suelo', 4.5, 8.6)], [15.4, 2, ('suelo', 7, 8.6)]],
+         rotulos=[(0.0, 'Dos visitantes engordan una torre: es el cebo.'),
+                  (3.0, 'Tres forman una fila y se quedan quietos: el arco ambar cuenta {tfila} segundos.'),
+                  (8.0, 'La fila cava una zanja en todas sus celdas. El monstruo viene a por la torre.'),
+                  (12.0, 'Cae en la zanja: vuelve a media celda y pierde lo devorado.'),
+                  (15.5, 'La fila se mueve: la zanja queda fijada y no se puede volver a cavar hasta el ciclo '
+                         'siguiente.')]),
+    dict(nombre='Canal: el agua lo ahoga',
+         sub='Una fila de 4 cava hasta el agua. Llena a x4 y desborda a x2 hacia la zanja vecina.',
+         dur=21.0, pars=dict(Zanjajuego=True, Rios=False, Pasomonstruo=48, Esperamonstruo=3.0), arco=True,
+         coreo=_sitios([('suelo', 3, 7.5), ('suelo', 4, 7.5), ('suelo', 5, 7.5), ('suelo', 6, 7.5)])
+         + [[0.3, j, ('casilla', 'fila', j)] for j in range(4)]
+         + [[13.0, 0, ('suelo', 2, 8.6)], [13.2, 1, ('suelo', 4, 7.8)], [13.4, 2, ('suelo', 7, 8.6)],
+            [13.6, 3, ('suelo', 9, 6.5)]],
+         rotulos=[(0.0, 'El monstruo avanza por una zanja de 2 conchas: cada paso le cuesta el doble.'),
+                  (2.5, 'Cuatro se ponen en fila junto a ella.'),
+                  (6.5, 'Su zanja llega a 4 conchas: aflora agua, llena a x4 y se desborda a x2.'),
+                  (8.0, 'El agua alcanza al monstruo: muere ahogado.'),
+                  (14.0, 'Al poco aparece otro.')]),
+    dict(nombre='Cerco', sub='Las celdas con alguien quieto son muro. Sin nada a su alcance, no come y pierde lo '
+                             'devorado.',
+         dur=19.0, pars=dict(Armacerco=True, Tfila=60.0),
+         coreo=[[-1.0, j, ('monstruo', db, dl)] for j, (db, dl) in enumerate(((0, -1), (0, 1), (1, 0), (-1, 0)))]
+         + _sigue(0, ('monstruo', 0, -1), 0.0, 19.0) + _sigue(1, ('monstruo', 0, 1), 0.0, 19.0)
+         + _sigue(2, ('monstruo', 1, 0), 0.0, 19.0) + _sigue(3, ('monstruo', -1, 0), 0.0, 14.0)
+         + [[14.5, 3, ('suelo', 10, 8)]],
+         rotulos=[(0.0, 'Cuatro visitantes rodean al monstruo grande mientras aparece.'),
+                  (4.6, 'Acorralado: no alcanza nada que comer y pierde un escalon por compas.'),
+                  (9.0, 'El giro mueve las celdas: para mantener el cerco hay que caminar con ellas.'),
+                  (15.0, 'Si alguien se va, el cerco se abre y se escapa.')]),
+    dict(nombre='Pisoton', sub='Tres personas sobre la celda del monstruo: deja de comer y encoge.',
+         dur=16.0, pars=dict(Armapison=True, Tfila=60.0),
+         coreo=_sitios([('suelo', 5, 6.2), ('suelo', 7, 6.2), ('suelo', 6, 7.0), ('suelo', 1, 6)])
+         + [[t_, 0, ('monstruo', 0, 0, -0.13, -0.13)] for t_ in (0.2, 6.0)]
+         + [[t_, 1, ('monstruo', 0, 0, 0.13, 0.13)] for t_ in (0.2, 6.0)]
+         + [[t_, 2, ('monstruo', 0, 0, 0.0, 0.0, 1)] for t_ in (0.2, 6.0)],
+         rotulos=[(0.0, 'El monstruo grande devora una corona.'),
+                  (2.0, 'Tres visitantes se le echan encima.'),
+                  (4.0, 'Con tres en su celda no come y encoge a cada paso.'),
+                  (11.0, 'Ha vuelto a la forma pequena: ya no puede con coronas ni fusiones.')]),
+    dict(nombre='Estatuas', sub='Toda la sala quieta y en silencio {tquietud} s: el monstruo queda petrificado.',
+         dur=17.0, pars=dict(Armaestatuas=True, Tfila=60.0, Umbralsilencio=('min', UMBRAL_SILENCIO_SALA)),
+         arco='estatuas',
+         ruido=[(0.0, 3.0, 'habla'), (3.0, 17.0, 'silencio')],
+         coreo=_sitios([('suelo', 2, 2), ('suelo', 4, 6), ('suelo', 6, 3), ('suelo', 8, 7), ('suelo', 9, 2),
+                        ('suelo', 1, 5)])
+         + [[0.0, i, ('suelo',) + d] for i, d in enumerate(((3, 3), (5, 7), (7, 2), (9, 6), (8, 1), (2, 6)))]
+         + [[1.6, 0, ('suelo', 2, 2.5)], [1.6, 2, ('suelo', 6, 2.5)], [1.6, 4, ('suelo', 9, 1.5)]],
+         rotulos=[(0.0, 'La sala camina y habla: el microfono lo oye.'),
+                  (3.0, 'Todos se quedan quietos y en silencio.'),
+                  (7.0, 'Petrificado durante {tpiedra} segundos: ni se mueve ni come.'),
+                  (13.0, 'Se rompe la piedra. El ruido de la sala, al reves, lo acelera.')]),
+    dict(nombre='Grito', sub='Un grito colectivo abre un pozo bajo el monstruo.',
+         dur=15.0, pars=dict(Armagrito=True, Rios=False, Tfila=60.0), ruido=[(2.0, 6.5, 'grito')],
+         coreo=_sitios([('celda', 'corro', 0.0, 0.0), ('celda', 'corro', -0.4, 0.0), ('celda', 'corro', 0.4, 0.0),
+                        ('celda', 'corro', 0.0, -0.4), ('celda', 'corro', 0.0, 0.4)]),
+         rotulos=[(0.0, 'El monstruo grande devora una corona.'),
+                  (2.0, 'Toda la sala grita a la vez.'),
+                  (5.0, 'El ruido de la sala pasa el umbral: se abre un pozo en su celda y cae.'),
+                  (9.0, 'El grito tarda {recarga} segundos en recargarse.')]),
+    dict(nombre='Relampago', sub='Una fila que cava a una celda o menos del monstruo lo deja aturdido.',
+         dur=15.0, pars=dict(Armarelampago=True, Zanjajuego=True, Rios=False, Pasomonstruo=80), arco=True,
+         coreo=_sitios([('suelo', 6, 6.6), ('suelo', 7, 6.6), ('suelo', 8, 6.6), ('suelo', 1, 7)])
+         + [[0.0, j, ('casilla', 'fila', j)] for j in range(3)],
+         rotulos=[(0.0, 'Tres visitantes se plantan en fila junto al monstruo.'),
+                  (3.0, 'Quietos {tfila} segundos.'),
+                  (7.0, 'La zanja se abre a su lado: relampago, y queda aturdido {taturdido} segundos.')]),
+    dict(nombre='Fin de ronda', sub='Al acabar la ronda se cuentan todas las celdas del globo, tambien las de la cara '
+                                    'oculta.',
+         dur=17.0, pars=dict(Barsperturn=9.0, Noche=('min', 4.0), Tfila=60.0),
+         coreo=_sitios([('suelo', 2, 4), ('suelo', 4, 6), ('suelo', 6, 3), ('suelo', 8, 5), ('suelo', 9, 7)]),
+         rotulos=[(0.0, 'Recuento: publico contra mal, en todo el planeta.'),
+                  (3.5, '{gana}'),
+                  (9.0, 'El mundo se entierra: la concha guarda el mapa de la partida.')]),
+]
+GIRO_DEMO = 450.0           # Barsperturn del resto de capitulos: el giro, despacio (0,4 grados por segundo)
+CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
+# lo que la demo pone en FASE1 mientras dura (y devuelve al salir)
+PARS_DEMO = dict(Fuente='simulada', Modojuego=True)
+PARS_CAPITULO = sorted(set(k for cp in CAPITULOS for k in cp['pars']) | set(ARMAS) | {'Barsperturn', 'Umbralaparicion'})
+
+
+def antetitulo(k):
+    if k == 0:
+        return 'STRATOS · JUEGOS DE SALA'
+    if k >= len(CAPITULOS) - 1:
+        return 'STRATOS · FIN DE RONDA'
+    return 'FORMA DE JUGAR %d / %d' % (k, len(CAPITULOS) - 2)
+
+
+_GZ = dict(activo=False, acabada=False, cap=None, t_titulo=None, t0=None, hechas=set(), refs={}, tramos={},
+           ruido=[], ganancia=1.0, cortes0=None, t_gan=None, reg={}, saltar=False, cap_par=None,
+           antes_cap={}, resultados=[], libres=None, rotulo=None, rotulo_frame=None, ultima_tabla=None)
+
+
+def ruido_demo(t):
+    """El modo del ruido del publico en t (s de la sala): None (fuera de la demo: las
+    palmadas y toses de Ruidopublico), 'habla', 'silencio' o 'grito'. En la demo, fuera de
+    sus tramos, el publico calla: sus palmadas sueltas serian onsets que erosionan (fase 21)
+    justo donde juega."""
+    for t0, t1, modo in _GZ.get('ruido', ()):
+        if t0 <= t < t1:
+            return modo
+    return 'silencio' if _GZ.get('activo') else None
+
+
+# --- las personas de la demo: tramos que pone la coreografia --------------------
+
+def _fuera_de(cfg):
+    return (0.0, 0.5 * cfg['fondo'] + 1.0)
+
+
+def tramos_demo(cfg, i, hasta):
+    """Los tramos de la persona i en la demo (los pone la coreografia); fuera de la
+    sala mientras no tenga ninguno. El ultimo se alarga hasta 'hasta'."""
+    tr = _GZ['tramos'].get(i)
+    if not tr:
+        f = _fuera_de(cfg)
+        tr = _GZ['tramos'][i] = [[0.0, hasta + 3600.0, f, f, False, False]]
+    if tr[-1][1] <= hasta:
+        tr[-1][1] = hasta + 3600.0
+    return tr
+
+
+def _corta(tr, t):
+    """Corta los tramos en t: el que esta en curso acaba ahi (donde este); los de despues, fuera.
+    Devuelve (posicion en t, dentro)."""
+    while len(tr) > 1 and tr[-1][0] >= t:
+        tr.pop()
+    s = tr[-1]
+    u = 0.0 if s[1] <= s[0] else max(0.0, min(1.0, (t - s[0]) / (s[1] - s[0])))
+    p = (s[2][0] + (s[3][0] - s[2][0]) * u, s[2][1] + (s[3][1] - s[2][1]) * u)
+    s[1], s[3] = max(s[0], t), p
+    return p, s[4]
+
+
+def mover(cfg, i, q, t, evitar=(), salto=False):
+    """La persona i va a q ((x, z) en metros o 'fuera') desde t: anda a VELOCIDAD por
+    el camino (rodeando la esfera y el estrobo) y se para alli. Con salto, esta alli
+    ya (al empezar el titulo). Devuelve si se mueve."""
+    tr = tramos_demo(cfg, i, t)
+    p, dentro = _corta(tr, t)
+    hz = 0.5 * cfg['fondo']
+    puerta = (0.0, hz - 0.3)
+    fuera = _fuera_de(cfg)
+    largo = 3600.0
+    if salto:
+        if q == _FUERA:
+            tr.append([t, t + largo, fuera, fuera, False, False])
+        else:
+            tr.append([t, t + largo, q, q, True, False])
+        return True
+    if q == _FUERA:
+        if not dentro:
+            tr.append([t, t + largo, fuera, fuera, False, False])
+            return False
+        t = _andar(tr, t, p, puerta, cfg, evitar)
+        tr.append([t, t + 1.0, puerta, (0.0, hz), True, True])
+        tr.append([t + 1.0, t + 1.0 + largo, fuera, fuera, False, False])
+        return True
+    if dentro and math.hypot(q[0] - p[0], q[1] - p[1]) < SIGUE_MIN:
+        tr.append([t, t + largo, p, p, True, False])
+        return False
+    if not dentro:                      # entra por la puerta
+        tr.append([t, t + 1.0, (0.0, hz), puerta, True, True])
+        t, p = t + 1.0, puerta
+    t = _andar(tr, t, p, q, cfg, evitar)
+    tr.append([t, t + largo, q, q, True, False])
+    del tr[:-120]
+    return True
+
+
+# --- de la sala al planeta: el mapeo de la fase 22, solo leyendo -----------------
+
+def a_suelo(c1, x, z):
+    """(x, y) en metros del suelo que cubre la camara de FASE1 (x desde la izquierda,
+    y desde la pantalla) del punto (x, z) de la sala: el suelo cubierto, centrado."""
+    return x + 0.5 * c1['ancho_sala'], z + 0.5 * c1['fondo_sala']
+
+
+def de_suelo(c1, x, y):
+    return x - 0.5 * c1['ancho_sala'], y - 0.5 * c1['fondo_sala']
+
+
+def casillas_libres(c, c1, m, evitar=()):
+    """Las casillas de FASE1 a las que llega el publico: su centro esta en el suelo
+    de la sala, lejos de las paredes, de la esfera y del estrobo, y sin quedar detras."""
+    cols, filas = m.rejilla_sala(c1)
+    out = set()
+    for k in range(cols * filas):
+        x, z = de_suelo(c1, *m.casilla_xy(c1, k))
+        q = _libre(c, (x, z), evitar)
+        if math.hypot(q[0] - x, q[1] - z) < 0.05:
+            out.add(k)
+    return out
+
+
+def _ref(refs, r):
+    if isinstance(r, (tuple, list)):
+        v = refs.get(r[0])
+        try:
+            return v[int(r[1])] if v is not None else None
+        except Exception:
+            return None
+    if isinstance(r, str):
+        return refs.get(r)
+    return r
+
+
+OTRA_EN_CASILLA = 0.13      # m (en diagonal) de dos personas en la misma casilla: 0,37 m entre las dos
+
+
+def punto_de_celda(m, W, c1, celda, libres=None, j=0):
+    """(x, z) de la sala del centro de la casilla j que mira a la celda (las libres, de la
+    mas cercana a su centro); con mas personas que casillas, dos por casilla, en diagonal.
+    Si ninguna la mira, el borde del suelo cubierto mas cercano."""
+    if celda is None:
+        return None
+    ks = m.casillas_de_celda(W, c1, celda, libres) or m.casillas_de_celda(W, c1, celda)
+    if ks:
+        x, z = de_suelo(c1, *m.casilla_xy(c1, ks[int(j) % len(ks)]))
+        if int(j) >= len(ks):
+            d = OTRA_EN_CASILLA if (int(j) // len(ks)) % 2 else -OTRA_EN_CASILLA
+            x, z = x + d, z + d
+        return x, z
+    lat, lon = m.lonlat_celda(celda)
+    ancho, rango = c1['ancho_angular'], c1['lat_norte'] - c1['lat_sur']
+    if ancho <= 0 or rango == 0:
+        return None
+    dlon = (lon - c1['lon_central'] + 180.0) % 360.0 - 180.0
+    u = max(0.0, min(1.0, 0.5 - dlon / ancho))
+    if c1['espejo']:
+        u = 1.0 - u
+    v = max(0.0, min(1.0, (c1['lat_norte'] - lat) / rango))
+    return de_suelo(c1, u * c1['ancho_sala'], v * c1['fondo_sala'])
+
+
+def destino_a_punto(c, F, d, refs, evitar=()):
+    """El destino de la coreografia en (x, z) de la sala, o 'fuera', o None si no se
+    puede (sin FASE1, sin monstruo...)."""
+    if d == _FUERA:
+        return _FUERA
+    if isinstance(d, (tuple, list)) and len(d) == 2 and all(isinstance(v, (int, float)) for v in d):
+        return _libre(c, (float(d[0]), float(d[1])), evitar)
+    kind = d[0]
+    if kind == 'suelo':
+        w, f = REJILLA_WEB
+        if F is not None:
+            c1 = F.cfg()
+            x, z = de_suelo(c1, (d[1] + 0.5) / w * c1['ancho_sala'], (d[2] + 0.5) / f * c1['fondo_sala'])
+        else:
+            x, z = (d[1] + 0.5) / w * 5.4 - 2.7, (d[2] + 0.5) / f * 4.5 - 2.25
+        return _libre(c, (x, z), evitar)
+    if F is None:
+        return None
+    m, c1, W = F.m, F.cfg(), F.W()
+    dx = dz = 0.0
+    p = None
+    if kind == 'celda':
+        dx, dz, j = list(d[2:5]) + [0.0, 0.0, 0][len(d[2:5]):]
+        p = punto_de_celda(m, W, c1, _ref(refs, d[1]), _GZ.get('libres'), j)
+    elif kind == 'monstruo':
+        J = W.get('juego') or {}
+        mc = (J.get('mon') or {}).get('celda')
+        if mc is None:
+            return None
+        dx, dz, j = list(d[3:6]) + [0.0, 0.0, 0][len(d[3:6]):]
+        p = punto_de_celda(m, W, c1, m.celda_desplazada(mc, d[1], d[2]), _GZ.get('libres'), j)
+    elif kind == 'casilla':
+        k = _ref(refs, (d[1], d[2])) if len(d) > 2 and isinstance(d[1], str) else _ref(refs, d[1])
+        dx, dz = (list(d[3:5]) + [0.0, 0.0])[:2]
+        if k is not None:
+            p = de_suelo(c1, *m.casilla_xy(c1, k))
+    if p is None:
+        return None
+    return _libre(c, (p[0] + dx, p[1] + dz), evitar)
+
+
+REJILLA_WEB = (11, 9)
+
+
+class Fase1(object):
+    """Lo que la demo usa de FASE1: su motor (m), su mundo y su configuracion."""
+
+    def __init__(self, base):
+        self.base = base
+        self.motor = base.op('motor')
+        self.m = self.motor.module
+        self._c = None
+
+    def cfg(self, fresca=False):
+        """La de este fotograma (cfg_foto), o la ultima (fresca, tras cambiar parametros)."""
+        if self._c is None or fresca:
+            try:
+                self._c = self.m.cfg() if fresca else self.m.cfg_foto()
+            except Exception:
+                self._c = self.m.cfg()
+        return self._c
+
+    def W(self):
+        return self.m.world()
+
+    def par(self, nombre, defecto=None):
+        p = getattr(self.base.par, nombre, None)
+        try:
+            return p.eval() if p is not None else defecto
+        except Exception:
+            return defecto
+
+    def poner(self, nombre, valor):
+        p = getattr(self.base.par, nombre, None)
+        if p is None:
+            return False
+        try:
+            p.val = valor
+            self._c = None
+            return True
+        except Exception:
+            return False
+
+
+def fase1():
+    try:
+        b = op('/project1/FASE1')
+        if b is None or b.op('motor') is None:
+            return None
+        return Fase1(b)
+    except Exception:
+        return None
+
+
+# --- el director: entrar, capitulos, coreografia, salir ---------------------------
+
+def _guardado():
+    try:
+        return parent().fetch('gz_guardado', None, search=False)
+    except Exception:
+        return _GZ.get('guardado')
+
+
+def _guardar(v):
+    _GZ['guardado'] = v
+    try:
+        if v is None:
+            parent().unstore('gz_guardado')
+        else:
+            parent().store('gz_guardado', v)
+    except Exception:
+        pass
+
+
+def _sala_par(nombre, valor):
+    try:
+        p = getattr(parent().par, nombre, None)
+        if p is not None:
+            p.val = valor
+    except Exception:
+        pass
+
+
+# lo que la demo pone en la pagina Sala (y devuelve al salir): la vista juego, el arco de
+# quietud y la luz de casa en lugar de la luz de prueba (su estrobo daria onsets que erosionan)
+SALA_DEMO = dict(Vista='juego', Arcoquietud=True, Modoluz='apagado', Luzcasa=('min', 0.35))
+
+
+def _valor_sala(nombre, valor):
+    if isinstance(valor, tuple) and valor and valor[0] == 'min':
+        try:
+            return max(float(_p(nombre, 0.0)), float(valor[1]))
+        except Exception:
+            return valor[1]
+    return valor
+
+
+def _valor_par(F, nombre, valor):
+    if isinstance(valor, tuple) and valor and valor[0] == 'min':
+        try:
+            return max(float(F.par(nombre, 0.0)), float(valor[1]))
+        except Exception:
+            return valor[1]
+    return valor
+
+
+def entrar(c, t, F, now):
+    """Demo = genozilla: guarda la escena de FASE1 en su hueco (Guardarescena en
+    GZ_HUECO), su mundo, sus parametros y la tabla sala_personas; luego pone los de
+    la demo y empieza en Capitulo. Si ya habia algo guardado (la sala se recargo a
+    mitad), no lo pisa."""
+    import copy
+    _GZ.update(activo=True, acabada=False, tramos={}, saltar=False, resultados=[], cap=None)
+    if _guardado() is None and F is not None:
+        try:
+            F.m.guardar_escena(GZ_HUECO)
+        except Exception:
+            pass
+        tb = F.base.op('sala_personas')
+        nombres = sorted(set(PARS_DEMO) | set(PARS_CAPITULO))
+        _guardar(dict(W=copy.deepcopy(F.motor.fetch('W', None)),
+                      pars=dict((k, F.par(k)) for k in nombres if F.par(k) is not None),
+                      tabla=[[x.val for x in tb.row(r)] for r in range(tb.numRows)] if tb is not None else None,
+                      sala=dict((k, _p(k, None)) for k in SALA_DEMO)))
+    if F is not None:
+        for k, v in PARS_DEMO.items():
+            F.poner(k, v)
+    for k, v in SALA_DEMO.items():
+        _sala_par(k, _valor_sala(k, v))
+    _GZ['cap_par'] = c['capitulo']
+    capitulo(c, t, F, now, c['capitulo'])
+
+
+def salir(F, cfg_sala=None):
+    """Deja FASE1 como estaba al entrar: los parametros del capitulo y de la demo,
+    la escena (Cargarescena del hueco), el mundo y la tabla sala_personas."""
+    import copy
+    g = _guardado()
+    if F is not None and _GZ.get('antes_cap'):
+        for k, v in _GZ['antes_cap'].items():
+            F.poner(k, v)
+    _GZ.update(activo=False, cap=None, antes_cap={}, ruido=[], ganancia=1.0, tramos={}, saltar=False)
+    if g is not None and F is not None:
+        for k, v in g.get('pars', {}).items():
+            F.poner(k, v)
+        try:
+            F.m.cargar_escena(GZ_HUECO)
+            t = F.m.tabla_escenas()
+            if t is not None:           # el hueco, fuera de la tabla de escenas
+                filas = [[t[r, k].val for k in range(t.numCols)] for r in range(t.numRows)]
+                t.clear()
+                for f in filas:
+                    if f and f[0] != GZ_HUECO:
+                        t.appendRow(f)
+        except Exception:
+            pass
+        if g.get('W') is not None:
+            F.motor.store('W', copy.deepcopy(g['W']))
+        else:
+            F.m.reset_world()
+        for k in ('inst', 'tiles', 'frame'):
+            try:
+                F.m._CACHE[k] = None
+            except Exception:
+                pass
+        tb = F.base.op('sala_personas')
+        if tb is not None and g.get('tabla') is not None:
+            tb.clear()
+            for f in g['tabla']:
+                tb.appendRow(f)
+        try:
+            F.m.sala_reset(cuentas=False)
+        except Exception:
+            pass
+        for k, v in (g.get('sala') or {}).items():
+            _sala_par(k, v)
+    _guardar(None)
+
+
+def _cap_pars(F, k, c):
+    """Los parametros de FASE1 del capitulo k: sus armas (solo la suya), su giro y lo
+    suyo. Devuelve los de antes, para devolverlos al acabar."""
+    cp = CAPITULOS[k]
+    quiere = dict((a, False) for a in ARMAS)
+    quiere['Barsperturn'] = GIRO_DEMO
+    quiere['Umbralaparicion'] = 1.0     # el monstruo aparece cuando lo dice el guion
+    quiere.update(cp['pars'])
+    antes = {}
+    for nm, v in quiere.items():
+        a = F.par(nm)
+        if a is None:
+            continue
+        antes[nm] = a
+        F.poner(nm, _valor_par(F, nm, v))
+    return antes
+
+
+def capitulo(c, t, F, now, k):
+    """Empieza el capitulo k en t (s de la sala): su titulo, el guion de FASE1 (con
+    Guion) y donde esta cada persona."""
+    k = int(k) % len(CAPITULOS)
+    if F is not None and _GZ.get('antes_cap'):
+        for nm, v in _GZ['antes_cap'].items():
+            F.poner(nm, v)
+    _GZ['antes_cap'] = {}
+    cp = CAPITULOS[k]
+    t0 = t + TITULO
+    _GZ.update(cap=k, t_titulo=t, t0=t0, hechas=set(), refs={}, saltar=False,
+               ruido=[(t0 + a, t0 + b, md) for a, b, md in cp.get('ruido', ())], ganancia=1.0, cortes0=None,
+               t_gan=None, reg=dict(cap=k))
+    ev = evitar_de(equipos_o_defecto(c))
+    if F is not None:
+        if c['guion']:
+            _GZ['antes_cap'] = _cap_pars(F, k, c)
+        c1 = F.cfg(fresca=True)
+        W = F.W()
+        _GZ['libres'] = casillas_libres(c, c1, F.m, ev)
+        refs = {}
+        try:
+            refs = F.m.demo_refs(W, c1, k, _GZ['libres'])
+            if c['guion']:
+                refs = F.m.guion_demo(W, c1, k, 'inicio', now, refs=refs, libres=_GZ['libres']) or refs
+        except Exception as e:
+            print('SALA  GENoZilla: el guion del capitulo %d fallo (%s)' % (k, e))
+        _GZ['refs'] = refs
+    quien = set()
+    for j, (tt, i, d) in enumerate(cp['coreo']):
+        if tt < 0:
+            q = destino_a_punto(c, F, d, _GZ['refs'], ev)
+            if q is not None:
+                mover(c, i, q, t, ev, salto=True)
+                quien.add(i)
+            _GZ['hechas'].add(j)
+    for i in range(GZ_PERSONAS):        # los demas, fuera (entraran por la puerta si les toca)
+        if i not in quien:
+            mover(c, i, _FUERA, t, ev, salto=True)
+    _GZ['rotulo'] = None
+
+
+def equipos_o_defecto(c):
+    try:
+        return equipos()
+    except Exception:
+        return [fila_equipo(f) for f in equipos_defecto(c['ancho'], c['fondo'], c['alto'])]
+
+
+def gz_tick(c, t, F, now, emular=False):
+    """Un paso de la demo en t (s de la sala; now, el reloj de FASE1): entra o sale,
+    cambia de capitulo, mueve a la gente segun la coreografia, el guion a su hora, la
+    ganancia del grito y lo que se observa para comprobar el capitulo."""
+    activa = c['activa'] and DEMOS[c['demo'] % len(DEMOS)] == 'genozilla'
+    if not activa:
+        if _GZ['activo'] or _guardado() is not None:
+            salir(F)
+        _GZ['acabada'] = False
+        return None
+    if not _GZ['activo']:
+        if _GZ.get('acabada'):
+            if not _GZ.get('saltar'):
+                return None
+            _GZ['acabada'] = False
+        entrar(c, t, F, now)
+    if c['capitulo'] != _GZ.get('cap_par'):          # Capitulo cambiado a mano: a el
+        _GZ['cap_par'] = c['capitulo']
+        cerrar_capitulo(F, now)
+        capitulo(c, t, F, now, c['capitulo'])
+    cp = CAPITULOS[_GZ['cap']]
+    if _GZ.get('saltar') or t - _GZ['t0'] >= cp['dur']:
+        cerrar_capitulo(F, now)
+        sig = _GZ['cap'] + 1
+        if sig >= len(CAPITULOS):
+            if not c['buclecap'] and not _GZ.get('saltar'):
+                salir(F)
+                _GZ['acabada'] = True
+                return None
+            sig = 0
+        capitulo(c, t, F, now, sig)
+        cp = CAPITULOS[_GZ['cap']]
+    tc = t - _GZ['t0']
+    ev = evitar_de(equipos_o_defecto(c))
+    for j, (tt, i, d) in enumerate(cp['coreo']):
+        if j in _GZ['hechas'] or tt > tc:
+            continue
+        q = destino_a_punto(c, F, d, _GZ['refs'], ev)
+        if q is not None or d == _FUERA:
+            mover(c, i, q, t, ev)
+            _GZ['hechas'].add(j)
+        elif tc - tt > 2.0:             # sin destino (no hay monstruo): se deja
+            _GZ['hechas'].add(j)
+    if F is None:
+        return None
+    if c['guion']:
+        try:
+            F.m.guion_demo(F.W(), F.cfg(), _GZ['cap'], 'tick', now, tc)
+        except Exception as e:
+            if not _GZ.get('err_tick'):
+                _GZ['err_tick'] = True
+                print('SALA  GENoZilla: guion_demo fallo (%s)' % e)
+    ganancia_grito(F, t)
+    observar(F, now, tc)
+    if not emular:
+        a_la_tabla(c, F, t, ev)
+    return tc
+
+
+def ganancia_grito(F, t):
+    """D4: en el tramo del grito, cada segundo sin que FASE1 abra un corte por el ruido
+    de sala (Umbralcorte), el grito sube GRITO_SUBE veces (hasta GANANCIA_MAX)."""
+    if ruido_demo(t) != 'grito':
+        return
+    r = F.W().get('ruido') or {}
+    n = r.get('cortes', 0)
+    if _GZ.get('cortes0') is None:
+        _GZ.update(cortes0=n, t_gan=t)
+    if n != _GZ['cortes0']:
+        return
+    if t - _GZ['t_gan'] >= 1.0:
+        _GZ['t_gan'] = t
+        _GZ['ganancia'] = min(GANANCIA_MAX, _GZ['ganancia'] * GRITO_SUBE)
+
+
+def a_la_tabla(c, F, t, ev=()):
+    """La gente de la sala, en la tabla sala_personas de FASE1 (x, y, altura en metros
+    del suelo cubierto): FASE1 la ve por su sala simulada, la misma imagen de alturas
+    que la camara."""
+    tb = F.base.op('sala_personas')
+    if tb is None:
+        return
+    c1 = F.cfg()
+    filas = []
+    for i, x, z, h, _ in personas(c, t, ev):
+        xf, yf = a_suelo(c1, x, z)
+        filas.append(['%.3f' % xf, '%.3f' % yf, '%.2f' % h])
+    if filas == _GZ.get('ultima_tabla'):
+        return
+    _GZ['ultima_tabla'] = filas
+    tb.clear()
+    tb.appendRow(list(F.m.SALA_COLS))
+    for f in filas:
+        tb.appendRow(f)
+
+
+def demo_tick():
+    """Desde frame_tick: la demo en el reloj de la sala (sin demo, casi nada)."""
+    if not _GZ['activo'] and str(_p('Demo', 'paseo')) != 'genozilla' and _guardado() is None:
+        return
+    gz_tick(cfg(), ahora(), fase1(), absTime.seconds)
+
+
+# --- lo que se mira para comprobar cada capitulo ---------------------------------
+
+def observar(F, now, tc):
+    """Lo que pasa en FASE1 durante el capitulo, para comprobarlo al final."""
+    reg = _GZ['reg']
+    if tc < 0.0:
+        return
+    m = F.m
+    W = F.W()
+    J = W.get('juego') or {}
+    mo = J.get('mon') or {}
+    vivo = mo.get('estado') not in (None, 'espera', 'muere') and mo.get('celda') is not None
+    if vivo:
+        reg['tam_max'] = max(reg.get('tam_max', 0.0), mo.get('tam', 0.0))
+        reg.setdefault('acum_ini', mo.get('acum', 0))
+        reg['acum_min'] = min(reg.get('acum_min', 99), mo.get('acum', 0))
+        reg['caidas'] = max(reg.get('caidas', 0), mo.get('caidas', 0))
+        if mo.get('estado') == 'cae' and mo.get('acum', 0) == 0:
+            reg['caida0'] = True
+        if mo.get('acorralado'):
+            reg['acorralado'] = True
+            reg.setdefault('acum_cerco', mo.get('acum', 0))
+            reg['acum_cerco_min'] = min(reg.get('acum_cerco_min', 99), mo.get('acum', 0))
+        if mo.get('piedra') is not None and now < mo['piedra']:
+            reg['piedra'] = True
+        if mo.get('aturdido') is not None and now < mo['aturdido'] and tc > 0.5:
+            reg['aturdido'] = True
+        if reg.get('murio'):
+            reg['reaparece'] = True
+    reg['acorralado_fin'] = bool(vivo and mo.get('acorralado'))
+    if mo.get('estado') == 'muere':
+        reg['murio'] = True
+    reg['n_max'] = max(reg.get('n_max', 0), mo.get('n', 0))
+    try:
+        if m.noche_nivel(W, F.cfg(), now) > 0.0:
+            reg['noche'] = True
+    except Exception:
+        pass
+
+
+def comprobar_capitulo(F, k, reg, now):
+    """La columna Comprobar del capitulo k: (bien, que)."""
+    m = F.m
+    W = F.W()
+    c1 = F.cfg()
+    J = W.get('juego') or {}
+    refs = _GZ.get('refs') or {}
+    N = len(W['occ'])
+    if not J:
+        return False, 'sin partida (Modojuego)'
+    if k == 0:
+        gente = [p for p in m.personas_en_sala() if p.get('casilla') is not None]
+        out = m.build_juego(W, c1, now, {})
+        celdas = set(m.celda_de_casilla(W, c1, p['casilla']) for p in gente)
+        return (bool(gente) and len(out.get('marcas', ())) >= len(celdas) > 0,
+                '%d personas en %d celdas, %d piezas de marca' % (len(gente), len(celdas), len(out.get('marcas', ()))))
+    if k == 1:
+        cas = m._SALA.get('casillas') or {}
+        celdas = set(m.celda_de_casilla(W, c1, q) for q in cas)
+        vacias = [x for x in celdas if W['occ'][x] <= 0]
+        coronas = [x for x in range(N) if W['occ'][x] >= c1['th_crown']]
+        return (bool(celdas) and not vacias and bool(coronas),
+                '%d celdas con gente, %d vacias, coronas %s' % (len(celdas), len(vacias), coronas))
+    if k == 2:
+        mal = [x for x in range(N) if W['occ'][x] > 0 and W['sp'][x] == m.MAL]
+        return (bool(mal) and reg.get('tam_max', 0.0) >= 1.0 - 1e-9,
+                '%d brotes del mal, tamano maximo %.2f' % (len(mal), reg.get('tam_max', 0.0)))
+    if k == 3:
+        b = refs.get('brote')
+        if b is None:
+            return False, 'sin brote'
+        vec = [x for x in m.NEIGH[b] if W['occ'][x] > 0 and W['sp'][x] == m.MAL]
+        return (W['sp'][b] == m.MAL and W['occ'][b] > 1 and bool(vec),
+                'el brote %d: ocupacion %d, %d vecinas del mal' % (b, W['occ'][b], len(vec)))
+    if k == 4:
+        b = refs.get('brote')
+        if b is None:
+            return False, 'sin brote'
+        return (W['sp'][b] in (m.GEO, m.ARQ) and W['occ'][b] >= 4 and J.get('rescatados', 0) >= 1,
+                'celda %d: especie %s, ocupacion %d, rescates %d' % (b, W['sp'][b], W['occ'][b],
+                                                                     J.get('rescatados', 0)))
+    if k == 5:
+        b = W.get('bloqueadas') or {}
+        zj = J.get('zanjas') or {}
+        return (bool(reg.get('caida0')) and bool(zj) and all(x in b for x in zj),
+                'caidas %d (acum 0: %s), zanja %s, fijada %s' % (reg.get('caidas', 0), bool(reg.get('caida0')),
+                                                                sorted(zj), sorted(b)))
+    if k == 6:
+        return (bool(reg.get('murio')) and bool(reg.get('reaparece')),
+                'ahogado %s, reaparece %s (monstruos %d)' % (bool(reg.get('murio')), bool(reg.get('reaparece')),
+                                                            reg.get('n_max', 0)))
+    if k == 7:
+        baja = reg.get('acum_cerco_min', 99) < reg.get('acum_cerco', -1)
+        return (bool(reg.get('acorralado')) and baja and not reg.get('acorralado_fin'),
+                'acorralado %s, acum %s -> %s, al final %s' % (
+                    bool(reg.get('acorralado')), reg.get('acum_cerco', '-'), reg.get('acum_cerco_min', '-'),
+                    'acorralado' if reg.get('acorralado_fin') else 'libre'))
+    if k == 8:
+        return (reg.get('acum_min', 99) < 8 and reg.get('acum_ini', 0) >= 8,
+                'acum %s -> %s' % (reg.get('acum_ini', '-'), reg.get('acum_min', '-')))
+    if k == 9:
+        return bool(reg.get('piedra')), 'petrificado %s' % bool(reg.get('piedra'))
+    if k == 10:
+        A = J.get('armas') or {}
+        g = (J.get('ev') or {}).get('grito') or {}
+        zj = J.get('zanjas') or {}
+        b = W.get('bloqueadas') or {}
+        pozo = g.get('celda') is not None and (g['celda'] in zj or g['celda'] in b)
+        return (A.get('gritos', 0) >= 1 and pozo and reg.get('caidas', 0) >= 1,
+                'gritos %d, pozo en %s, caidas %d' % (A.get('gritos', 0), g.get('celda'), reg.get('caidas', 0)))
+    if k == 11:
+        A = J.get('armas') or {}
+        s = W.get('sala') or {}
+        return (bool(reg.get('aturdido')) and A.get('rayos', 0) >= 1 and s.get('relampagos', 0) >= 1,
+                'aturdido %s, rayos %d, relampagos %d' % (bool(reg.get('aturdido')), A.get('rayos', 0),
+                                                         s.get('relampagos', 0)))
+    if k == 12:
+        rs = J.get('resultados') or []
+        return (bool(rs) and bool(reg.get('noche')),
+                'resultados %s, noche %s' % (['%s %d-%d' % (r['gana'], r['publico'], r['mal']) for r in rs],
+                                             bool(reg.get('noche'))))
+    return True, ''
+
+
+def cerrar_capitulo(F, now):
+    """El capitulo acaba: su comprobacion (al Textport y a _GZ['resultados'])."""
+    k = _GZ.get('cap')
+    if k is None or F is None:
+        return None
+    try:
+        bien, que = comprobar_capitulo(F, k, _GZ['reg'], now)
+    except Exception as e:
+        bien, que = False, 'no pude comprobarlo (%s)' % e
+    _GZ['resultados'].append((k, bien, que))
+    if not _GZ.get('callado'):
+        print('GENOZILLA  %2d %-24s %s  %s' % (k, CAPITULOS[k]['nombre'], 'OK   ' if bien else 'FALLO', que))
+    return bien
+
+
+# --- titulo, rotulo y leyenda ---------------------------------------------------
+
+def _valores_texto(F):
+    v = dict(tfila='4', taliados='3', tquietud='4', tpiedra='6', taturdido='4', recarga='30', aliados='3',
+             gana='Gana la sala.')
+    if F is None:
+        return v
+    try:
+        c1 = F.cfg()
+        v.update(tfila='%g' % c1['t_fila'], taliados='%g' % c1['t_aliados'], tquietud='%g' % c1['t_quietud'],
+                 tpiedra='%g' % c1['t_piedra'], taturdido='%g' % c1['t_aturdido'],
+                 recarga='%g' % c1['recarga_grito'], aliados='%d' % int(c1['aliados']))
+        J = F.W().get('juego') or {}
+        rs = J.get('resultados') or []
+        if rs:
+            r = rs[-1]
+            v['gana'] = '%s: publico %d, mal %d, en todo el globo.' % (
+                'Gana la sala' if r['gana'] == 'publico' else 'Gana el mal', r['publico'], r['mal'])
+    except Exception:
+        pass
+    return v
+
+
+def _formato(texto, F):
+    try:
+        return texto.format(**_valores_texto(F))
+    except Exception:
+        return texto
+
+
+def titulo_alfa(frame=None):
+    """La opacidad del titulo (Level TOP titulo_fundido), ahora."""
+    try:
+        return alfa_titulo(ahora())
+    except Exception:
+        return 0.0
+
+
+def alfa_titulo(t):
+    """La opacidad del titulo (0-1) en t: TITULO s al empezar cada capitulo, con su
+    fundido (TITULO_ENTRA de entrada y TITULO_SALE de salida)."""
+    if not _GZ.get('activo') or _GZ.get('t_titulo') is None:
+        return 0.0
+    u = t - _GZ['t_titulo']
+    if u < 0.0 or u > TITULO:
+        return 0.0
+    return max(0.0, min(1.0, u / TITULO_ENTRA, (TITULO - u) / TITULO_SALE))
+
+
+def titulo_texto(que, frame=None):
+    """Las tres lineas del titulo: 'ante' (antetitulo), 'nombre' y 'sub'."""
+    k = _GZ.get('cap')
+    if not _GZ.get('activo') or k is None:
+        return ''
+    if que == 'ante':
+        return antetitulo(k)
+    if que == 'nombre':
+        return CAPITULOS[k]['nombre']
+    return _formato(CAPITULOS[k]['sub'], None)
+
+
+def rotulo_texto(t=None, F=None):
+    """El rotulo del capitulo en t (vacio durante el titulo)."""
+    k = _GZ.get('cap')
+    if not _GZ.get('activo') or k is None:
+        return ''
+    t = ahora() if t is None else t
+    tc = t - _GZ['t0']
+    if tc < 0.0:
+        return ''
+    txt = ''
+    for t0, s in CAPITULOS[k]['rotulos']:
+        if t0 <= tc + 1e-9:
+            txt = s
+    return _formato(txt, F)
+
+
+def rotulo_demo(frame=None):
+    """El Text TOP rotulo_demo: se rehace cada ROTULO_CADA fotogramas."""
+    f = absTime.frame
+    if _GZ.get('rotulo') is not None and _GZ.get('rotulo_frame') is not None \
+            and 0 <= f - _GZ['rotulo_frame'] < ROTULO_CADA:
+        return _GZ['rotulo']
+    _GZ['rotulo'], _GZ['rotulo_frame'] = rotulo_texto(F=fase1()), f
+    return _GZ['rotulo']
+
+
+def rotulo_alfa(frame=None):
+    return 1.0 if rotulo_demo(frame) else 0.0
+
+
+def legend_demo():
+    k = _GZ.get('cap')
+    if k is None:
+        return 'GENOZILLA  -'
+    tc = ahora() - _GZ['t0']
+    hechos = _GZ.get('resultados') or []
+    return 'GENOZILLA  %d/%d %s   %s   comprobados %d/%d' % (
+        k, len(CAPITULOS) - 1, CAPITULOS[k]['nombre'],
+        'titulo' if tc < 0 else '%.1f/%.0f s' % (tc, CAPITULOS[k]['dur']),
+        sum(1 for r in hechos if r[1]), len(hechos))
+
+
+def arco_segundos(c):
+    """Los segundos que tarda en cerrarse el arco de quietud (None: sin arcos). En la
+    demo, solo en los capitulos de fila (Tfila) y de estatuas (Tquietud)."""
+    if not c.get('arco_quietud'):
+        return None
+    F = None
+    try:
+        F = fase1()
+    except Exception:
+        F = None
+    if _GZ.get('activo') and _GZ.get('cap') is not None:
+        a = CAPITULOS[_GZ['cap']].get('arco')
+        if not a:
+            return None
+        nombre = 'Tquietud' if a == 'estatuas' else 'Tfila'
+    else:
+        nombre = 'Tfila'
+    try:
+        v = float(F.par(nombre, 4.0)) if F is not None else 4.0
+    except Exception:
+        v = 4.0
+    return max(0.5, v)
+
+
+# --- la demo en tiempo simulado (la autoprueba de la sala) ------------------------
+
+MIC_CAPS = (9, 10)          # capitulos en los que el microfono cuenta (estatuas y grito)
+
+
+def paso_fase1(F, c, t, now, dt, ev, eq=None, mic=False):
+    """Lo que FASE1 hace en un paso de dt s con la gente de la sala en t, sin
+    TouchDesigner: la imagen de la camara (las cabezas, de las posiciones), el
+    seguimiento, las paradas, filas, rescates y armas (sala_mundo), el microfono (con
+    mic) y el juego."""
+    m = F.m
+    c1 = F.cfg()
+    W = F.W()
+    W['t'] = now
+    maximos = []
+    for i, x, z, h, _ in personas(c, t, ev):
+        xf, yf = a_suelo(c1, x, z)
+        if 0.0 <= xf <= c1['ancho_sala'] and 0.0 <= yf <= c1['fondo_sala']:
+            maximos.append((xf, yf, h))
+    res = m.tick_personas(W, c1, now, maximos)
+    m.sala_mundo(W, c1, now, res)
+    if mic and eq is not None:
+        n = max(32, int(round(dt * RATE)))
+        ta = t - n / float(RATE)
+        x = bloque_audio(c, eq, ta, n, RATE, eventos(c, ta - 0.5, t, ev))
+        m.mic_bloque(W, c1, x, RATE, now)
+    if m.juego_al_dia(W, c1, now) is not None and m.juego_on(W, c1):
+        semi = 60.0 / max(1e-6, m.tempo()) / max(1, int(c1['steps_per_beat']))
+        m.juego_avanzar(W, c1, now, dt / semi)
+
+
+def simular_demo(c, F, caps=None, dt=1.0 / 15.0, dt_mic=1.0 / 60.0, t_ini=10000.0, now_ini=None):
+    """La demo GENoZilla en tiempo simulado, capitulo a capitulo: el director con un
+    reloj a mano (el de la sala y el de FASE1) y FASE1 paso a paso (paso_fase1).
+    Entra (guarda la escena), juega los capitulos y sale (la devuelve). Devuelve
+    [(capitulo, bien, que)], la columna Comprobar de cada uno."""
+    caps = list(range(len(CAPITULOS))) if caps is None else list(caps)
+    eq = equipos_o_defecto(c)
+    ev = evitar_de(eq)
+    t = float(t_ini)
+    now = float(now_ini if now_ini is not None else t_ini)
+    cc = dict(c, activa=True, demo=DEMOS.index('genozilla'), capitulo=caps[0], buclecap=False)
+    _GZ.update(activo=False, acabada=False, resultados=[], callado=True)
+    _PIEZAS['clave'] = None
+    try:
+        gz_tick(cc, t, F, now, emular=True)              # entra (y empieza caps[0])
+        for j, k in enumerate(caps):
+            if j > 0:
+                cc['capitulo'] = k                       # el capitulo siguiente, como con Capitulo
+                gz_tick(cc, t, F, now, emular=True)
+            mic = k in MIC_CAPS
+            paso = dt_mic if mic else dt
+            fin = _GZ['t0'] + CAPITULOS[k]['dur'] - 1e-6
+            while t + paso < fin:
+                t += paso
+                now += paso
+                gz_tick(cc, t, F, now, emular=True)
+                paso_fase1(F, cc, t, now, paso, ev, eq, mic)
+        cerrar_capitulo(F, now)
+    finally:
+        salir(F)
+        _GZ.update(activo=False, acabada=False, cap=None, callado=False)
+    return list(_GZ['resultados'])

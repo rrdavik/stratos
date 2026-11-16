@@ -35,7 +35,13 @@ QUE MONTA
                  llena  la sala se llena deprisa y se quedan casi quietos
                  goteo  de uno en uno: van a la esfera, miran y se van
                  vacia  nadie
-               Cada persona es un tronco de su altura (v5: sin cabeza).
+                 genozilla  (v24) el publico juega a GENoZilla capitulo a
+                        capitulo (ver DEMO GENOZILLA)
+               v24: cada persona es un MONIGOTE de hombre (i par) o de mujer
+               (i impar), como los letreros de los aseos (Monigotes; apagado,
+               el tronco de su altura de la v5), de color Colormonigote, con
+               las piernas que se balancean al andar. Arcoquietud: un arco
+               ambar a sus pies que se cierra en Tfila mientras sigue quieta.
                Hacen ruido: pasos al andar y palmadas o toses (Ruidopublico por segundo y persona;
                Reaccion veces mas con el estrobo encendido).
   MICROFONO    el Script CHOP audio_mic: lo que oye el microfono virtual
@@ -69,12 +75,30 @@ QUE MONTA
                             despacio entre el publico mirando la esfera
                  orbita     desde fuera (Orbita, Distancia, Alturavista)
                  cenital    lo que ve la camara del techo
+                 juego      (v24) la sala desde la entrada a la izquierda y la
+                            imagen de FASE1 en grande a la derecha (la de la
+                            demo GENoZilla); encima, su titulo y su rotulo
                Encima: lo que ve la camara cenital, toda la planta de la sala
                con el publico (abajo a la derecha, 200 x 180; v10, antes un
                plano ortografico aparte de 320 x 240) y el rotulo con la luz, el publico y los onsets
                (arriba a la izquierda). render_cenital (320 x 288) y
                'profundidad' siguen ahi para la fase 22: no hace falta
                mirarlos.
+
+DEMO GENOZILLA (v24, Demo = genozilla)
+--------------------------------------
+  El publico virtual juega a GENoZilla capitulo a capitulo (la demo web
+  «GENoZilla · demo de sala»): 13 capitulos, unos 3 min 50 s. Cada uno empieza
+  con su titulo (titulo_demo, 2,8 s, con un velo) y un rotulo abajo
+  (rotulo_demo) explica lo que pasa. El juego lo juega FASE1 de verdad: la sala
+  mueve a la gente y FASE1 la ve por su sala simulada (Fuente = simulada, la
+  tabla sala_personas: la misma imagen de alturas que la camara). Con Guion,
+  el motor de FASE1 (motor v118, guion_demo) prepara cada capitulo. Al entrar,
+  Guardarescena en el hueco 'antes_demo' (y el mundo y los parametros); al
+  salir (otra Demo, o Activa apagada), Cargarescena: FASE1 como estaba.
+  Vista = juego (por defecto en la demo): la sala desde la entrada y la imagen
+  de FASE1 en grande, lado a lado. Capitulo (el inicial), Siguientecap,
+  Buclecap y Guion en la pagina Sala.
 
 COMO USARLO
 -----------
@@ -90,7 +114,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v23  (la Palmada de la autoprueba, con la cola de palmadas vacia)'
+VERSION = 'sala_virtual v24  (monigotes, arco de quietud y la demo GENoZilla con su vista juego)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -135,6 +159,29 @@ try:
 except Exception as e:
     raise RuntimeError('sala_motor no compila: %s' % e)
 
+# v24: si la demo GENoZilla estaba en marcha, FASE1 vuelve antes a como estaba (su escena y su
+# mundo): la autoprueba guarda el mundo de ahora y la demo, al volver a entrar, guardaria el suyo.
+try:
+    if sm._guardado() is not None:
+        sm.salir(sm.fase1())
+        ok('demo GENoZilla: estaba en marcha; FASE1 vuelve a como estaba (con Demo = genozilla, empieza '
+           'otra vez al acabar el script)')
+except Exception as e:
+    info('demo GENoZilla: no pude devolver FASE1 a como estaba (%s)' % e)
+
+# v24: el guion de la demo GENoZilla vive en el motor de FASE1 (motor v118). Si el motor de
+# FASE1 es de antes, se pone al dia aqui, como hace cada fase (el mundo se conserva).
+motor1 = fase1.op('motor')
+if motor1 is not None:
+    src1 = read_text(CARPETA, 'estratos_motor.py')
+    if motor1.text != src1:
+        motor1.text = src1
+        try:
+            ok('motor de FASE1 al dia (%s): trae el guion de la demo GENoZilla; el mundo se conserva'
+               % motor1.module.MOTOR_VERSION)
+        except Exception as e:
+            raise RuntimeError('el motor de FASE1 no compila: %s' % e)
+
 # -----------------------------------------------------------------------------
 # PARAMETROS (pagina Sala)
 # -----------------------------------------------------------------------------
@@ -156,6 +203,37 @@ add_par(sala, page, 'pulse', 'Recolocar', 'Recolocar los equipos con estas medid
 add_par(sala, page, 'int', 'Personas', 'Personas', 6, 0, 30, clamp=True)
 add_par(sala, page, 'menu', 'Demo', 'Demo de visita del publico', 'paseo', menu=sm.DEMOS,
         menu_labels=sm.DEMOS_ETIQUETAS)
+
+
+def menu_al_dia(nombre, nombres, etiquetas):
+    """v24: un menu que ya existia toma las opciones nuevas y conserva lo elegido."""
+    try:
+        p_ = getattr(sala.par, nombre)
+        if list(p_.menuNames) != list(nombres) or list(p_.menuLabels) != list(etiquetas):
+            antes_ = str(p_.eval())
+            p_.menuNames = list(nombres)
+            p_.menuLabels = list(etiquetas)
+            if antes_ in nombres:
+                p_.val = antes_
+            return True
+    except Exception as e:
+        info('%s: no pude poner sus opciones nuevas (%s)' % (nombre, e))
+    return False
+
+
+if menu_al_dia('Demo', sm.DEMOS, sm.DEMOS_ETIQUETAS):
+    ok('Demo: con genozilla (el publico juega a GENoZilla capitulo a capitulo)')
+# v24: la demo GENoZilla
+add_par(sala, page, 'menu', 'Capitulo', 'GENoZilla: capitulo inicial', sm.CAP_NOMBRES[0], menu=sm.CAP_NOMBRES,
+        menu_labels=sm.CAP_ETIQUETAS)
+menu_al_dia('Capitulo', sm.CAP_NOMBRES, sm.CAP_ETIQUETAS)
+add_par(sala, page, 'pulse', 'Siguientecap', 'GENoZilla: saltar al capitulo siguiente')
+add_par(sala, page, 'toggle', 'Buclecap', 'GENoZilla: al acabar el ultimo, volver al primero', True)
+add_par(sala, page, 'toggle', 'Guion', 'GENoZilla: el guion prepara FASE1 en cada capitulo', True)
+# v24: monigotes
+add_par(sala, page, 'toggle', 'Monigotes', 'Publico de monigotes (apagado: troncos)', True)
+add_par(sala, page, 'rgb', 'Colormonigote', 'Color de los monigotes', sm.COL_MONIGOTE)
+add_par(sala, page, 'toggle', 'Arcoquietud', 'Arco de quietud a los pies (cuenta Tfila)', False)
 add_par(sala, page, 'float', 'Llegada', 'Paseo: segundos entre dos llegadas', 8.0, 0.0, 120.0, clamp=True)
 add_par(sala, page, 'float', 'Ruidopublico', 'Palmadas y toses por segundo y persona', 0.05, 0.0, 2.0, clamp=True)
 add_par(sala, page, 'float', 'Reaccion', 'Con el estrobo, el publico hace x veces mas ruido', 3.0, 0.0, 10.0, clamp=True)
@@ -199,11 +277,12 @@ add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 =
         clamp=True)
 VISTAS_ETIQUETAS = ['Visitante (pasea entre el publico)', 'Entrada (la sala desde la puerta)', 'Orbita (desde fuera)',
                     'Camara cenital']
+VISTAS_ETIQUETAS.append('Juego (la sala y la imagen de FASE1, lado a lado)')         # v24
 add_par(sala, page, 'menu', 'Vista', 'Vista del monitor', 'entrada', menu=sm.VISTAS,
         menu_labels=VISTAS_ETIQUETAS)
 try:                                    # v2: libre pasa a llamarse orbita y el defecto es visitante
     vp = sala.par.Vista
-    if list(vp.menuNames) != list(sm.VISTAS):
+    if 'visitante' not in list(vp.menuNames):
         antes = str(vp.eval())
         vp.menuNames = list(sm.VISTAS)
         vp.menuLabels = VISTAS_ETIQUETAS
@@ -213,6 +292,8 @@ try:                                    # v2: libre pasa a llamarse orbita y el 
         ok('Vista: visitante (pasea entre el publico), entrada, orbita (la libre de antes) y cenital')
 except Exception as e:
     info('Vista: no pude poner las vistas nuevas (%s)' % e)
+if menu_al_dia('Vista', sm.VISTAS, VISTAS_ETIQUETAS):        # v24: y juego
+    ok('Vista: con juego (la sala y la imagen de FASE1, lado a lado; la de la demo GENoZilla)')
 try:                                    # v4: el defecto pasa a ser entrada (una vez por proyecto)
     vp = sala.par.Vista
     vp.default = 'entrada'
@@ -230,7 +311,8 @@ add_par(sala, page, 'float', 'Alturavista', 'Vista libre: altura (m)', 5.0, 0.5,
 ok('pagina Sala: Activa, Ancho 8, Fondo 6, Alto 4, Recolocar, Personas 6, '
    'Llegada 8, Ruidopublico 0,05, Reaccion 3, Volumendrone 0,5, Palmada, Reiniciarsala, Usarmic, '
    'Modoluz (prueba), Hzprueba 2,5, Luzcasa 0,06, Bruma 0,5, Vista (visitante), Orbita, Distancia, '
-   'Alturavista (las tres, solo con Vista = orbita)')
+   'Alturavista (las tres, solo con Vista = orbita); v24: Capitulo, Siguientecap, Buclecap, Guion, '
+   'Monigotes, Colormonigote, Arcoquietud')
 
 # -----------------------------------------------------------------------------
 # LA TABLA DE EQUIPOS
@@ -315,8 +397,10 @@ SM = "parent().op('sala_motor').module"
 def instanciado(name, x, y, mat, sop='box'):
     """Geometry COMP 'name' instanciada desde el Script CHOP 'i_name': una caja
     de 1 x 1 x 1 con la base en y = 0, una esfera de diametro 1 centrada
-    (sop='sphere') o un cono abierto de diametro 1 y largo 1 con la punta en
-    el origen hacia -Z, como la luz de una Light COMP (sop='haz')."""
+    (sop='sphere'), un cono abierto de diametro 1 y largo 1 con la punta en
+    el origen hacia -Z, como la luz de una Light COMP (sop='haz'), o (v24) el
+    vestido de los monigotes: un cono truncado cerrado, de diametro 1 abajo y
+    VESTIDO arriba, alto 1 y la base en y = 0 (sop='vestido')."""
     chop = get_or_make(sala, 'scriptCHOP', 'i_' + name, x - 220, y)
     setp_any(chop, ['callbacks', 'callbackdat', 'dat'], 'instancias_sala')
     geo = fresh(sala, 'geometryCOMP', name, x, y)
@@ -348,6 +432,19 @@ def instanciado(name, x, y, mat, sop='box'):
         setp(s, 'ty', -0.5)                     # la punta en el origen...
         setp(s, 'rx', 90.0)                     # ...y el cono hacia -Z
         setmenu(s, ['xord'], ['trs'], None)     # primero baja, luego gira
+    elif sop == 'vestido':
+        cono = mk(geo, 'tubeSOP', 'cono', 0, 120)
+        setp_any(cono, ['rad1'], 0.5)
+        setp_any(cono, ['rad2'], 0.5 * sm.VESTIDO[0] / sm.VESTIDO[1])
+        setp(cono, 'height', 1.0)
+        setp_any(cono, ['cols', 'columns'], 20)
+        setp_any(cono, ['rows'], 2)
+        setp_any(cono, ['caps', 'endcaps', 'capends'], True)
+        setmenu(cono, ['orient', 'orientation'], ['y'], 1)
+        arriba = punta_arriba(geo, cono)        # lo estrecho arriba
+        s = mk(geo, 'transformSOP', 'al_suelo', 200, 0)
+        connect(s, arriba, 0)
+        setp(s, 'ty', 0.5)                      # la base en y = 0
     else:
         s = mk(geo, 'boxSOP', 'bloque', 0, 0)
         for ax in ('sizex', 'sizey', 'sizez'):
@@ -391,10 +488,17 @@ instanciado('personas', 0, 40, 'mat_personas')
 for vieja in ('cabezas', 'i_cabezas'):          # v5: el publico, sin cabeza
     if sala.op(vieja) is not None:
         sala.op(vieja).destroy()
+# v24: los monigotes (cabeza y hombros, y el vestido) y el arco de quietud
+instanciado('personas_bolas', 0, -200, 'mat_personas', sop='sphere')
+instanciado('personas_conos', 0, -280, 'mat_personas', sop='vestido')
+make_constant(sala, 'mat_arcos', 660, 600, (1.0, 1.0, 1.0))      # se ve a oscuras, como las lineas
+instanciado('arcos', 0, -360, 'mat_arcos')
+ok('monigotes: personas (cuerpo, brazos y piernas), personas_bolas (cabeza y hombros) y personas_conos '
+   '(el vestido), de Colormonigote; arcos: el arco de quietud (Arcoquietud), ambar en el suelo')
 instanciado('haces', 0, 440, 'mat_haz', sop='haz')
 instanciado('lineas', 0, 520, 'mat_lineas')
-ok('sala_caja, equipos_geo y personas (un tronco, sin cabeza): suelo, paredes, el suelo del publico, puerta, aparatos y '
-   'publico; haces: la luz de cada foco y del estrobo en la bruma (Bruma); lineas: aristas, umbral de la '
+ok('sala_caja, equipos_geo y personas (v24: monigotes; sin Monigotes, un tronco): suelo, paredes, el suelo del '
+   'publico, puerta, aparatos y publico; haces: la luz de cada foco y del estrobo en la bruma (Bruma); lineas: aristas, umbral de la '
    'puerta, reticula de 1 m y la del suelo del publico (0,5 m)')
 
 # la esfera de LEDs, con la imagen de FASE1
@@ -639,13 +743,17 @@ setexpr(cenital, 'fov', "%s.fov_cenital()" % SM)   # v8: todo el suelo de la sal
 if sala.op('vista_plano') is not None:         # v10: la miniatura es la camara cenital
     sala.op('vista_plano').destroy()
 MINI_W, MINI_H = 200, 180         # v10: la miniatura de la camara cenital
-geos = 'sala_caja lineas equipos_geo personas esfera haces'
+PUBLICO = 'personas personas_bolas personas_conos'       # v24: los monigotes
+geos = 'sala_caja lineas equipos_geo %s arcos esfera haces' % PUBLICO
 r1 = get_or_make(sala, 'renderTOP', 'render_sala', 660, 360)
 setexpr(r1, 'camera', "'vista_cenital' if str(parent().par.Vista) == 'cenital' else 'vista'")
 setp(r1, 'geometry', geos)
 setexpr(r1, 'lights', "%s.luces_render()" % SM)        # v6: sin luz_esfera con Luzesfera 0
 setp_any(r1, ['resolutionw'], 1280)
 setp_any(r1, ['resolutionh'], 720)
+# v24: con Vista = juego, la sala en un cuadrado de 720 x 720 (a la izquierda del monitor)
+JUEGO_EXPR = "str(parent().par.Vista) == 'juego'"
+setexpr(r1, 'resolutionw', "720 if %s else 1280" % JUEGO_EXPR)
 setp_any(r1, ['bgcolorr'], 0.0)
 setp_any(r1, ['bgcolorg'], 0.0)
 setp_any(r1, ['bgcolorb'], 0.0)
@@ -659,14 +767,14 @@ setp(luz_plano, 'dimmer', 0.5)
 # planta de la sala (fov_cenital). Mas pequena: 200 x 180, la proporcion de render_cenital.
 rp = get_or_make(sala, 'renderTOP', 'render_plano', 660, 120)
 setp(rp, 'camera', 'vista_cenital')
-setp(rp, 'geometry', 'sala_caja lineas equipos_geo personas esfera')
+setp(rp, 'geometry', 'sala_caja lineas equipos_geo %s arcos esfera' % PUBLICO)
 setexpr(rp, 'lights', "%s.luces_render('plano_luz')" % SM)
 setp_any(rp, ['resolutionw'], MINI_W)
 setp_any(rp, ['resolutionh'], MINI_H)
 setp_any(rp, ['bgcolora', 'bgalpha'], 1.0)      # v7: el plano, un recuadro negro que se lee
 r2 = get_or_make(sala, 'renderTOP', 'render_cenital', 660, 280)
 setp(r2, 'camera', 'vista_cenital')
-setp(r2, 'geometry', 'sala_caja personas')
+setp(r2, 'geometry', 'sala_caja %s' % PUBLICO)      # v24: los monigotes; sin el arco del suelo
 setp(r2, 'lights', 'luz_casa')
 setp_any(r2, ['resolutionw'], 320)
 setp_any(r2, ['resolutionh'], 288)
@@ -691,9 +799,10 @@ setp_any(rot, ['positiony', 'texty'], -16)
 setexpr(rot, 'text', MONITOR_TXT)
 
 
-def encima(nombre, arriba, abajo, horiz, vert, x, y):
+def encima(nombre, arriba, abajo, horiz, vert, x, y, margen=16):
     """Over TOP: 'arriba' a su tamano, en la esquina (horiz, vert) de 'abajo',
-    a 16 px del borde. Devuelve si pudo colocarlo."""
+    a 'margen' px del borde (v24: centrado, horiz o vert 'center'). Devuelve si pudo
+    colocarlo."""
     o = get_or_make(sala, 'overTOP', nombre, x, y)
     connect(o, arriba, 0)
     connect(o, abajo, 1)
@@ -702,16 +811,80 @@ def encima(nombre, arriba, abajo, horiz, vert, x, y):
             setmenu(o, ['justifyh'], [horiz], None),
             setmenu(o, ['justifyv'], [vert], None)]
     setmenu(o, ['tunit'], ['pixels'], None)
-    setp(o, 'tx', -16 if horiz == 'right' else 16)
-    setp(o, 'ty', 16 if vert == 'bottom' else -16)
+    setp(o, 'tx', 0 if horiz == 'center' else (-margen if horiz == 'right' else margen))
+    setp(o, 'ty', 0 if vert == 'center' else (margen if vert == 'bottom' else -margen))
     return all(bien)
+
+
+def fuente(nombre):
+    """v24: el nombre de la fuente si esta instalada (en la carpeta de fuentes de
+    Windows, del usuario o de macOS); si no, Arial."""
+    import os
+    clave = nombre.replace(' ', '').lower()
+    carpetas = ['C:/Windows/Fonts', os.path.expandvars('%LOCALAPPDATA%/Microsoft/Windows/Fonts'),
+                '/Library/Fonts', os.path.expanduser('~/Library/Fonts')]
+    for d in carpetas:
+        try:
+            for f in os.listdir(d):
+                if clave in f.replace(' ', '').replace('-', '').replace('_', '').lower():
+                    return nombre
+        except Exception:
+            pass
+    return 'Arial'
+
+
+def texto_top(nombre, x, y, w, h, expr, tam, color, fuente_, alinea_y='center', pos_y=0, fondo=None, envolver=False):
+    """v24: un Text TOP de w x h con el texto de la expresion, centrado, de color
+    (r, g, b) y tamano tam; fondo (r, g, b, a) o transparente."""
+    o = get_or_make(sala, 'textTOP', nombre, x, y)
+    setmenu(o, ['outputresolution'], ['custom'], None)
+    setp_any(o, ['resolutionw'], w)
+    setp_any(o, ['resolutionh'], h)
+    setp_any(o, ['font', 'fontfamily'], fuente_)
+    setp_any(o, ['fontsizex', 'fontsize'], tam)
+    setp(o, 'fontsizey', tam)
+    setp_any(o, ['alignx'], 'center')
+    setp_any(o, ['aligny'], alinea_y)
+    setp_any(o, ['positionx', 'textx'], 0)
+    setp_any(o, ['positiony', 'texty'], pos_y)
+    for ch, v in zip('rgb', color):
+        setp_any(o, ['fontcolor' + ch, 'color' + ch], v)
+    setp_any(o, ['fontalpha', 'fontcolora'], 1.0)
+    f = fondo or (0.0, 0.0, 0.0, 0.0)
+    for ch, v in zip('rgb', f[:3]):
+        setp_any(o, ['bgcolor' + ch, 'backgroundcolor' + ch], v)
+    transp = setp_any(o, ['bgalpha', 'backgroundalpha', 'bgcolora'], f[3])
+    if envolver:
+        setp_any(o, ['wordwrap'], True)
+    setexpr(o, 'text', expr)
+    return o, bool(transp)
 
 
 # v7: sin el recuadro de lo que muestra la esfera arriba a la derecha: parecia la
 # esfera metida en la esquina de la sala. La esfera 3D ya lo ensena.
 if sala.op('con_esfera') is not None:
     sala.op('con_esfera').destroy()
-colocados = [encima('con_plano', rp, r1, 'right', 'bottom', 880, 360)]
+# v24: la vista juego: la sala (720 x 720) a la izquierda y la imagen de FASE1 (560 x 720, el
+# centro del render: el planeta) a la derecha, en un lienzo de 1280 x 720
+lienzo = get_or_make(sala, 'constantTOP', 'juego_lienzo', 660, 680)
+setmenu(lienzo, ['outputresolution'], ['custom'], None)
+setp_any(lienzo, ['resolutionw'], 1280)
+setp_any(lienzo, ['resolutionh'], 720)
+for ch in ('colorr', 'colorg', 'colorb'):
+    setp(lienzo, ch, 0.0)
+setp_any(lienzo, ['alpha', 'colora'], 1.0)
+j_fase1 = get_or_make(sala, 'cropTOP', 'juego_fase1', 880, 760)
+connect(j_fase1, sel_fase1, 0)
+lado_j = 0.5 * (1.0 - 560.0 / 1280.0)
+setp_any(j_fase1, ['cropleft'], lado_j)
+setp_any(j_fase1, ['cropright'], 1.0 - lado_j)
+juego_ok = [encima('juego_sala', r1, lienzo, 'left', 'top', 880, 680, margen=0),
+            encima('juego_lado', j_fase1, sala.op('juego_sala'), 'right', 'top', 1100, 680, margen=0)]
+base_mon = get_or_make(sala, 'switchTOP', 'monitor_base', 1100, 440)
+connect(base_mon, r1, 0)
+connect(base_mon, sala.op('juego_lado'), 1)
+setexpr(base_mon, 'index', "1 if %s else 0" % JUEGO_EXPR)
+colocados = [encima('con_plano', rp, base_mon, 'right', 'bottom', 880, 360)]
 if transparente:
     con_rotulo = get_or_make(sala, 'overTOP', 'con_rotulo', 1320, 360)
     connect(con_rotulo, rot, 0)
@@ -720,6 +893,48 @@ if transparente:
 else:
     ultimo = sala.op('con_plano')
     info('rotulo_sala: no pude hacer transparente su fondo; el rotulo se ve en su nodo')
+# v24: el titulo y el rotulo de la demo GENoZilla, encima de todo (salen en salida_sala)
+TXT = "parent().op('sala_motor').module.%s(absTime.frame)"
+f_titulo, f_rotulo = fuente('Space Grotesk'), fuente('Inter')
+velo = get_or_make(sala, 'constantTOP', 'titulo_velo', 1320, 840)
+setmenu(velo, ['outputresolution'], ['custom'], None)
+setp_any(velo, ['resolutionw'], 1280)
+setp_any(velo, ['resolutionh'], 720)
+for ch in ('colorr', 'colorg', 'colorb'):
+    setp(velo, ch, 0.02)
+setp_any(velo, ['alpha', 'colora'], sm.VELO)
+t_ante, _ = texto_top('titulo_ante', 1100, 920, 1280, 720, "parent().op('sala_motor').module.titulo_texto('ante', "
+                      "absTime.frame)", 22, sm.AMBAR, f_titulo, pos_y=95)
+t_nom, _ = texto_top('titulo_demo', 1100, 1000, 1280, 720, "parent().op('sala_motor').module.titulo_texto('nombre', "
+                     "absTime.frame)", 64, (0.91, 0.92, 0.95), f_titulo, pos_y=10)
+t_sub, _ = texto_top('titulo_sub', 1100, 1080, 1280, 720, "parent().op('sala_motor').module.titulo_texto('sub', "
+                     "absTime.frame)", 24, (0.55, 0.58, 0.64), f_rotulo, pos_y=-75)
+capa = velo
+for k_, (nm_, o_) in enumerate((('titulo_c1', t_ante), ('titulo_c2', t_nom), ('titulo_c3', t_sub))):
+    ov = get_or_make(sala, 'overTOP', nm_, 1320, 920 + 80 * k_)
+    connect(ov, o_, 0)
+    connect(ov, capa, 1)
+    setmenu(ov, ['size', 'outputresolution'], ['input2', 'in2'], None)
+    capa = ov
+fundido = get_or_make(sala, 'levelTOP', 'titulo_fundido', 1540, 1000)
+connect(fundido, capa, 0)
+titulo_ok = setexpr(fundido, 'opacity', TXT % 'titulo_alfa')
+rot_demo, rot_transp = texto_top('rotulo_demo', 1100, 1200, 1152, 84, TXT % 'rotulo_demo', 22,
+                                 (0.91, 0.92, 0.95), f_rotulo, fondo=(0.02, 0.027, 0.04, 0.82), envolver=True)
+rot_fundido = get_or_make(sala, 'levelTOP', 'rotulo_fundido', 1320, 1200)
+connect(rot_fundido, rot_demo, 0)
+rotulo_ok = setexpr(rot_fundido, 'opacity', TXT % 'rotulo_alfa')
+colocados.append(encima('con_rotulo_demo', rot_fundido, ultimo, 'center', 'bottom', 1540, 440, margen=16))
+colocados.append(encima('con_titulo', fundido, sala.op('con_rotulo_demo'), 'center', 'center', 1540, 520, margen=0))
+ultimo = sala.op('con_titulo')
+if titulo_ok and rotulo_ok:
+    ok('titulo_demo y rotulo_demo: el titulo de cada capitulo de GENoZilla (2,8 s sobre un velo, con fundido; '
+       '%s) y el rotulo abajo (%s), encima del monitor y en salida_sala' % (f_titulo, f_rotulo))
+else:
+    info('titulo_demo / rotulo_demo: no pude enlazar su opacidad (Level TOP: Opacity); revisa titulo_fundido y '
+         'rotulo_fundido')
+if all(juego_ok):
+    ok('Vista = juego: la sala desde la entrada (720 x 720) y la imagen de FASE1 en grande (560 x 720), lado a lado')
 monitor = get_or_make(sala, 'nullTOP', 'monitor_sala', 1540, 360)
 connect(monitor, ultimo, 0)
 salida = get_or_make(sala, 'outTOP', 'salida_sala', 1760, 360)
@@ -873,6 +1088,7 @@ def prueba(t):
     guarda = {}
     for o, nm in ((sala, 'Personas'), (sala, 'Ruidopublico'), (sala, 'Volumendrone'), (sala, 'Modoluz'),
                   (sala, 'Hzprueba'), (sala, 'Activa'), (sala, 'Vista'), (sala, 'Bruma'), (sala, 'Demo'),
+                  (sala, 'Monigotes'), (sala, 'Arcoquietud'), (sala, 'Capitulo'), (sala, 'Guion'),
                   (fase1, 'Fuentemic'), (fase1, 'Chopmic')):
         try:
             guarda[(o, nm)] = getattr(o.par, nm).eval()
@@ -1093,15 +1309,19 @@ def _prueba(t, m):
             '%.0f grados en horizontal desde %.1f m' % (sm.fov_cenital(c), cam['y']))
     sala.par.Vista = 'visitante'
     sala.par.Personas = 4
+    sala.par.Monigotes = False
     c = sm.cfg()
     ps = sm.personas(c, 120.0, ev)
     cue = sm._filas_personas(c, eq, 120.0)
-    t.check('v5: el publico sin cabeza: un tronco por persona, de toda su altura',
+    t.check('v5: sin Monigotes, el publico es un tronco por persona, de toda su altura (sin cabeza)',
             len(cue) == len(ps) > 0 and sala.op('cabezas') is None
             and all(abs(q[7] - p[3]) < 1e-9 for q, p in zip(cue, ps)))
+    sala.par.Monigotes = True
     # v5: las demos de visita
     sala.par.Personas = 8
     for demo in sm.DEMOS:
+        if demo == 'genozilla':         # v24: la mueve su coreografia (se prueba aparte, abajo)
+            continue
         sala.par.Demo = demo
         c = sm.cfg()
         sm._PLANES.clear()
@@ -1221,6 +1441,165 @@ def _prueba(t, m):
         finally:
             W['mic']['t'] = t_onset
     t.check('leyenda SALA', sm.legend().startswith('SALA') and 'personas' in sm.legend())
+    prueba_monigotes(t, m, eq)
+    prueba_genozilla(t, m)
+
+
+def prueba_monigotes(t, m, eq):
+    """v24: los monigotes, vistos por la camara cenital como los troncos."""
+    import numpy as np
+    sala.par.Demo = 'paseo'
+    sala.par.Personas = 8
+    sala.par.Monigotes = True
+    c = sm.cfg()
+    ev = sm.evitar_de(eq)
+    sm._PLANES.clear()
+    quietos, peor_h, fuera, sexo = 0, 0.0, 0, True
+    for k in range(30):
+        tt = 60.0 + 7.0 * k
+        for i in range(8):
+            e = sm.estado_persona(c, i, tt, ev)
+            if e is None or e['andando']:
+                continue
+            h = sm.altura(i)
+            pz = sm.piezas_monigote(i, e['x'], e['z'], h, e['rumbo'], e['andado'], False)
+            sexo = sexo and (len(pz['conos']) == (i % 2)) and pz['bolas']
+            img = sm.alturas_planta(np, pz, e['x'] - 0.4, e['z'] - 0.4, 0.8, 0.8, px=0.01)
+            quietos += 1
+            peor_h = max(peor_h, abs(float(img.max()) - h))
+            fs, cs = np.nonzero(img > 0.01)
+            X, Z = (cs + 0.5) * 0.01 - 0.4, (fs + 0.5) * 0.01 - 0.4
+            a = e['rumbo']
+            lat, fre = X * math.cos(a) - Z * math.sin(a), X * math.sin(a) + Z * math.cos(a)
+            fuera += int(((np.abs(lat) > 0.5 * sm.TRONCO[0] + 0.01) | (np.abs(fre) > 0.5 * sm.TRONCO[1] + 0.01)).sum())
+    t.check('v24: monigotes: la coronilla a la altura de la persona (3 cm) y la huella dentro de la del tronco '
+            '(0,42 x 0,26 m, girado como ella); hombre las personas pares, mujer (vestido) las impares',
+            quietos > 0 and peor_h <= 0.03 and fuera == 0 and sexo,
+            '%d personas quietas, %.1f cm de diferencia como mucho, %d pixeles fuera' % (quietos, 100 * peor_h, fuera))
+    c1 = m.cfg()
+    x0, z0 = sm.de_suelo(c1, 0.0, 0.0)
+    bien, cuentas = True, []
+    for k in range(20):
+        tt = 60.0 + 11.0 * k
+        dentro, lejos = [], 0
+        for i, x, z, h, _ in sm.personas(c, tt, ev):
+            xf, yf = sm.a_suelo(c1, x, z)
+            if 0.0 <= xf <= c1['ancho_sala'] and 0.0 <= yf <= c1['fondo_sala']:
+                dentro.append((xf, yf))
+            elif -0.15 <= xf <= c1['ancho_sala'] + 0.15 and -0.15 <= yf <= c1['fondo_sala'] + 0.15:
+                lejos += 1              # en el borde: se le ve la cabeza o no
+        # dos cabezas a menos de Separacioncabezas cuentan como una (fase 24)
+        grupos = []
+        for q in dentro:
+            cerca = [g for g in grupos if any(math.hypot(q[0] - p_[0], q[1] - p_[1]) < c1['sep_cabezas'] for p_ in g)]
+            for g in cerca:
+                grupos.remove(g)
+            grupos.append(sum(cerca, []) + [q])
+        dentro = len(dentro)
+        juntos = dentro - len(grupos)
+        cuenta = []
+        for mon in (True, False):
+            sm._PIEZAS['clave'] = None
+            pz = sm.piezas_personas(dict(c, monigotes=mon), eq, tt, t_arco=0)
+            img = sm.alturas_planta(np, pz, x0, z0, c1['ancho_sala'], c1['fondo_sala'], px=0.02)
+            cuenta.append(len(m.detectar_cabezas(img, c1)))
+        bien = bien and dentro - juntos <= cuenta[0] <= dentro + lejos
+        cuentas.append((dentro, cuenta[0], cuenta[1]))
+    sm._PIEZAS['clave'] = None
+    t.check('v24: la fase 24 cuenta cada monigote una vez en la imagen de la camara cenital (paseo, 8 personas; '
+            'el tronco plano, de 0,42 m, salia dos veces)', bien,
+            'personas en el suelo cubierto / monigotes contados / troncos contados: %s'
+            % ' '.join('%d/%d/%d' % q for q in cuentas[:8]))
+    andando, parados = [], []
+    for k in range(200):
+        tt = 60.0 + 0.5 * k
+        for i in range(8):
+            e = sm.estado_persona(c, i, tt, ev)
+            if e is None:
+                continue
+            pz = sm.piezas_monigote(i, e['x'], e['z'], 1.75, e['rumbo'], e['andado'], e['andando'])
+            (andando if e['andando'] else parados).append(max(abs(f[3]) for f in pz['cajas']))
+    t.check('v24: las piernas se balancean al andar (15 grados) y quietos estan rectas',
+            andando and 10.0 <= max(andando) <= sm.BALANCEO + 1e-6 and parados and max(parados) == 0.0,
+            '%.1f grados como mucho andando, %d instantes' % (max(andando or [0.0]), len(andando)))
+    medio = sm.filas_arco(0.0, 0.0, 0.5)
+    t.check('v24: el arco de quietud se completa al cumplir su tiempo (Tfila), en el suelo y ambar',
+            not sm.filas_arco(0.0, 0.0, 0.0) and len(medio) == sm.ARCO_SEGS // 2
+            and len(sm.filas_arco(0.0, 0.0, 2.0)) == sm.ARCO_SEGS and all(f[1] < 0.02 for f in medio)
+            and tuple(medio[0][9:12]) == tuple(sm.AMBAR))
+    sm._PIEZAS['clave'] = None
+    con = sm.piezas_personas(dict(c, arco_quietud=True), eq, 120.0, t_arco=4.0)
+    sm._PIEZAS['clave'] = None
+    t.check('v24: los monigotes y el arco, instanciados (personas, personas_bolas, personas_conos, arcos) y en la '
+            'camara cenital (sin el arco)',
+            all(sala.op(n_) is not None and sala.op('i_' + n_) is not None
+                for n_ in ('personas', 'personas_bolas', 'personas_conos', 'arcos'))
+            and all(n_ in str(sala.op('render_cenital').par.geometry.val).split()
+                    for n_ in ('personas', 'personas_bolas', 'personas_conos'))
+            and 'arcos' not in str(sala.op('render_cenital').par.geometry.val).split() and con['arcos'],
+            '%d piezas de arco a los 120 s' % len(con['arcos']))
+
+
+def prueba_genozilla(t, m):
+    """v24: la demo GENoZilla en tiempo simulado, capitulo a capitulo; al acabar, FASE1
+    como estaba."""
+    import copy
+    caps = sm.CAPITULOS
+    t.check('v24: GENoZilla: 13 capitulos (unos 3 min 50 s); en los de las armas, solo la suya',
+            len(caps) == 13 and 220.0 <= sum(cp['dur'] for cp in caps) <= 240.0
+            and all([a for a in sm.ARMAS if caps[k]['pars'].get(a)] == [sm.ARMAS[k - 7]] for k in range(7, 12))
+            and not any(caps[k]['pars'].get(a) for k in list(range(7)) + [12] for a in sm.ARMAS),
+            '%.0f s' % sum(cp['dur'] for cp in caps))
+    sala.par.Demo = 'genozilla'
+    sala.par.Guion = True
+    motor_ = fase1.op('motor')
+    W0 = copy.deepcopy(motor_.fetch('W', None))
+    antes = dict((nm, getattr(fase1.par, nm).eval()) for nm in sm.ARMAS + ('Fuente', 'Modojuego', 'Tfila',
+                                                                          'Barsperturn'))
+    vista0 = str(sala.par.Vista.eval())
+    F = sm.Fase1(fase1)
+    res = sm.simular_demo(sm.cfg(), F)
+    for k, bien, que in res:
+        t.check('v24: GENoZilla %d %s: %s' % (k, caps[k]['nombre'], COMPRUEBA[k]), bien, que)
+    t.check('v24: GENoZilla: se juegan los 13 capitulos', len(res) == 13, '%d' % len(res))
+    W1 = motor_.fetch('W', None)
+    despues = dict((nm, getattr(fase1.par, nm).eval()) for nm in antes)
+    tb = fase1.op('escenas')
+    hueco = [r for r in range(tb.numRows) if tb[r, 0].val == sm.GZ_HUECO] if tb is not None else []
+    t.check('v24: al salir de la demo FASE1 queda como estaba: el mismo mundo (Guardarescena / Cargarescena en '
+            'antes_demo), las armas, Fuente, Modojuego, Tfila y el giro; y la Vista de la sala',
+            W1 == W0 and despues == antes and not hueco and str(sala.par.Vista.eval()) == vista0
+            and sm._guardado() is None,
+            '' if despues == antes else 'antes %s, despues %s' % (antes, despues))
+    g = dict(sm._GZ)
+    try:
+        sm._GZ.update(activo=True, cap=5, t_titulo=100.0, t0=100.0 + sm.TITULO)
+        alfas = [sm.alfa_titulo(100.0 + u) for u in (0.1, 1.0, 2.6, 3.0)]
+        rot = sm.rotulo_texto(100.0 + sm.TITULO + 3.5, F)
+        ante = sm.titulo_texto('ante')
+    finally:
+        sm._GZ.clear()
+        sm._GZ.update(g)
+    t.check('v24: el titulo de cada capitulo: 2,8 s con fundido de entrada y de salida, y su antetitulo',
+            0.0 < alfas[0] < 0.5 and alfas[1] == 1.0 and 0.0 < alfas[2] < 1.0 and alfas[3] == 0.0
+            and ante == 'FORMA DE JUGAR 5 / 11', '%s  %s' % (['%.2f' % a for a in alfas], ante))
+    t.check('v24: el rotulo explica lo que pasa, con los tiempos de FASE1 (Tfila)',
+            ('%g segundos' % fase1.par.Tfila.eval()) in rot, rot)
+    sala.par.Vista = 'juego'
+    t.check('v24: Vista = juego: la sala desde la entrada y la imagen de FASE1 lado a lado (monitor_base), con el '
+            'titulo y el rotulo encima del monitor',
+            sm.vista('fov') == sm.FOV_JUEGO and sm.ojos(sm.cfg())[0][2] > 0.0
+            and all(sala.op(n_) is not None for n_ in ('juego_lado', 'monitor_base', 'titulo_demo', 'rotulo_demo',
+                                                       'con_titulo', 'con_rotulo_demo'))
+            and sala.op('monitor_sala').inputs and sala.op('monitor_sala').inputs[0] == sala.op('con_titulo'))
+
+
+COMPRUEBA = ['marca de jugador en la celda de cada persona', 'ocupacion en las celdas con gente y una corona',
+             'un brote del mal y el monstruo en forma grande', 'el brote crece y desborda a sus vecinas',
+             'rescatado: geologia o arquitectura con su ocupacion', 'cae (acum 0) y la zanja queda fijada',
+             'muere ahogado y aparece otro', 'acorralado pierde acum; si alguien se va, se escapa',
+             'el pisoton le baja acum de 8', 'petrificado', 'el grito abre un pozo en su celda y cae',
+             'aturdido y un relampago', 'un resultado de ronda y la noche']
 
 
 def distancia_xz(a, b):
@@ -1228,8 +1607,9 @@ def distancia_xz(a, b):
 
 
 run_test(fase1, prueba)
-print('  Ahora: mira salida_sala (todo en una imagen; Vista = entrada, visitante, orbita o')
-print('  cenital). Modoluz = prueba recorre la luz en un minuto; Bruma, los haces en el aire.')
+print('  Ahora: mira salida_sala (todo en una imagen; Vista = entrada, visitante, orbita,')
+print('  cenital o juego). Modoluz = prueba recorre la luz en un minuto; Bruma, los haces en el aire.')
+print('  Demo = genozilla: el publico juega a GENoZilla capitulo a capitulo (Vista = juego).')
 print('  Palmada: la oye FASE1. Personas y Ruidopublico para mas o menos publico.')
 print('  ' + sm.legend())
 print('=' * 66)
