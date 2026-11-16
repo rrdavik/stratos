@@ -53,7 +53,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v10  (autoprueba: los remates del mal solo cuentan desde la fase 39)'
+VERSION = 'fase12 v11  (autoprueba: de noche las luces a oscuras no son un fallo; los remates del mal, desde la 39)'
 banner(VERSION)
 
 base = require_base(12)
@@ -170,9 +170,15 @@ def _prueba(t, m):
             all(x in nombres for x in ('uCiudad', 'uSeq1', 'uSeq2')) and 'edificio' in PIEL_PIXEL
             and all(mat == 'mat_piel_ciudad' for g, mo, mat in geos if mo.startswith('edi_'))
             and any(mo.startswith('edi_') for g, mo, mat in geos))
-    t.check('los uniformes del shader (luces, familia) se evaluan sin error',
-            not malos and all(v > 0 for v in col), '; '.join(malos[:2]) or
-            'color x dimmer %s' % ' '.join('%.2f' % v for v in col))
+    try:                                # v11: de noche (fase 28) las luces estan a oscuras, y es correcto
+        dia = float(m.dia())
+    except Exception:
+        dia = 1.0
+    t.check('los uniformes del shader (luces, familia) se evaluan sin error; las luces encendidas (o a oscuras '
+            'porque es de noche: un entierro de otra autoprueba abre la noche de la fase 28)',
+            not malos and (all(v > 0 for v in col) or dia < 0.999), '; '.join(malos[:2]) or
+            'color x dimmer %s%s' % (' '.join('%.2f' % v for v in col),
+                                     '   (de noche: dia %.2f)' % dia if dia < 0.999 else ''))
     # 2. velocidad -> material: Sembrar con Velprueba 10 y 120 (por el camino real)
     nota = int(base.par.Nota)
     i = m.note_cell(nota)

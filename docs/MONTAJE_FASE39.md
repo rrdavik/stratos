@@ -13,7 +13,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase39_mal.py').read())
 
 **Antes de lanzarla:** copia la carpeta `sprites/` del repositorio dentro de la carpeta de los scripts (`C:/Users/DareDave/Downloads/est/sprites/mal_emblemas.png`). Si falta, el informe dice `FALLO mal_atlas: no encuentro ...`.
 
-También cambian, solo en su autoprueba: `fase12_moduladores.py` v10 (los remates del mal cuentan desde la fase 39) y `fase33_monstruo.py` v3 (con la fase 39 prueba el velo provisional con `Especiemal` apagado).
+También cambian, solo en su autoprueba: `fase12_moduladores.py` v10 y v11 (los remates del mal cuentan desde la fase 39; de noche, las luces a oscuras no son un fallo) y `fase33_monstruo.py` v3 (con la fase 39 prueba el velo provisional con `Especiemal` apagado).
 
 ---
 
