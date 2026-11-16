@@ -313,7 +313,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v19  (la piel por turnos y el mapa por cajas; nucleo 8 y mas hoja; el agua se desborda)'
+VERSION = 'fase11 v20  (autoprueba: el volcan en calma se mide en un instante sin erupcion, no a la hora de TouchDesigner)'
 banner(VERSION)
 
 base = require_base(11)
@@ -896,7 +896,13 @@ def _prueba_oceano(t, m):
             % len(pies), pies and secos and 'mangle' in costa and 'palmera' in costa, 'costa: %s' % sorted(costa))
     # 5. volcanes: con Volcanes 1, el cono suelto es un volcan con crater, lava y penacho
     Wv = mundo([i], m.ARQ, int(c['th_crown']), 110)
-    instv = m.build_instances(Wv, c, absTime.seconds + 10.0)
+    paso = m.step_dur(c, 120.0)
+    compas = paso * int(c['steps_per_beat']) * int(c['beats_per_bar'])
+    serie = [m.erupcion(c, i, k * 0.25 * compas, paso) for k in range(4 * (m.ERUPCION_CADA[1] + 2))]
+    # v20: el volcan en calma, en un instante sin erupcion (con absTime + 10 s podia caer en una
+    # erupcion, segun la hora de TouchDesigner, y entonces la erupcion no tenia 'mas humo')
+    t_calma = next(k for k, v in enumerate(serie) if v <= 0) * 0.25 * compas
+    instv = m.build_instances(Wv, c, t_calma)
     terv = m.terreno(Wv, c)
     sel = rej['celda'] == i
     L = terv['L'] if terv['L'] is not None else np.zeros_like(terv['E'])
@@ -907,9 +913,6 @@ def _prueba_oceano(t, m):
             [v[0] for v in terv['volcanes']] == [i] and terv['centro'][i] < borde - 0.02 * terv['hmax']
             and L[sel].max() > 0.9 and ((L > 0.2) & (L < 0.7)).any() and len(instv.get('humo', [])) >= 3
             and not m.rasgos_terreno(Wv, dict(c, volcanes=0.0))[1]['volcanes'])
-    paso = m.step_dur(c, 120.0)
-    compas = paso * int(c['steps_per_beat']) * int(c['beats_per_bar'])
-    serie = [m.erupcion(c, i, k * 0.25 * compas, paso) for k in range(4 * (m.ERUPCION_CADA[1] + 2))]
     activos = sum(1 for v in serie if v > 0)
     t0 = next(k for k, v in enumerate(serie) if v > 0) * 0.25 * compas
     inste = m.build_instances(Wv, c, t0 + 0.3 * compas)
