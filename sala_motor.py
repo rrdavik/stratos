@@ -80,9 +80,15 @@
 #               La sala guarda la escena de FASE1 (y su mundo) al entrar y la
 #               devuelve al salir; con Guion, prepara cada capitulo con
 #               guion_demo del motor de FASE1 (motor v119).
+#   v14         GENoZilla anda un tercio mas lento (motor v120, fase 33 v4): los
+#               capitulos que lo frenan a proposito lo frenan en proporcion
+#               (Canal: Pasomonstruo 72; Relampago: 120) y el Cerco dura 2,5 s mas
+#               (21,5 s): al abrirse, los otros tres se quedan donde estan (ya no lo
+#               siguen) y le da tiempo a escapar; la comprobacion mira que salga de la
+#               celda en la que lo acorralaron.
 # =============================================================================
 
-SALA_VERSION = 'sala v13'
+SALA_VERSION = 'sala v14'
 
 import math
 
@@ -1676,7 +1682,7 @@ CAPITULOS = [
                          'siguiente.')]),
     dict(nombre='Canal: el agua lo ahoga',
          sub='Una fila de 4 cava hasta el agua. Llena a x4 y desborda a x2 hacia la zanja vecina.',
-         dur=21.0, pars=dict(Zanjajuego=True, Rios=False, Pasomonstruo=48, Esperamonstruo=3.0), arco=True,
+         dur=21.0, pars=dict(Zanjajuego=True, Rios=False, Pasomonstruo=72, Esperamonstruo=3.0), arco=True,
          coreo=_sitios([('suelo', 3, 7.5), ('suelo', 4, 7.5), ('suelo', 5, 7.5), ('suelo', 6, 7.5)])
          + [[0.3, j, ('casilla', 'fila', j)] for j in range(4)]
          + [[13.0, 0, ('suelo', 2, 8.6)], [13.2, 1, ('suelo', 4, 7.8)], [13.4, 2, ('suelo', 7, 8.6)],
@@ -1688,10 +1694,10 @@ CAPITULOS = [
                   (14.0, 'Al poco aparece otro.')]),
     dict(nombre='Cerco', sub='Las celdas con alguien quieto son muro. Sin nada a su alcance, no come y pierde lo '
                              'devorado.',
-         dur=19.0, pars=dict(Armacerco=True, Tfila=60.0),
+         dur=21.5, pars=dict(Armacerco=True, Tfila=60.0),      # v14: 2,5 s mas (el monstruo, mas lento)
          coreo=[[-1.0, j, ('monstruo', db, dl)] for j, (db, dl) in enumerate(((0, -1), (0, 1), (1, 0), (-1, 0)))]
-         + _sigue(0, ('monstruo', 0, -1), 0.0, 19.0) + _sigue(1, ('monstruo', 0, 1), 0.0, 19.0)
-         + _sigue(2, ('monstruo', 1, 0), 0.0, 19.0) + _sigue(3, ('monstruo', -1, 0), 0.0, 14.0)
+         + _sigue(0, ('monstruo', 0, -1), 0.0, 14.5) + _sigue(1, ('monstruo', 0, 1), 0.0, 14.5)
+         + _sigue(2, ('monstruo', 1, 0), 0.0, 14.5) + _sigue(3, ('monstruo', -1, 0), 0.0, 14.0)
          + [[14.5, 3, ('suelo', 10, 8)]],
          rotulos=[(0.0, 'Cuatro visitantes rodean al monstruo grande mientras aparece.'),
                   (4.6, 'Acorralado: no alcanza nada que comer y pierde un escalon por compas.'),
@@ -1728,7 +1734,7 @@ CAPITULOS = [
                   (5.0, 'El ruido de la sala pasa el umbral: se abre un pozo en su celda y cae.'),
                   (9.0, 'El grito tarda {recarga} segundos en recargarse.')]),
     dict(nombre='Relampago', sub='Una fila que cava a una celda o menos del monstruo lo deja aturdido.',
-         dur=15.0, pars=dict(Armarelampago=True, Zanjajuego=True, Rios=False, Pasomonstruo=80), arco=True,
+         dur=15.0, pars=dict(Armarelampago=True, Zanjajuego=True, Rios=False, Pasomonstruo=120), arco=True,
          coreo=_sitios([('suelo', 6, 6.6), ('suelo', 7, 6.6), ('suelo', 8, 6.6), ('suelo', 1, 7)])
          + [[0.0, j, ('casilla', 'fila', j)] for j in range(3)],
          rotulos=[(0.0, 'Tres visitantes se plantan en fila junto al monstruo.'),
@@ -2316,6 +2322,7 @@ def observar(F, now, tc):
             reg['caida0'] = True
         if mo.get('acorralado'):
             reg['acorralado'] = True
+            reg.setdefault('celda_cerco', mo.get('celda'))      # v14: de donde tiene que escapar
             reg.setdefault('acum_cerco', mo.get('acum', 0))
             reg['acum_cerco_min'] = min(reg.get('acum_cerco_min', 99), mo.get('acum', 0))
         if mo.get('piedra') is not None and now < mo['piedra']:
@@ -2325,6 +2332,8 @@ def observar(F, now, tc):
         if reg.get('murio'):
             reg['reaparece'] = True
     reg['acorralado_fin'] = bool(vivo and mo.get('acorralado'))
+    if vivo and reg.get('celda_cerco') is not None and mo.get('celda') != reg['celda_cerco']:
+        reg['escapa'] = True                # v14: el cerco se abrio y salio de su celda
     if mo.get('estado') == 'muere':
         reg['murio'] = True
     reg['n_max'] = max(reg.get('n_max', 0), mo.get('n', 0))
@@ -2388,10 +2397,13 @@ def comprobar_capitulo(F, k, reg, now):
                                                             reg.get('n_max', 0)))
     if k == 7:
         baja = reg.get('acum_cerco_min', 99) < reg.get('acum_cerco', -1)
-        return (bool(reg.get('acorralado')) and baja and not reg.get('acorralado_fin'),
-                'acorralado %s, acum %s -> %s, al final %s' % (
+        # v14: que se escapa es que sale de la celda en la que lo acorralaron (antes: que al
+        # final no estuviera acorralado; con el monstruo mas lento, en la celda a la que
+        # escapa lo vuelven a cercar los que estan cerca)
+        return (bool(reg.get('acorralado')) and baja and bool(reg.get('escapa')),
+                'acorralado %s, acum %s -> %s, %s' % (
                     bool(reg.get('acorralado')), reg.get('acum_cerco', '-'), reg.get('acum_cerco_min', '-'),
-                    'acorralado' if reg.get('acorralado_fin') else 'libre'))
+                    'se escapa' if reg.get('escapa') else 'no sale de su celda'))
     if k == 8:
         return (reg.get('acum_min', 99) < 8 and reg.get('acum_ini', 0) >= 8,
                 'acum %s -> %s' % (reg.get('acum_ini', '-'), reg.get('acum_min', '-')))

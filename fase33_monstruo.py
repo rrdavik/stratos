@@ -65,7 +65,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v3  (autoprueba: con la fase 39, el velo provisional con Especiemal apagado)'
+VERSION = 'fase33 v4  (GENoZilla un tercio mas lento: Pasomonstruo 24, Pasogrande 12)'
 banner(VERSION)
 
 base = require_base(33)
@@ -82,8 +82,19 @@ add_par(base, page, 'float', 'Tamanoinicial', 'Tamano inicial (celdas)', 0.5, 0.
 add_par(base, page, 'int', 'Ocupacionmax', 'Ocupacion maxima', 8, 4, 16, clamp=True)
 add_par(base, page, 'int', 'Ritmodevora', 'Ritmo de devorar (escalones por paso)', 2, 1, 10, clamp=True)
 add_par(base, page, 'int', 'Ritmogrande', 'Ritmo grande (escalones por paso)', 3, 1, 10, clamp=True)
-add_par(base, page, 'int', 'Pasomonstruo', 'Paso del monstruo (semicorcheas)', 16, 1, 64, clamp=True)
-add_par(base, page, 'int', 'Pasogrande', 'Paso grande (semicorcheas)', 8, 1, 64, clamp=True)
+add_par(base, page, 'int', 'Pasomonstruo', 'Paso del monstruo (semicorcheas)', 24, 1, 128, clamp=True)
+add_par(base, page, 'int', 'Pasogrande', 'Paso grande (semicorcheas)', 12, 1, 128, clamp=True)
+# v4: GENoZilla anda un tercio mas lento (16 -> 24 y 8 -> 12 semicorcheas por celda). Un
+# proyecto con los valores de antes pasa a los nuevos una sola vez; el tope sube a 128
+for _nm, _viejo, _nuevo in (('Pasomonstruo', 16, 24), ('Pasogrande', 8, 12)):
+    renew_default(base, _nm, _viejo, _nuevo)
+    try:
+        _p = getattr(base.par, _nm)
+        if float(_p.max) < 128:
+            _p.normMax = 128
+            _p.max = 128
+    except Exception:
+        pass
 add_par(base, page, 'float', 'Costezanja', 'Coste en zanja', 2.0, 1.0, 5.0, clamp=True)
 add_par(base, page, 'int', 'Recalculo', 'Recalculo de objetivo (pasos)', 4, 1, 32, clamp=True)
 add_par(base, page, 'float', 'Esperamonstruo', 'Espera de reaparicion (s)', 8.0, 0.0, 120.0, clamp=True)
@@ -91,7 +102,7 @@ add_par(base, page, 'toggle', 'Verobjetivo', 'Ver objetivo', True)
 add_par(base, page, 'pulse', 'Simmonstruo', 'Simular monstruo')
 add_par(base, page, 'int', 'Simceldamon', 'Celda del monstruo simulado', 0, 0, m.N - 1)
 ok('pagina Fase33: Umbralaparicion 0,25, Tamanoinicial 0,5, Ocupacionmax 8, Ritmodevora 2, Ritmogrande 3, '
-   'Pasomonstruo 16, Pasogrande 8, Costezanja 2, Recalculo 4, Esperamonstruo 8 s, Verobjetivo, Simmonstruo, '
+   'Pasomonstruo 24, Pasogrande 12 (v4: un tercio mas lento), Costezanja 2, Recalculo 4, Esperamonstruo 8 s, Verobjetivo, Simmonstruo, '
    'Simceldamon')
 
 # -----------------------------------------------------------------------------
@@ -274,7 +285,7 @@ def _prueba(t, m, copy):
     S.semis(W, c, int(c['paso_monstruo']) - 1)
     quieto = mo['celda']
     S.semis(W, c, 1)
-    t.check('avanza una celda por el camino cada Pasomonstruo (16) semicorcheas', quieto == a
+    t.check('avanza una celda por el camino cada Pasomonstruo (24) semicorcheas', quieto == a
             and mo['celda'] != a and mo['celda'] in m.NEIGH[a] and mo['objetivo'] == lejos,
             '%s -> %s' % (quieto, mo['celda']))
 

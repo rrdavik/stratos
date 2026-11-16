@@ -179,6 +179,20 @@
 #                 brotes, un monstruo ya grande, una zanja hecha, el fin de ronda) y
 #                 pone la musica de la demo. Solo actua con Demo = genozilla en SALA;
 #                 el juego no cambia.
+#                 Motor v120 (fase 11 v21, fase 33 v4, fase 39 v3, comun v89): el OCEANO
+#                 es la primera capa de todos los temas: con Oceano, en la ciudad y la
+#                 industria las celdas vacias son mar y cada celda ocupada un muelle
+#                 (isla llana de costa recta; las vecinas se unen) sobre el que se apoya
+#                 lo construido (base_radius); el mar no sedimenta y el monstruo no lo
+#                 cruza en ningun tema. Biblioteca nueva: tiendas (quiosco, mercadillo,
+#                 colmado, bajos, galeria, bloque con bajos, mercado) y campos de futbol
+#                 (potrero, campo, estadio) en la ciudad; la torre petrolifera, que si se
+#                 sigue construyendo encima se convierte en refineria (RUTA_PETROLEO), y
+#                 termicas de gas, de carbon y el ciclo combinado en la industria; la
+#                 discoteca del mal, con focos que barren el cielo; neon en las
+#                 construcciones finales del mal y sus yates en el mar; los demonios
+#                 grandes, un 30 % mas pequenos. GENoZilla anda un tercio mas lento
+#                 (Pasomonstruo 24, Pasogrande 12).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -190,7 +204,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v119'
+MOTOR_VERSION = 'motor v120'
 
 import math
 import time as _time
@@ -425,7 +439,7 @@ DEFAULT_CFG = dict(
     # fases 32 a 37: el juego «El devorador» (lo apagado por defecto: Modojuego y las armas)
     modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1,
     umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3,
-    paso_monstruo=16, paso_grande=8, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
+    paso_monstruo=24, paso_grande=12, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0,
     zanja_juego=1, profundidad_agua=4, ritmo_agua=4, desborde_agua=2, ahoga=0.5,
     aliados=3, t_aliados=3.0, luz_juego=1,
@@ -988,8 +1002,22 @@ def column_radii(W, cfg, c):
 
 
 def base_radius(W, cfg, i):
-    """Donde se apoyan formaciones, luz y reticula de la celda: su suelo."""
-    return suelo(W, cfg, i)
+    """Donde se apoyan formaciones, luz y reticula de la celda: su suelo (y, motor v120,
+    con Oceano en la ciudad y la industria, la meseta de su isla o la lamina del mar)."""
+    return suelo(W, cfg, i) + isla_construida(W, cfg, i)
+
+
+def isla_construida(W, cfg, i):
+    """Motor v120: el oceano es la primera capa de todos los temas. Con Oceano, en la
+    ciudad y la industria cada celda ocupada es una isla llana de costa recta (un muelle:
+    ISLA_ALTO, como las de la naturaleza) y lo construido se apoya en su meseta; una
+    celda vacia es mar, y lo que pasa por ella (carreteras, tuberias) va sobre el agua,
+    OCEANO_LIFT por encima de su loseta. En la naturaleza, 0: el relieve va aparte."""
+    if not cfg.get('oceano') or cfg['nivel'] < 11 or tema_de(cfg) == 'naturaleza':
+        return 0.0
+    if W['occ'][i] > 0 and W['own'][i]:
+        return isla_alto(W['occ'][i])
+    return OCEANO_LIFT
 
 
 def max_laguna(W, cfg):
@@ -2129,7 +2157,7 @@ def sedimenta(W, cfg):
     en este mundo (ocupada, con carga, nacida en el o erosionada en el) y donde las
     personas dejaron su huella (inclusiones, fase 25) o abrieron una escision (fase 29).
     Motor v100."""
-    if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza' or not cfg.get('oceano'):
+    if cfg['nivel'] < 11 or not cfg.get('oceano'):          # motor v120: en todos los temas
         return [True] * N
     t0 = W.get('ciclo_t0')
     quit_ = W.get('quitadas') or [0] * N
@@ -2200,7 +2228,7 @@ def inundar(W, cfg, dt):
     hondonadas con agua. Devuelve cuantas hay."""
     agua = W.setdefault('agua', {})
     ritmo = float(cfg.get('inundacion', 0.0))
-    if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza' or not cfg.get('oceano') or ritmo <= 0.0:
+    if cfg['nivel'] < 11 or not cfg.get('oceano') or ritmo <= 0.0:     # motor v120: en todos los temas
         if agua:
             agua.clear()
         _TERRENO['agua'] = {}
@@ -2731,6 +2759,9 @@ def _build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False
         build_fulguritas(W, cfg, now, out)
     if lvl >= 32:                   # fases 32 a 34: el juego (marcas, monstruo, tocon, brotes del mal, agua)
         build_juego(W, cfg, now, out)
+    luz_mal = out.pop('luz_mal', None)  # motor v120: los haces, el neon y los yates del mal, en la luz local
+    if luz_mal and lvl >= 18:
+        out['luz_local'] = list(out.get('luz_local') or []) + luz_mal
     out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
@@ -5269,6 +5300,386 @@ MODELOS.update(MODELOS_MAL)
 for _m in MODELOS_MAL:                  # como se apoyan (las mide el motor: build_mal)
     PIE[_m] = ('esbelto', 0.9)
     ANCHO[_m] = _ancho_natural(_m)
+# --- motor v120: tiendas, mercados y campos de futbol; petroleo, refinerias y termicas;
+# la discoteca del mal ------------------------------------------------------------------
+# Lo que la naturaleza gano en la fase 11 v14 (mas especies, mas detalle), en lo
+# construido. Disenos nuevos de la misma gramatica, al final de DISENOS (las semillas de
+# los de antes no cambian), cada uno en la lista de su tipo (la celda elige entre ellos
+# con su semilla, como siempre):
+#   CIUDAD     informal: quiosco y mercadillo (caseta), colmado (casa), bajos comerciales
+#              (tres plantas), el potrero (racimo: un campo de futbol de tierra entre las
+#              casas); planificada: campo de futbol y galeria de tiendas (pabellon), bloque
+#              con bajos comerciales (bloque), mercado de abastos (manzana) y el estadio
+#              (podio). Cesped, tierra y gradas, fachadas nuevas del shader de la ciudad.
+#   INDUSTRIA  la torre petrolifera (brote de la mina). Una celda petrolifera (la torre o
+#              el balancin) que sigue creciendo se convierte en REFINERIA: separadores,
+#              refineria pequena, craqueo con esferas y el complejo petroquimico (RUTA
+#              _PETROLEO), en vez de la escalera de la mina. Termicas de gas y de carbon y
+#              el ciclo combinado (energia).
+#   MAL        la discoteca (sala de fiestas): caja negra con un tambor de neon y focos
+#              que barren el cielo (luz local aditiva).
+CIUDAD_V120 = dict(caseta=['quiosco', 'mercadillo'], casa=['colmado'], tresplantas=['bajos'], racimo=['potrero'],
+                   pabellon=['campofutbol', 'galeriatiendas'], bloque=['bloquebajos'], manzana=['mercado'],
+                   podio=['estadio'])
+INDUSTRIA_V120 = dict(brote=['torrepetrolera'], refineria=['petroquimica'], termica=['termicagas', 'termicacarbon'],
+                      central=['ciclocombinado'])
+PETROLIFERAS = ('balancin', 'torrepetrolera')
+RUTA_PETROLEO = {2: ['separadora'], 3: ['refinerita'], 4: ['craqueo'], 5: ['refineria', 'petroquimica']}
+MAL_V120 = dict(salafiestas=['discoteca'])
+F_CESPED, F_TIERRA, F_GRADA = 15, 16, 17
+FACHADAS += ['cesped', 'tierra', 'grada']
+TOLDOS = ('toldo', 'toldoa', 'toldov', 'toldom')
+COL_REMATE.update(toldoa=(0.16, 0.42, 0.72), toldov=(0.20, 0.55, 0.30), toldom=(0.92, 0.70, 0.16),
+                  raya=(0.94, 0.95, 0.92), porteria=(0.96, 0.96, 0.96), torrefoco=(0.42, 0.43, 0.45),
+                  puesto=(0.50, 0.42, 0.34), cajas=(0.62, 0.46, 0.26), rotulociu=(0.86, 0.22, 0.18),
+                  esfera=(0.90, 0.90, 0.88), arbolito=(0.22, 0.42, 0.18), marquesinaciu=(0.80, 0.80, 0.78),
+                  anillociu=(0.94, 0.95, 0.92))
+REMATES_LOD = REMATES_LOD + ('raya', 'cajas', 'porteria', 'arbolito')
+
+
+def _toldo_de(G):
+    return TOLDOS[int(G.u(0, len(TOLDOS) - 0.01))]
+
+
+def _gen_quiosco(G):
+    """Quiosco: una caseta con el mostrador abierto, el toldo de color y la prensa."""
+    s = G.u(0.22, 0.26)
+    k = G.add(_v(0.0, 0.0, s, s * 0.8, 0.0, 0.9, fach=F_ZOCALO, slot=int(G.u(0, 3.99)), hueco=0.8, hm=-0.9))
+    G.rem += [_rem(_toldo_de(G), 0.0, 0.72, s * 0.4 + 0.05, s=s * 1.3, alto=0.12, vol=k),
+              _rem('cajas', s * 0.75, 0.0, 0.05, s=0.07, alto=0.35, vol=k),
+              _rem('techo1', 0.0, 0.9, 0.0, s=s * 1.15, alto=0.25, vol=k)]
+
+
+def _gen_mercadillo(G):
+    """Mercadillo: tres puestos con toldos de colores, cajas de fruta y la gente."""
+    for q in range(3):
+        x = -0.28 + 0.28 * q
+        z = G.u(-0.06, 0.06)
+        G.rem.append(_rem('puesto', x, 0.0, z, s=0.22, alto=0.75, giro=G.u(-6.0, 6.0)))
+        G.rem.append(_rem(_toldo_de(G), x, 0.72, z + 0.02, s=0.26, alto=0.1, largo=0.24))
+        G.rem.append(_rem('cajas', x + 0.05, 0.0, z + 0.14, s=0.08, alto=0.25))
+    G.add(_v(0.0, -0.3, 0.7, 0.04, 0.0, 0.15, fach=F_CIEGA, slot=SLOT_TECHO))      # el bordillo
+    G.add(_v(0.0, 0.34, 0.62, 0.12, 0.0, 0.9, fach=F_ZOCALO, slot=int(G.u(0, 3.99)), hueco=0.8, hm=-0.9))   # los locales
+
+
+def _gen_colmado(G):
+    """Colmado: la casa que crece con la tienda en la planta baja (escaparate iluminado,
+    toldo, cajas en la acera y el rotulo)."""
+    c = _cuarto0(G)
+    c['fach'], c['hm'], c['hueco'] = F_ZOCALO, -1.0, 0.75
+    k = G.add(c)
+    G.add(_v(c['x'], c['z'], c['w'] * 1.08, c['d'] * 1.08, 1.0, 1.1, fach=F_CIEGA, slot=SLOT_TECHO, pila=0))
+    G.rem += [_rem(_toldo_de(G), c['x'], 0.78, c['z'] + c['d'] * 0.5 + 0.05, s=c['w'] * 0.95, alto=0.12, vol=k),
+              _rem('rotulociu', c['x'], 0.9, c['z'] + c['d'] * 0.5 + 0.01, s=c['w'] * 0.6, alto=0.12, largo=0.02,
+                   vol=k),
+              _rem('cajas', c['x'] + c['w'] * 0.35, 0.0, c['z'] + c['d'] * 0.5 + 0.08, s=0.07, alto=0.3, vol=k),
+              _rem('varillas', c['x'], 1.1, c['z'], s=c['w'] * 0.8, alto=0.4, vol=k),
+              _rem('deposito', c['x'] - c['w'] * 0.25, 1.1, c['z'] - c['d'] * 0.2, s=0.07, alto=0.35, vol=k)]
+
+
+def _gen_bajos(G):
+    """Bajos comerciales: la casa de tres plantas sobre dos tiendas con sus toldos."""
+    c0 = _cuarto0(G)
+    cs = _pila(G, c0, 3, desplaza=0.03)
+    cs[0] = dict(cs[0], fach=F_ZOCALO, hm=-1.0, hueco=0.8, w=cs[0]['w'] * 1.15)
+    ks = [G.add(c) for c in cs]
+    b = cs[0]
+    for q, dx in enumerate((-0.25, 0.25)):
+        G.rem.append(_rem(_toldo_de(G), b['x'] + dx * b['w'], 0.78, b['z'] + b['d'] * 0.5 + 0.05, s=b['w'] * 0.45,
+                          alto=0.12, vol=ks[0]))
+    t = cs[-1]
+    G.rem += [_rem('antena', t['x'] + 0.05, 3.0, t['z'], s=0.04, alto=1.2, vol=ks[-1]),
+              _rem('techo', t['x'], 3.0, t['z'], s=t['w'], alto=0.3, vol=ks[-1])]
+
+
+def _rayas(G, w, d, y, xc=0.0, zc=0.0):
+    """Las lineas del campo de futbol (w x d, a la altura y en plantas): banda, fondo,
+    medio campo, las areas y el circulo central."""
+    g = 0.012
+    for z in (-d / 2, d / 2):
+        G.rem.append(_rem('raya', xc, y, zc + z, s=w, alto=0.02, largo=g))
+    for x in (-w / 2, 0.0, w / 2):
+        G.rem.append(_rem('raya', xc + x, y, zc, s=g, alto=0.02, largo=d))
+    for sx in (-1, 1):
+        a = 0.16 * w
+        G.rem.append(_rem('raya', xc + sx * (w / 2 - a), y, zc, s=g, alto=0.02, largo=0.55 * d))
+        G.rem.append(_rem('raya', xc + sx * (w / 2 - a / 2), y, zc - 0.275 * d, s=a, alto=0.02, largo=g))
+        G.rem.append(_rem('raya', xc + sx * (w / 2 - a / 2), y, zc + 0.275 * d, s=a, alto=0.02, largo=g))
+        G.rem.append(_rem('porteria', xc + sx * (w / 2 + 0.008), y, zc, s=0.02, alto=0.3, largo=0.13 * d, giro=0.0))
+    G.rem.append(_rem('anillociu', xc, y, zc, s=0.22 * d, alto=0.02, largo=0.22 * d))
+
+
+def _gen_potrero(G):
+    """El potrero: un campo de futbol de tierra entre las casas del racimo, con dos
+    porterias de palos y la gente mirando desde las azoteas."""
+    w, d = 0.6, 0.36
+    G.add(_v(0.0, 0.08, w, d, 0.0, 0.04, fach=F_TIERRA, slot=SLOT_TECHO))
+    _rayas(G, w * 0.94, d * 0.9, 0.04, 0.0, 0.08)
+    for k in range(4):
+        x = -0.33 + 0.22 * k + G.u(-0.02, 0.02)
+        alto = int(G.u(1, 3.99))
+        c0 = _v(x, -0.32, G.u(0.17, 0.21), G.u(0.14, 0.18), 0.0, 1.0, fach=F_IRREGULAR, slot=int(G.u(0, 3.99)),
+                hueco=G.u(0.3, 0.5), giro=round(G.u(-G.obl, G.obl), 1), pila=k)
+        cs = _pila(G, c0, alto, desplaza=0.02, pila=k)
+        ks = [G.add(c) for c in cs]
+        G.rem.append(_rem('techo', cs[-1]['x'], cs[-1]['y1'], cs[-1]['z'], s=cs[-1]['w'], alto=0.3, vol=ks[-1]))
+    G.rem.append(_rem('arbolito', 0.42, 0.0, 0.36, s=0.1, alto=1.2))
+
+
+def _gen_campofutbol(G):
+    """Campo de futbol: cesped a franjas con sus lineas, porterias, una grada cubierta
+    a un lado y cuatro torres de focos."""
+    w, d = 0.84, 0.5
+    G.add(_v(0.0, 0.06, w, d, 0.0, 0.05, fach=F_CESPED, slot=SLOT_PIEDRA))
+    _rayas(G, w * 0.92, d * 0.88, 0.05, 0.0, 0.06)
+    k = G.add(_v(0.0, -0.38, w * 0.7, 0.12, 0.0, 1.0, fach=F_GRADA, slot=SLOT_CUERPO, hueco=0.5, top=0.7))
+    G.rem.append(_rem('marquesinaciu', 0.0, 1.0, -0.38, s=w * 0.72, alto=0.1, largo=0.16, vol=k))
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            G.rem.append(_rem('torrefoco', sx * (w / 2 + 0.03), 0.0, 0.06 + sz * (d / 2 + 0.03), s=0.05, alto=5.0,
+                              giro=45.0 * sx * sz))
+
+
+def _gen_galeriatiendas(G):
+    """Galeria de tiendas: una fila de locales de una planta, cada uno con su escaparate
+    iluminado y su toldo, y la marquesina corrida."""
+    n = 4
+    w = 0.2
+    for q in range(n):
+        x = -0.3 + 0.2 * q
+        G.add(_v(x, 0.0, w * 0.96, 0.34, 0.0, 1.0 + 0.15 * (q % 2), fach=F_ZOCALO, slot=SLOT_CUERPO, hueco=0.85,
+                 hm=-1.0))
+        G.rem.append(_rem(_toldo_de(G), x, 0.78, 0.2, s=w * 0.9, alto=0.12))
+    G.rem += [_rem('marquesinaciu', 0.0, 1.0, 0.0, s=0.84, alto=0.08, largo=0.4),
+              _rem('arbolito', -0.36, 0.0, 0.34, s=0.1, alto=1.2), _rem('arbolito', 0.36, 0.0, 0.34, s=0.1, alto=1.2)]
+
+
+def _gen_bloquebajos(G):
+    """Bloque con bajos comerciales: la planta baja de tiendas (zocalo iluminado,
+    toldos) y encima viviendas en reticula."""
+    w, d = G.u(0.66, 0.74), G.u(0.24, 0.28)
+    G.add(_v(0.0, 0.0, w, d, 0.0, 1.0, fach=F_ZOCALO, slot=SLOT_PIEDRA, hueco=0.85, hm=-1.0))
+    k = G.add(_v(0.0, 0.0, w, d, 1.0, 7.0, fach=F_RETICULA, slot=SLOT_CUERPO, hueco=0.5))
+    for q in range(3):
+        G.rem.append(_rem(_toldo_de(G), (-0.3 + 0.3 * q) * w, 0.78, d / 2 + 0.04, s=w * 0.26, alto=0.12, vol=0))
+    G.rem += [_rem('maquinaria', 0.2 * w, 7.0, 0.0, s=0.08, alto=0.6, vol=k),
+              _rem('cubierta', -0.25 * w, 7.0, 0.0, s=0.12, alto=0.3, vol=k)]
+
+
+def _gen_mercado(G):
+    """Mercado de abastos: la nave de hierro y vidrio (dientes de sierra), los puestos
+    al aire libre en la plaza y el rotulo."""
+    k = G.add(_v(0.0, -0.1, 0.74, 0.5, 0.0, 2.2, fach=F_SIERRA, slot=SLOT_CUERPO, hueco=0.8, hm=1.6))
+    G.rem.append(_rem('sierra', 0.0, 2.2, -0.1, s=0.74, alto=0.6, vol=k, largo=0.5))
+    G.rem.append(_rem('rotulociu', 0.0, 1.6, 0.15 + 0.012, s=0.3, alto=0.25, largo=0.02, vol=k))
+    for q in range(4):
+        x = -0.33 + 0.22 * q
+        G.rem.append(_rem('puesto', x, 0.0, 0.34, s=0.15, alto=0.7))
+        G.rem.append(_rem(TOLDOS[(q + G.var) % len(TOLDOS)], x, 0.68, 0.35, s=0.18, alto=0.1, largo=0.16))
+
+
+def _gen_estadio(G):
+    """El estadio: el campo y cuatro gradas que lo cierran (la de tribuna, mas alta y
+    cubierta) y cuatro torres de focos en las esquinas."""
+    w, d = 0.56, 0.36
+    G.add(_v(0.0, 0.0, w, d, 0.0, 0.08, fach=F_CESPED, slot=SLOT_PIEDRA))
+    _rayas(G, w * 0.92, d * 0.86, 0.08, 0.0, 0.0)
+    g = 0.15
+    for x, z, ww, dd, alto in ((0.0, -(d / 2 + g / 2), w + 2 * g, g, 4.0), (0.0, d / 2 + g / 2, w + 2 * g, g, 3.0),
+                               (-(w / 2 + g / 2), 0.0, g, d, 3.0), (w / 2 + g / 2, 0.0, g, d, 3.0)):
+        G.add(_v(x, z, ww, dd, 0.0, alto, fach=F_GRADA, slot=SLOT_CUERPO, hueco=0.5))
+    G.rem.append(_rem('marquesinaciu', 0.0, 4.0, -(d / 2 + g / 2), s=w + 2 * g, alto=0.12, largo=g * 1.4, vol=0))
+    for sx in (-1, 1):
+        for sz in (-1, 1):
+            G.rem.append(_rem('torrefoco', sx * (w / 2 + g + 0.01), 0.0, sz * (d / 2 + g + 0.01), s=0.05, alto=8.0,
+                              giro=45.0 * sx * sz))
+
+
+# la industria: el petroleo
+def _llama(G, x, z, alto, r=0.012):
+    k = _cil(G, x, z, r, 0.0, alto, slot=1, rol='antorcha')
+    G.rem.append(_rem('llama', x, alto, z, s=0.05, alto=0.0, vol=k))
+    return k
+
+
+def _gen_torrepetrolera(G):
+    """La torre petrolifera: la torre de perforacion (celosia que se afila), la caseta,
+    el balancin al lado, el tanque y la balsa de lodos."""
+    G.add(_v(0.0, 0.0, 0.3, 0.3, 0.0, 0.25, fach=F_CIEGA, slot=1, rol='base'))
+    k = G.add(_v(0.0, 0.0, 0.2, 0.2, 0.25, 4.5, fach=F_CELOSIA, slot=6, top=0.22, rol='torre'))
+    G.add(_v(0.24, -0.04, 0.16, 0.14, 0.0, 0.7, fach=F_RETICULA, slot=5, hueco=0.3, rol='caseta'))
+    G.rem += [_rem('mastil', 0.0, 4.5, 0.0, s=0.05, alto=0.6, vol=k),
+              _rem('balancin', -0.3, 1.0, 0.24, s=0.22, alto=0.45, vol=0)]
+    G.add(_v(-0.3, 0.24, 0.18, 0.06, 0.0, 0.25, fach=F_CIEGA, slot=1, rol='base'))
+    G.add(_v(-0.3, 0.24, 0.035, 0.05, 0.25, 1.0, fach=F_CELOSIA, slot=7, top=0.6, rol='poste'))
+    _cil(G, 0.28, 0.3, 0.08, 0.0, 0.8, slot=2, rol='tanque')
+    G.rem.append(_rem('terril', 0.3, 0.0, -0.3, s=0.16, alto=0.3, vol=0))
+
+
+def _gen_separadora(G):
+    """Separadores (el petrolifero que crece, etapa 2): los balancines siguen, los
+    tanques de separacion, la primera antorcha y la tuberia."""
+    for q in range(2):
+        x, z = -0.3 + 0.24 * q, -0.24 + 0.1 * q
+        G.add(_v(x, z, 0.2, 0.07, 0.0, 0.3, fach=F_CIEGA, slot=1, rol='base'))
+        k = G.add(_v(x, z, 0.04, 0.05, 0.3, 1.5, fach=F_CELOSIA, slot=7, top=0.6, rol='poste'))
+        G.rem.append(_rem('balancin', x, 1.5, z, s=0.24, alto=0.5, vol=k))
+    for q, (x, z) in enumerate(((0.12, 0.2), (0.3, 0.2), (0.21, 0.02))):
+        _cil(G, x, z, 0.075, 0.0, 1.6 + 0.4 * q, slot=3, rol='tanque')
+    _llama(G, -0.34, 0.32, 3.5)
+    G.rem.append(_rem('tuberia', 0.0, 0.6, 0.1, s=0.03, alto=0.1, giro=20.0, vol=0, largo=0.6))
+
+
+def _gen_refinerita(G):
+    """Refineria pequena (etapa 3): dos columnas de destilacion, el bastidor de
+    tuberias, cuatro tanques y la antorcha."""
+    for q, a in enumerate((7.0, 5.5)):
+        _cil(G, -0.2 + 0.1 * q, -0.15, 0.04, 0.0, a, slot=3, rol='columna')
+    G.add(_v(0.05, 0.02, 0.44, 0.07, 0.0, 1.8, fach=F_CELOSIA, slot=7, rol='bastidor'))
+    for x, z in ((0.22, 0.24), (-0.04, 0.3), (0.3, -0.16), (0.3, 0.04)):
+        _cil(G, x, z, 0.08, 0.0, 0.8, slot=3, rol='tanque')
+    _llama(G, -0.36, 0.34, 9.0)
+
+
+def _gen_craqueo(G):
+    """Craqueo (etapa 4): columnas altas, el reactor, las esferas de gas, los
+    bastidores y dos antorchas."""
+    for q, a in enumerate((12.0, 9.0, 10.5)):
+        _cil(G, -0.24 + 0.09 * q, -0.18 + 0.04 * (q % 2), 0.035, 0.0, a, slot=3, rol='columna')
+    _cil(G, 0.02, -0.2, 0.07, 0.0, 6.0, slot=1, top=0.8, rol='reactor')
+    G.add(_v(0.0, 0.05, 0.6, 0.07, 0.0, 2.2, fach=F_CELOSIA, slot=7, rol='bastidor'))
+    for x, z in ((0.22, 0.28), (0.02, 0.32), (-0.18, 0.3)):
+        G.rem.append(_rem('esfera', x, 0.0, z, s=0.15, alto=1.6, vol=0))
+    _llama(G, 0.38, -0.34, 13.0)
+    _llama(G, 0.4, 0.38, 10.0, r=0.01)
+
+
+def _gen_petroquimica(G):
+    """El complejo petroquimico (etapa 5): un bosque de columnas, dos reactores,
+    bastidores cruzados, esferas, tanques de techo flotante y tres antorchas."""
+    for q in range(6):
+        a = (14.0, 10.0, 12.0, 8.0, 11.0, 9.0)[q]
+        _cil(G, -0.3 + 0.07 * q, -0.24 + 0.05 * (q % 2), 0.03, 0.0, a, slot=3, rol='columna')
+    for x in (0.18, 0.3):
+        _cil(G, x, -0.24, 0.06, 0.0, 7.0, slot=1, top=0.8, rol='reactor')
+    G.add(_v(0.0, -0.04, 0.72, 0.06, 0.0, 2.4, fach=F_CELOSIA, slot=7, rol='bastidor'))
+    G.add(_v(-0.06, 0.1, 0.06, 0.36, 0.0, 2.0, fach=F_CELOSIA, slot=7, rol='bastidor'))
+    for x, z in ((0.16, 0.18), (0.34, 0.18)):
+        G.rem.append(_rem('esfera', x, 0.0, z, s=0.15, alto=1.6, vol=0))
+    for x, z in ((-0.3, 0.3), (-0.14, 0.34), (0.16, 0.38), (0.34, 0.38)):
+        _cil(G, x, z, 0.075, 0.0, 0.8, slot=3, rol='tanque')
+    for x, z, a in ((-0.42, -0.42, 15.0), (0.43, -0.4, 12.0), (0.44, 0.04, 10.0)):
+        _llama(G, x, z, a, r=0.011)
+
+
+def _gen_termicagas(G):
+    """Termica de gas: la sala de calderas, dos chimeneas finas con bandas, el
+    gasometro y la subestacion."""
+    _calderas(G, -0.12, -0.12, 0.34, 0.26, 3.5)
+    G.add(_v(-0.12, 0.17, 0.4, 0.14, 0.0, 1.6, fach=F_RETICULA, slot=5, hueco=0.5, rol='turbinas'))
+    for x in (0.14, 0.24):
+        _chimenea(G, x, -0.28, 0.035, 10.0)
+    _cil(G, 0.26, 0.2, 0.13, 0.0, 2.6, slot=1, rol='gasometro')
+    G.rem.append(_rem('subestacion', -0.32, 0.0, 0.34, s=0.16, alto=0.9, vol=0))
+
+
+def _gen_termicacarbon(G):
+    """Termica de carbon: la caldera alta, la chimenea de ladrillo, dos torres de
+    refrigeracion, el parque de carbon y la cinta que lo sube."""
+    _calderas(G, -0.18, -0.14, 0.26, 0.26, 5.0)
+    _chimenea(G, 0.04, -0.32, 0.05, 14.0, balizas=True)
+    for x, z in ((0.24, 0.12), (0.24, -0.16)):
+        _torre_ref(G, x, z, 0.13, 5.0)
+    G.rem += [_rem('terril', -0.3, 0.0, 0.3, s=0.28, alto=1.0, vol=0),
+              _rem('terril', -0.06, 0.0, 0.34, s=0.2, alto=0.7, vol=0),
+              _rem('cinta', -0.22, 1.8, 0.1, s=0.03, alto=0.1, giro=-70.0, vol=0, largo=0.36)]
+
+
+def _gen_ciclocombinado(G):
+    """Ciclo combinado: tres turbinas en fila, cada una con su caldera de recuperacion
+    y su chimenea, la sala de turbinas y la subestacion; sin torres."""
+    for q in range(3):
+        z = -0.28 + 0.24 * q
+        _calderas(G, -0.06, z, 0.24, 0.12, 3.0)
+        _chimenea(G, 0.12, z, 0.035, 9.0, balizas=q == 1)
+    G.add(_v(-0.3, 0.0, 0.14, 0.7, 0.0, 2.0, fach=F_RETICULA, slot=5, hueco=0.5, rol='turbinas'))
+    G.rem.append(_rem('subestacion', 0.32, 0.0, 0.3, s=0.2, alto=1.0, vol=0))
+
+
+# el mal: la discoteca
+def _gen_discoteca(G):
+    """Discoteca: caja negra con la cornisa de neon, el tambor de neon encima, la
+    entrada con su marquesina y la cola, y seis focos que barren el cielo."""
+    G.add(_v(0.0, -0.04, 0.6, 0.46, 0.0, 1.6, fach=F_NEON, slot=SL_NEGRO, hueco=0.0))
+    G.add(_v(0.0, -0.04, 0.3, 0.3, 1.6, 2.4, fach=F_TORRENEON, slot=SL_NEGRO, hueco=0.8, forma='cil'))
+    G.rem += [_rem('rotulo', 0.0, 1.2, 0.19 + 0.012, s=0.3, alto=0.3, largo=0.02),
+              _rem('marquesina', 0.0, 0.7, 0.24, s=0.26, alto=0.1, largo=0.08),
+              _rem('barrera', 0.16, 0.0, 0.32, s=0.3, alto=0.18, largo=0.015)]
+    for q in range(6):
+        x = -0.24 + 0.096 * q
+        G.rem.append(_rem('foco', x, 1.6, -0.2 + 0.4 * (q % 2), s=0.08, alto=5.0, giro=(-1.0) ** q))
+
+
+_GEN_V120 = dict(quiosco=_gen_quiosco, mercadillo=_gen_mercadillo, colmado=_gen_colmado, bajos=_gen_bajos,
+                 potrero=_gen_potrero, campofutbol=_gen_campofutbol, galeriatiendas=_gen_galeriatiendas,
+                 bloquebajos=_gen_bloquebajos, mercado=_gen_mercado, estadio=_gen_estadio,
+                 torrepetrolera=_gen_torrepetrolera, separadora=_gen_separadora, refinerita=_gen_refinerita,
+                 craqueo=_gen_craqueo, petroquimica=_gen_petroquimica, termicagas=_gen_termicagas,
+                 termicacarbon=_gen_termicacarbon, ciclocombinado=_gen_ciclocombinado, discoteca=_gen_discoteca)
+_GEN_EDI.update(_GEN_V120)
+for _t, _ds in list(CIUDAD_V120.items()) + list(INDUSTRIA_V120.items()) + list(MAL_V120.items()):
+    DISENOS_TIPO[_t] = DISENOS_TIPO[_t] + _ds
+    TIPO_DE_DISENO.update((_d, _t) for _d in _ds)
+DISENOS_TIPO_MAL['salafiestas'] = DISENOS_TIPO['salafiestas']
+for _e, _ds in RUTA_PETROLEO.items():
+    for _d in _ds:
+        TIPO_DE_DISENO.setdefault(_d, TIPOS['mina'][_e - 1])
+DISENOS_V120 = list(_GEN_V120)
+DISENOS = DISENOS + DISENOS_V120             # al final: las semillas de los de antes no cambian
+INFORMALES |= set(d for t in TIPOS['informal'] for d in DISENOS_TIPO[t])
+INDUSTRIALES |= set(d for d in DISENOS_V120 if d in ('torrepetrolera', 'separadora', 'refinerita', 'craqueo',
+                                                     'petroquimica', 'termicagas', 'termicacarbon',
+                                                     'ciclocombinado'))
+MALES |= {'discoteca'}
+DISENOS_IND = DISENOS_IND + [d for d in DISENOS_V120 if d in INDUSTRIALES]
+SIN_PLANTAS = ('campofutbol', 'galeriatiendas', 'estadio', 'potrero', 'mercadillo', 'mercado')   # no suben plantas
+
+
+def _modelos_v120():
+    """Los remates nuevos de la ciudad y la industria (instancias 'ciu_', color por instancia)."""
+    M = {}
+    M['ciu_raya'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
+    M['ciu_porteria'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, -0.42), _losa(-0.5, 0.5, 0.0, 1.0, 0.42, 0.5),
+                         _losa(-0.5, 0.5, 0.9, 1.0, -0.5, 0.5)]
+    M['ciu_torrefoco'] = [_losa(-0.08, 0.08, 0.0, 0.9, -0.08, 0.08), _losa(-0.5, 0.5, 0.86, 1.0, -0.12, 0.12),
+                          _caja(0.0, 0.93, 0.14, 0.9, 0.1, 0.06, 30.0, 0.0, 0.0)]
+    M['ciu_puesto'] = ([_losa(x - 0.04, x + 0.04, 0.0, 0.95, z - 0.04, z + 0.04) for x in (-0.45, 0.45)
+                        for z in (-0.4, 0.4)] + [_losa(-0.5, 0.5, 0.0, 0.42, -0.42, -0.1)])
+    M['ciu_cajas'] = [_losa(-0.5, 0.0, 0.0, 0.5, -0.5, 0.5), _losa(0.05, 0.5, 0.0, 0.45, -0.45, 0.45),
+                      _losa(-0.4, 0.1, 0.5, 1.0, -0.4, 0.4)]
+    M['ciu_rotulociu'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
+    M['ciu_marquesinaciu'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
+    M['ciu_anillociu'] = [_caja(0.45 * math.cos(math.radians(30 * k)), 0.5, 0.45 * math.sin(math.radians(30 * k)),
+                                0.06, 1.0, 0.25, 0.0, -30.0 * k, 0.0) for k in range(12)]
+    M['ciu_esfera'] = [_bola(0.0, 0.62, 0.0, 0.76, 0.76)] + [_losa(x - 0.04, x + 0.04, 0.0, 0.3, z - 0.04, z + 0.04)
+                                                            for x in (-0.22, 0.22) for z in (-0.22, 0.22)]
+    M['ciu_arbolito'] = [_losa(-0.06, 0.06, 0.0, 0.45, -0.06, 0.06), _bola(0.0, 0.7, 0.0, 0.9, 0.62)]
+    for t in TOLDOS[1:]:
+        M['ciu_' + t] = list(M.get('ciu_toldo') or [_caja(0.0, 0.5, 0.0, 1.0, 0.12, 1.0, 18.0, 0.0, 0.0)])
+    for k, prims in M.items():
+        b = _caja_modelo(prims)
+        if b[2] < -1e-6 or b[3] > 1.0 + 1e-6:
+            M[k] = _a_alto_uno(prims)
+    return M
+
+
+MODELOS_V120 = _modelos_v120()
+MODELOS.update(MODELOS_V120)
+for _m in MODELOS_V120:
+    PIE[_m] = ('esbelto', 0.9)
+    ANCHO[_m] = _ancho_natural(_m)
+
+
 _EDIFICIOS = {}
 
 
@@ -7061,6 +7472,8 @@ def diseno_celda(W, cfg, i, esp=None, e=None):
         esp, e, _ = _de_codigo(_codigo_edi(cfg, W, i))
     lista = [d for d in modelos_de(cfg, tema_de(cfg), esp, 'etapa%d' % e) if d in _GEN_EDI] or \
         DISENOS_TIPO[TIPOS[esp][e - 1]]
+    if esp == 'mina' and e >= 2 and petrolifera(W, cfg, i):
+        lista = RUTA_PETROLEO[e]        # motor v120: el pozo que sigue creciendo, refineria
     xs = logistica(semilla_caos(W['vel'][i], i + 131 * e), cfg['caos'], 3)
     f = int(cfg.get('fijar_tipo', 0))
     d = lista[min(len(lista) - 1, f - 1 if f > 0 else int(xs[0] * len(lista)))]
@@ -7069,6 +7482,13 @@ def diseno_celda(W, cfg, i, esp=None, e=None):
         d = 'prisma'
     nv = variantes_de(cfg, d)
     return d, min(nv - 1, int(xs[1] * nv)), int(xs[2] * 4)
+
+
+def petrolifera(W, cfg, i):
+    """Motor v120: la celda i de la mina empezo como pozo de petroleo (su brote es la torre
+    petrolifera o el balancin). Si se sigue construyendo encima, no es una mina: es una
+    refineria (RUTA_PETROLEO). Lo decide la misma semilla que eligio el brote."""
+    return diseno_celda(W, cfg, i, 'mina', 1)[0] in PETROLIFERAS
 
 
 def plantas_de(cfg, W, i, occ=None):
@@ -7091,6 +7511,8 @@ def plantas_de(cfg, W, i, occ=None):
         vig = W['vig'][i] if cfg['nivel'] >= 12 else 1.0
         return ex['alto'] * (1.0 + 0.12 * k) * (0.85 + 0.15 * vig)
     paso = dict(pabellon=0.0, bloque=3.0, manzana=1.0, podio=3.0, rascacielos=4.0)[TIPOS[esp][e - 1]]
+    if d in SIN_PLANTAS:                # motor v120: campos, estadios y mercados no suben plantas
+        paso = 0.0
     return ex['alto'] + paso * k
 
 
@@ -8696,9 +9118,17 @@ def rasgos_terreno(W, cfg, cl=None):
     alto_a, alto_b, collado), ('domo', celda, alto)] y el resumen (cordilleras,
     capitales). Alturas sobre el suelo local, de la ocupacion (no del stop-motion:
     el mapa solo se rehace cuando cambia la ocupacion)."""
-    if cfg['nivel'] < 11 or tema_de(cfg) != 'naturaleza':
+    if cfg['nivel'] < 11 or (tema_de(cfg) != 'naturaleza' and not cfg.get('oceano')):
         return [], dict(cordilleras=0, montes=0, ejes=[], volcanes=[], islas=0, archipielagos=0)
-    clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), GRID['lo'], GRID['hi'],
+    if tema_de(cfg) != 'naturaleza':     # motor v120: la ciudad y la industria, sobre sus muelles
+        clave = ('muelles', tuple(W['occ']), tuple(bool(o) for o in W['own']), GRID['lo'], GRID['hi'])
+        v = _TERRENO.get('rasgos')
+        if v is not None and v[0] == clave:
+            return v[1]
+        v = _muelles(W)
+        _TERRENO['rasgos'] = (clave, v)
+        return v
+    clave = ('nat', tuple(W['occ']), tuple(W['own']), tuple(W['par']), GRID['lo'], GRID['hi'],
              cfg.get('oceano', 0), cfg.get('volcanes', 0.0), cfg['caos'],
              tuple(W['vel']) if cfg.get('volcanes', 0.0) > 0 else None, cfg['umbral_vecindad'], cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], cfg['th_branch'],
              cfg['sat_size'], cfg['umbral_monte'], cfg['altura_monte'], limit(cfg), cfg['seed_frac'],
@@ -8716,6 +9146,39 @@ def rasgos_terreno(W, cfg, cl=None):
         v = _rasgos_terreno(W, cfg, cl)
     _TERRENO['rasgos'] = (clave, v)
     return v
+
+
+MUELLE_K = 1.12             # motor v120: el muelle, x media celda (la planta del edificio es 0,94 x celda)
+
+
+def _muelles(W):
+    """Motor v120: los rasgos de la ciudad y la industria con Oceano. Cada celda ocupada
+    es un muelle (una isla llana de costa recta, ISLA_ALTO segun la ocupacion) y dos
+    celdas ocupadas vecinas se unen por un istmo: un barrio es una sola isla."""
+    tierra = [c for c in range(N) if W['occ'][c] > 0 and W['own'][c]]
+    ts = set(tierra)
+    rasgos = []
+    for c in tierra:
+        rasgos.append(('muelle', c, round(isla_alto(W['occ'][c]), 3), MUELLE_K))
+        for b in NEIGH[c]:
+            if b > c and b in ts:
+                rasgos.append(('istmo', c, b, round(min(isla_alto(W['occ'][c]), isla_alto(W['occ'][b])), 3)))
+    islas = archis = 0
+    vistos = set()
+    for c in tierra:
+        if c in vistos:
+            continue
+        grupo, frente = set([c]), [c]
+        while frente:
+            x = frente.pop()
+            for j in NEIGH[x]:
+                if j in ts and j not in grupo:
+                    grupo.add(j)
+                    frente.append(j)
+        vistos |= grupo
+        islas += 1
+        archis += len(grupo) >= 3
+    return rasgos, dict(cordilleras=0, montes=0, ejes=[], volcanes=[], islas=islas, archipielagos=archis)
 
 
 def _rasgos_terreno(W, cfg, cl=None, islas_W=None):
@@ -8943,6 +9406,29 @@ def _isla_forma(np, rej, c, k, islotes):
     return filas, cols, f
 
 
+def _muelle(np, rej, c, H, k):
+    """Motor v120: el parche del muelle de la celda c (ciudad e industria): una meseta de
+    alto H con la planta casi cuadrada de la celda (una superelipse) y el borde a pico,
+    como un malecon; la costa apenas ondula."""
+    filas, cols, f = _forma(('muelle', GRID['lo'], GRID['hi'], c, k), lambda: _muelle_forma(np, rej, c, k))
+    return filas, cols, H * f, float(H)
+
+
+def _muelle_forma(np, rej, c, k):
+    n = NORMALS[c]
+    e, t = tangents(n)
+    hx, hz = _semiejes(c, k)
+    filas, cols = _ventana(np, n, 1.5 * max(hx, hz))
+    ix = np.ix_(filas, cols)
+    D = rej['D'][ix]
+    x = np.abs(D @ np.array(e) / hx)
+    z = np.abs(D @ np.array(t) / hz)
+    q = (x ** 5 + z ** 5) ** 0.2
+    q = np.where(D @ np.array(n) > 0.0, q, 9.0)
+    f = _smooth(np, 1.0, 0.90, q + 0.06 * (rej['costa'][ix] - 0.5))
+    return filas, cols, f
+
+
 def _istmo(np, rej, a, b, H):
     """El parche del istmo que une las islas de a y b."""
     filas, cols, f = _forma(('istmo', GRID['lo'], GRID['hi'], a, b), lambda: _istmo_forma(np, rej, a, b))
@@ -9057,6 +9543,8 @@ def _parche(np, rej, r):
         v = _isla(np, rej, *r[1:])
     elif r[0] == 'istmo':
         v = _istmo(np, rej, *r[1:])
+    elif r[0] == 'muelle':                  # motor v120
+        v = _muelle(np, rej, *r[1:])
     else:
         c = r[1]
         e_, t_ = tangents(NORMALS[c])
@@ -9119,7 +9607,7 @@ def _suave5(np, A):
 
 
 def _capa_de(r):
-    return 'dom' if r[0] == 'domo' else ('isla' if r[0] in ('isla', 'istmo') else 'rel')
+    return 'dom' if r[0] == 'domo' else ('isla' if r[0] in ('isla', 'istmo', 'muelle') else 'rel')
 
 
 def _caja_de(np, filas, cols):
@@ -9263,7 +9751,7 @@ def terreno(W, cfg, cl=None):
         # cambia. Con el oceano hay unos 450 rasgos y volver a pintarlos todos a cada nota
         # costaba mas de 100 ms: el fotograma entero a 20 fps son 50.
         (Erel, Hrel), (Edom, Hdom), isl = _capas(np, rej, rasgos)
-        Eis, His = isl if any(r[0] in ('isla', 'istmo') for r in rasgos) else (None, None)
+        Eis, His = isl if any(r[0] in ('isla', 'istmo', 'muelle') for r in rasgos) else (None, None)
         # motor v101: si solo cambian rasgos (el mismo reparto, el mismo alto y los mismos
         # hibridos), el mapa se rehace solo en las filas que tocan y un borde de suavizado
         prev = _TERRENO.get('clave')
@@ -15003,12 +15491,11 @@ _MAR_MON = {}
 
 def mar_mon(W, cfg):
     """Motor v118 (fase 39, Montierra): las celdas que son mar para el monstruo, que
-    solo anda por tierra. Con Oceano (naturaleza): las vacias cuyo terreno (suelo y
+    solo anda por tierra. Con Oceano (motor v120: en todos los temas): las vacias cuyo terreno (suelo y
     relieve en su centro) queda a ras del nivel del mar y las hondonadas inundadas
     (W['agua']). Las ocupadas son islas; las zanjas del juego, su trampa (no cuentan).
-    Sin Oceano, o en la ciudad y la industria, todo es tierra."""
-    if cfg['nivel'] < 39 or not cfg.get('mon_tierra', 1) or tema_de(cfg) != 'naturaleza' \
-            or not cfg.get('oceano'):
+    Sin Oceano, todo es tierra."""
+    if cfg['nivel'] < 39 or not cfg.get('mon_tierra', 1) or not cfg.get('oceano'):     # v120: todos los temas
         return frozenset()
     S = suelos_fotograma(W, cfg)
     agua = W.get('agua') or {}
@@ -16126,10 +16613,30 @@ def fila_emblema(p, marco, alto, nombre, luz=1.0, modo='fijo', atras=None):
     return _fila_m(p, marco, 2.0 * alto, alto, atras if atras is not None else alto, (luz, luz, luz)) + [float(q)]
 
 
+COL_HACES = ((1.0, 0.20, 0.62), (0.20, 0.85, 1.0), (0.62, 0.28, 1.0), (1.0, 0.92, 0.80))   # motor v120
+NEON_RAMA = dict(negocio=((1.0, 0.16, 0.55), (1.0, 0.78, 0.25)), ocio=((1.0, 0.16, 0.55), (0.20, 0.90, 1.0),
+                                                                       (0.66, 0.30, 1.0)),
+                 encierro=((1.0, 0.08, 0.06),))
+
+
+def _haz(luz, p, n, eje, ang, rumbo, largo, ancho, col, k):
+    """Motor v120: el haz de un foco del mal, en la luz local (aditiva): una caja larga y
+    fina desde p, inclinada ang grados de la normal hacia rumbo (en el plano de eje), y
+    un halo mas ancho y tenue alrededor."""
+    e, t = eje
+    a, r_ = math.radians(ang), math.radians(rumbo)
+    d = _norm(_add(_mul(n, math.cos(a)), _add(_mul(e, math.cos(r_)), _mul(t, math.sin(r_))), math.sin(a)))
+    luz.append(_row(p, d, ancho, largo, ancho, _tint(col, 0.55 * k)))
+    luz.append(_row(p, d, 3.2 * ancho, 0.8 * largo, 3.2 * ancho, _tint(col, 0.10 * k)))
+    luz.append(_row(p, n, 1.6 * ancho, 0.6 * ancho, 1.6 * ancho, _tint(col, 1.0 * k)))     # la lampara
+
+
 def _remates_mal(ctx, i, inf, ex, ej, p0, sx, sz, H, encendido, out, now):
-    """Los remates del ejemplar del mal en su sitio. Los focos, solo encendidos."""
+    """Los remates del ejemplar del mal en su sitio. Los focos, solo encendidos (motor
+    v120: con su haz de luz, que barre el cielo, en la luz local)."""
     k = 0
     hp = inf['hp']
+    nf = 0
     for r in ex['rem']:
         mo, col = MAL_REM.get(r['tipo'], (None, None))
         if mo is None or mo not in MODELOS:
@@ -16140,6 +16647,15 @@ def _remates_mal(ctx, i, inf, ex, ej, p0, sx, sz, H, encendido, out, now):
                 continue
             barre = round(14.0 * math.sin(0.7 * now + i) / 7.0) * 7.0       # barren el cielo, a saltos
             mk = _marco(i, round(g), 16.0, round(g + (0.0 if r['giro'] > 0 else 180.0) + barre))
+            n = normal_i(i)
+            pf = _en_edi(p0, ej, r['x'] * sx, r['y'] * H, r['z'] * sz)
+            ang = 18.0 + 10.0 * math.sin(0.9 * now + 1.7 * nf + i)
+            rumbo = (g + (0.0 if r['giro'] > 0 else 180.0) + 55.0 * math.sin(0.45 * now + 2.3 * nf + 0.5 * i)
+                     + 60.0 * nf)
+            largo = H * 1.4 + 14.0 * hp
+            _haz(out.setdefault('luz_mal', []), pf, n, (ej[0], ej[2]), ang, rumbo, largo, 0.11 * r['s'] * sx,
+                 COL_HACES[(nf + i) % len(COL_HACES)], 1.0)
+            nf += 1
         else:
             mk = _marco(i, round(g + r['giro']))
         p = _en_edi(p0, ej, r['x'] * sx, r['y'] * H, r['z'] * sz)
@@ -16161,6 +16677,82 @@ def _edificio_mal(ctx, W, cfg, i, ex, ej, p0, sx, sz, H, luces, fin, modo, now, 
     out.setdefault(geometria_de(nombre_edificio(ex['diseno'], ex['var'])), []).append(
         _fila_edi(ctx, p0, ej, (sx, H, sz), alb, 0.55, luces, PALETA_MAL, tinte, 1.0, fin, modo, 0.0))
     return 1
+
+
+def neon_mal(inf, ex, ej, p0, sx, sz, H, luz, now, i):
+    """Motor v120: el neon de las construcciones finales del mal (etapa 4 y 5, encendidas):
+    tubos de luz (luz local, aditiva) que dibujan el contorno de cada volumen en su
+    cubierta y, en la etapa 5, sus aristas y un forjado de cada dos. Del color de su rama;
+    titubea un poco, como un neon de verdad. Devuelve cuantos tubos."""
+    cols = NEON_RAMA.get(inf['rama'] or 'negocio', NEON_RAMA['negocio'])
+    k0 = len(luz)
+    grueso = 0.012 * min(sx, sz)
+    vols = [v for v in ex['vols'] if v['y1'] - v['y0'] > 0.05 and v['forma'] != 'cil' or v['y1'] > 0.6]
+    vols = sorted(vols, key=lambda v: -v['y1'] * max(v['w'], v['d']))[:6]
+    for q, v in enumerate(vols):
+        col = cols[q % len(cols)]
+        parpa = 0.85 + 0.15 * math.sin(7.0 * now + 3.1 * q + i)
+        pl = _planta_vol(v)
+        alturas = [v['y1']]
+        if inf['etapa'] >= 5:
+            plantas = max(1, int(round((v['y1'] - v['y0']) * ex['alto'])))
+            alturas += [v['y0'] + (v['y1'] - v['y0']) * f / plantas for f in range(2, plantas, 2)]
+        for y in alturas:
+            for a, b in zip(pl, pl[1:] + pl[:1]):
+                f = _linea(_en_edi(p0, ej, a[0] * sx, y * H, a[1] * sz), _en_edi(p0, ej, b[0] * sx, y * H, b[1] * sz),
+                           grueso, _tint(col, 0.9 * parpa))
+                if f is not None:
+                    luz.append(f)
+        if inf['etapa'] >= 5 and v['forma'] != 'cil':
+            for a in pl:
+                f = _linea(_en_edi(p0, ej, a[0] * sx, v['y0'] * H, a[1] * sz),
+                           _en_edi(p0, ej, a[0] * sx, v['y1'] * H, a[1] * sz), grueso, _tint(col, 0.7 * parpa))
+                if f is not None:
+                    luz.append(f)
+    return len(luz) - k0
+
+
+YATES_MAL = dict(ocio=(0, 0, 0, 1, 2), negocio=(0, 0, 0, 0, 1))      # por etapa (1 a 5)
+
+
+def yates_mal(W, cfg, ctx, inf, i, now, out, luz):
+    """Motor v120: los yates del mal, en el mar junto a su isla (Oceano): el ocio desde el
+    casino (uno; dos el resort) y el magnate de la gran superficie (uno). Fondeados en las
+    celdas de mar vecinas (vacias y a ras del nivel del mar), se mecen con el oleaje y
+    llevan su linea de neon. Devuelve cuantos."""
+    if not cfg.get('oceano') or inf['rama'] not in YATES_MAL:
+        return 0
+    n_ = YATES_MAL[inf['rama']][inf['etapa'] - 1]
+    if not n_:
+        return 0
+    g0 = nivel_mar(W, cfg)
+    mar = [j for j in NEIGH[i] if W['occ'][j] <= 0 and suelo(W, cfg, j) - g0 < MAR_TIERRA]
+    mar.sort(key=lambda j: _hash01(i, j, 401))
+    hp = inf['hp']
+    k = 0
+    for q, j in enumerate(mar[:n_]):
+        ni, nj = normal_i(i), normal_i(j)
+        f = 0.80 + 0.08 * _hash01(i, j, 403)        # fuera del muelle (1,12 x media celda)
+        n = _norm(_add(_mul(ni, 1.0 - f), _mul(nj, f)))
+        r = suelo(W, cfg, j) + OCEANO_LIFT
+        p = _mul(n, r)
+        cw, cl_ = _cell_sizes(r, j)
+        m_ = min(cw, cl_)
+        rumbo = _rumbo(n, _hacia(n, ni, nj)) + 90.0 + 25.0 * (_hash01(j, i, 405) - 0.5)
+        balanceo = round(4.0 * math.sin(1.3 * now + 2.0 * q + i), 1)
+        mk = _marco(j, round(rumbo), abs(balanceo), round(rumbo) if balanceo >= 0 else round(rumbo) + 180)
+        L, A, Hy = 0.32 * m_, 0.10 * m_, 0.9 * hp
+        out.setdefault(geometria_de('ciu_yate'), []).append(_fila_ciu(ctx, p, mk, (L, Hy, A), MAL_REM['yate'][1]))
+        X, Z = mk[0], mk[2]
+        col = _tint(ROSA_MAL if q % 2 == 0 else (0.2, 0.85, 1.0), 0.8)
+        for y, lado, largo in ((0.45, 0.51, 0.48), (0.45, -0.51, 0.48), (0.76, 0.36, 0.26), (0.76, -0.36, 0.26)):
+            c_ = _add(_add(p, Z, lado * A), n, y * Hy)      # la borda y la cabina, de neon
+            fl = _linea(_add(c_, X, largo * L), _add(c_, X, -largo * L), 0.008 * m_, col)
+            if fl is not None:
+                luz.append(fl)
+        luz.append(_row(_add(p, X, -0.5 * L), n, 0.5 * L, 0.004, 0.8 * A, (0.10, 0.12, 0.14)))     # la estela
+        k += 1
+    return k
 
 
 def dibujar_celda_mal(W, cfg, ctx, E, i, now, paso, out, res):
@@ -16193,6 +16785,12 @@ def dibujar_celda_mal(W, cfg, ctx, E, i, now, paso, out, res):
         piezas += _edificio_mal(ctx, W, cfg, i, ex, ej, p0, sx, sz, H, luces, fin, modo_obra, now, paso, out)
         if s >= 2:
             piezas += _remates_mal(ctx, i, inf, ex, ej, p0, sx, sz, H, luces > 0, out, now)
+        if luces > 0 and inf['etapa'] >= 4:     # motor v120: el neon de las construcciones finales
+            res['neon'] = res.get('neon', 0) + neon_mal(inf, ex, ej, p0, sx, sz, H, out.setdefault('luz_mal', []),
+                                                        now, i)
+        if s >= 2:                              # motor v120: los yates, en el mar
+            res['yates'] = res.get('yates', 0) + yates_mal(W, cfg, ctx, inf, i, now, out,
+                                                           out.setdefault('luz_mal', []))
         if s == 1:                              # la estructura y la grua
             r = ex['radio']
             pg = _en_edi(p0, ej, 0.78 * r * cw, 0.0, -0.5 * r * cl_)
@@ -16297,10 +16895,11 @@ def demonios_mal(W, cfg, altos, out):
         marco = (X, Y, Z, _euler_xyz(X, Y, Z))
         # motor v118: con un cluster grande, el coloso crecia con su radio hasta salirse del
         # planeta; ahora, como mucho, un tercio (la cabeza, un cuarto) del radio del planeta
+        # motor v120: un 30 % mas pequenos (como mucho un sexto y un cuarto del radio)
         if nombre == 'cabeza':
-            alto = min(1.3 * hmax + 0.45 * radio, 0.25 * r0)
+            alto = min(0.9 * hmax + 0.32 * radio, 0.17 * r0)
         else:
-            alto = min(1.8 * hmax + 0.7 * radio, 0.34 * r0)
+            alto = min(1.25 * hmax + 0.5 * radio, 0.24 * r0)
         out['emblemas_mal'].append(fila_emblema(pc, marco, alto, nombre, 1.0, 'detras', min(0.7 * radio, 0.5 * alto)))
     return hechos
 
@@ -16310,7 +16909,7 @@ def build_mal(W, cfg, now, out):
     los demonios. Devuelve el resumen (tambien en W['juego']['mal']['res'])."""
     out['emblemas_mal'] = []
     res = dict(negocio=0, ocio=0, encierro=0, vallas=0, obras=0, emblemas=0, piezas=0, rescate=0.0,
-               demonios=[])
+               demonios=[], neon=0, yates=0)
     if not mal_propio(W, cfg):
         return res
     E = mal_estado(W)
@@ -16378,10 +16977,12 @@ def _legend_mal(W, c):
     if not res:
         return '  MAL      -'
     dem = res['demonios'][0] if res['demonios'] else None
-    return '  MAL      negocio %d  ocio %d  encierro %d  vallas %d   obras %d%s   demonio %s' % (
+    return '  MAL      negocio %d  ocio %d  encierro %d  vallas %d   obras %d%s   demonio %s%s' % (
         res['negocio'], res['ocio'], res['encierro'], res['vallas'], res['obras'],
         '   rescate %.0f%%' % (100 * res['rescate']) if res['rescate'] > 0 else '',
-        '%s (%d celdas)' % dem if dem else '-')
+        '%s (%d celdas)' % dem if dem else '-',
+        '   neon %d  yates %d' % (res.get('neon', 0), res.get('yates', 0))       # motor v120
+        if res.get('neon') or res.get('yates') else '')
 
 
 # --- el rescate simulado y la leyenda -------------------------------------------
@@ -17971,10 +18572,14 @@ def uniformes_piel(W, c, now):
     u = {}
     nat = c['nivel'] >= 11 and tema_de(c) == 'naturaleza'
     lb, ln = _limites_pisos(c) if c['nivel'] >= 11 else (0.65, 0.9)
-    mar = nat and bool(c.get('oceano'))     # motor v97: el mar flota sobre las losetas (z < 0)
+    # motor v97: el mar flota sobre las losetas (z < 0); motor v120: en todos los temas
+    mar = c['nivel'] >= 11 and bool(c.get('oceano'))
     u['uTerreno'] = (0.0, alto_hipso(c) if c['nivel'] >= 11 else 1.0, -OCEANO_LIFT if mar else HUNDIDO, 0.0)
     u['uOceano'] = (1.0 if mar else 0.0, now % 3600.0, nivel_mar(W, c) if mar else 0.0, 1.0 if nat else 0.0)
-    u['uTierra'] = (c.get('tierra', 0.0) if nat else 0.0, 0.0, 0.0, 0.0)     # motor v100: las conchas, de tierra
+    # motor v100: las conchas, de tierra; y motor v120: de que es el suelo de las islas (0 la
+    # naturaleza; 1 la ciudad, losas y muelles; 2 la industria, hormigon, hollin y charcos)
+    u['uTierra'] = (c.get('tierra', 0.0) if nat else 0.0,
+                    float(TEMAS.index(tema_de(c))) if c['nivel'] >= 11 else 0.0, 0.0, 0.0)
     # motor v99: la pradera (GPU): cuantas matas reparte el shader por el planeta y su tamano
     u['uPradera'] = (float(c.get('pradera', 0)) if nat and c.get('detalle', 1) else 0.0, c.get('mata', 0.16), 0.0, 0.0)
     erup = []
@@ -19857,7 +20462,7 @@ def suelo_rasante(W, cfg, lat, lon):
         g = max(g, suelo(W, cfg, celda_de_lonlat(lat - 1.0, lon + dl)),
                 suelo(W, cfg, celda_de_lonlat(lat + 1.0, lon + dl)))
     try:
-        if cfg['nivel'] >= 11 and tema_de(cfg) == 'naturaleza':
+        if cfg['nivel'] >= 11 and (tema_de(cfg) == 'naturaleza' or cfg.get('oceano')):     # v120: y los muelles
             la, lo = math.radians(lat), math.radians(lon)
             d = (math.cos(la) * math.cos(lo), math.sin(la), math.cos(la) * math.sin(lo))
             g += max(0.0, alto_en(terreno(W, cfg), d))
