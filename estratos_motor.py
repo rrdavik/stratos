@@ -170,6 +170,10 @@
 #                 barracon), la obra que termina encendiendo el neon, los emblemas
 #                 (sprites que flotan encima) y el demonio de cada cluster. Va en
 #                 cualquier tema y no entra en la piel del publico.
+#                 Motor v118 (fase 39 v2): con Oceano, el mal tiene su isla (llana) y sus
+#                 edificios se apoyan en ella (el mar los tapaba y solo quedaban los
+#                 emblemas); el coloso, a la escala del planeta; Trumpzilla solo anda por
+#                 tierra (Montierra): no entra en el mar ni en las hondonadas inundadas.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -181,7 +185,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v117'
+MOTOR_VERSION = 'motor v118'
 
 import math
 import time as _time
@@ -425,7 +429,7 @@ DEFAULT_CFG = dict(
     recarga_grito=30.0, t_aturdido=4.0,
     sprite_mon=1, emocion_fija='auto', alto_sprite=0.8,
     # fase 39: la especie del mal
-    especie_mal=1, vecinas_encierro=3, pasos_obra_mal=8, tam_emblema=0.45, demonio_mal=1, alto_mal=1.5,
+    especie_mal=1, vecinas_encierro=3, pasos_obra_mal=8, tam_emblema=0.35, demonio_mal=1, alto_mal=1.5, mon_tierra=1,
 )
 
 
@@ -8700,14 +8704,18 @@ def rasgos_terreno(W, cfg, cl=None):
     v = _TERRENO.get('rasgos')
     if v is not None and v[0] == clave:
         return v[1]
-    if malp:
-        W = dict(W, occ=[0 if W['sp'][i] == MAL else W['occ'][i] for i in range(N)])
-    v = _rasgos_terreno(W, cfg, cl)
+    if malp:                            # motor v118: sin montes, pero con su isla (con Oceano)
+        v = _rasgos_terreno(dict(W, occ=[0 if W['sp'][i] == MAL else W['occ'][i] for i in range(N)]), cfg, cl,
+                            islas_W=W)
+    else:
+        v = _rasgos_terreno(W, cfg, cl)
     _TERRENO['rasgos'] = (clave, v)
     return v
 
 
-def _rasgos_terreno(W, cfg, cl=None):
+def _rasgos_terreno(W, cfg, cl=None, islas_W=None):
+    """islas_W (motor v118, fase 39): el mundo del que salen las islas del oceano, si no
+    es W (las celdas del mal no levantan montes, pero son tierra: su isla, llana)."""
     cl = cl or clusters(W, cfg)
     rel = [c for c in range(N) if W['occ'][c] > 0 and W['own'][c] == ARQ]
     alto = {}
@@ -8743,17 +8751,22 @@ def _rasgos_terreno(W, cfg, cl=None):
         else:
             rasgos.append(('cono', c, round(alto[c], 3), 1.1))
     islas = archis = 0
+    Wi = islas_W if islas_W is not None else W
     if cfg.get('oceano'):                   # motor v97: cada celda ocupada es una isla sobre el mar
-        tierra = [c for c in range(N) if W['occ'][c] > 0 and W['own'][c]]
+        tierra = [c for c in range(N) if Wi['occ'][c] > 0 and Wi['own'][c]]
         ts = set(tierra)
         for c in tierra:
-            sat = W['par'][c] >= 0
-            rasgos.append(('isla', c, round(isla_alto(W['occ'][c]), 3),
-                           round(isla_k(W['occ'][c]) * (0.75 if sat else 1.0), 3),
-                           round(max(0.0, min(1.0, (W['occ'][c] - 2) / 4.0)), 2)))
+            sat = Wi['par'][c] >= 0
+            if islas_W is not None and Wi['sp'][c] == MAL:     # fase 39: el solar del mal, llano y sin islotes
+                rasgos.append(('isla', c, round(isla_alto(Wi['occ'][c]), 3), round(ISLA_K[2], 3), 0.0))
+            else:
+                rasgos.append(('isla', c, round(isla_alto(Wi['occ'][c]), 3),
+                               round(isla_k(Wi['occ'][c]) * (0.75 if sat else 1.0), 3),
+                               round(max(0.0, min(1.0, (Wi['occ'][c] - 2) / 4.0)), 2)))
             for b in NEIGH[c]:              # dos islas vecinas que crecen se unen por un istmo
-                if b > c and b in ts and min(W['occ'][c], W['occ'][b]) >= ISTMO_DESDE:
-                    rasgos.append(('istmo', c, b, round(min(isla_alto(W['occ'][c]), isla_alto(W['occ'][b])), 3)))
+                if b > c and b in ts and (min(Wi['occ'][c], Wi['occ'][b]) >= ISTMO_DESDE
+                                          or (islas_W is not None and Wi['sp'][c] == MAL == Wi['sp'][b])):
+                    rasgos.append(('istmo', c, b, round(min(isla_alto(Wi['occ'][c]), isla_alto(Wi['occ'][b])), 3)))
         vistos = set()                      # islas: grupos de celdas ocupadas vecinas; archipielago: 3 o mas
         for c in tierra:
             if c in vistos:
@@ -14919,9 +14932,12 @@ def celda_aparicion(W, cfg, vis=None):
     las celdas con el giro (desempate _hash01). None si no hay ninguna vacia."""
     J = W['juego']
     vis = cara_visible(cfg) if vis is None else vis
-    libre = [i for i in vis if W['occ'][i] <= 0 and i not in J['zanjas']]
+    mar = mar_mon(W, cfg)               # motor v118 (Montierra): aparece en tierra
+    libre = [i for i in vis if W['occ'][i] <= 0 and i not in J['zanjas'] and i not in mar]
     if not libre:
-        libre = [i for i in range(N) if W['occ'][i] <= 0 and i not in J['zanjas']]
+        libre = [i for i in range(N) if W['occ'][i] <= 0 and i not in J['zanjas'] and i not in mar]
+    if not libre and mar:               # todo lo vacio es mar: en una isla (lo construido de la cara visible)
+        libre = [i for i in vis if W['occ'][i] > 0 and W['sp'][i] != MAL and i not in J['zanjas']]
     if not libre:
         return None
     lon0 = float(cfg.get('lon_central', 0.0))
@@ -14976,12 +14992,46 @@ def muros_cerco(W, cfg, now):
     return out
 
 
+MAR_TIERRA = 0.02               # motor v118: por debajo de esto sobre el nivel del mar, es mar
+_MAR_MON = {}
+
+
+def mar_mon(W, cfg):
+    """Motor v118 (fase 39, Montierra): las celdas que son mar para el monstruo, que
+    solo anda por tierra. Con Oceano (naturaleza): las vacias cuyo terreno (suelo y
+    relieve en su centro) queda a ras del nivel del mar y las hondonadas inundadas
+    (W['agua']). Las ocupadas son islas; las zanjas del juego, su trampa (no cuentan).
+    Sin Oceano, o en la ciudad y la industria, todo es tierra."""
+    if cfg['nivel'] < 39 or not cfg.get('mon_tierra', 1) or tema_de(cfg) != 'naturaleza' \
+            or not cfg.get('oceano'):
+        return frozenset()
+    S = suelos_fotograma(W, cfg)
+    agua = W.get('agua') or {}
+    zj = (W.get('juego') or {}).get('zanjas') or {}
+    clave = (id(W), S, tuple(W['occ']), tuple(sorted(agua.items())), tuple(sorted(zj)))
+    if _MAR_MON.get('clave') == clave:
+        return _MAR_MON['v']
+    try:
+        centro = terreno(W, cfg)['centro']
+    except Exception:
+        centro = [0.0] * N
+    g = min(S)
+    v = frozenset(c for c in range(N) if W['occ'][c] <= 0 and c not in zj
+                  and (S[c] + centro[c] - g < MAR_TIERRA or agua.get(c, 0.0) > S[c] + 1e-3))
+    _MAR_MON['clave'], _MAR_MON['v'] = clave, v
+    return v
+
+
 def dijkstra_mon(W, cfg, src, muro=()):
     """(coste, previa) de cada celda alcanzable desde src por vecinas6: entrar en
-    una zanja cuesta Costezanja; no entra en el agua ni en el muro."""
+    una zanja cuesta Costezanja; no entra en el agua ni en el muro. Motor v118: con
+    Montierra, tampoco en el mar (solo anda por tierra)."""
     import heapq
     J = W['juego']
     zj, agua = J['zanjas'], J['agua']
+    mar = mar_mon(W, cfg)
+    if mar:
+        muro = set(muro) | mar
     cz = max(1.0, float(cfg['coste_zanja']))
     dist, prev = {src: 0.0}, {}
     heap = [(0.0, src)]
@@ -15109,8 +15159,8 @@ def mover_monstruo(W, cfg, now):
         m['mov'] = 0.0
         return
     nxt = m['camino'][0]
-    if J['agua'].get(nxt, 0) > 0 or nxt not in NEIGH[m['celda']]:
-        recalcular_objetivo(W, cfg, m, now)         # el agua corto el camino
+    if J['agua'].get(nxt, 0) > 0 or nxt not in NEIGH[m['celda']] or nxt in mar_mon(W, cfg):
+        recalcular_objetivo(W, cfg, m, now)         # el agua (o el mar, v118) corto el camino
         return
     zj = J['zanjas']
     k = max(1.0, float(cfg['coste_zanja'])) if (nxt in zj or m['celda'] in zj) else 1.0
@@ -15946,6 +15996,20 @@ def mal_propio(W, cfg):
     return cfg['nivel'] >= 39 and bool(cfg.get('especie_mal', 1)) and juego_on(W, cfg)
 
 
+def suelo_mal(W, cfg, i):
+    """Motor v118: donde se apoya lo del mal en la celda i. Su suelo y, en la naturaleza,
+    el relieve en el centro de la celda (con Oceano, la meseta de su isla: sin ella el
+    mar, que flota sobre las losetas, tapaba los edificios y solo quedaban los emblemas)."""
+    r = base_radius(W, cfg, i)
+    if cfg['nivel'] >= 11 and tema_de(cfg) == 'naturaleza':
+        try:
+            ter = terreno(W, cfg)
+            r += ter['centro'][i]
+        except Exception:
+            pass
+    return r
+
+
 def celdas_mal(W):
     return [i for i in range(N) if W['occ'][i] > 0 and W['sp'][i] == MAL]
 
@@ -16098,7 +16162,7 @@ def dibujar_celda_mal(W, cfg, ctx, E, i, now, paso, out, res):
     """Una celda del mal: su edificio (o su valla, o su obra), sus remates y su emblema."""
     inf = info_mal(W, cfg, i, E)
     n = normal_i(i)
-    p0 = _mul(n, base_radius(W, cfg, i))
+    p0 = _mul(n, suelo_mal(W, cfg, i))
     cw, cl_ = _cell_sizes(_len(p0), i)
     sx, sz = 0.94 * cw, 0.94 * cl_
     ej = _marco(i, inf['giro'])
@@ -16165,7 +16229,7 @@ def caida_mal(W, cfg, ctx, i, t0, now, out):
     d = VALLAS_MAL[int(_hash01(i, 389) * len(VALLAS_MAL)) % len(VALLAS_MAL)]
     ex = edificio(cfg, d, 0)
     n = normal_i(i)
-    p0 = _mul(n, base_radius(W, cfg, i))
+    p0 = _mul(n, suelo_mal(W, cfg, i))
     cw, cl_ = _cell_sizes(_len(p0), i)
     g = 90.0 * int(_hash01(i, 397) * 4)
     incl = round(85.0 * q * q / 5.0) * 5.0
@@ -16213,12 +16277,12 @@ def demonios_mal(W, cfg, altos, out):
         hmax = max(altos.get(c, 0.0) for c in cs)
         if nombre == 'diablillo':
             n = normal_i(alta)
-            p0 = _mul(n, base_radius(W, cfg, alta))
+            p0 = _mul(n, suelo_mal(W, cfg, alta))
             m_ = min(_cell_sizes(_len(p0), alta))
             out['emblemas_mal'].append(fila_emblema(_add(p0, n, altos.get(alta, 0.0)), _marco(alta), 0.42 * m_,
                                                     'diablillo', 1.0, 'fijo', 0.05 * m_))
             continue
-        ps = [_mul(normal_i(c), base_radius(W, cfg, c)) for c in cs]
+        ps = [_mul(normal_i(c), suelo_mal(W, cfg, c)) for c in cs]
         g = (sum(p[0] for p in ps) / len(ps), sum(p[1] for p in ps) / len(ps), sum(p[2] for p in ps) / len(ps))
         nc = _norm(g)
         r0 = sum(_len(p) for p in ps) / len(ps)
@@ -16226,11 +16290,13 @@ def demonios_mal(W, cfg, altos, out):
         radio = max(_len(_add(p, pc, -1.0)) for p in ps)
         X, Y, Z = _ejes(nc)
         marco = (X, Y, Z, _euler_xyz(X, Y, Z))
+        # motor v118: con un cluster grande, el coloso crecia con su radio hasta salirse del
+        # planeta; ahora, como mucho, un tercio (la cabeza, un cuarto) del radio del planeta
         if nombre == 'cabeza':
-            alto = 1.3 * hmax + 0.45 * radio
+            alto = min(1.3 * hmax + 0.45 * radio, 0.25 * r0)
         else:
-            alto = 1.8 * hmax + 0.7 * radio
-        out['emblemas_mal'].append(fila_emblema(pc, marco, alto, nombre, 1.0, 'detras', 0.7 * radio))
+            alto = min(1.8 * hmax + 0.7 * radio, 0.34 * r0)
+        out['emblemas_mal'].append(fila_emblema(pc, marco, alto, nombre, 1.0, 'detras', min(0.7 * radio, 0.5 * alto)))
     return hechos
 
 
@@ -16942,7 +17008,8 @@ def cfg():
                  pasos_obra_mal=max(1, int(_p('Pasosobramal', c['pasos_obra_mal']))),
                  tam_emblema=max(0.05, min(3.0, _p('Tamanoemblema', c['tam_emblema']))),
                  demonio_mal=int(bool(_p('Demoniomal', True))),
-                 alto_mal=max(0.5, min(4.0, _p('Altomal', c['alto_mal']))))
+                 alto_mal=max(0.5, min(4.0, _p('Altomal', c['alto_mal']))),
+                 mon_tierra=int(bool(_p('Montierra', True))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
