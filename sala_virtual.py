@@ -93,7 +93,7 @@ DEMO GENOZILLA (v24, Demo = genozilla)
   (rotulo_demo) explica lo que pasa. El juego lo juega FASE1 de verdad: la sala
   mueve a la gente y FASE1 la ve por su sala simulada (Fuente = simulada, la
   tabla sala_personas: la misma imagen de alturas que la camara). Con Guion,
-  el motor de FASE1 (motor v118, guion_demo) prepara cada capitulo. Al entrar,
+  el motor de FASE1 (motor v119, guion_demo) prepara cada capitulo. Al entrar,
   Guardarescena en el hueco 'antes_demo' (y el mundo y los parametros); al
   salir (otra Demo, o Activa apagada), Cargarescena: FASE1 como estaba.
   Vista = juego (por defecto en la demo): la sala desde la entrada y la imagen
@@ -169,7 +169,7 @@ try:
 except Exception as e:
     info('demo GENoZilla: no pude devolver FASE1 a como estaba (%s)' % e)
 
-# v24: el guion de la demo GENoZilla vive en el motor de FASE1 (motor v118). Si el motor de
+# v24: el guion de la demo GENoZilla vive en el motor de FASE1 (motor v119). Si el motor de
 # FASE1 es de antes, se pone al dia aqui, como hace cada fase (el mundo se conserva).
 motor1 = fase1.op('motor')
 if motor1 is not None:

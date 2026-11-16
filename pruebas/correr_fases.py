@@ -270,7 +270,8 @@ def genozilla(sim, fps=30.0, fps_mic=60.0):
     base = sim.op('/project1/FASE1')
     sm = sala.op('sala_motor').module
     m = base.op('motor').module
-    pars = list(sm.ARMAS) + ['Fuente', 'Modojuego', 'Tfila', 'Barsperturn', 'Pasomonstruo', 'Noche']
+    pars = list(sm.ARMAS) + ['Fuente', 'Modojuego', 'Tfila', 'Barsperturn', 'Pasomonstruo', 'Noche', 'Oceano']
+    sim.fotograma(1.0 / fps)            # lo que FASE1 hace sola en un fotograma (limpiar celdas vacias) no es de la demo
     antes = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars),
              str(sala.par.Vista.eval()), str(sala.par.Modoluz.eval()))
     demo0 = str(sala.par.Demo.eval())

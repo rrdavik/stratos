@@ -6,6 +6,7 @@
 | Fase | Script | Qué hace | Motor | Comun |
 |---|---|---|---|---|
 | 39 | `fase39_mal.py` | La especie del mal: vallas, negocio, ocio y encierro, obra que se enciende, emblemas y demonio | v117 | v87 |
+| 39 v2 | `fase39_mal.py` | Con `Oceano` el mal tiene su isla; el coloso a la escala del planeta; los emblemas, al final del render; Trumpzilla solo anda por tierra (`Montierra`) | v118 | v88 |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase39_mal.py').read())
@@ -53,7 +54,11 @@ Cuerpos casi negros; el neón rosa (el dinero) en los escaparates de la planta b
 
 Rosa neón = dinero · rojo = vigilancia y demonios · hueso = la calavera. Desde ocupación 4, uno de cada tres dólares es un demonio. La valla con cartel lleva «próximamente». La calavera, el magnate y el diamante laten despacio.
 
-**El demonio del clúster.** Un clúster del mal (celdas del mal vecinas) de 4 celdas o más invoca a su demonio: de 4 a 6, un **diablillo** sentado en la pieza más alta; de 7 a 9, una **cabeza** que asoma detrás del clúster; de 10 en adelante, el **coloso**, que abraza el clúster con la calavera en el pecho. Los dos grandes se apartan de la cámara para quedar detrás de los edificios.
+**El demonio del clúster.** Un clúster del mal (celdas del mal vecinas) de 4 celdas o más invoca a su demonio: de 4 a 6, un **diablillo** sentado en la pieza más alta; de 7 a 9, una **cabeza** que asoma detrás del clúster; de 10 en adelante, el **coloso**, que abraza el clúster con la calavera en el pecho. Los dos grandes se apartan de la cámara para quedar detrás de los edificios. v2: como mucho un cuarto (la cabeza) o un tercio (el coloso) del radio del planeta; en la v1 crecían con el clúster y se salían del planeta.
+
+**Con `Oceano` (v2).** Cada celda del mal es una isla llana, sin montes ni islotes (dos del mal vecinas se unen por un istmo), y sus edificios se apoyan en la meseta. En la v1 las celdas del mal salían del relieve entero: se quedaban a ras del mar, que flota sobre las losetas, y lo tapaba; solo se veían los emblemas, flotando sobre el agua.
+
+**Trumpzilla solo anda por tierra (v2, `Montierra`).** Con `Oceano`, el monstruo no entra en el mar: una celda vacía cuyo terreno (suelo y relieve en su centro) queda a ras del nivel del mar, ni en una hondonada inundada. Lo construido es isla (también los brotes del mal) y las zanjas del juego siguen siendo su trampa. Aparece en una celda vacía de tierra; si todo lo vacío es mar, en una isla de la cara visible. Si entre su isla y la presa solo hay mar, se queda quieto: el público puede cortarle el paso no construyendo puentes. Sin `Oceano`, o en la ciudad y la industria, todo es tierra.
 
 **El rescate** (fase 35). Mientras dura, el neón parpadea y se apaga y el emblema se debilita; al completarse, la valla cae (1,2 s) y la celda vuelve a ser del público con la especie del último secuenciador.
 
@@ -61,7 +66,7 @@ Rosa neón = dinero · rojo = vigilancia y demonios · hueso = la calavera. Desd
 
 | Operador | Tipo | Qué es |
 |---|---|---|
-| `emblemas_mal`, `i_emblemas_mal` | Geometry COMP + Script CHOP | Una lámina (Rectangle SOP 1 × 1) instanciada: los emblemas y los demonios |
+| `emblemas_mal`, `i_emblemas_mal` | Geometry COMP + Script CHOP | Una lámina (Rectangle SOP 1 × 1) instanciada: los emblemas y los demonios. Comun v88: lo último del render (son neón opaco; las capas aditivas, dibujadas encima, podían lavarlos) |
 | `mat_emblema` | GLSL MAT | `emblema_vertex` y `emblema_pixel`; sampler `sAtlas`; uniformes `uEmblema` (reloj `sprite_t` de `frame_u`, pixelado, columnas y filas) y `uEmblemaInc` (`Inclinasprite`, `Brilloemblema`). Opaco, recortado por alfa, escribe profundidad, sin culling. Luz propia: la noche no lo apaga |
 | `mal_atlas` | Movie File In TOP | `sprites/mal_emblemas.png` |
 | `emblema_vertex`, `emblema_pixel` | Text DAT | Los shaders |
@@ -87,10 +92,11 @@ Para añadir emblemas: el dibujo y el nombre en `EMBLEMAS` del script y en `EMBL
 | `Especiemal` | encendido | El mal con su especie; apagado, el velo provisional de la fase 33 |
 | `Vecinasencierro` | 3 | Vecinas del mal que cierran una valla al abrir (encierro) |
 | `Pasosobramal` | 8 | Pasos (semicorcheas) por paso de obra: cartel, estructura, a oscuras, encendida |
-| `Tamanoemblema` | 0,45 | Alto del emblema, en celdas (crece un poco con la etapa) |
+| `Tamanoemblema` | 0,35 | Alto del emblema, en celdas (crece un poco con la etapa). v2: de 0,45 a 0,35; un proyecto con 0,45 pasa a 0,35 una sola vez |
 | `Brilloemblema` | 1 | Multiplica la luz propia de los emblemas |
 | `Altomal` | 1,5 | Alto de los edificios del mal, por la altura de planta de la ciudad |
 | `Demoniomal` | encendido | El demonio de los clústeres |
+| `Montierra` | encendido | (v2) Con `Oceano`, el monstruo solo anda por tierra |
 | `Simmal` | pulso | Un clúster de diez celdas alrededor de `Simceldamon`, sembrado de fuera adentro, en obra |
 
 **Leyenda.** `MAL      negocio 3  ocio 3  encierro 2  vallas 2   obras 1   demonio coloso (10 celdas)` (con un rescate en curso, `rescate 40%`).
@@ -101,8 +107,9 @@ Para añadir emblemas: el dibujo y el nombre en `EMBLEMAS` del script y en `EMBL
 
 1. `Modojuego`. `Simmal`: diez celdas alrededor de `Simceldamon`. Por fuera, vallas, negocio y ocio; en el centro, encierro. Todas en obra: cartel «próximamente», grúas, terminadas a oscuras y, al final, el neón se enciende titubeando. Detrás, el coloso.
 2. Siembra con el SEQ1 una celda vacía junto a un brote suelto: el brote abre negocio; con el SEQ2, ocio.
-3. `Simrescate` sobre una celda del mal: el neón parpadea, se apaga, la valla cae y la celda vuelve a ser del público.
-4. `Especiemal` apagado: vuelve el velo de la fase 33.
+3. Naturaleza con `Oceano`: `Simmal` levanta el clúster sobre sus islas, con los edificios encima del mar. `Simmonstruo` en una isla separada por mar de lo construido: no se mueve; siembra una celda entre las dos y cruza por ella.
+4. `Simrescate` sobre una celda del mal: el neón parpadea, se apaga, la valla cae y la celda vuelve a ser del público.
+5. `Especiemal` apagado: vuelve el velo de la fase 33.
 
 ## Qué ajustar en sala
 
@@ -113,5 +120,5 @@ Para añadir emblemas: el dibujo y el nombre en `EMBLEMAS` del script y en `EMBL
 
 ## Pruebas
 
-- `python3 pruebas/correr_fases.py` corre las fases 3 a 39 en el TouchDesigner simulado (la autoprueba de la fase 39: once comprobaciones; la lógica, igual que con la 38; presupuesto, unos 0,3 ms por fotograma con diez celdas).
+- `python3 pruebas/correr_fases.py` corre las fases 3 a 39 en el TouchDesigner simulado (la autoprueba de la fase 39: doce comprobaciones, la última con `Oceano`: el monstruo no cruza el mar y sí un puente de tierra, y la celda del mal sobre su isla; la lógica, igual que con la 38; presupuesto, unos 0,3 ms por fotograma con diez celdas).
 - `xvfb-run -a python3 pruebas/lamina_mal.py` dibuja la lámina con el motor y los shaders de verdad (moderngl: `pip install moderngl`): las vallas, las tres escaleras, la obra, el rescate, un clúster con su coloso y la prueba a distancia (~24 px, ampliado × 4) junto a la ciudad y la industria. Deja `pruebas/lamina_mal.png`.

@@ -79,7 +79,7 @@
 #               pasa y la vista juego (la sala y la imagen de FASE1 lado a lado).
 #               La sala guarda la escena de FASE1 (y su mundo) al entrar y la
 #               devuelve al salir; con Guion, prepara cada capitulo con
-#               guion_demo del motor de FASE1 (motor v118).
+#               guion_demo del motor de FASE1 (motor v119).
 # =============================================================================
 
 SALA_VERSION = 'sala v13'
@@ -1555,7 +1555,7 @@ def legend(frame=None):
 # demo de sala»). El juego lo juega FASE1 de verdad (fases 32 a 39): la sala solo
 # mueve a la gente, que FASE1 ve por su sala simulada (Fuente = simulada: la tabla
 # sala_personas, la misma imagen de alturas que la camara), y con Guion le pide a su
-# motor que prepare cada capitulo (guion_demo, motor v118).
+# motor que prepare cada capitulo (guion_demo, motor v119).
 #
 # Cada capitulo trae su coreografia: tramos [t, persona, destino], t en segundos desde
 # que acaba su titulo (negativo: donde esta al empezar el titulo, sin andar). Destinos:
@@ -1746,7 +1746,8 @@ GIRO_DEMO = 450.0           # Barsperturn del resto de capitulos: el giro, despa
 CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
 # lo que la demo pone en FASE1 mientras dura (y devuelve al salir)
 PARS_DEMO = dict(Fuente='simulada', Modojuego=True)
-PARS_CAPITULO = sorted(set(k for cp in CAPITULOS for k in cp['pars']) | set(ARMAS) | {'Barsperturn', 'Umbralaparicion'})
+PARS_CAPITULO = sorted(set(k for cp in CAPITULOS for k in cp['pars']) | set(ARMAS)
+                       | {'Barsperturn', 'Umbralaparicion', 'Oceano'})
 
 
 def antetitulo(k):
@@ -2130,6 +2131,7 @@ def _cap_pars(F, k, c):
     quiere = dict((a, False) for a in ARMAS)
     quiere['Barsperturn'] = GIRO_DEMO
     quiere['Umbralaparicion'] = 1.0     # el monstruo aparece cuando lo dice el guion
+    quiere['Oceano'] = False            # motor v118: con Oceano, un mundo vacio es mar y el monstruo solo anda por tierra
     quiere.update(cp['pars'])
     antes = {}
     for nm, v in quiere.items():
