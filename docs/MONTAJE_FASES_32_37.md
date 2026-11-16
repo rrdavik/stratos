@@ -11,6 +11,7 @@ Turf War de toda la sala contra un monstruo. El público construye quedándose q
 |---|---|---|---|
 | 32 | `fase32_juego.py` | Modo de juego, ronda, recuento del globo, herencia del mal y marca de jugador | v106 |
 | 33 | `fase33_monstruo.py` | El monstruo (aparición, objetivo, movimiento, devorar, crecer) y los brotes del mal | v107 |
+| 33 v4 | `fase33_monstruo.py` | GENoZilla un tercio más lento: `Pasomonstruo` 24 y `Pasogrande` 12 (antes 16 y 8) | v120 |
 | 34 | `fase34_zanjas.py` | Zanjas de las filas, caída del monstruo y agua | v108 |
 | 35 | `fase35_rescate.py` | Rescatar brotes entre cuatro | v109 |
 | 36 | `fase36_luzjuego.py` | La luz de sala cuenta la partida | v110 |
@@ -130,7 +131,7 @@ El alfa de cada instancia lleva rugosidad + 2 × parte (0 velo, 1 cuerpo, 2 ojos
 
 ### Parámetros (página Fase33)
 
-`Umbralaparicion` 0,25 · `Tamanoinicial` 0,5 · `Ocupacionmax` 8 · `Ritmodevora` 2 · `Ritmogrande` 3 · `Pasomonstruo` 16 · `Pasogrande` 8 · `Costezanja` 2 · `Recalculo` 4 · `Esperamonstruo` 8 s · `Verobjetivo` encendido · `Simmonstruo` (pulso: aparece ya) · `Simceldamon` 0
+`Umbralaparicion` 0,25 · `Tamanoinicial` 0,5 · `Ocupacionmax` 8 · `Ritmodevora` 2 · `Ritmogrande` 3 · `Pasomonstruo` 24 · `Pasogrande` 12 (fase 33 v4; antes 16 y 8) · `Costezanja` 2 · `Recalculo` 4 · `Esperamonstruo` 8 s · `Verobjetivo` encendido · `Simmonstruo` (pulso: aparece ya) · `Simceldamon` 0
 
 ### Leyenda
 
@@ -330,7 +331,7 @@ Una por arma con su interruptor encendido y las demás apagadas; con todas apaga
 
 - **`Duracionronda` y `Rondas`**: 360 s y 4 (D5). Para enseñar el juego, 120 s y 2.
 - **`Umbralaparicion`**: con poca gente el 25 % de la cara visible tarda en llenarse; bájalo si el monstruo no llega, o usa `Simmonstruo`.
-- **`Pasomonstruo` / `Pasogrande`**: el monstruo pequeño da un paso por compás (16 semicorcheas). Si la sala no llega a cortarle el camino, súbelo.
+- **`Pasomonstruo` / `Pasogrande`**: desde la fase 33 v4 (motor v120) GENoZilla anda un tercio más lento: el pequeño da un paso cada compás y medio (24 semicorcheas; antes 16) y el grande cada 12 (antes 8). Un proyecto con los valores de antes pasa a los nuevos una sola vez; el tope sube a 128. Si la sala no llega a cortarle el camino, súbelo.
 - **`Tfila`** (fase 29) y **`Conchasporpersona`**: deciden lo rápido que se cava y lo honda que queda la zanja; con pocas conchas en el planeta (al empezar la jornada) las zanjas salen poco hondas. Entierra unas cuantas conchas antes de abrir la partida.
 - **`Profundidadagua`** y **`Ahoga`**: una fila de 4 ahoga con 4 conchas por debajo; si el público no consigue reunir a 4, prueba 3.
 - **`Aliados`** y **`Taliados`**: cuatro personas tres segundos. Con la cámara real, mira la línea `RESCATE` para ver si las celdas vecinas caen en las casillas que esperas (las celdas son más anchas que las casillas).

@@ -298,6 +298,37 @@ QUE ANADE
                La erosion las recorre hacia atras; el fin de ciclo las cierra.
   PARTICULAS   esporas, polvo y obreros: cajas que calcula el motor.
 
+EL OCEANO PARA TODOS Y LO CONSTRUIDO, MAS RICO (v21, motor v120, comun v89)
+---------------------------------------------------------------------------
+  OCEANO     el mar es la primera capa de todos los temas. Con Oceano, en la
+             ciudad y la industria las celdas vacias son mar y cada celda ocupada
+             un MUELLE: una isla llana de costa recta (un malecon de sillares) que
+             sube con la ocupacion, como las de la naturaleza; dos ocupadas vecinas
+             se unen, asi que un barrio es una sola isla. Los edificios, las
+             carreteras y las luces se apoyan en el muelle; lo que cruza una celda
+             de mar (una carretera, una tuberia) va sobre el agua. Encima, el suelo
+             del tema: losas en reticula con parterres (ciudad), hormigon con
+             hollin, oxido y charcos de aceite (industria). El mar no sedimenta en
+             ningun tema.
+  CIUDAD     tiendas y campos de futbol, de la misma gramatica:
+               informal    quiosco y mercadillo (caseta), colmado (casa),
+                           bajos comerciales (tres plantas), el potrero (racimo:
+                           un campo de tierra entre las casas)
+               planificada campo de futbol y galeria de tiendas (pabellon),
+                           bloque con bajos comerciales (bloque), mercado de
+                           abastos (manzana), el estadio (podio)
+             Cesped a franjas, tierra batida y gradas de colores: tres fachadas
+             nuevas del shader de la ciudad; lineas, porterias, torres de focos,
+             toldos de colores, puestos y cajas, remates nuevos.
+  INDUSTRIA  la torre petrolifera (brote de la mina, con el balancin). Una celda
+             petrolifera que se sigue construyendo se convierte en REFINERIA:
+             separadores (2-3), refineria pequena (Umbralram-1), craqueo con
+             esferas de gas (fusion-1) y refineria o complejo petroquimico
+             (corona-1), en vez de la escalera de la mina. En la energia, la
+             termica de gas y la de carbon y el ciclo combinado.
+  Las piezas nuevas necesitan geometria: esta fase las construye (modelos/
+  edi_<diseno>_<v> y mod_ciu_...).
+
 PROBAR SIN BEATSTEP
 -------------------
   Sembrarzona (Nota, SEQ1) o Sembrarzona2 (Nota2, SEQ2) dos veces con cada
@@ -313,7 +344,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v20  (autoprueba: el volcan en calma se mide en un instante sin erupcion, no a la hora de TouchDesigner)'
+VERSION = 'fase11 v21  (el oceano en todos los temas: muelles; tiendas, campos de futbol, petroleo y termicas)'
 banner(VERSION)
 
 base = require_base(11)
@@ -801,8 +832,91 @@ def _prueba(t, m):
     _prueba_natural(t, m)
     _prueba_ciudad(t, m)
     _prueba_industria(t, m)
+    _prueba_v21(t, m)
     _prueba_rendimiento_td(t, m)
     _prueba_turnos(t, m)
+
+
+def _prueba_v21(t, m):
+    """v21 (motor v120): el oceano en la ciudad y la industria (muelles), la biblioteca
+    nueva (tiendas, campos de futbol, petroleo y termicas) y el pozo que se hace
+    refineria. Mundos propios: no toca el de la sesion."""
+    c = dict(m.cfg(), nivel=max(17, m.cfg()['nivel']), oceano=1, avance=0, respaldo=0)
+    i = m.note_cell(64)
+    j = m.NEIGH[i][0]
+
+    def mundo(tema, celdas, own, occ, vel=100):
+        cc = dict(c, tema=m.TEMAS.index(tema))
+        W = m.new_world()
+        for x in celdas:
+            W['occ'][x], W['own'][x], W['sp'][x], W['vel'][x] = occ, own, own, vel
+            W['h'][x] = W['vh'][x] = m.height_for(cc, occ)
+            W['t_nac'][x] = -50.0
+        m.cerrar_obras(W, cc)
+        W['paso'] = 0.125
+        return cc, W
+
+    # 1. los muelles: la ciudad y la industria con Oceano
+    bien, det = True, []
+    for tema in ('ciudad', 'industria'):
+        cc, W = mundo(tema, [i, j], m.GEO, 4)
+        ter = m.terreno(W, cc)
+        rs = m.rasgos_terreno(W, cc)
+        u = m.uniformes_piel(W, cc, 1.0)
+        lejos = min(range(m.N), key=lambda x: sum(m.NORMALS[x][q] * m.NORMALS[i][q] for q in range(3)))
+        alto = m.isla_alto(4)
+        sobre = m.base_radius(W, cc, i) - m.suelo(W, cc, i)
+        ok_ = (sum(1 for r in rs[0] if r[0] == 'muelle') == 2 and any(r[0] == 'istmo' for r in rs[0])
+               and rs[1]['islas'] == 1 and abs(ter['centro'][i] - alto) < 0.012 and abs(sobre - alto) < 1e-9
+               and abs(m.base_radius(W, cc, lejos) - m.suelo(W, cc, lejos) - m.OCEANO_LIFT) < 1e-9
+               and u['uOceano'][0] == 1.0 and u['uOceano'][3] == 0.0 and u['uTierra'][1] == m.TEMAS.index(tema)
+               and abs(m.base_radius(W, dict(cc, oceano=0), i) - m.suelo(W, cc, i)) < 1e-9
+               and not m.rasgos_terreno(W, dict(cc, oceano=0))[0])
+        bien = bien and ok_
+        det.append('%s: centro %.3f, muelle %.3f' % (tema, ter['centro'][i], alto))
+    t.check('v21: con Oceano, la ciudad y la industria sobre muelles (una isla por celda ocupada, unidas por '
+            'istmos; los edificios en la meseta; lo vacio, mar); sin Oceano, como antes', bien, '; '.join(det))
+    # 2. la biblioteca nueva, en sus tipos
+    nuevos = dict(quiosco='caseta', mercadillo='caseta', colmado='casa', bajos='tresplantas', potrero='racimo',
+                  campofutbol='pabellon', galeriatiendas='pabellon', bloquebajos='bloque', mercado='manzana',
+                  estadio='podio', torrepetrolera='brote', termicagas='termica', termicacarbon='termica',
+                  ciclocombinado='central', petroquimica='refineria')
+    falta = [d for d, tp in nuevos.items() if d not in m.DISENOS_TIPO.get(tp, ())
+             or ('edi_%s_0' % d) not in m.edificios_de(c)]
+    campo = m.edificio(c, 'campofutbol', 0)
+    rayas = sum(1 for r in campo['rem'] if r['tipo'] == 'raya')
+    t.check('v21: tiendas, campos de futbol, petroleo y termicas en la biblioteca (%d disenos nuevos); el campo '
+            'con cesped, %d lineas, dos porterias y cuatro torres de focos' % (len(nuevos), rayas),
+            not falta and any(v['fach'] == m.F_CESPED for v in campo['vols']) and rayas >= 9
+            and sum(1 for r in campo['rem'] if r['tipo'] == 'porteria') == 2
+            and sum(1 for r in campo['rem'] if r['tipo'] == 'torrefoco') == 4
+            and m.plantas_de(dict(c, tema=1), *mundo('ciudad', [i], m.ARQ, 1)[1:], i) > 0,
+            'faltan: %s' % falta)
+    # 3. el pozo que se hace refineria
+    cc, W = mundo('industria', [i], m.GEO, 1)
+    vel = None
+    for v in range(1, 128):
+        W['vel'][i] = v
+        if m.diseno_celda(W, cc, i)[0] == 'torrepetrolera':
+            vel = v
+            break
+    ruta = []
+    if vel is not None:
+        for e in range(1, 6):
+            W['occ'][i] = m.occ_inicio(cc, 'mina', e)
+            ruta.append(m.diseno_celda(W, cc, i)[0])
+    otra = None
+    for v in range(1, 128):
+        W['vel'][i] = v
+        W['occ'][i] = 1
+        if m.diseno_celda(W, cc, i)[0] not in m.PETROLIFERAS:
+            W['occ'][i] = m.occ_inicio(cc, 'mina', 2)
+            otra = m.diseno_celda(W, cc, i)[0]
+            break
+    t.check('v21: la torre petrolifera que se sigue construyendo se convierte en refineria (%s); una mina que '
+            'no empezo como pozo sigue su escalera (%s)' % (' > '.join(ruta), otra),
+            len(ruta) == 5 and ruta[0] == 'torrepetrolera' and ruta[1:4] == ['separadora', 'refinerita', 'craqueo']
+            and ruta[4] in m.RUTA_PETROLEO[5] and otra in m.DISENOS_TIPO['mina'])
 
 
 def _prueba_turnos(t, m):
@@ -1039,12 +1153,13 @@ def _prueba_oceano(t, m):
     solo = [x for x in range(m.N) if Ws['cols'][x]]
     u8 = m.uniformes_piel(Ws, c8, 11.0)
     t.check('sedimentacion: al enterrar un mundo con 2 celdas ocupadas, la concha (%.2f) solo deja loseta en '
-            'ellas (%d de %d); el mar sigue en el nucleo (nivel del mar %.2f) y la concha lo apunta (rm)'
+            'ellas (%d de %d); el mar sigue en el nucleo (nivel del mar %.2f) y la concha lo apunta (rm); v21: '
+            'tambien en la ciudad'
             % (g1, len(solo), m.N, m.nivel_mar(Ws, c8)),
             sorted(solo) == sorted([i, j]) and g1 > 0 and abs(m.suelo(Ws, c8, i) - core - g1) < 1e-6
             and abs(m.nivel_mar(Ws, c8) - core) < 1e-9 and abs(u8['uOceano'][2] - core) < 1e-6
             and Ws['shells'][-1]['rm'][lejos] == 1 and Ws['shells'][-1]['rm'][i] == 0
-            and all(m.sedimenta(Ws, dict(c8, oceano=0))) and all(m.sedimenta(Ws, dict(c8, tema=1))))
+            and all(m.sedimenta(Ws, dict(c8, oceano=0))) and m.sedimenta(Ws, dict(c8, tema=1)) == m.sedimenta(Ws, c8))
     est = base.op('estratos')
     t.check('conchas como capas de tierra: estratos con mat_piel_estrato (uFamilia 8) y Tierra %.2f en la '
             'naturaleza (0 en la ciudad); la celda que suena ilumina su suelo' % u8['uTierra'][0],
@@ -1446,7 +1561,8 @@ def _prueba_ciudad_(t, m):
             for d in m.DISENOS_TIPO[tipo]:
                 ex = m.edificio(c, d, 0)
                 ritmo = any(v['fach'] in (m.F_RETICULA, m.F_IRREGULAR, m.F_LOGGIA, m.F_SIERRA, m.F_ZOCALO,
-                                          m.F_CORONA) for v in ex['vols'])
+                                          m.F_CORONA) + tuple(getattr(m, 'F_CESPED', 99) + k for k in range(3))
+                            for v in ex['vols'])     # v21: cesped, tierra y grada tambien tienen ritmo
                 remate = bool(ex['rem']) or len(ex['vols']) > 1
                 if not (ritmo and remate):
                     desnudas.append(d)
@@ -1973,8 +2089,15 @@ def _prueba_industria_(t, m):
             and res5[0][5] == 0 and all(x[6] for x in res5), str(res5))
     # 6. planta integrada: complejo minero y 1 y 3 notas del SEQ2
     res6 = []
+    vel_m = 100                                 # v21: una mina que no empezo como pozo de petroleo
+    if hasattr(m, 'petrolifera'):
+        for vel_m in range(100, 228):
+            Wp = mundo([i], m.GEO, o_com, vel=vel_m % 128 or 1, cerrar=False)
+            if not m.petrolifera(Wp, c, i):
+                break
+        vel_m = vel_m % 128 or 1
     for notas in (1, 3):
-        W = mundo([i], m.GEO, o_com)            # un complejo minero
+        W = mundo([i], m.GEO, o_com, vel=vel_m)    # un complejo minero
         W['t_nac'][i] = t_unico()
         for _ in range(notas):
             m.note_on(W, c, m.ARQ, nota, 100, 2.0, 120.0)

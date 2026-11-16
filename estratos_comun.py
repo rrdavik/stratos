@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v88'
+VERSION_COMUN = 'comun v89'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1060,7 +1060,7 @@ uniform vec4 uOceano;       // motor v97: x 1 con mar, y tiempo (s), z alto de u
 uniform vec4 uVolcan0;      // motor v97: los tres volcanes mas activos: xyz direccion (planeta), w erupcion 0-1
 uniform vec4 uVolcan1;
 uniform vec4 uVolcan2;
-uniform vec4 uTierra;       // motor v100: x cuanto se ven las conchas como capas de tierra (mat_piel_estrato)
+uniform vec4 uTierra;       // motor v100: x cuanto se ven las conchas como capas de tierra (mat_piel_estrato); v120: y el tema de las islas
 
 in Vertex {
     vec4 color;
@@ -1411,6 +1411,46 @@ void main()
                 playa = mix(playa, suelo, smoothstep(0.012, 0.05, sobreMar));
                 base = mix(base, playa, arena);
                 rug = mix(rug, 0.8, arena);
+                if (uOceano.w < 0.5) {
+                    // comun v89 (motor v120): las islas de la ciudad y la industria son muelles.
+                    // Arriba, el suelo de su tema: la ciudad, losas claras en reticula con sus
+                    // juntas; la industria, hormigon con hollin, oxido y charcos de aceite. El
+                    // borde, a pico: un malecon de sillares con la linea de la marea
+                    vec3 pp = iVert.pPos;
+                    float pend = 1.0 - abs(dot(nf, normalize(iVert.wPos)));
+                    float muro = max(smoothstep(0.30, 0.55, pend), 1.0 - smoothstep(0.006, 0.02, eAbs + sobreMar));
+                    vec3 g = pp * 150.0;
+                    vec3 fj = abs(fract(g) - 0.5);
+                    float aa = clamp(fwidth(g.x) + fwidth(g.y) + fwidth(g.z), 0.0, 1.0);
+                    float junta = smoothstep(0.43, 0.48, max(fj.x, max(fj.y, fj.z))) * (1.0 - aa);
+                    float tesela = hash13(floor(g));
+                    vec3 losa;
+                    if (uTierra.y < 1.5) {
+                        losa = mix(vec3(0.50, 0.49, 0.46), vec3(0.66, 0.64, 0.60), tesela);
+                        losa = mix(losa, vec3(0.30, 0.29, 0.28), 0.65 * junta);
+                        float parque = smoothstep(0.70, 0.80, ruido(pp * 9.0 + vec3(2.7)));
+                        losa = mix(losa, vec3(0.20, 0.36, 0.17) * (0.8 + 0.4 * ruido(pp * 60.0)), parque);
+                    } else {
+                        float gr2 = ruido(pp * 17.0) * 0.6 + ruido(pp * 53.0) * 0.4;
+                        losa = mix(vec3(0.30, 0.29, 0.28), vec3(0.44, 0.43, 0.40), gr2);
+                        losa = mix(losa, vec3(0.24, 0.23, 0.22), 0.45 * junta);
+                        float hollin = smoothstep(0.55, 0.85, ruido(pp * 6.0 + vec3(1.3)));
+                        losa = mix(losa, vec3(0.07, 0.07, 0.07), 0.75 * hollin);
+                        float oxido = smoothstep(0.66, 0.86, ruido(pp * 13.0 + vec3(5.1)));
+                        losa = mix(losa, vec3(0.42, 0.22, 0.10), 0.6 * oxido * (1.0 - hollin));
+                        float charco = smoothstep(0.78, 0.84, ruido(pp * 21.0 + vec3(8.9)));
+                        losa = mix(losa, vec3(0.03, 0.03, 0.04), charco);
+                        emis += charco * 0.06 * (0.5 + 0.5 * cos(vec3(0.0, 2.1, 4.2) + 40.0 * ruido(pp * 90.0)));
+                        ks = mix(ks, 1.4, charco);
+                        expo = mix(expo, 90.0, charco);
+                    }
+                    float hilada = smoothstep(0.40, 0.48, abs(fract(length(pp) * 900.0) - 0.5));
+                    vec3 sillar = vec3(0.52, 0.50, 0.46) * (0.85 + 0.3 * ruido(pp * 120.0)) * (1.0 - 0.35 * hilada);
+                    sillar = mix(sillar * vec3(0.55, 0.62, 0.58), sillar, smoothstep(0.004, 0.012, eAbs + sobreMar));   // la marea
+                    base = mix(losa, sillar, muro);
+                    rug = mix(0.75, 0.9, muro);
+                    sombra = max(sombra, 0.5);
+                }
             }
         }
         // fase 11 v8: los hibridos son mesetas construidas
@@ -1583,6 +1623,35 @@ void main()
                     * step(0.45, h1);
                 base = mix(base, vec3(0.05), ven);
             }
+        } else if (fach > 14.5 && fach < 16.5) {
+            // comun v89 (motor v120): el campo de futbol, cesped segado a franjas; el
+            // potrero, tierra batida con calvas. Las lineas y las porterias son remates
+            if (cubierta) {
+                float franja = step(0.5, fract(bp.x / max(1e-4, 1.6 * vano)));
+                if (fach < 15.5)
+                    base = mix(vec3(0.17, 0.43, 0.15), vec3(0.23, 0.53, 0.19), franja) * (0.92 + 0.16 * ruido(bp * 90.0));
+                else
+                    base = mix(vec3(0.52, 0.38, 0.24), vec3(0.62, 0.48, 0.32), ruido(bp * 35.0) * 0.6
+                               + ruido(bp * 140.0) * 0.4);
+            } else {
+                base = vec3(0.33, 0.32, 0.30);
+            }
+            rug = 0.95;
+        } else if (fach > 16.5 && fach < 17.5) {
+            // comun v89 (motor v120): la grada: filas de asientos de dos colores (los del
+            // club: la semilla) y los vomitorios oscuros; arriba, hormigon
+            if (cubierta) {
+                base = vec3(0.50, 0.50, 0.48);
+            } else {
+                float fila = fract(bp.y / max(1e-4, 0.34 * hp));
+                vec3 c1 = h2 < 0.33 ? vec3(0.75, 0.12, 0.12) : (h2 < 0.66 ? vec3(0.12, 0.30, 0.70) : vec3(0.90, 0.75, 0.15));
+                vec3 asiento = mix(c1, vec3(0.92, 0.92, 0.90), step(0.5, fract(fx * 0.5 + 0.25 * floor(fy))));
+                base = mix(vec3(0.45, 0.45, 0.43), asiento, step(0.35, fila));
+                float vomi = step(0.44, g.x) * step(g.x, 0.56) * step(0.5, fract(fy * 0.5));
+                base = mix(base, vec3(0.04), vomi);
+                emis += asiento * 0.06 * uVentanas.x * step(0.35, fila);
+            }
+            rug = 0.8;
         } else if (cubierta) {
             base *= 0.72;               // la cubierta (la losa de la azotea)
         } else if (mal && fach > 10.5) {
@@ -4394,7 +4463,8 @@ PIEL_UNIFORMES = [
     # comun v77 (motor v99): la pradera (solo mat_piel_pradera): cuantas matas y su tamano
     ('uPradera', (PIEL_U % ('uPradera', 0), PIEL_U % ('uPradera', 1), '0', '0')),
     # comun v78 (motor v100): cuanto se ven las conchas como tierra (solo mat_piel_estrato)
-    ('uTierra', (PIEL_U % ('uTierra', 0), '0', '0', '0')),
+    # comun v89 (motor v120): y de que es el suelo de las islas (y: 0 naturaleza, 1 ciudad, 2 industria)
+    ('uTierra', (PIEL_U % ('uTierra', 0), PIEL_U % ('uTierra', 1), '0', '0')),
 ] + [('uVolcan%d' % k, tuple(PIEL_U % ('uVolcan%d' % k, q) for q in range(4))) for k in range(3)]
 # comun v67 (fases 25 y 29): plastico (las inclusiones) y vidrio (la fulgurita)
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio', 'pradera',     # comun v77: 7, la pradera
@@ -4586,7 +4656,7 @@ def materiales_piel(base):
                 vals = ('0', '0', '0', '0')
             elif nombre in ('uOceano', 'uPradera') and fam not in ('tierra', 'pradera'):     # comun v77
                 vals = ('0', '0', '0', '0')
-            elif nombre == 'uTierra' and fam != 'estrato':                                   # comun v78
+            elif nombre == 'uTierra' and fam not in ('estrato', 'tierra'):    # comun v78 (v89: y el suelo de las islas)
                 vals = ('0', '0', '0', '0')
             bien = _uniforme(mat, q, nombre, vals) and bien
         if not bien:

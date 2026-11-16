@@ -7,6 +7,7 @@
 |---|---|---|---|---|
 | 39 | `fase39_mal.py` | La especie del mal: vallas, negocio, ocio y encierro, obra que se enciende, emblemas y demonio | v117 | v87 |
 | 39 v2 | `fase39_mal.py` | Con `Oceano` el mal tiene su isla; el coloso a la escala del planeta; los emblemas, al final del render; Trumpzilla solo anda por tierra (`Montierra`) | v118 | v88 |
+| 39 v3 | `fase39_mal.py` | La discoteca y sus focos (haces que barren el cielo), el neón de las construcciones finales, los yates en el mar y los demonios grandes un 30 % más pequeños | v120 | v89 |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase39_mal.py').read())
@@ -103,6 +104,18 @@ Para añadir emblemas: el dibujo y el nombre en `EMBLEMAS` del script y en `EMBL
 
 ---
 
+## La noche del mal (v3, motor v120)
+
+**La discoteca.** Una sala de fiestas más (ocio, etapa 3, la que diga la celda): caja negra con la cornisa de neón, un tambor de neón encima, la entrada con su marquesina y la cola, y **seis focos** en la cubierta. Encendida, cada foco lanza un **haz de luz** que barre el cielo (de colores: rosa, cian, violeta y blanco), con un halo tenue y la lámpara; los focos de la sala de fiestas y del casino también. Los haces van en la **luz local** (`luz_local`, la geometría aditiva de la fase 18): no son luces de verdad y no cuestan nada a la escena.
+
+**El neón de lo terminado.** Las construcciones finales encendidas (etapa 4: centro comercial, casino-hotel, centro de internamiento; etapa 5: gran superficie, resort, campo) llevan tubos de neón en el contorno de la cubierta de cada volumen; la etapa 5, también en las aristas y en un forjado de cada dos. Del color de su rama (negocio rosa y oro; ocio rosa, cian y violeta; encierro rojo) y titubean un poco. En obra, a oscuras o durante el rescate (el neón apagado), no.
+
+**Los yates.** Con `Oceano`, el casino trae un yate, el resort dos y la gran superficie del magnate uno: fondeados en las celdas de mar vecinas de su isla (vacías y a ras del nivel del mar), se mecen con el oleaje y llevan neón en la borda y en la cabina (luz local). En cualquier tema.
+
+**Los demonios, más pequeños.** La cabeza, como mucho un sexto del radio del planeta (antes un cuarto); el coloso, un cuarto (antes un tercio); los dos crecen un 30 % menos con el clúster. El diablillo no cambia.
+
+**Leyenda.** Con neón o yates, al final: `neon 92  yates 2`.
+
 ## Prueba manual
 
 1. `Modojuego`. `Simmal`: diez celdas alrededor de `Simceldamon`. Por fuera, vallas, negocio y ocio; en el centro, encierro. Todas en obra: cartel «próximamente», grúas, terminadas a oscuras y, al final, el neón se enciende titubeando. Detrás, el coloso.
@@ -120,5 +133,5 @@ Para añadir emblemas: el dibujo y el nombre en `EMBLEMAS` del script y en `EMBL
 
 ## Pruebas
 
-- `python3 pruebas/correr_fases.py` corre las fases 3 a 39 en el TouchDesigner simulado (la autoprueba de la fase 39: doce comprobaciones, la última con `Oceano`: el monstruo no cruza el mar y sí un puente de tierra, y la celda del mal sobre su isla; la lógica, igual que con la 38; presupuesto, unos 0,3 ms por fotograma con diez celdas).
+- `python3 pruebas/correr_fases.py` corre las fases 3 a 39 en el TouchDesigner simulado (la autoprueba de la fase 39: trece comprobaciones (v3: la discoteca con sus seis haces, el neón del resort y ninguno en la discoteca, los yates con y sin `Oceano` y la cabeza a un sexto del radio), la última con `Oceano`: el monstruo no cruza el mar y sí un puente de tierra, y la celda del mal sobre su isla; la lógica, igual que con la 38; presupuesto, unos 0,3 ms por fotograma con diez celdas).
 - `xvfb-run -a python3 pruebas/lamina_mal.py` dibuja la lámina con el motor y los shaders de verdad (moderngl: `pip install moderngl`): las vallas, las tres escaleras, la obra, el rescate, un clúster con su coloso y la prueba a distancia (~24 px, ampliado × 4) junto a la ciudad y la industria. Deja `pruebas/lamina_mal.png`.

@@ -1742,3 +1742,26 @@ Relanzar `recargar_todo.py` (la biblioteca de ejemplares se regenera).
 - **El agua se desborda (`Inundacion`, 0,08 unidades por segundo).** El mar abierto es el grupo más grande de celdas vecinas con el suelo más bajo. Una celda de mar que queda encerrada por sedimento es una hondonada con agua: sube poco a poco hasta el borde más bajo por el que saldría al mar y, si al subir supera el suelo de una hondonada vecina (un corte, otra poza), se desborda en ella y la llena igual, cubriendo lo que haya. Una hondonada seca sin agua cerca sigue seca. Con 0 no se desborda.
 - **Lo que el agua no hace todavía:** las plantas de una celda inundada no mueren (quedan cubiertas hasta donde llegue el agua) y los ríos no cuentan con ella.
 
+
+## El océano para todos y lo construido, más rico (motor v120, comun v89, fase11 v21)
+
+Relanzar `recargar_todo.py`: la fase 11 construye los diseños nuevos (`modelos/edi_<diseño>_<v>`) y sus remates (`mod_ciu_...`), y el shader de la piel trae las fachadas nuevas y el suelo de los muelles. La tabla `catalogo`, si no se editó a mano, pasa sola a la de fábrica con los diseños nuevos.
+
+- **El océano es la primera capa de todos los temas.** Con `Oceano`, en la ciudad y la industria las celdas vacías son mar y cada celda ocupada un **muelle**: una isla llana de costa recta (un malecón de sillares, con la línea de la marea) que sube con la ocupación como las islas de la naturaleza (`ISLA_ALTO`). Dos celdas ocupadas vecinas se unen por un istmo: un barrio, o un polígono, es una sola isla. Los edificios, las carreteras, las vías, las luces y el monstruo se apoyan en la meseta del muelle (`base_radius` = suelo + muelle); lo que pasa por una celda de mar (una carretera, una tubería) va sobre el agua. Encima del muelle, el suelo de su tema: losas en retícula con parterres (ciudad); hormigón con hollín, óxido y charcos de aceite irisados (industria). El mar no sedimenta en ningún tema y Trumpzilla no lo cruza en ninguno (`Montierra`). Sin `Oceano`, todo como antes.
+- **Ciudad: tiendas y campos de fútbol.** De la misma gramática, cada uno en la lista de su tipo (la celda elige con su semilla):
+
+| Tipo | Etapa | Diseños nuevos |
+|---|---|---|
+| caseta (informal) | 1 | quiosco (mostrador iluminado y toldo), mercadillo (tres puestos con toldos de colores, cajas y los locales de detrás) |
+| casa (informal) | 2 | colmado (la tienda en la planta baja: escaparate, toldo, rótulo, cajas) |
+| tres plantas (informal) | 3 | bajos comerciales (dos tiendas con sus toldos) |
+| racimo (informal) | Umbralram − 1 | el potrero (campo de fútbol de tierra entre las casas, porterías de palos) |
+| pabellón (planificada) | 1 | campo de fútbol (césped a franjas, líneas, porterías, grada cubierta, cuatro torres de focos), galería de tiendas |
+| bloque (planificada) | 2 | bloque con bajos comerciales |
+| manzana (planificada) | Umbralram − 1 | mercado de abastos (nave de dientes de sierra y puestos en la plaza) |
+| podio (planificada) | fusión − 1 | el estadio (campo, cuatro gradas, la tribuna cubierta, torres de focos) |
+
+  Los campos, el estadio y los mercados no suben plantas con la ocupación. Tres fachadas nuevas en el shader de la ciudad: césped (franjas de segado), tierra batida y grada (filas de asientos de los colores del club y los vomitorios).
+- **Industria: el petróleo.** La **torre petrolífera** (torre de perforación de celosía, caseta, balancín, tanque y balsa) es un brote de la mina, como el balancín. Una celda **petrolífera** (su brote fue la torre o el balancín) que se sigue construyendo **se convierte en refinería** en vez de seguir la escalera de la mina: separadores (2-3), refinería pequeña (Umbralram − 1), craqueo con esferas de gas (fusión − 1) y refinería o complejo petroquímico (corona − 1), con sus antorchas (`RUTA_PETROLEO`, `petrolifera()`). En la energía, la **térmica de gas** (dos chimeneas finas, gasómetro) y la **de carbón** (caldera alta, chimenea con balizas, dos torres de refrigeración, parque de carbón y cinta) junto a la térmica de siempre, y el **ciclo combinado** junto a la central.
+- **Lámina.** `xvfb-run -a python3 pruebas/lamina_especies.py` dibuja con el motor y los shaders de verdad cada diseño nuevo sobre su muelle, la ciudad y la industria con el mar, y el mal de noche (deja `pruebas/lamina_especies.png`).
+- **Autoprueba (v21).** Los muelles en la ciudad y la industria (una isla por celda ocupada, unidas; la meseta a la altura del muelle; lo vacío, mar; sin `Oceano`, como antes), los quince diseños nuevos en su tipo y con geometría, el campo con sus líneas, porterías y focos, y la torre petrolífera que se hace refinería mientras una mina que no empezó como pozo sigue su escalera. La de la sedimentación comprueba que tampoco sedimenta el mar de la ciudad.

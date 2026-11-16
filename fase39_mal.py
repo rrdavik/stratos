@@ -52,6 +52,14 @@ QUE HACE
                entra en el mar (celda vacia a ras del nivel del mar) ni en las
                hondonadas inundadas; aparece en tierra (si todo lo vacio es mar,
                en una isla). Lo construido es isla; las zanjas, su trampa.
+  NOCHE        (v3) la DISCOTECA (otra sala de fiestas: caja negra, tambor de neon,
+               la cola) y sus seis focos: haces de colores que barren el cielo (luz
+               local, aditiva; tambien los de la sala de fiestas y el casino). Las
+               construcciones finales (etapa 4 y 5, encendidas) llevan NEON en el
+               contorno de cada volumen (la 5, tambien en las aristas y un forjado de
+               cada dos), del color de su rama. Con Oceano, YATES fondeados en el mar
+               junto a la isla (casino 1, resort 2, gran superficie 1), con neon en la
+               borda. La cabeza y el coloso, un 30 % mas pequenos.
   LEYENDA      MAL      negocio 3  ocio 3  encierro 2  vallas 2   obras 1   demonio coloso (10 celdas)
 
 OPERADORES (en /project1/FASE1)
@@ -80,7 +88,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase39 v2  (con Oceano el mal tiene su isla; el coloso a escala; Trumpzilla solo anda por tierra)'
+VERSION = 'fase39 v3  (la discoteca y sus focos, el neon de lo terminado, los yates en el mar y demonios mas pequenos)'
 banner(VERSION)
 
 base = require_base(39)
@@ -437,6 +445,61 @@ def _prueba(t, m, copy, time):
             and con_puente == (b, [puente, b]) and sin_regla == frozenset()
             and suelo_m > 0.02 and abs(suelo_m - ter['centro'][puente]) < 1e-9,
             'mar %d celdas; sin puente %s, con puente %s; isla %.3f' % (len(mar), sin_puente, con_puente, suelo_m))
+
+    # 12. v3: la discoteca y sus focos, el neon de lo terminado, los yates y los demonios mas pequenos
+    base.par.Tema = 'ciudad'
+    base.par.Oceano = True
+
+    def mal_en(W, c, x, occ, rama, diseno=None):
+        m.brote_mal(W, c, x, S.now)
+        W['occ'][x] = occ
+        E = m.mal_estado(W)
+        E['rama'][x] = rama
+        E['obra'][x] = (m.etapa_mal(c, occ), -1e9)
+        if diseno is not None:
+            for v in range(1, 128):
+                W['vel'][x] = v
+                if m.info_mal(W, c, x)['diseno'] == diseno:
+                    break
+        return m.info_mal(W, c, x)
+
+    W, c = S.nuevo(1)
+    luz0 = len(m.build_instances(W, c, S.now).get('luz_local') or [])
+    inf = mal_en(W, c, a, m.occ_inicio(c, 'planificada', 3), 'ocio', 'discoteca')
+    S.semis(W, c, 1)
+    inst = m.build_instances(W, c, S.now)
+    res3 = dict(W['juego']['mal']['res'])
+    haces = len(inst.get('luz_local') or []) - luz0
+    W, c = S.nuevo(1)
+    inf5 = mal_en(W, c, a, m.occ_inicio(c, 'planificada', 5), 'ocio')
+    S.semis(W, c, 1)
+    m.build_instances(W, c, S.now)
+    res5 = dict(W['juego']['mal']['res'])
+    base.par.Oceano = False
+    c = m.cfg()
+    m.build_instances(W, c, S.now)
+    sin_mar = dict(W['juego']['mal']['res'])
+    base.par.Oceano = True
+    c = m.cfg()
+    alto_cabeza = []
+    W, c = S.nuevo(1)
+    for x in ([a] + vec)[:7]:
+        m.brote_mal(W, c, x, S.now)
+        W['occ'][x] = 9
+    S.semis(W, c, 1)
+    inst = m.build_instances(W, c, S.now)
+    r0 = m.base_radius(W, c, a)
+    alto_cabeza = [f[7] for f in inst['emblemas_mal'] if _emblema(m, f)[0] == 'cabeza']
+    t.check('v3: la discoteca (sala de fiestas) con seis focos que barren el cielo (%d filas de luz local); el '
+            'neon de lo terminado (resort: %d tubos; la discoteca, ninguno); con Oceano, los yates del resort en '
+            'el mar (%d; sin Oceano, %d); la cabeza, como mucho un sexto del radio (%.2f de %.2f)'
+            % (haces, res5.get('neon', 0), res5.get('yates', 0), sin_mar.get('yates', 0),
+               max(alto_cabeza or [0.0]), r0),
+            inf['diseno'] == 'discoteca' and 'discoteca' in m.DISENOS_TIPO['salafiestas'] and haces >= 18
+            and res3.get('neon', 0) == 0 and inf5['etapa'] == 5 and res5.get('neon', 0) > 8
+            and res5.get('yates', 0) >= 1 and sin_mar.get('yates', 0) == 0
+            and len(alto_cabeza) == 1 and alto_cabeza[0] <= 0.17 * r0 + 1e-6,
+            'disenos %s; res3 %s; res5 %s' % (inf['diseno'], res3, res5))
 
 
 run_test(base, prueba)
