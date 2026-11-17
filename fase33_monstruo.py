@@ -65,7 +65,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v4  (GENoZilla un tercio mas lento: Pasomonstruo 24, Pasogrande 12)'
+VERSION = 'fase33 v5  (Trumpzilla hace la mitad de dano: Danomonstruo 0,5)'
 banner(VERSION)
 
 base = require_base(33)
@@ -82,6 +82,9 @@ add_par(base, page, 'float', 'Tamanoinicial', 'Tamano inicial (celdas)', 0.5, 0.
 add_par(base, page, 'int', 'Ocupacionmax', 'Ocupacion maxima', 8, 4, 16, clamp=True)
 add_par(base, page, 'int', 'Ritmodevora', 'Ritmo de devorar (escalones por paso)', 2, 1, 10, clamp=True)
 add_par(base, page, 'int', 'Ritmogrande', 'Ritmo grande (escalones por paso)', 3, 1, 10, clamp=True)
+# v5: la mitad de dano. Multiplica Ritmodevora y Ritmogrande (2 x 0,5 = 1 escalon por paso;
+# 3 x 0,5 = 1,5: alterna 1 y 2). Sin publico, el monstruo ganaba la partida entera
+add_par(base, page, 'float', 'Danomonstruo', 'Dano del monstruo (x ritmo)', 0.5, 0.0, 2.0, clamp=True)
 add_par(base, page, 'int', 'Pasomonstruo', 'Paso del monstruo (semicorcheas)', 24, 1, 128, clamp=True)
 add_par(base, page, 'int', 'Pasogrande', 'Paso grande (semicorcheas)', 12, 1, 128, clamp=True)
 # v4: GENoZilla anda un tercio mas lento (16 -> 24 y 8 -> 12 semicorcheas por celda). Un
@@ -102,6 +105,7 @@ add_par(base, page, 'toggle', 'Verobjetivo', 'Ver objetivo', True)
 add_par(base, page, 'pulse', 'Simmonstruo', 'Simular monstruo')
 add_par(base, page, 'int', 'Simceldamon', 'Celda del monstruo simulado', 0, 0, m.N - 1)
 ok('pagina Fase33: Umbralaparicion 0,25, Tamanoinicial 0,5, Ocupacionmax 8, Ritmodevora 2, Ritmogrande 3, '
+   'Danomonstruo 0,5 (v5: la mitad de dano), '
    'Pasomonstruo 24, Pasogrande 12 (v4: un tercio mas lento), Costezanja 2, Recalculo 4, Esperamonstruo 8 s, Verobjetivo, Simmonstruo, '
    'Simceldamon')
 
@@ -127,8 +131,8 @@ leeme(base, 33, """FASE 33 - EL MONSTRUO Y LOS BROTES DEL MAL
   cara visible, por el borde de entrada del giro. Objetivo (cada Recalculo
   pasos o al vaciar una celda): Dijkstra, mayor ocupacion / (1 + coste); el
   pequeno no come fusiones ni coronas. Avanza una celda cada Pasomonstruo
-  semicorcheas; devora Ritmodevora escalones por paso (lo ultimo construido
-  primero; fuera del balance). tam crece con lo devorado hasta 1 en
+  semicorcheas; devora Ritmodevora x Danomonstruo (0,5: la mitad) escalones
+  por paso (lo ultimo construido primero; fuera del balance). tam crece con lo devorado hasta 1 en
   Ocupacionmax: forma grande (Pasogrande, Ritmogrande, come coronas). Cada
   celda vaciada deja un brote del mal (occ 1), que crece como cualquier celda
   y no desborda en el publico. Esperamonstruo s tras morir, otro.
@@ -211,7 +215,8 @@ def _prueba(t, m, copy):
     t.check('el pequeno tampoco elige una fusion', m.recalcular_objetivo(W, c, mo, S.now) == b
             and not m.comestible(W, c, mo, d) and not m.comestible(W, c, mo, co))
 
-    # 2. devorar: Ritmodevora escalones por paso de juego, sin triggers, al reves de la construccion
+    # 2. devorar: Ritmodevora x Danomonstruo escalones por paso de juego, sin triggers, al reves de la
+    # construccion (v5: 2 x 0,5 = 1)
     W, c = S.nuevo(4)
     J = W['juego']
     _poner(m, W, b, 3)
@@ -223,9 +228,12 @@ def _prueba(t, m, copy):
     S.semis(W, c, int(c['paso_juego']))
     p1 = (W['occ'][b], W['occ'][sat], mo['acum'], mo['estado'])
     S.pasos(W, c, 1)
-    t.check('en su objetivo devora Ritmodevora (2) escalones por paso de juego, sin ningun trigger: primero el '
-            'satelite y luego la altura', p1 == (2, 0, 2, 'devora') and W['hits'] == hits and mo['acum'] == 4,
-            '%s' % (p1,))
+    p2 = (W['occ'][b], W['occ'][sat], mo['acum'])
+    S.pasos(W, c, 2)
+    t.check('en su objetivo devora Ritmodevora x Danomonstruo (2 x 0,5 = 1) escalon por paso de juego, sin '
+            'ningun trigger: primero el satelite y luego la altura',
+            p1 == (3, 0, 1, 'devora') and p2 == (2, 0, 2) and W['hits'] == hits and mo['acum'] == 4,
+            '%s, %s' % (p1, p2))
     t.check('la celda vaciada recibe un brote: ocupacion 1 y especie mal (conserva la especie de origen para la '
             'geometria) y busca otro objetivo',
             W['occ'][b] == 1 and W['sp'][b] == m.MAL and W['own'][b] == m.GEO and mo['objetivo'] != b
@@ -271,11 +279,14 @@ def _prueba(t, m, copy):
     m.recalcular_objetivo(W, c, mo, S.now)
     occ0 = W['occ'][b]
     S.pasos(W, c, 1)
+    d1 = occ0 - W['occ'][b]
+    S.pasos(W, c, 1)
+    d2 = occ0 - W['occ'][b] - d1
     t.check('tam crece con acum (0,5 + 0,5 x acum / 8) y llega a 1 en Ocupacionmax; en forma grande devora '
-            'Ritmogrande (3) por paso y avanza cada Pasogrande semicorcheas',
-            tams == [(2, 0.625), (4, 0.75), (6, 0.875), (8, 1.0)] and grande and occ0 - W['occ'][b] == 3
+            'Ritmogrande x Danomonstruo (3 x 0,5 = 1,5: 1 y 2) por paso y avanza cada Pasogrande semicorcheas',
+            tams == [(2, 0.625), (4, 0.75), (6, 0.875), (8, 1.0)] and grande and (d1, d2) == (1, 2)
             and mo['acum'] == 11 and pequeno == (None, int(c['paso_monstruo'])) and mo['objetivo'] == b
-            and m.paso_mon(c, mo) == int(c['paso_grande']), '%s, %d' % (tams, occ0 - W['occ'][b]))
+            and m.paso_mon(c, mo) == int(c['paso_grande']), '%s, %d y %d' % (tams, d1, d2))
 
     # 6. el movimiento: una celda cada Pasomonstruo semicorcheas
     W, c = S.nuevo(4)
@@ -350,8 +361,8 @@ def _prueba(t, m, copy):
     sin = m.build_instances(W, m.cfg(), S.now).get('tocon', [])
     base.par.Verobjetivo = True
     t.check('Verobjetivo apagado: sin tocon', sin == [])
-    t.check('la linea MONSTRUO: numero, estado, celda -> objetivo, tam, acum y ritmo',
-            leg.startswith('  MONSTRUO #1  ') and ' celda %d -> %d  tam 0.50  acum 0/8  x2' % (a, mo['objetivo'])
+    t.check('la linea MONSTRUO: numero, estado, celda -> objetivo, tam, acum y ritmo (2 x 0,5 = x1)',
+            leg.startswith('  MONSTRUO #1  ') and ' celda %d -> %d  tam 0.50  acum 0/8  x1' % (a, mo['objetivo'])
             in leg, leg.strip())
     t.check('el mal, en la familia 9 del shader de la piel', 'mal' in FAMILIAS_PIEL
             and FAMILIAS_PIEL.index('mal') == 9 and 'bool malo = fam > 8.5' in PIEL_PIXEL)
