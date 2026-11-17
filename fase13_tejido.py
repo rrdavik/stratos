@@ -78,6 +78,14 @@ PAGINA MAS CORTA (v6)
   solo el ancho de las carreteras. Relanzar cualquier fase los quita de un
   proyecto anterior y avisa si los habias cambiado.
 
+LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
+-----------------------------------------------
+  Rios sobre la naturaleza: un rio acaba en la primera celda que no lo es (la
+  ciudad queda en la desembocadura) y no cruza ciudad ni industria. Carreteras
+  entre las celdas de la ciudad, con los tramos solo por la ciudad (un arbol por
+  mancha); vias y red, solo por la industria. Las redes se tocan en la frontera,
+  sin enlace nuevo.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase13_tejido.py').read())
@@ -87,7 +95,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v9  (autoprueba: con Oceano el relieve acaba en la costa de su isla; el rio, 0,05 de holgura)'
+VERSION = 'fase13 v10  (la mezcla de especies: cada red dentro de su especie, un arbol por mancha)'
 banner(VERSION)
 
 base = require_base(13)
@@ -193,6 +201,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)        # motor v121: la mezcla de especies
     finally:
         for nm, v in guarda.items():
             try:
@@ -545,6 +554,15 @@ def _prueba_industria_(t, m):
     t.check('leyenda TEJIDO de la industria (vias, playas, red, centrales, apagadas)',
             'TEJIDO   vías' in ley and 'centrales' in ley and 'apagadas' in ley,
             ' '.join(l.strip() for l in ley.split('\n') if 'TEJIDO' in l))
+
+
+def _prueba_mezcla(t, m):
+    """La mezcla de especies (fase 11 v22, motor v121): lo que hace esta fase en un globo con
+    las tres especies (un mundo propio: el de la sesion no se toca)."""
+    if not hasattr(m, 'autoprueba_mezcla_fase'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla_fase(m.cfg(), 13):
+        t.check(texto, bien, detalle)
 
 
 run_test(base, prueba)

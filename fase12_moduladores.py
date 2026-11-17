@@ -44,6 +44,11 @@ PROBAR SIN BEATSTEP
   Gateprueba 0,25, 1 y 2. Los botones de prueba sueltan la nota tras
   Gateprueba pasos. La leyenda MOD dice velocidad, rugosidad, gate y efecto.
 
+LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
+-----------------------------------------------
+  Material, vigor y plantas por la especie de cada celda: con Tema = auto un gate
+  ligado da plantas en la ciudad y vigor en la naturaleza del mismo globo.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase12_moduladores.py').read())
@@ -53,7 +58,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase12 v11  (autoprueba: de noche las luces a oscuras no son un fallo; los remates del mal, desde la 39)'
+VERSION = 'fase12 v12  (la mezcla de especies: material y gate por la especie de cada celda)'
 banner(VERSION)
 
 base = require_base(12)
@@ -116,6 +121,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)        # motor v121: la mezcla de especies
     finally:
         for nm, v in guarda.items():
             try:
@@ -292,6 +298,15 @@ def _prueba(t, m):
             'MOD' in leg and 'rugosidad 0.24' in leg and 'gate 1.60' in leg, [l for l in leg.split('\n')
                                                                              if 'MOD' in l][0].strip()
             if 'MOD' in leg else '')
+
+
+def _prueba_mezcla(t, m):
+    """La mezcla de especies (fase 11 v22, motor v121): lo que hace esta fase en un globo con
+    las tres especies (un mundo propio: el de la sesion no se toca)."""
+    if not hasattr(m, 'autoprueba_mezcla_fase'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla_fase(m.cfg(), 12):
+        t.check(texto, bien, detalle)
 
 
 run_test(base, prueba)

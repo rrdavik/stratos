@@ -33,6 +33,14 @@ PROBAR SIN BEATSTEP
   Sembrarzona en dos zonas y Forzarciclo: la concha de hormigon con sus
   calles. Quedan dos conchas de temas distintos.
 
+LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
+-----------------------------------------------
+  El registro de la concha guarda la especie de cada celda (temas): una concha
+  puede ser mixta (su tema, el de mas celdas). Losetas, recurso de la mina y
+  cortes la leen por celda. Temaenciclo no se aplica con Tema = auto; con auto,
+  lo heredado queda neutro (sin especie hasta su primera nota) y el tramo vuelve
+  al primero.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase15_era.py').read())
@@ -42,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase15 v3  (industria: el recurso de la concha de abajo, la epoca por las eras y las vias heredadas)'
+VERSION = 'fase15 v4  (la mezcla de especies: conchas mixtas, la especie de cada celda en el registro)'
 banner(VERSION)
 
 base = require_base(15)
@@ -92,6 +100,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)        # motor v121: la mezcla de especies
         _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
@@ -331,6 +340,29 @@ def _prueba_industria(t, m):
     trazas = set((a, b) for a, b in m.world()['trazas'])
     t.check('de la industria a la industria: las trazas son sus vias (%d tramos)' % len(vias),
             vias and trazas == vias)
+
+
+def _prueba_mezcla(t, m):
+    """La mezcla de especies (fase 11 v22, motor v121): lo que hace esta fase en un globo con
+    las tres especies (un mundo propio: el de la sesion no se toca)."""
+    if not hasattr(m, 'autoprueba_mezcla_fase'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla_fase(m.cfg(), 15):
+        t.check(texto, bien, detalle)
+    # Temaenciclo no se aplica con Tema = auto: el mundo con tema 1 no deja un tema pendiente
+    guarda = (str(base.par.Tema.eval()), bool(base.par.Temaenciclo.eval()))
+    W = m.world()
+    wt = W.get('tema')
+    try:
+        base.par.Temaenciclo = True
+        base.par.Tema = 'auto'
+        W['tema'] = 1
+        c = m.cfg()
+        t.check('mezcla: con Tema auto, Temaenciclo no se aplica (sin tema pendiente aunque el mundo tenga otro)',
+                c.get('tema_auto') == 1 and 'tema_pendiente' not in c and m.tema_de(c) == 'naturaleza')
+    finally:
+        W['tema'] = wt
+        base.par.Tema, base.par.Temaenciclo = guarda
 
 
 run_test(base, prueba)

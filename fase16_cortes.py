@@ -40,6 +40,11 @@ PROBAR SIN BEATSTEP
   Padprueba en un pad que corte (2, la caja) y Erosionar. Unirprueba da dos
   cortes vecinos seguidos alrededor de Nota: canon o galeria.
 
+LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
+-----------------------------------------------
+  Sin cambio de logica: los cortes leen la especie de cada celda del registro
+  de la concha (una concha mixta ensena fosiles, cimientos o galerias segun la celda).
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase16_cortes.py').read())
@@ -49,7 +54,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase16 v4  (autoprueba: las piezas del corte, medidas sobre la normal de su celda)'
+VERSION = 'fase16 v5  (la mezcla de especies: los cortes leen el registro de cada celda)'
 banner(VERSION)
 
 base = require_base(16)
@@ -112,6 +117,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)        # motor v121: la mezcla de especies
         _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
@@ -306,6 +312,15 @@ def _prueba_industria(t, m):
     t.check('industria: el corte ensena galerias, vagonetas y pozos (%s); las eras: %s; las epocas de abajo '
             'arriba %s' % (', '.join(sorted(ind)), ', '.join(nombres), epocas),
             ind and 'galerias' in nombres and epocas == sorted(epocas) and m.cfg().get('tema') == 2)
+
+
+def _prueba_mezcla(t, m):
+    """La mezcla de especies (fase 11 v22, motor v121): lo que hace esta fase en un globo con
+    las tres especies (un mundo propio: el de la sesion no se toca)."""
+    if not hasattr(m, 'autoprueba_mezcla_fase'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla_fase(m.cfg(), 16):
+        t.check(texto, bien, detalle)
 
 
 run_test(base, prueba)

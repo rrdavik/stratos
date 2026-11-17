@@ -329,8 +329,63 @@ EL OCEANO PARA TODOS Y LO CONSTRUIDO, MAS RICO (v21, motor v120, comun v89)
   Las piezas nuevas necesitan geometria: esta fase las construye (modelos/
   edi_<diseno>_<v> y mod_ciu_...).
 
+LA MEZCLA DE ESPECIES (v22, motor v121)
+---------------------------------------
+  El mundo deja de tener una sola especie. Con Tema = auto (de fabrica) empieza
+  siempre en naturaleza; segun se construye terreno, la ciudad nace junto al agua
+  y se extiende por contagio, y despues la industria nace en el borde de la
+  ciudad. La especie de una celda (y su familia de piezas) se fija al fundarse y
+  no cambia hasta que la celda se vacia del todo.
+  CONSTRUIDO  celdas con especie / (celdas del globo x Topeconstruido, 0,6): el
+              60 % cuenta como 100 %. No cuentan las semillas neutras heredadas
+              (hasta su primera nota) ni el mal. Simconstruido (0-100) lo fuerza
+              para probar los tramos; -1, el real.
+  TABLA       mezcla_especies (editable a mano: construido naturaleza ciudad
+              industria, en %). Cada fila vale desde su umbral; el tramo solo
+              avanza (el entierro lo devuelve al primero). Su cuota es el techo de
+              celdas de la ciudad y la industria y la parte de la biblioteca de
+              las tres. Una fila que no suma 100 se normaliza (aviso en la leyenda).
+                construido  N    C    I
+                  0 %      100   0    0
+                 30 %       70  30    0
+                 50 %       50  40   10
+                 75 %       25  50   25
+                100 %       10  50   40
+  SUCESION    1 contagio: la celda nueva que toca ciudad o industria es de esa
+              especie si esta por debajo de su cuota (si toca las dos, la mas lejos
+              de su cuota; en empate, la ciudad). 2 fundacion: con la fundacion
+              abierta (puede crecer y no tiene celdas, o su deficit pasa de Valvula
+              puntos), la ciudad se funda tocando un rio o un lago (sin agua, la
+              formacion natural mas ocupada) y la industria tocando la ciudad (si
+              compite con el contagio de la ciudad, gana la que mas lejos esta de su
+              cuota; si hay varias candidatas a la vez, la que toca relieve). Tras
+              Paciencia celdas sin candidata, la siguiente funda donde caiga. 3 el
+              resto, naturaleza. Los satelites heredan especie y familia del nucleo.
+  FAMILIAS    la unidad de carga: una evolucion completa de una linea (brote, cada
+              etapa con su diseno y su variante; obra, remates, puentes,
+              protagonista e hibridos). Vegetacion: una por bioma y variante;
+              relieve: una, sin piezas. Disponibles: ceil(cuota x familias), con
+              una por linea (y por bioma) como minimo; entran en el orden del ciclo
+              (Ordenfamilias = ciclo; fijo, siempre el mismo). Una familia con
+              celdas no se descarga. La cola carga o descarga Cargaporfotograma
+              geometrias por fotograma; el tramo siguiente se precarga a Precarga
+              puntos de su umbral. El Render TOP dibuja lo cargado.
+  REDES       cada una dentro de su especie: un rio termina en la primera celda
+              que no es naturaleza (la ciudad queda en la desembocadura), las
+              carreteras solo por la ciudad, las vias y la red solo por la industria.
+  Con Tema fijo (naturaleza, ciudad o industria), como antes; un cambio de Tema en
+  directo solo afecta a las celdas que se fundan despues.
+  Leyenda: MEZCLA construido 52% (tramo 50) cuota N/C/I 50/40/10 globo 61/30/9
+           manchas C1 I1 familias 9+4/7/2 cola 3
+
 PROBAR SIN BEATSTEP
 -------------------
+  Mezcla: Tema = auto y Simconstruido en 0, 30, 50, 75 y 100 (la leyenda da las
+  cinco cuotas). Con Simconstruido -1 y Sembrarzona en zonas distintas: todo
+  empieza en naturaleza; pasado el 30 %, la primera celda nueva junto a un rio
+  funda la ciudad y solo las que la tocan salen de ciudad; pasado el 50 %, la
+  industria aparece pegada a la ciudad.
+
   Sembrarzona (Nota, SEQ1) o Sembrarzona2 (Nota2, SEQ2) dos veces con cada
   tema: cluster, puentes y protagonista. Sembrar en la misma celda con
   Velprueba 100 y luego 101 da dos compuestos distintos; con 100, el mismo.
@@ -344,7 +399,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v21  (el oceano en todos los temas: muelles; tiendas, campos de futbol, petroleo y termicas)'
+VERSION = 'fase11 v22  (la mezcla de especies: Tema auto, sucesion con territorio y carga por familias)'
 banner(VERSION)
 
 base = require_base(11)
@@ -356,10 +411,21 @@ m = motor.module
 # -----------------------------------------------------------------------------
 
 page = get_page(base, 'Fase11')
-add_par(base, page, 'menu', 'Tema', 'Tema', 'naturaleza', menu=m.TEMAS,
-        menu_labels=['Naturaleza', 'Ciudad', 'Industria'])
-if menu_al_dia(base, 'Tema', m.TEMAS, ['Naturaleza', 'Ciudad', 'Industria']):
-    info('v11: Tema gana la industria (naturaleza / ciudad / industria)')
+TEMA_ETIQUETAS = ['Auto (mezcla de especies)', 'Naturaleza', 'Ciudad', 'Industria']
+add_par(base, page, 'menu', 'Tema', 'Tema', 'auto', menu=m.TEMA_MODOS, menu_labels=TEMA_ETIQUETAS)
+if menu_al_dia(base, 'Tema', m.TEMA_MODOS, TEMA_ETIQUETAS):
+    info('v22: Tema gana auto (la mezcla de especies: auto / naturaleza / ciudad / industria)')
+if renew_default(base, 'Tema', 'naturaleza', 'auto'):
+    info('v22: Tema pasa a auto (estaba en naturaleza, el valor de fabrica de antes)')
+# v22 (motor v121): la mezcla de especies
+add_par(base, page, 'float', 'Topeconstruido', 'Tope de construido (fraccion ocupada que es el 100 %)', 0.6, 0.3, 1.0)
+add_par(base, page, 'float', 'Valvula', 'Valvula de fundacion (puntos de deficit para otra mancha)', 10.0, 0.0, 50.0)
+add_par(base, page, 'int', 'Paciencia', 'Paciencia de fundacion (celdas nuevas)', 8, 0, 64, clamp=True)
+add_par(base, page, 'menu', 'Ordenfamilias', 'Orden de familias', 'ciclo', menu=m.ORDEN_FAMILIAS,
+        menu_labels=['Por ciclo (cada mundo, otras)', 'Fijo (siempre el mismo)'])
+add_par(base, page, 'float', 'Precarga', 'Precarga (puntos antes del umbral)', 5.0, 0.0, 20.0)
+add_par(base, page, 'int', 'Cargaporfotograma', 'Carga por fotograma (geometrias)', 4, 1, 32, clamp=True)
+add_par(base, page, 'float', 'Simconstruido', 'Simular construido (%; -1 el real)', -1.0, -1.0, 100.0)
 add_par(base, page, 'float', 'Pesovecina', 'Peso de las vecinas en la presion', 0.5, 0.0, 2.0)
 add_par(base, page, 'float', 'Umbralvecindad', 'Presion para fundirse (cluster)', 4.0, 1.0, 20.0)
 add_par(base, page, 'int', 'Mincluster', 'Celdas minimas de un cluster', 2, 2, 20, clamp=True)
@@ -466,7 +532,7 @@ add_par(base, page, 'int', 'Maxbastidor', 'Niveles maximos del bastidor (planta 
 add_par(base, page, 'float', 'Emisiones', 'Humo y vapor de la industria', 0.5, 0.0, 2.0)
 add_par(base, page, 'int', 'Maxhumo', 'Particulas de humo maximas', 6000, 0, 20000, clamp=True)
 add_par(base, page, 'float', 'Lodind', 'Remates pequenos de la industria desde (px por celda)', 60.0, 0.0, 400.0)
-ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
+ok('pagina Fase11: Tema (auto desde la v22), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
    'Maxpiezas 6, Avance (gates), Pasosetapa 2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
    'Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
    'Ligero, Refrescopiel 0,25 (v18; antes Refresconat), Turnos, Cachearq, Biomas, Variantes 2, Traslucidez 0,35, '
@@ -477,13 +543,38 @@ ok('pagina Fase11: Tema (naturaleza), Pesovecina 0,5, Umbralvecindad 4, Minclust
    'Modulomarco 0,25, Maxmarco 3, Capsulas 0,4, Mutacion 0,5, Mutacionfuente (manual), Obra, '
    'Desfasefachada 2, Gruas, Maxgruas 6, Tinteventanas, Pasostinte 4, Lodciudad 60; v11: Tema + industria, '
    'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
-   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16; v17: Tierra 0,75; v18: Radionucleo 8, Inundacion 0,08')
+   'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16; v17: Tierra 0,75; v18: Radionucleo 8, Inundacion 0,08; '
+   'v22: Tema (auto), Topeconstruido 0,6, Valvula 10, Paciencia 8, Ordenfamilias (ciclo), Precarga 5, '
+   'Cargaporfotograma 4, Simconstruido -1')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
 # -----------------------------------------------------------------------------
 # CATALOGO (tabla editable: tema especie estado variante modelo)
 # -----------------------------------------------------------------------------
+
+# v22: la tabla de la mezcla (construido naturaleza ciudad industria, en %), editable a mano
+def mezcla_al_dia_td(base, m):
+    filas_def = [list(m.MEZCLA_COLS)] + [[('%g' % x) for x in f] for f in m.MEZCLA_DEF]
+    t = get_or_make(base, 'tableDAT', 'mezcla_especies', -440, -600)
+    actual = [[cell.val for cell in t.row(r)] for r in range(t.numRows)]
+    if not actual or actual[0][:4] != list(m.MEZCLA_COLS) or actual == t.fetch('defecto', None):
+        t.clear()
+        for f in filas_def:
+            t.appendRow(f)
+        t.store('defecto', filas_def)
+        return True
+    if actual == filas_def:
+        t.store('defecto', filas_def)
+        return True
+    return False
+
+
+if mezcla_al_dia_td(base, m):
+    ok('mezcla_especies: la tabla de la mezcla (0 % 100/0/0, 30 % 70/30/0, 50 % 50/40/10, '
+       '75 % 25/50/25, 100 % 10/50/40)')
+else:
+    info('mezcla_especies editada a mano: se conserva. Para volver a la de fabrica, borrala y relanza')
 
 n_cat = catalogo_al_dia(base, m)
 if n_cat is not None:
@@ -517,9 +608,15 @@ humo_al_dia(base, crear=True)           # comun v53: el humo, en la GPU (mat_hum
 set_render(base)
 
 leeme(base, 11, """FASE 11 - LA PIEL
-  Tema (pagina Fase11): naturaleza (vegetacion SEQ1, basalto SEQ2) o
-  ciudad (informal SEQ1, planificada SEQ2). Modelos en 'modelos', tabla
-  'catalogo' editable (tema especie estado variante modelo).
+  Tema (pagina Fase11): auto (v22, de fabrica: la mezcla de especies, segun el
+  terreno construido y la tabla 'mezcla_especies'), naturaleza (vegetacion SEQ1,
+  basalto SEQ2), ciudad (informal SEQ1, planificada SEQ2) o industria (mina
+  SEQ1, energia SEQ2). Modelos en 'modelos', tabla 'catalogo' editable (tema
+  especie estado variante modelo).
+  v22, la mezcla: la especie de cada celda se fija al fundarse (contagio,
+  fundacion junto al agua o en el borde de la ciudad, naturaleza) y dura hasta
+  vaciarse; las piezas se cargan por familias, Cargaporfotograma por fotograma.
+  Leyenda MEZCLA: construido, tramo, cuotas, reparto, manchas, familias, cola.
   Vecinas con presion >= Umbralvecindad se funden: puentes (dosel, meseta,
   pasarela, podio) y pieza protagonista en la capital.
   Compuestos por juego del caos (Caos, Maxpiezas): misma semilla, mismo
@@ -569,13 +666,14 @@ def prueba(t):
     import math
     m = t.m
     guarda = {}
-    for nm in ('Tema', 'Avance', 'Velprueba', 'Nota', 'Nota2'):
+    for nm in ('Tema', 'Avance', 'Velprueba', 'Nota', 'Nota2', 'Simconstruido'):
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)            # v22: la mezcla de especies
     finally:
         for nm, v in guarda.items():
             try:
@@ -2206,6 +2304,51 @@ def _prueba_industria_(t, m):
             'ciudad %.1f ms (solo se informa)'
             % (m.N, nh, int(c['max_humo']), 1000 * tiempos['industria'], 1000 * tiempos['ciudad']),
             nh <= int(c['max_humo']))
+
+
+def _prueba_mezcla(t, m):
+    """v22 (motor v121): la mezcla de especies. Las pruebas del motor (mundos propios: no
+    tocan el de la sesion) y lo que solo se ve en TouchDesigner."""
+    if not hasattr(m, 'autoprueba_mezcla'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla(m.cfg()):
+        t.check(texto, bien, detalle)
+    # en TouchDesigner: la tabla, la leyenda con Simconstruido y el render con lo cargado
+    tab = base.op('mezcla_especies')
+    filas = [[c_.val for c_ in tab.row(r)] for r in range(tab.numRows)] if tab is not None else []
+    t.check('la tabla mezcla_especies (construido naturaleza ciudad industria) con sus %d filas'
+            % max(0, len(filas) - 1),
+            bool(filas) and filas[0][:4] == list(m.MEZCLA_COLS) and len(filas) - 1 >= 2)
+    tema0 = str(base.par.Tema.eval())
+    sim0 = float(base.par.Simconstruido.eval())
+    W = m.world()
+    import copy
+    mez0 = copy.deepcopy(W.get('mezcla'))
+    malas = []
+    try:
+        base.par.Tema = 'auto'
+        defecto = filas[1:] == [[('%g' % x) for x in f] for f in m.MEZCLA_DEF]
+        for pct, fila in zip((0, 30, 50, 75, 100), m.MEZCLA_DEF):
+            base.par.Simconstruido = pct
+            ley = m.legend()
+            if 'MEZCLA' not in ley or (defecto and 'cuota N/C/I %d/%d/%d' % tuple(int(x) for x in fila[1:]) not in ley):
+                malas.append('%d%%' % pct)
+        t.check('leyenda MEZCLA: Tema auto y Simconstruido en 0, 30, 50, 75 y 100 dan las cinco cuotas',
+                not malas, 'mal %s' % malas)
+        base.par.Simconstruido = -1
+        c = m.cfg()
+        m.carga_tick(W, c)
+        m._CACHE.pop('render_tema', None)
+        m.render_tema_al_dia(c, W)
+        geos = sorted(g for g in str(base.op('render').par.geometry.val).split() if g.startswith('mod_'))
+        t.check('con Tema auto el render dibuja lo que ha cargado la cola (%d geometrias de modelos)' % len(geos),
+                geos == sorted(m._CARGA['geos']) and len(geos) > 0)
+    finally:
+        base.par.Simconstruido = sim0
+        base.par.Tema = tema0
+        W['mezcla'] = mez0
+        m._CACHE.pop('render_tema', None)
+        m.render_tema_al_dia(m.cfg(), W)
 
 
 def _prueba_mallas_sin_cfg(t, m):

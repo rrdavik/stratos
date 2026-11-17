@@ -88,6 +88,13 @@ La camara de globo (estratos_comun.py, motor v24) encuadra el planeta
 entero y retrocede lo justo a cada enterramiento. La fase 10 anade la de
 superficie como modo.
 
+V14 (MOTOR V121): LA PALETA CON LA MEZCLA DE ESPECIES
+----------------------------------------------------
+Con Tema = auto (fase 11 v22) la paleta de las conchas reserva las bandas de
+tono de las tres especies (tambien el violeta de la red de la industria): el
+globo puede tener industria en cualquier momento. La autoprueba de los colores
+de referencia fija Tema naturaleza.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase8_conchas.py').read())
@@ -97,7 +104,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v13  (pagina mas corta: la luminosidad del suelo, en un solo Paletaluz)'
+VERSION = 'fase8 v14  (la paleta con Tema auto reserva las bandas de las tres especies)'
 banner(VERSION)
 
 base = require_base(8)
@@ -303,7 +310,8 @@ def prueba(t):
     # paleta de generaciones
     cp = dict(c)
     cp.update(paleta=0, paleta_tono=20.0, paleta_croma=0.04, paleta_luz=0.35, paleta_alterna=0.06,
-              contraste_ocupada=0.04, tapa_neutra=0.0, tapa_luz=0.28,
+              contraste_ocupada=0.04, tapa_neutra=0.0, tapa_luz=0.28, tema_auto=0,   # v14: Tema fijo
+
               nivel=min(c['nivel'], 14))          # desde la fase 15 la concha lleva la materia de su tema
 
     def oklch(n, ocup):
@@ -329,6 +337,13 @@ def prueba(t):
     t.check('paleta: los colores de referencia (vacia y ocupada), aunque antes se haya pintado en industria',
             [(hx(m.generation_color(cp, n, False)), hx(m.generation_color(cp, n, True))) for n in range(8)] == ref
             and ind != [r[0] for r in ref])
+    # v14 (motor v121): con Tema = auto (la mezcla de especies de la fase 11 v22) se reservan
+    # las bandas de las tres especies: la de la industria tambien
+    if hasattr(m, 'TEMA_MODOS'):
+        ca = dict(cp, tema=0, tema_auto=1, nivel=max(11, cp['nivel']))
+        t.check('v14: con Tema auto la paleta reserva las bandas de las tres especies (como en la industria)',
+                m.bandas_de(ca) == m.BANDAS_INDUSTRIA
+                and [hx(m.generation_color(ca, n, False)) for n in range(8)] == ind)
     t.check('paleta: la loseta ocupada, algo mas clara que la vacia',
             all(sum(m.generation_color(cp, n, False)) < sum(m.generation_color(cp, n, True))
                 < sum(m.generation_color(cp, n, False)) + 0.25 for n in range(200)))

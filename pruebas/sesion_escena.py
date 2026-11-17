@@ -1,8 +1,12 @@
 """
 Sesion de 20 minutos por escena (fase 18), sobre el motor sin TouchDesigner.
 
-    python3 pruebas/sesion_escena.py              # las dos escenas, 20 minutos
+    python3 pruebas/sesion_escena.py              # las cuatro escenas, 20 minutos
     python3 pruebas/sesion_escena.py ciudad 5     # una escena, 5 minutos
+    python3 pruebas/sesion_escena.py mezcla 5     # la mezcla de especies (Tema = auto, fase 11 v22)
+
+La escena mezcla informa ademas del reparto final de la sesion frente a la cuota
+(MEZCLA de la leyenda: construido, tramo, cuota y globo).
 
 A 120 BPM y 30 fotogramas por segundo: SEQ1 en semicorcheas (cambia de
 pattern cada 4 minutos con una rafaga de All Notes Off: A, B, A, C, A),
@@ -41,7 +45,8 @@ def cfg_escena(nombre):
     c.update(nivel=18, avance=1, escena=m.ESCENAS.index(nombre))
     for k, v in m.escena_defecto(nombre).items():
         if k == 'Tema':
-            c['tema'] = m.TEMAS.index(v)
+            c['tema'] = m.TEMAS.index(v) if v in m.TEMAS else 0
+            c['tema_auto'] = int(v == 'auto')   # fase 11 v22: la mezcla de especies
         elif k == 'Paleta':
             c['paleta'] = 0 if v == 'generaciones' else 1
         elif k in PAR_CFG:
@@ -121,6 +126,8 @@ def sesion(nombre, minutos=20.0, fps=30.0, tempo=120.0, muestra=0.5):
             datos['luz'].append(len(inst.get('luz_local', [])))
             datos['px'].append(m.px_formaciones(W, c))
     datos['R'] = m.top_radius(W, c)
+    if c.get('tema_auto'):
+        datos['mezcla'] = m.legend_mezcla(W, c).strip()
     return datos
 
 
@@ -150,6 +157,8 @@ def informe(nombre, d, minutos):
              max(d['luz']), statistics.mean(d['chops']) if d['chops'] else 0.0))
     for texto, bien in criterios:
         print('   %-6s %s' % ('OK' if bien else 'FALLO', texto))
+    if d.get('mezcla'):
+        print('   reparto final: %s' % d['mezcla'])
     return all(b for _, b in criterios)
 
 

@@ -577,6 +577,36 @@ Un tercer `Tema` junto a naturaleza y ciudad. La **mina** (SEQ1) cava, en racimo
 
 ---
 
+### La mezcla de especies (fase 11 v22, motor v121, comun v90; fases 8 v14, 12 v12, 13 v10, 14 v5, 15 v4, 16 v5, 17 v4, 18 v4, 19 v4)
+
+El mundo deja de tener una sola especie. Con `Tema = auto`, el nuevo valor de fábrica, empieza en naturaleza; según se construye terreno, la ciudad nace junto al agua y se extiende por contagio, y después la industria nace en el borde de la ciudad. La especie de cada celda (`W['tema_c']`: 0 naturaleza, 1 ciudad, 2 industria; −1 ninguna, −2 semilla neutra heredada) y su familia de piezas (`W['fam']`) se fijan al fundarse la celda y no cambian hasta que se vacía del todo. Con `Tema` fijo (naturaleza, ciudad o industria) todo se comporta como antes: `pruebas/regresion_mezcla.py` lo comprueba contra el motor de `main`.
+
+**Construido y tramo.** `construido` = celdas con especie / (celdas del globo × `Topeconstruido`, 0,6). No cuentan las semillas neutras heredadas (hasta su primera nota) ni el mal. La tabla `mezcla_especies` (Table DAT, editable) da la cuota de cada especie por tramo; el tramo solo avanza y el entierro lo devuelve al primero.
+
+| Construido desde | Naturaleza | Ciudad | Industria |
+|---|---|---|---|
+| 0 % | 100 | 0 | 0 |
+| 30 % | 70 | 30 | 0 |
+| 50 % | 50 | 40 | 10 |
+| 75 % | 25 | 50 | 25 |
+| 100 % | 10 | 50 | 40 |
+
+**Sucesión.** 1, contagio: una celda nueva que toca ciudad o industria es de esa especie si está por debajo de su cuota (la más lejos de su cuota si toca las dos; en empate, la ciudad). 2, fundación: con la fundación abierta (la especie puede crecer y no tiene celdas, o su déficit pasa de `Valvula` puntos), la ciudad se funda tocando un río o un lago (sin agua, la formación natural más ocupada) y la industria tocando la ciudad; tras `Paciencia` celdas sin candidata, la siguiente funda donde caiga. 3, el resto, naturaleza. Los satélites heredan especie y familia de su núcleo. Una especie sin familia lista en la línea de la celda no puede crecer: la nota nunca espera a la carga.
+
+**Familias y carga.** Una familia es una evolución completa de una línea: en ciudad e industria, un diseño y una variante por etapa (la familia *k* toma la pareja *k*-ésima de cada etapa, así que todas salen en alguna; en la mina, si el brote es petrolífero, la ruta de la refinería); en la vegetación, una por bioma y variante, con todas las plantas que una celda de ese bioma puede pedir; el relieve, una sin piezas. Lo que la piel pide por su nombre (obra, remates, puentes, protagonista, híbridos, huellas, cortes, piezas de los mutantes) va con la especie. Disponibles por especie: `ceil(cuota × familias)`, con una por línea (y por bioma) como mínimo, en el orden del ciclo (`Ordenfamilias`). Cargar una geometría es ponerla en la lista del Render TOP; la cola carga o descarga como mucho `Cargaporfotograma` por fotograma, una familia no está disponible hasta que está entera y una familia con celdas no se descarga. El tramo siguiente se precarga a `Precarga` puntos de su umbral. Antes del motor v121 no había carga repartida: el render cambiaba de golpe la lista del tema (`render_tema_al_dia`); ahora, con `auto`, dibuja lo que ha cargado la cola.
+
+**Cada regla, en su mancha.** Con varias especies en el globo, la piel, el terreno, los ríos, las carreteras, las vías y la red y el tráfico se calculan por especie sobre una *vista* del mundo en la que las celdas de las otras especies se ven vacías, con sus cachés propias. Los clusters y la presión solo cuentan vecinas de la misma especie. Un río acaba en la primera celda que no es naturaleza (la ciudad queda en la desembocadura); las carreteras van solo por la ciudad (un árbol por mancha) y las vías solo por la industria. El mapa de alturas es uno: el relieve de la naturaleza y los muelles de la ciudad y la industria; el canal `b` de `alturas` lleva la especie de cada píxel (2 ciudad, 3 industria) y el shader pinta las losas o el hormigón donde toca (comun v90). Las conchas guardan la especie de cada celda (`temas`): una concha puede ser mixta y losetas, recursos y cortes la leen por celda. `Temaenciclo` no se aplica con `auto`. La paleta de conchas reserva las bandas de las tres especies (fase 8 v14). La escena `mezcla` (fase 18 v4) carga `Tema = auto`.
+
+**Parámetros (página Fase11).** `Tema` (auto / naturaleza / ciudad / industria; auto de fábrica: un proyecto en naturaleza pasa a auto al relanzar, una vez) · `Topeconstruido` 0,6 · `Valvula` 10 · `Paciencia` 8 · `Ordenfamilias` (ciclo / fijo) · `Precarga` 5 · `Cargaporfotograma` 4 · `Simconstruido` −1.
+
+**Leyenda.** `MEZCLA construido 52% (tramo 50) cuota N/C/I 50/40/10 globo 61/30/9 manchas C1 I1 familias 9+4/7/2 cola 3` (`9+4`: 9 disponibles y 4 en uso fuera de la cuota).
+
+**Prueba sin BeatStep.** `Tema = auto` y `Simconstruido` en 0, 30, 50, 75 y 100: la leyenda da las cinco cuotas. Con `Simconstruido` −1 y `Sembrarzona` en zonas distintas: todo empieza en naturaleza; pasado el 30 %, la primera celda nueva junto a un río funda la ciudad; pasado el 50 %, la industria aparece pegada a la ciudad.
+
+**Autoprueba** (`autoprueba_mezcla` en el motor; las fases 12 a 19 llaman a `autoprueba_mezcla_fase`): arranque, tabla y tramo, contagio, fundación (con agua, sin agua y en el borde de la ciudad), paciencia, válvula, techo, satélites, persistencia, familia completa, mínimos, descarga de lo implantado, carga repartida, redes, clusters, entierro, determinismo, coste y la regresión con `Tema` fijo.
+
+---
+
 ## FASE 12 · Moduladores: velocidad y duración del gate
 
 ### Qué hace

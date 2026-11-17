@@ -41,6 +41,11 @@ PROBAR SIN BEATSTEP
   y recorre el cluster. O Erosionar dos veces seguidas (en menos de Ventana-
   escalada pasos: un segundo a 120 BPM).
 
+LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
+-----------------------------------------------
+  El efecto del aranazo, segun la especie de la celda golpeada; la escalada
+  (incendio, implosion, apagon) no sale de su mancha.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase14_destructores.py').read())
@@ -50,7 +55,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase14 v4  (industria: derrumbe de galeria y grisu, chimenea y apagon en cadena, fuga e incendio)'
+VERSION = 'fase14 v5  (la mezcla de especies: aranazo y escalada segun la especie de cada celda)'
 banner(VERSION)
 
 base = require_base(14)
@@ -121,6 +126,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)        # motor v121: la mezcla de especies
     finally:
         for nm, v in guarda.items():
             try:
@@ -387,6 +393,15 @@ def _prueba(t, m):
     base.par.Grisu = True
     base.par.Apagon = True
     t.check('Grisu y Apagon apagados: la mina y la energia no escalan (%s)' % sin, sin == [None, None])
+
+
+def _prueba_mezcla(t, m):
+    """La mezcla de especies (fase 11 v22, motor v121): lo que hace esta fase en un globo con
+    las tres especies (un mundo propio: el de la sesion no se toca)."""
+    if not hasattr(m, 'autoprueba_mezcla_fase'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla_fase(m.cfg(), 14):
+        t.check(texto, bien, detalle)
 
 
 run_test(base, prueba)

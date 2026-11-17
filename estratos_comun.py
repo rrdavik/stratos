@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v89'
+VERSION_COMUN = 'comun v90'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -828,7 +828,7 @@ float relieveFino(vec3 d, float e, float rel)
 {
     // rel: 1 el relieve del SEQ2 (crestas finas), 0 los montes boscosos (comun v76: lisos; con
     // las crestas parecian una pelota de golf)
-    if (uOceano.w < 0.5 || e <= 0.0)
+    if (uOceano.w < 0.5 || e <= 0.0 || rel > 1.5)     // comun v90: rel 2-3, un muelle de la mezcla
         return max(e, 0.0);
     float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
     float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
@@ -891,7 +891,7 @@ void main()
         float e0 = max(a.r, 0.0);
         // comun v80: primero lo barato. relieveFino sube como mucho 0,017 + 1,1 % (fruido va de 0 a
         // 1): el mar, la lava y lo que no llega a tierra firme se descartan sin calcular ruido
-        bool vive = uOceano.w > 0.5 && id < uPradera.x && a.a < 0.05 && e0 * 1.02 + 0.018 > 0.035;
+        bool vive = uOceano.w > 0.5 && id < uPradera.x && a.a < 0.05 && a.b < 1.5 && e0 * 1.02 + 0.018 > 0.035;
         if (vive) {
             // y lo que queda detras del planeta con la camara lejos (globo): el horizonte de una
             // esfera mas pequena que el nucleo, con el margen del relieve mas alto y de la mata
@@ -1125,7 +1125,7 @@ float relieveFino(vec3 d, float e, float rel)
 {
     // rel: 1 el relieve del SEQ2 (crestas finas), 0 los montes boscosos (comun v76: lisos; con
     // las crestas parecian una pelota de golf)
-    if (uOceano.w < 0.5 || e <= 0.0)
+    if (uOceano.w < 0.5 || e <= 0.0 || rel > 1.5)     // comun v90: rel 2-3, un muelle de la mezcla
         return max(e, 0.0);
     float n1 = fruido(d * 90.0) * 0.6 + fruido(d * 210.0) * 0.4;
     float n2 = fruido(d * 150.0) * 0.55 + fruido(d * 340.0) * 0.45;
@@ -1298,12 +1298,16 @@ void main()
         vec3 dT = normalize(iVert.oPos);
         vec2 tuv = uvMapa(dT);
         vec4 mapa = texture(sAlturas, tuv);
+        // comun v90 (motor v121): con la mezcla de especies, sAlturas.b dice de que especie es
+        // cada pixel: 2 la ciudad, 3 la industria (sus muelles); por debajo, la naturaleza
+        float temaPix = mapa.b > 1.5 ? (mapa.b > 2.5 ? 2.0 : 1.0) : 0.0;
+        bool natPix = uOceano.w > 0.5 && temaPix < 0.5;
         // motor v97: la altura, pixel a pixel (el mapa mas el relieve fino): la costa no
         // depende de los vertices de la malla
         float eAbs = uOceano.w > 0.5 ? relieveFino(dT, max(mapa.r, 0.0), mapa.b) : iVert.hrel * uTerreno.y;
         float h = clamp(eAbs / max(1e-4, uTerreno.y), 0.0, 1.0);
         // comun v76: el borde de cada piso, irregular (antes, anillos perfectos en los montes)
-        float hp = uOceano.w > 0.5 ? clamp(h + smoothstep(0.03, 0.12, h) * (0.07 * (ruido(iVert.pPos * 2.9) - 0.5)
+        float hp = natPix ? clamp(h + smoothstep(0.03, 0.12, h) * (0.07 * (ruido(iVert.pPos * 2.9) - 0.5)
                                                  + 0.035 * (ruido(iVert.pPos * 8.3) - 0.5)), 0.0, 1.0) : h;
         base = uTerreno.w > 0.5 ? texture(sRampa, vec2(hp, 0.5)).rgb : rampa(hp);
         float roca = smoothstep(uPisos.x, uPisos.x + 0.05, h) * (1.0 - step(uPisos.y, h));
@@ -1319,7 +1323,7 @@ void main()
         ks = mix(0.30, 0.02, rug);
         amb = 1.15;
         sombra = max(sombra, 0.65);
-        if (uOceano.w > 0.5) {
+        if (natPix) {
             // motor v97: el detalle del suelo vegetal. Claros de pasto seco y manchas de
             // umbria (dos escalas), flores sueltas de cerca, y la roca que asoma donde la
             // ladera se empina, a cualquier altura
@@ -1411,7 +1415,7 @@ void main()
                 playa = mix(playa, suelo, smoothstep(0.012, 0.05, sobreMar));
                 base = mix(base, playa, arena);
                 rug = mix(rug, 0.8, arena);
-                if (uOceano.w < 0.5) {
+                if (!natPix) {
                     // comun v89 (motor v120): las islas de la ciudad y la industria son muelles.
                     // Arriba, el suelo de su tema: la ciudad, losas claras en reticula con sus
                     // juntas; la industria, hormigon con hollin, oxido y charcos de aceite. El
@@ -1425,7 +1429,7 @@ void main()
                     float junta = smoothstep(0.43, 0.48, max(fj.x, max(fj.y, fj.z))) * (1.0 - aa);
                     float tesela = hash13(floor(g));
                     vec3 losa;
-                    if (uTierra.y < 1.5) {
+                    if ((temaPix > 0.5 ? temaPix : uTierra.y) < 1.5) {
                         losa = mix(vec3(0.50, 0.49, 0.46), vec3(0.66, 0.64, 0.60), tesela);
                         losa = mix(losa, vec3(0.30, 0.29, 0.28), 0.65 * junta);
                         float parque = smoothstep(0.70, 0.80, ruido(pp * 9.0 + vec3(2.7)));
