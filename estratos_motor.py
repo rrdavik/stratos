@@ -2687,7 +2687,11 @@ def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True)
 
 def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False):
     t_py = _time.perf_counter()
-    out = _build_instances(W, cfg, now, hide_beacons, tiles, refresco)
+    _MEZCLA_CACHE['dibujo'] = (_TERRENO.get('sello', 0), now)     # v121: lo que no cambia mientras se dibuja
+    try:
+        out = _build_instances(W, cfg, now, hide_beacons, tiles, refresco)
+    finally:
+        _MEZCLA_CACHE['dibujo'] = None
     _TURNOS['ms_inst'] = (_time.perf_counter() - t_py) * 1000.0     # motor v101: para la leyenda PIEL
     if cfg.get('tema_auto') and cfg['nivel'] >= 11 and _CARGA['arranque']:   # v121: lo que no esta cargado
         _CARGA['sin_cargar'] = sorted(g for g, f in out.items() if f and g.startswith('mod_')
@@ -6184,9 +6188,18 @@ def especies_presentes(W, cfg):
     """Las especies de las celdas ocupadas (las que se dibujan)."""
     if cfg['nivel'] < 11:
         return frozenset([int(cfg.get('tema', 0)) % len(TEMAS)])
+    dib = _MEZCLA_CACHE.get('dibujo')     # durante build_instances el mundo no cambia: una vez
+    clave = (dib, id(W), bool(cfg.get('tema_auto')), int(cfg.get('tema', 0))) if dib is not None else None
+    if clave is not None:
+        v = _MEZCLA_CACHE.get('presentes')
+        if v is not None and v[0] == clave:
+            return v[1]
     esp = especies_lista(W, cfg)
-    s = frozenset(esp[i] for i in range(N) if W['occ'][i] > 0 or W['vh'][i] > 0.005)
-    return s or frozenset([tema_idx(W, cfg, -1)])
+    occ, vh = W['occ'], W['vh']
+    s = frozenset(e for e, o, h in zip(esp, occ, vh) if o > 0 or h > 0.005) or frozenset([tema_idx(W, cfg, -1)])
+    if clave is not None:
+        _MEZCLA_CACHE['presentes'] = (clave, s)
+    return s
 
 
 def multiespecie(W, cfg):
@@ -7003,11 +7016,17 @@ def vista(W, cfg, t, refrescar=True):
     if refrescar == 'frame' and V.get('_sello') == sello:
         return V
     esp = especies_lista(W, cfg)
-    for k, v in W.items():
-        if k not in VISTA_MASCARA:
+    propias = dict((k, V.get(k)) for k in VISTA_MASCARA)
+    propias['par'] = V.get('par')
+    V.update(W)                         # lo que no se enmascara, compartido (en C: barato)
+    for k, v in propias.items():        # las listas enmascaradas son las de la vista
+        if v is not None:
             V[k] = v
-    for k in [k for k in V if k not in W and k not in VISTA_MASCARA and k not in ('_de', '_sello')]:
-        del V[k]
+        else:
+            V.pop(k, None)
+    if len(V) > len(W) + 3:             # una clave que W ya no tiene
+        for k in [k for k in V if k not in W and k not in VISTA_MASCARA and k not in ('_de', '_sello', 'par')]:
+            del V[k]
     V['_sello'] = sello
     V['_de'] = W
     for k, vacio in VISTA_MASCARA.items():
@@ -7016,17 +7035,18 @@ def vista(W, cfg, t, refrescar=True):
             V.pop(k, None)
             continue
         dst = V.get(k)
+        nuevo = [a if e == t else vacio for a, e in zip(src, esp)]
         if dst is None or dst is src or len(dst) != len(src):
-            dst = V[k] = list(src)
-        for i in range(len(src)):
-            dst[i] = src[i] if esp[i] == t else vacio
+            V[k] = nuevo
+        else:
+            dst[:] = nuevo              # la misma lista: quien la tenga la ve al dia
     par = W['par']
     vp = V.get('par')
+    nuevo = [p if e == t and (p < 0 or esp[p] == t) else -1 for p, e in zip(par, esp)]
     if vp is None or vp is par or len(vp) != len(par):
-        vp = V['par'] = list(par)
-    for i in range(N):
-        p = par[i]
-        vp[i] = p if esp[i] == t and (p < 0 or esp[p] == t) else -1
+        V['par'] = nuevo
+    else:
+        vp[:] = nuevo
     return V
 
 
@@ -7151,7 +7171,7 @@ def piel_multi(W, cfg, now, out, refresco):
     'especies' y la informacion de los turnos sumada."""
     res, infos = {}, []
     for t in sorted(especies_presentes(W, cfg)):
-        V, ct = vista(W, cfg, t), cfg_especie(cfg, t)
+        V, ct = vista(W, cfg, t, 'frame'), cfg_especie(cfg, t)
         with en_vista(t):
             r = build_piel_refresco(V, ct, now, out) if refresco else build_piel(V, ct, now, out)
             infos.append(dict(_TURNOS.get('info') or {}))
@@ -7179,7 +7199,7 @@ def tejido_multi(W, cfg, now, out):
     filas, res, rios = [], {}, {}
     vias = []
     for t in sorted(especies_presentes(W, cfg)):
-        V, ct = vista(W, cfg, t), cfg_especie(cfg, t)
+        V, ct = vista(W, cfg, t, 'frame'), cfg_especie(cfg, t)
         with en_vista(t):
             f, r = build_tejido(V, ct)
             filas.extend(f)

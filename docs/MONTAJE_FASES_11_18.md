@@ -603,6 +603,8 @@ El mundo deja de tener una sola especie. Con `Tema = auto`, el nuevo valor de f�
 
 **Prueba sin BeatStep.** `Tema = auto` y `Simconstruido` en 0, 30, 50, 75 y 100: la leyenda da las cinco cuotas. Con `Simconstruido` −1 y `Sembrarzona` en zonas distintas: todo empieza en naturaleza; pasado el 30 %, la primera celda nueva junto a un río funda la ciudad; pasado el 50 %, la industria aparece pegada a la ciudad.
 
+*Medidas* (simulación, Python): la lógica de la mezcla y la cola, 0,05 ms por fotograma de media (pico 0,7 ms al fundar). Escena `mezcla` de `perfil_piel.py`: 3,8 ms frente a 3,5 de la naturaleza sola (+9 %). Con las tres especies a la vez (27/27/20 celdas) frente al mismo mundo de una sola especie: ≈ 1,96 ms frente a 1,55 de la ciudad (+25 %); lo causan el tejido (tres redes en vez de una, +0,18 ms) y el refresco de las vistas (≈ 0,15 ms). Sesión de 20 minutos con los patterns de la escena: el último mundo, en el tramo del 50 %, reparte 77/23/0 frente a la cuota 50/40/10. **En TouchDesigner, por comprobar:** los fps con la cola cargando y el suelo de los muelles de la mezcla.
+
 **Autoprueba** (`autoprueba_mezcla` en el motor; las fases 12 a 19 llaman a `autoprueba_mezcla_fase`): arranque, tabla y tramo, contagio, fundación (con agua, sin agua y en el borde de la ciudad), paciencia, válvula, techo, satélites, persistencia, familia completa, mínimos, descarga de lo implantado, carga repartida, redes, clusters, entierro, determinismo, coste y la regresión con `Tema` fijo.
 
 ---
