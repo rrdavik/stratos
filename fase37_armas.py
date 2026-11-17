@@ -182,8 +182,9 @@ def _prueba(t, m, copy):
     leg = m._legend_armas(W, c)
     S.camara(W, c, [], n=3)
     S.pasos(W, c, 1, casillas=[])
-    t.check('pisoton: Npison personas sobre su celda: no devora y tam baja Encoge por paso; al irse, devora',
-            pisado == (6, round(tam0 - 2 * c['encoge'], 3), True) and W['occ'][a] == 4 and not mo['pisoton']
+    t.check('pisoton: Npison personas sobre su celda: no devora y tam baja Encoge por paso; al irse, devora '
+            '(1 escalon por paso: Ritmodevora 2 x Danomonstruo 0,5)',
+            pisado == (6, round(tam0 - 2 * c['encoge'], 3), True) and W['occ'][a] == 5 and not mo['pisoton']
             and 'pison 3/3' in leg, '%s, %s' % (pisado, leg.strip()))
     a = a_
 

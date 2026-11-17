@@ -106,7 +106,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase33_monstruo.py').read())
 - **Aparición (D2).** Cuando la fracción de celdas de la cara visible (las que tienen casilla en la sala) con `occ > 0` y `sp != MAL` llega a `Umbralaparicion`, el monstruo aparece en la celda vacía de la cara visible más cercana al borde por el que entran las celdas con el giro (el sentido en que avanza `Loncentral`), con desempate `_hash01`, y tamaño `Tamanoinicial`.
 - **Objetivo.** Cada `Recalculo` pasos de juego, siempre que vacía una celda y cuando el objetivo deja de ser comestible: un Dijkstra por `vecinas6` (la vecindad de la fase 4) en el que entrar en una zanja cuesta `Costezanja` y el agua es muro. El objetivo es el de mayor `occ / (1 + coste)` (desempate `_hash01`). El pequeño no elige fusiones (`occ` desde `Umbralram + Pasoumbral`) ni coronas (desde `Umbralram + 2 Pasoumbral`): los umbrales de la página Fase4.
 - **Movimiento.** Una celda por el camino cada `Pasomonstruo` semicorcheas (`Pasogrande` en forma grande). Sin objetivo, quieto. Entre dos celdas se dibuja a medio camino.
-- **Devorar.** En su objetivo, en cada paso de juego quita `Ritmodevora` escalones de ocupación (`Ritmogrande` en forma grande) con `_undo_note()`, en el orden de la erosión: primero los satélites, luego la altura (y, de paso, las inclusiones que quedan por encima, fase 26). No pasa por `erosion()`: no cuenta en el balance de la fase 23. Cada escalón suma 1 a `acum`.
+- **Devorar.** En su objetivo, en cada paso de juego quita `Ritmodevora` × `Danomonstruo` escalones de ocupación (`Ritmogrande` × `Danomonstruo` en forma grande; desde la fase 33 v5 / motor v122, `Danomonstruo` 0,5: la mitad de daño, 1 escalón por paso de pequeño y 1,5 —alterna 1 y 2— de grande) con `_undo_note()`, en el orden de la erosión: primero los satélites, luego la altura (y, de paso, las inclusiones que quedan por encima, fase 26). No pasa por `erosion()`: no cuenta en el balance de la fase 23. Cada escalón suma 1 a `acum`.
 - **Crecer.** `tam = Tamanoinicial + (1 − Tamanoinicial) × min(1, acum / Ocupacionmax)`. En 1, forma grande: más rápido, devora a `Ritmogrande` y puede con fusiones y coronas.
 - **Brote del mal.** La celda que llega a `occ = 0` se vacía y recibe un brote: `occ = 1`, `sp = MAL`. El monstruo busca otro objetivo.
 - **El mal crece.** Un brote que recibe notas crece con las reglas de siempre (carga, ocupación, desborde, fusión, corona); la presencia del público encima sube la probabilidad de que prendan, como en cualquier celda (fase 22). No hibrida: una nota del otro secuenciador no lo vuelve híbrido. **Desborde del mal (D4):** en una vecina vacía, un satélite del mal; en otra del mal, crece o la presiona; sobre una del público, se pierde (ni hibrida ni la carga).
@@ -131,7 +131,7 @@ El alfa de cada instancia lleva rugosidad + 2 × parte (0 velo, 1 cuerpo, 2 ojos
 
 ### Parámetros (página Fase33)
 
-`Umbralaparicion` 0,25 · `Tamanoinicial` 0,5 · `Ocupacionmax` 8 · `Ritmodevora` 2 · `Ritmogrande` 3 · `Pasomonstruo` 24 · `Pasogrande` 12 (fase 33 v4; antes 16 y 8) · `Costezanja` 2 · `Recalculo` 4 · `Esperamonstruo` 8 s · `Verobjetivo` encendido · `Simmonstruo` (pulso: aparece ya) · `Simceldamon` 0
+`Umbralaparicion` 0,25 · `Tamanoinicial` 0,5 · `Ocupacionmax` 8 · `Ritmodevora` 2 · `Ritmogrande` 3 · `Danomonstruo` 0,5 (fase 33 v5) · `Pasomonstruo` 24 · `Pasogrande` 12 (fase 33 v4; antes 16 y 8) · `Costezanja` 2 · `Recalculo` 4 · `Esperamonstruo` 8 s · `Verobjetivo` encendido · `Simmonstruo` (pulso: aparece ya) · `Simceldamon` 0
 
 ### Leyenda
 

@@ -205,6 +205,11 @@
 #                 el terreno, los rios, las carreteras, las vias y el trafico se calculan
 #                 por especie sobre vistas del mundo (cada regla, dentro de su mancha);
 #                 las conchas guardan la especie de cada celda. Con Tema fijo, como antes.
+#                 Motor v122 (fase 33 v5): Trumpzilla hace la MITAD DE DANO. Danomonstruo
+#                 (0,5) multiplica los escalones que devora por paso de juego
+#                 (Ritmodevora x 0,5 = 1; Ritmogrande x 0,5 = 1,5: alterna 1 y 2, con un
+#                 resto que se acumula). Sin publico, ganaba la partida entera. En la
+#                 demo, el capitulo 2 lo hace aparecer con 2 ya comidos (llega a grande).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -216,7 +221,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v121'
+MOTOR_VERSION = 'motor v122'
 
 import math
 import time as _time
@@ -453,7 +458,7 @@ DEFAULT_CFG = dict(
     carpeta_historico='',
     # fases 32 a 37: el juego «El devorador» (lo apagado por defecto: Modojuego y las armas)
     modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1,
-    umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3,
+    umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3, dano_monstruo=0.5,
     paso_monstruo=24, paso_grande=12, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0,
     zanja_juego=1, profundidad_agua=4, ritmo_agua=4, desborde_agua=2, ahoga=0.5,
@@ -17078,8 +17083,8 @@ def valores_dmx(W, cfg, now, filas):
 #   FASE 33  el monstruo: aparece al construirse Umbralaparicion de la cara
 #            visible, por el borde por el que entran las celdas con el giro;
 #            elige su objetivo con un Dijkstra (occ / (1 + coste)); avanza una
-#            celda cada Pasomonstruo semicorcheas; devora Ritmodevora escalones
-#            por paso de juego con _undo_note (lo ultimo construido primero, sin
+#            celda cada Pasomonstruo semicorcheas; devora Ritmodevora x
+#            Danomonstruo escalones por paso de juego con _undo_note (lo ultimo construido primero, sin
 #            pasar por erosion(): fuera del balance de la fase 23); crece con lo
 #            devorado y en forma grande va mas deprisa y puede con fusiones y
 #            coronas. Cada celda vaciada deja un BROTE DEL MAL (occ 1, sp MAL),
@@ -17120,7 +17125,7 @@ SEMIS_MAX = 64                  # semicorcheas como mucho por fotograma (un salt
 def mon_nuevo(n=0, tam=0.5):
     return dict(estado='espera', celda=None, tam=float(tam), acum=0, objetivo=None, camino=[], mov=0.0,
                 t_muerte=None, n=int(n), de=None, recalc=0, t_estado=None, comidos=0, caidas=0,
-                piedra=None, aturdido=None, acorralado=False, pisoton=False, quietud=None)
+                piedra=None, aturdido=None, acorralado=False, pisoton=False, quietud=None, resto=0.0)
 
 
 def juego_nuevo(cfg, now):
@@ -17567,6 +17572,13 @@ def factor_ruido(W, cfg):
     return 1.0 + max(0.0, min(1.0, r / max(1e-6, cfg['umbral_corte'])))
 
 
+def ritmo_mon(cfg, m):
+    """Escalones que devora por paso de juego (puede ser fraccionario): Ritmodevora
+    (Ritmogrande en forma grande) por Danomonstruo (motor v122: 0,5, la mitad)."""
+    r = cfg['ritmo_grande'] if grande(m) else cfg['ritmo_devora']
+    return max(0.0, float(r) * float(cfg.get('dano_monstruo', 1.0)))
+
+
 def paso_mon(cfg, m):
     return max(1, int(cfg['paso_grande'] if grande(m) else cfg['paso_monstruo']))
 
@@ -17646,7 +17658,9 @@ def monstruo_paso(W, cfg, now):
     if parado(W, cfg, m, now) or m.get('pisoton') or m.get('acorralado'):
         return
     c = m['celda']
-    ritmo = int(cfg['ritmo_grande'] if grande(m) else cfg['ritmo_devora'])
+    m['resto'] = m.get('resto', 0.0) + ritmo_mon(cfg, m)    # v122: el ritmo puede ser fraccionario
+    ritmo = int(m['resto'] + 1e-9)
+    m['resto'] = max(0.0, m['resto'] - ritmo)
     for _ in range(max(0, ritmo)):
         if W['occ'][c] <= 0:
             break
@@ -19316,8 +19330,8 @@ def _demo_tick(W, cfg, cap, now, t, r):
     if J is not None and t >= 0.0:
         m = J['mon']
         if cap == 2 and t >= 1.0 and _una_vez('aparece'):
-            c = celda_aparicion(W, cfg)
-            if _demo_monstruo(W, cfg, now, c) is not None:
+            c = celda_aparicion(W, cfg)     # v122: con 2 ya comidos (con la mitad de dano llega a grande igual)
+            if _demo_monstruo(W, cfg, now, c, acum=2) is not None:
                 hecho.append('aparece en %d' % c)
         elif cap == 5 and t >= 6.0 and _una_vez('aparece'):
             if _demo_monstruo(W, cfg, now, r.get('salida'), acum=8) is not None:
@@ -19408,13 +19422,13 @@ def _legend_monstruo(W, c):
             extra = '   cara visible %d%% (aparece al %d%%)' % (
                 int(round(construida_visible(W, c) * 100)), int(round(c['umbral_aparicion'] * 100)))
         return '  MONSTRUO #%d  %s%s' % (m['n'], m['estado'], extra)
-    ritmo = int(c['ritmo_grande'] if grande(m) else c['ritmo_devora'])
+    ritmo = ritmo_mon(c, m)
     cara = ''
     if c['nivel'] >= 38 and c.get('sprite_mon', 1):        # fase 38: la cara de Trumpzilla
         cara = '   cara %s' % emocion_mon(W, c, m, W.get('t') or 0.0)[0]
-    return '  MONSTRUO #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d  x%d%s%s' % (
+    return '  MONSTRUO #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d  x%s%s%s' % (
         m['n'], m['estado'], m['celda'], m['objetivo'] if m['objetivo'] is not None else '-', m['tam'],
-        min(m['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), ritmo,
+        min(m['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), ('%g' % ritmo).replace('.', ','),
         '   GRANDE' if grande(m) else '', cara)
 
 
@@ -19953,6 +19967,7 @@ def cfg():
                  ocupacion_max=max(1, int(_p('Ocupacionmax', c['ocupacion_max']))),
                  ritmo_devora=max(0, int(_p('Ritmodevora', c['ritmo_devora']))),
                  ritmo_grande=max(0, int(_p('Ritmogrande', c['ritmo_grande']))),
+                 dano_monstruo=max(0.0, float(_p('Danomonstruo', c['dano_monstruo']))),
                  paso_monstruo=max(1, int(_p('Pasomonstruo', c['paso_monstruo']))),
                  paso_grande=max(1, int(_p('Pasogrande', c['paso_grande']))),
                  coste_zanja=max(1.0, _p('Costezanja', c['coste_zanja'])),
