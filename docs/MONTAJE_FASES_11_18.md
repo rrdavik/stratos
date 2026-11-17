@@ -588,8 +588,12 @@ El mundo deja de tener una sola especie. Con `Tema = auto`, el nuevo valor de f�
 | 0 % | 100 | 0 | 0 |
 | 30 % | 70 | 30 | 0 |
 | 50 % | 50 | 40 | 10 |
-| 75 % | 25 | 50 | 25 |
-| 100 % | 10 | 50 | 40 |
+| 75 % | 30 | 45 | 25 |
+| 100 % | 30 | 40 | 30 |
+
+**Reserva de naturaleza (fase 11 v23, motor v122).** `Reservanaturaleza` (0,3): un 30 % de lo construido es siempre naturaleza. Si una fila de la tabla (también una editada a mano) da menos, la ciudad y la industria se reparten el 70 % restante en su proporción (10/50/40 pasa a 30/38,9/31,1). Como la cuota es el techo de la ciudad y la industria, juntas no pasan del 70 %; solo los satélites, que heredan la especie de su núcleo, pueden rebasarlo por poco.
+
+**La grúa por piezas (fase 11 v23, motor v122).** `ciu_grua` es solo el mástil (6 % de la celda de ancho), que sube con la obra; la pluma, el contrapeso, la cabina, el cable y el gancho van en `ciu_foso` a la escala de la celda y miden lo mismo en cualquier obra. Antes el modelo entero se estiraba con la altura y, en un edificio alto, la pluma era una lámina de varios pisos flotando en el aire. Hay que relanzar la fase 11 (o `recargar_todo.py`) para que se reconstruya el modelo `ciu_grua`.
 
 **Sucesión.** 1, contagio: una celda nueva que toca ciudad o industria es de esa especie si está por debajo de su cuota (la más lejos de su cuota si toca las dos; en empate, la ciudad). 2, fundación: con la fundación abierta (la especie puede crecer y no tiene celdas, o su déficit pasa de `Valvula` puntos), la ciudad se funda tocando un río o un lago (sin agua, la formación natural más ocupada) y la industria tocando la ciudad; tras `Paciencia` celdas sin candidata, la siguiente funda donde caiga. 3, el resto, naturaleza. Los satélites heredan especie y familia de su núcleo. Una especie sin familia lista en la línea de la celda no puede crecer: la nota nunca espera a la carga.
 
@@ -597,7 +601,7 @@ El mundo deja de tener una sola especie. Con `Tema = auto`, el nuevo valor de f�
 
 **Cada regla, en su mancha.** Con varias especies en el globo, la piel, el terreno, los ríos, las carreteras, las vías y la red y el tráfico se calculan por especie sobre una *vista* del mundo en la que las celdas de las otras especies se ven vacías, con sus cachés propias. Los clusters y la presión solo cuentan vecinas de la misma especie. Un río acaba en la primera celda que no es naturaleza (la ciudad queda en la desembocadura); las carreteras van solo por la ciudad (un árbol por mancha) y las vías solo por la industria. El mapa de alturas es uno: el relieve de la naturaleza y los muelles de la ciudad y la industria; el canal `b` de `alturas` lleva la especie de cada píxel (2 ciudad, 3 industria) y el shader pinta las losas o el hormigón donde toca (comun v90). Las conchas guardan la especie de cada celda (`temas`): una concha puede ser mixta y losetas, recursos y cortes la leen por celda. `Temaenciclo` no se aplica con `auto`. La paleta de conchas reserva las bandas de las tres especies (fase 8 v14). La escena `mezcla` (fase 18 v4) carga `Tema = auto`.
 
-**Parámetros (página Fase11).** `Tema` (auto / naturaleza / ciudad / industria; auto de fábrica: un proyecto en naturaleza pasa a auto al relanzar, una vez) · `Topeconstruido` 0,6 · `Valvula` 10 · `Paciencia` 8 · `Ordenfamilias` (ciclo / fijo) · `Precarga` 5 · `Cargaporfotograma` 4 · `Simconstruido` −1.
+**Parámetros (página Fase11).** `Tema` (auto / naturaleza / ciudad / industria; auto de fábrica: un proyecto en naturaleza pasa a auto al relanzar, una vez) · `Topeconstruido` 0,6 · `Reservanaturaleza` 0,3 (v23) · `Valvula` 10 · `Paciencia` 8 · `Ordenfamilias` (ciclo / fijo) · `Precarga` 5 · `Cargaporfotograma` 4 · `Simconstruido` −1.
 
 **Leyenda.** `MEZCLA construido 52% (tramo 50) cuota N/C/I 50/40/10 globo 61/30/9 manchas C1 I1 familias 9+4/7/2 cola 3` (`9+4`: 9 disponibles y 4 en uso fuera de la cuota).
 
