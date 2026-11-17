@@ -210,6 +210,13 @@
 #                 (Ritmodevora x 0,5 = 1; Ritmogrande x 0,5 = 1,5: alterna 1 y 2, con un
 #                 resto que se acumula). Sin publico, ganaba la partida entera. En la
 #                 demo, el capitulo 2 lo hace aparecer con 2 ya comidos (llega a grande).
+#                 Fase 11 v23: RESERVANATURALEZA (0,3): un 30 % de lo construido es
+#                 siempre naturaleza (reservar_naturaleza: si la fila de mezcla_especies
+#                 da menos, la ciudad y la industria se reparten el 70 %; la tabla de
+#                 fabrica, 75 % 30/45/25 y 100 % 30/40/30). La GRUA POR PIEZAS
+#                 (filas_grua): ciu_grua es solo el mastil; la pluma, el contrapeso, la
+#                 cabina, el cable y el gancho, en ciu_foso a la escala de la celda (antes
+#                 la pluma se estiraba con la altura: una lamina flotando en el aire).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -388,7 +395,7 @@ DEFAULT_CFG = dict(
     tema=0, peso_vecina=0.5, umbral_vecindad=4.0, min_cluster=2, caos=3.91, max_piezas=6,
     avance=0, pasos_etapa=2, rebote=0.2, catalogo=None,
     # fase 11 v22 (motor v121): la mezcla de especies (tema_auto: Tema = auto)
-    tema_auto=0, tope_construido=0.6, valvula=10.0, paciencia=8, orden_familias=0, precarga=5.0,
+    tema_auto=0, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, paciencia=8, orden_familias=0, precarga=5.0,
     carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
     # fase 11 v5: la naturaleza legible
     umbral_monte=8, max_caos_nat=5, limite_bosque=0.65, limite_nieve=0.90, altura_monte=1.0,
@@ -3453,8 +3460,9 @@ def _modelos():
                          for x in (-0.48, 0.48) for z in (-0.48, 0.48)]
                         + [_losa(-0.5, 0.5, y, y + 0.03, z - 0.02, z + 0.02)
                            for y in (0.33, 0.66, 0.97) for z in (-0.48, 0.48)])
-    M['ciu_grua'] = [_losa(-0.04, 0.04, 0.0, 1.0, -0.04, 0.04), _losa(-0.25, 0.85, 0.94, 0.98, -0.03, 0.03),
-                     _losa(-0.25, -0.14, 0.86, 0.94, -0.05, 0.05), _losa(0.6, 0.61, 0.72, 0.94, -0.005, 0.005)]
+    # motor v122: la grua es solo el mastil (la pluma, el contrapeso, la cabina y el cable van aparte,
+    # en ciu_foso, a la escala de la celda: estirados con el mastil, la pluma era una lamina en el aire)
+    M['ciu_grua'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
     # ------------------------------------------- huellas de las catastrofes (fase 14)
     # claro de ceniza: el suelo quemado, tocones carbonizados y un tronco caido
     M['veg_claro'] = [_hexa(-0.16, 0.03, 0.1, 0.62, 0.06), _hexa(0.18, 0.04, -0.12, 0.56, 0.08, 0.0, 30.0, 0.0),
@@ -6140,7 +6148,7 @@ NAT, CIU, IND = 0, 1, 2
 NEUTRA = -2                 # tema_c de una semilla heredada sin especie hasta su primera nota
 MEZCLA_COLS = ['construido', 'naturaleza', 'ciudad', 'industria']
 MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (30.0, 70.0, 30.0, 0.0), (50.0, 50.0, 40.0, 10.0),
-              (75.0, 25.0, 50.0, 25.0), (100.0, 10.0, 50.0, 40.0))
+              (75.0, 30.0, 45.0, 25.0), (100.0, 30.0, 40.0, 30.0))     # v122: nunca menos de 30 de naturaleza
 ORDEN_FAMILIAS = ['ciclo', 'fijo']
 MEZCLA_HIST = 512           # fundaciones recientes que se recuerdan (las autopruebas las miran)
 LINEAS = {NAT: ('vegetacion', 'relieve'), CIU: ('informal', 'planificada'), IND: ('mina', 'energia')}
@@ -6304,10 +6312,21 @@ def mezcla_estado(W, cfg, avanzar=True):
         k = max(min(int(M['tramo']), len(filas) - 1), tramo_de(filas, pct))
         if avanzar:
             M['tramo'] = k
-    cuota = [x / 100.0 for x in filas[k][1:4]]
+    cuota = reservar_naturaleza([x / 100.0 for x in filas[k][1:4]], cfg)
     sig = filas[k + 1][0] if k + 1 < len(filas) else None
     return dict(construido=pct, tramo=k, umbral=filas[k][0], cuota=cuota, filas=filas, avisos=avisos,
                 siguiente=sig, sim=sim >= 0.0)
+
+
+def reservar_naturaleza(cuota, cfg):
+    """Motor v122: Reservanaturaleza (0,3) de lo construido es siempre naturaleza. Si
+    la fila da menos, la ciudad y la industria se reparten el resto en su proporcion."""
+    r = max(0.0, min(1.0, float(cfg.get('reserva_naturaleza', 0.3))))
+    if cuota[NAT] >= r - 1e-12:
+        return cuota
+    resto = cuota[CIU] + cuota[IND]
+    k = (1.0 - r) / resto if resto > 1e-12 else 0.0
+    return [r if resto > 1e-12 else 1.0, cuota[CIU] * k, cuota[IND] * k]
 
 
 # --- la especie de una celda nueva -------------------------------------------------
@@ -9182,6 +9201,31 @@ def _obra_planificada(W, cfg, ctx, i, inf, ej, p0, n, cw, cl_, sx, sz, H, paso_,
     return k
 
 
+# motor v122: la grua por piezas, a la escala de la celda (cw). Solo el mastil se estira
+# con la altura; la pluma, el contrapeso, la cabina, el cable y el gancho miden lo mismo
+# en cualquier obra. (x a lo largo de la pluma, y arriba, z de lado; en fracciones de cw)
+GRUA_MASTIL = 0.06
+GRUA_PIEZAS = (                     # (x, y desde la cima del mastil, z, ancho, alto, fondo)
+    (0.15, 0.0, 0.0, 0.62, 0.035, 0.045),       # la pluma (de -0,16 a 0,46)
+    (-0.12, -0.05, 0.0, 0.08, 0.05, 0.07),      # el contrapeso, bajo la cola de la pluma
+    (0.05, -0.05, 0.0, 0.06, 0.05, 0.06),       # la cabina, junto al mastil
+    (0.40, -0.24, 0.0, 0.008, 0.24, 0.008),     # el cable
+    (0.40, -0.27, 0.0, 0.03, 0.03, 0.03),       # el gancho
+)
+
+
+def filas_grua(ctx, out, i, pg, cw, hc, col):
+    """La grua de la celda i en pg: el mastil (ciu_grua, alto hc) y las piezas de
+    arriba (ciu_foso, unidad de 0 a 1 en y). Devuelve la cima de la pluma."""
+    mk = _marco(i, 90.0)
+    m = GRUA_MASTIL * cw
+    out.setdefault(geometria_de('ciu_grua'), []).append(_fila_ciu(ctx, pg, mk, (m, hc, m), col))
+    for x, y, z, w, h, d in GRUA_PIEZAS:
+        p = _en_edi(pg, mk, x * cw, hc + y * cw, z * cw)
+        out.setdefault(geometria_de('ciu_foso'), []).append(_fila_ciu(ctx, p, mk, (w * cw, h * cw, d * cw), col))
+    return hc + GRUA_PIEZAS[0][4] * cw
+
+
 def emitir_gruas(W, cfg, ctx, out, now, paso):
     """Las gruas de las obras (Maxgruas, las mas recientes), con su baliza."""
     pedidas = sorted(ctx['gruas'], key=lambda g: (-g[0], g[1]))
@@ -9189,10 +9233,9 @@ def emitir_gruas(W, cfg, ctx, out, now, paso):
     for t0, i, ej, p0, n, cw, cl_, r, alto in pedidas[:tope]:
         pg = _en_edi(p0, ej, 0.78 * r * cw, 0.0, -0.5 * r * cl_)
         hc = min(alto * 1.18 + 0.1 * limit(cfg), H_TOPE * limit(cfg) * 1.25)
-        out.setdefault(geometria_de('ciu_grua'), []).append(
-            _fila_ciu(ctx, pg, _marco(i, 90.0), (0.5 * cw, hc, 0.5 * cl_), COL_OBRA['grua']))
+        cima = filas_grua(ctx, out, i, pg, cw, hc, COL_OBRA['grua'])
         if int(now / paso) % 2 == 0:            # la baliza de obra parpadea al paso
-            out.setdefault('particulas', []).append(_row(_add(pg, n, hc), n, 0.03 * cw, 0.03 * cw, 0.03 * cw,
+            out.setdefault('particulas', []).append(_row(_add(pg, n, cima), n, 0.03 * cw, 0.03 * cw, 0.03 * cw,
                                                          COL_BALIZA))
     ctx['res']['gruas'] = min(len(pedidas), tope)
     return min(len(pedidas), tope)
@@ -9757,7 +9800,7 @@ PRUEBA_NOTAS2 = (36, 43, 41, 39, 46)
 def _mezcla_cfg(cfg, **kw):
     """La configuracion de las autopruebas de la mezcla: Tema = auto, los valores de
     fabrica de la pagina Fase11 v22 y el nivel 13 (rios y carreteras)."""
-    c = dict(cfg, nivel=13, tema=0, tema_auto=1, tope_construido=0.6, valvula=10.0, paciencia=8,
+    c = dict(cfg, nivel=13, tema=0, tema_auto=1, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, paciencia=8,
              orden_familias=0, precarga=5.0, carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
              refresco_piel=0.25, turnos=1, avance=0)
     c.pop('tema_pendiente', None)
@@ -9886,6 +9929,16 @@ def _autoprueba_mezcla(cfg, res):
     Wt = _mezcla_mundo(c)
     Wt['mezcla']['tramo'] = 3
     no_baja = mezcla_estado(Wt, c)['tramo'] == 3
+    filas_r = [list(f) for f in MEZCLA_DEF]
+    filas_r[-1] = [100.0, 10.0, 50.0, 40.0]         # v122: una fila con menos naturaleza que la reserva
+    q_r = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas_r), sim_construido=100.0))['cuota']
+    q_0 = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas_r), sim_construido=100.0,
+                                reserva_naturaleza=0.0))['cuota']
+    res.append(('reserva: con Reservanaturaleza 0,3 una fila 10/50/40 da 30/38,9/31,1 (la ciudad y la industria se '
+                'reparten el 70 %); con 0, la fila tal cual',
+                all(abs(a - b) < 1e-9 for a, b in zip(q_r, (0.3, 0.7 * 5 / 9, 0.7 * 4 / 9)))
+                and all(abs(a - b) < 1e-9 for a, b in zip(q_0, (0.1, 0.5, 0.4))),
+                '%s, %s' % (['%.3f' % x for x in q_r], ['%.3f' % x for x in q_0])))
     res.append(('tabla y tramo: Simconstruido 0, 30, 50, 75 y 100 dan las cuotas de mezcla_especies; una fila '
                 'que no suma 100 se normaliza con aviso; bajar construido no baja el tramo',
                 not malas and norm and no_baja,
@@ -18741,8 +18794,7 @@ def dibujar_celda_mal(W, cfg, ctx, E, i, now, paso, out, res):
             r = ex['radio']
             pg = _en_edi(p0, ej, 0.78 * r * cw, 0.0, -0.5 * r * cl_)
             hc = H * 1.18 + 0.1 * limit(cfg)
-            out.setdefault(geometria_de('ciu_grua'), []).append(
-                _fila_ciu(ctx, pg, _marco(i, 90.0), (0.5 * cw, hc, 0.5 * cl_), COL_OBRA['grua']))
+            filas_grua(ctx, out, i, pg, cw, hc, COL_OBRA['grua'])
             piezas += 1
             em = None
         elif s == 2:
@@ -19749,6 +19801,7 @@ def cfg():
         tm = _menu('Tema', TEMA_MODOS, 0)      # fase 11 v22: auto (la mezcla) o una especie fija
         c.update(tema=max(0, tm - 1), tema_auto=int(tm == 0),
                  tope_construido=max(0.05, min(1.0, _p('Topeconstruido', c['tope_construido']))),
+                 reserva_naturaleza=max(0.0, min(1.0, _p('Reservanaturaleza', c['reserva_naturaleza']))),
                  valvula=max(0.0, _p('Valvula', c['valvula'])),
                  paciencia=max(0, int(_p('Paciencia', c['paciencia']))),
                  orden_familias=_menu('Ordenfamilias', ORDEN_FAMILIAS, 0),

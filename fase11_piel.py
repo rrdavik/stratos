@@ -349,8 +349,11 @@ LA MEZCLA DE ESPECIES (v22, motor v121)
                   0 %      100   0    0
                  30 %       70  30    0
                  50 %       50  40   10
-                 75 %       25  50   25
-                100 %       10  50   40
+                 75 %       30  45   25
+                100 %       30  40   30
+  RESERVA     Reservanaturaleza (0,3): un 30 % de lo construido es siempre
+              naturaleza. Si una fila (tambien una editada a mano) da menos, la
+              ciudad y la industria se reparten el 70 % en su proporcion.
   SUCESION    1 contagio: la celda nueva que toca ciudad o industria es de esa
               especie si esta por debajo de su cuota (si toca las dos, la mas lejos
               de su cuota; en empate, la ciudad). 2 fundacion: con la fundacion
@@ -399,7 +402,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v22  (la mezcla de especies: Tema auto, sucesion con territorio y carga por familias)'
+VERSION = 'fase11 v23  (Reservanaturaleza 0,3: un 30 % de lo construido siempre naturaleza; la grua por piezas)'
 banner(VERSION)
 
 base = require_base(11)
@@ -419,6 +422,9 @@ if renew_default(base, 'Tema', 'naturaleza', 'auto'):
     info('v22: Tema pasa a auto (estaba en naturaleza, el valor de fabrica de antes)')
 # v22 (motor v121): la mezcla de especies
 add_par(base, page, 'float', 'Topeconstruido', 'Tope de construido (fraccion ocupada que es el 100 %)', 0.6, 0.3, 1.0)
+# v23 (motor v122): un 30 % de lo construido, siempre naturaleza
+add_par(base, page, 'float', 'Reservanaturaleza', 'Reserva de naturaleza (fraccion de lo construido)', 0.3, 0.0, 1.0,
+        clamp=True)
 add_par(base, page, 'float', 'Valvula', 'Valvula de fundacion (puntos de deficit para otra mancha)', 10.0, 0.0, 50.0)
 add_par(base, page, 'int', 'Paciencia', 'Paciencia de fundacion (celdas nuevas)', 8, 0, 64, clamp=True)
 add_par(base, page, 'menu', 'Ordenfamilias', 'Orden de familias', 'ciclo', menu=m.ORDEN_FAMILIAS,
@@ -545,7 +551,7 @@ ok('pagina Fase11: Tema (auto desde la v22), Pesovecina 0,5, Umbralvecindad 4, M
    'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
    'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16; v17: Tierra 0,75; v18: Radionucleo 8, Inundacion 0,08; '
    'v22: Tema (auto), Topeconstruido 0,6, Valvula 10, Paciencia 8, Ordenfamilias (ciclo), Precarga 5, '
-   'Cargaporfotograma 4, Simconstruido -1')
+   'Cargaporfotograma 4, Simconstruido -1; v23: Reservanaturaleza 0,3')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -572,7 +578,7 @@ def mezcla_al_dia_td(base, m):
 
 if mezcla_al_dia_td(base, m):
     ok('mezcla_especies: la tabla de la mezcla (0 % 100/0/0, 30 % 70/30/0, 50 % 50/40/10, '
-       '75 % 25/50/25, 100 % 10/50/40)')
+       '75 % 30/45/25, 100 % 30/40/30: v23, nunca menos de 30 de naturaleza)')
 else:
     info('mezcla_especies editada a mano: se conserva. Para volver a la de fabrica, borrala y relanza')
 
@@ -1729,6 +1735,19 @@ def _prueba_ciudad_(t, m):
             [x[1] for x in serie] == esperado and set(esperado) == set(m.TIPOS['planificada'])
             and vistas[:len(pasos_)] == pasos_ and fin_ok and gruas >= 3
             and esq >= 1 and fachada >= 1, 'tipos %s' % [x[1] for x in serie])
+    # v23: la grua por piezas: solo el mastil se estira; la pluma mide lo mismo en cualquier obra
+    def grua_de(hc):
+        o = {}
+        m.filas_grua(dict(doce=False), o, i, m.normal_i(i), 0.2, hc, m.COL_OBRA['grua'])
+        return o
+    baja, alta = grua_de(0.3), grua_de(3.0)
+    gb, ga = baja.get(m.geometria_de('ciu_grua'), []), alta.get(m.geometria_de('ciu_grua'), [])
+    pb, pa = baja.get(m.geometria_de('ciu_foso'), []), alta.get(m.geometria_de('ciu_foso'), [])
+    t.check('la grua por piezas: el mastil (ciu_grua) sube con la obra y la pluma, el contrapeso, la cabina, '
+            'el cable y el gancho (ciu_foso) miden lo mismo en una grua baja y en una 10 veces mas alta',
+            len(gb) == len(ga) == 1 and abs(ga[0][7] - 10 * gb[0][7]) < 1e-9 and ga[0][6] == gb[0][6]
+            and len(pb) == len(pa) == len(m.GRUA_PIEZAS) and [f[6:9] for f in pb] == [f[6:9] for f in pa],
+            'mastil %s / %s' % (gb[0][6:9] if gb else None, ga[0][6:9] if ga else None))
     # 3. semilla: Velprueba 100 dos veces, el mismo edificio; 101, otro
     def edificio_de(vel):
         W = mundo([i], m.ARQ, 8, vel)
