@@ -41,6 +41,11 @@ PROBAR SIN BEATSTEP
   proyecto y mira el trafico de una ciudad con carreteras. Para la linea de
   tiempo: todo se queda quieto.
 
+LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
+-----------------------------------------------
+  Balanceo (naturaleza), trafico (carreteras de la ciudad) y trenes (vias de la
+  industria), cada uno en sus celdas del mismo globo.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase17_tiempo.py').read())
@@ -50,7 +55,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase17 v3  (industria: trenes y balancines al tempo, STOP es huelga, el frente es un cambio de turno)'
+VERSION = 'fase17 v4  (la mezcla de especies: balanceo, trafico y trenes, cada uno en sus celdas)'
 banner(VERSION)
 
 base = require_base(17)
@@ -109,6 +114,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)        # motor v121: la mezcla de especies
         _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
@@ -377,6 +383,15 @@ def _prueba_industria_(t, m):
     sin = set(m.ventanas_celda(W, c2, x, bq) in (1, 4) for x in sur)
     t.check('cambio de turno: el frente enciende o apaga los focos de sodio a su paso; sin Turno, no',
             con == {True} and sin == {True})
+
+
+def _prueba_mezcla(t, m):
+    """La mezcla de especies (fase 11 v22, motor v121): lo que hace esta fase en un globo con
+    las tres especies (un mundo propio: el de la sesion no se toca)."""
+    if not hasattr(m, 'autoprueba_mezcla_fase'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla_fase(m.cfg(), 17):
+        t.check(texto, bien, detalle)
 
 
 run_test(base, prueba)

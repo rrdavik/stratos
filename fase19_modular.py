@@ -46,6 +46,11 @@ PROBAR SIN MODULAR
   viene y cada ocho segundos los materiales se fracturan. O manual, y mueve
   los deslizadores.
 
+LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
+-----------------------------------------------
+  Viento, smog y humo a la vez: cada senal del modular sobre las celdas y los
+  materiales de su especie (el smog, solo sobre la ciudad y la industria).
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase19_modular.py').read())
@@ -55,7 +60,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase19 v3  (industria: el ruido lleva el humo, la saturacion la incandescencia, el LFO el vapor)'
+VERSION = 'fase19 v4  (la mezcla de especies: viento, smog y humo a la vez, cada senal en su especie)'
 banner(VERSION)
 
 base = require_base(19)
@@ -138,6 +143,7 @@ def prueba(t):
             pass
     try:
         _prueba(t, m)
+        _prueba_mezcla(t, m)        # motor v121: la mezcla de especies
         _prueba_industria(t, m)
     finally:
         for nm, v in guarda.items():
@@ -306,6 +312,15 @@ def _prueba_industria(t, m):
     finally:
         base.par.Tema = tema0
         m.world()['modular'].update(ruido=0.0, saturacion=0.0, lfo=0.5, activo=False)
+
+
+def _prueba_mezcla(t, m):
+    """La mezcla de especies (fase 11 v22, motor v121): lo que hace esta fase en un globo con
+    las tres especies (un mundo propio: el de la sesion no se toca)."""
+    if not hasattr(m, 'autoprueba_mezcla_fase'):
+        return
+    for texto, bien, detalle in m.autoprueba_mezcla_fase(m.cfg(), 19):
+        t.check(texto, bien, detalle)
 
 
 run_test(base, prueba)

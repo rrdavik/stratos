@@ -193,6 +193,18 @@
 #                 construcciones finales del mal y sus yates en el mar; los demonios
 #                 grandes, un 30 % mas pequenos. GENoZilla anda un tercio mas lento
 #                 (Pasomonstruo 24, Pasogrande 12).
+#                 Motor v121 (fase 11 v22): la MEZCLA DE ESPECIES. Tema = auto (de
+#                 fabrica): el mundo empieza en naturaleza y, segun se construye
+#                 terreno (construido, sobre Topeconstruido), la tabla mezcla_especies da
+#                 la cuota de cada especie; la ciudad se funda junto al agua y crece por
+#                 contagio, la industria nace en el borde de la ciudad. Cada celda guarda
+#                 su especie (tema_c) y su familia de piezas (fam) hasta vaciarse del
+#                 todo. Las piezas se cargan por familias (evoluciones completas de una
+#                 linea) con una cola repartida entre fotogramas (Cargaporfotograma) y el
+#                 Render TOP dibuja lo cargado. Con varias especies en el globo, la piel,
+#                 el terreno, los rios, las carreteras, las vias y el trafico se calculan
+#                 por especie sobre vistas del mundo (cada regla, dentro de su mancha);
+#                 las conchas guardan la especie de cada celda. Con Tema fijo, como antes.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -204,7 +216,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v120'
+MOTOR_VERSION = 'motor v121'
 
 import math
 import time as _time
@@ -370,6 +382,9 @@ DEFAULT_CFG = dict(
     # fase 11: la piel
     tema=0, peso_vecina=0.5, umbral_vecindad=4.0, min_cluster=2, caos=3.91, max_piezas=6,
     avance=0, pasos_etapa=2, rebote=0.2, catalogo=None,
+    # fase 11 v22 (motor v121): la mezcla de especies (tema_auto: Tema = auto)
+    tema_auto=0, tope_construido=0.6, valvula=10.0, paciencia=8, orden_familias=0, precarga=5.0,
+    carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
     # fase 11 v5: la naturaleza legible
     umbral_monte=8, max_caos_nat=5, limite_bosque=0.65, limite_nieve=0.90, altura_monte=1.0,
     lod_nat=80.0, tinte_borde_nat=0.8, superficie=0,
@@ -795,6 +810,10 @@ def new_world():
         derribo=[0] * N,        # la obra de la celda se recorre hacia atras
         # el ciclo como era (fase 15)
         tema=None,              # tema del mundo (con Temaenciclo, cambia en el fin de ciclo)
+        # la mezcla de especies (fase 11 v22, motor v121)
+        tema_c=[-1] * N,        # especie de cada celda: 0 naturaleza, 1 ciudad, 2 industria; -1 ninguna, -2 neutra
+        fam=[''] * N,           # familia de piezas de cada celda ('' ninguna)
+        mezcla=dict(tramo=0, fundaciones=[0, 0, 0], espera=[0, 0, 0], hist=[], disp=None, ciclo=None),
         rebrote=[0] * N,        # etapa del rebrote de lo heredado: 1 semillas, 2 brotes, 0 nada
         t_rebrote=[-99.0] * N,
         trazas=[],              # tramos de carretera de la ciudad enterrada: [[a, b], ...]
@@ -1013,7 +1032,7 @@ def isla_construida(W, cfg, i):
     ISLA_ALTO, como las de la naturaleza) y lo construido se apoya en su meseta; una
     celda vacia es mar, y lo que pasa por ella (carreteras, tuberias) va sobre el agua,
     OCEANO_LIFT por encima de su loseta. En la naturaleza, 0: el relieve va aparte."""
-    if not cfg.get('oceano') or cfg['nivel'] < 11 or tema_de(cfg) == 'naturaleza':
+    if not cfg.get('oceano') or cfg['nivel'] < 11 or tema_en(W, cfg, i) == 'naturaleza':
         return 0.0
     if W['occ'][i] > 0 and W['own'][i]:
         return isla_alto(W['occ'][i])
@@ -1129,7 +1148,12 @@ def grow(W, cfg, i, s, vel, now):
         W['huella'][i] = 0.0
         W['t_nac'][i] = now
         W['vig'][i] = 1.0
+        mezcla_fundar(W, cfg, i)            # fase 11 v22: la especie y la familia de la celda
         return dict(estado='semilla', inc=0.0, celda=i, trigger=True)
+
+    tc = W.get('tema_c')
+    if lvl >= 11 and tc is not None and len(tc) == N and (tc[i] == NEUTRA or (tc[i] == -1 and W['sp'][i] != MAL)):
+        mezcla_fundar(W, cfg, i)            # la primera nota sobre una semilla neutra heredada
 
     W['lat_s'][i] = s
     if W['par'][i] >= 0:                    # un satelite que recibe senal
@@ -1169,6 +1193,7 @@ def overflow(W, cfg, i, s, vel, now):
         W['huella'][j] = 0.0
         W['t_nac'][j] = now
         W['vig'][j] = 1.0
+        mezcla_fundar(W, cfg, j, nucleo=i)  # fase 11 v22: el satelite, con la especie de su nucleo
         kind = 'satelite nuevo'
     elif W['par'][j] == i:
         W['occ'][j] = o + 1
@@ -1951,7 +1976,11 @@ BANDAS_INDUSTRIA = BANDAS_RESERVADAS + (BANDA_RED,)
 
 
 def bandas_de(cfg):
-    return BANDAS_INDUSTRIA if cfg is not None and tema_de(cfg) == 'industria' else BANDAS_RESERVADAS
+    """Las bandas de tono que las conchas no usan. Con Tema = auto (motor v121) las de las tres
+    especies: el globo puede tener industria, y su red electrica, en cualquier momento."""
+    if cfg is not None and (tema_de(cfg) == 'industria' or (cfg.get('tema_auto') and cfg['nivel'] >= 11)):
+        return BANDAS_INDUSTRIA
+    return BANDAS_RESERVADAS
 AUREO = 0.6180339887
 # luminosidad (motor v53, conchas discretas): media Paletaluz, alternando
 # +- Paletaalterna / 2 (par oscura, impar clara); la loseta ocupada,
@@ -2041,7 +2070,7 @@ def zocalo_color(cfg):
 
 
 def palette_key(cfg):
-    return (cfg.get('tema'), cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'),
+    return (cfg.get('tema'), cfg.get('tema_auto'), cfg.get('paleta', 0), cfg.get('paleta_tono'), cfg.get('paleta_croma'),
             cfg.get('paleta_luz'), cfg.get('paleta_alterna'), cfg.get('contraste_ocupada'),
             cfg.get('tapa_neutra'), cfg.get('tapa_luz'),
             cfg['nivel'] >= 15, cfg.get('respaldo', 0))
@@ -2330,6 +2359,8 @@ def end_cycle(W, cfg, now, bars=None, motivo=None):
     W['pend'] = {}
     if juego:                           # fase 32: zanjas, agua y bloqueadas, enterradas con el mundo
         juego_al_enterrar(W, cfg, now)
+    if cfg['nivel'] >= 11:              # fase 11 v22: lo heredado, neutro; el tramo, al primero
+        mezcla_enterrar(W, cfg)         # (antes de cerrar las obras: con la especie con la que sigue)
     cerrar_obras(W, cfg)                # y lo heredado empieza sin obras a medias
     if reg:
         herencia_tematica(W, cfg, now, reg)
@@ -2385,6 +2416,8 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
             W['vh'][i] = 0.0
             if W['sp'][i]:
                 W['sp'][i] = W['own'][i] = W['traza'][i] = 0
+    if piel:                            # fase 11 v22: la mezcla (especies, tramo y la cola de carga)
+        mezcla_tick(W, cfg, now)
     out = dict(ciclo=None, burst=None)
     if cfg['nivel'] >= 9 and W['scars']:
         st = cfg['scar_time']
@@ -2654,8 +2687,15 @@ def _arq_pieces(W, cfg, i, p0, n, vh, cl, scale, col, out, cw=None, pulido=True)
 
 def build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False):
     t_py = _time.perf_counter()
-    out = _build_instances(W, cfg, now, hide_beacons, tiles, refresco)
+    _MEZCLA_CACHE['dibujo'] = (_TERRENO.get('sello', 0), now)     # v121: lo que no cambia mientras se dibuja
+    try:
+        out = _build_instances(W, cfg, now, hide_beacons, tiles, refresco)
+    finally:
+        _MEZCLA_CACHE['dibujo'] = None
     _TURNOS['ms_inst'] = (_time.perf_counter() - t_py) * 1000.0     # motor v101: para la leyenda PIEL
+    if cfg.get('tema_auto') and cfg['nivel'] >= 11 and _CARGA['arranque']:   # v121: lo que no esta cargado
+        _CARGA['sin_cargar'] = sorted(g for g, f in out.items() if f and g.startswith('mod_')
+                                      and g not in _CARGA['geos'])
     return out
 
 
@@ -2738,18 +2778,33 @@ def _build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False
                                                0.03 * kw * cl, COL_CROWN))
                     out['coronas'].append(_row(top, n, 0.20 * cl, 0.05 * lim, 0.20 * cl, COL_CROWN))
     bomba.cerrar()
+    multi = piel and multiespecie(W, cfg)   # fase 11 v22: varias especies, cada una en su vista
+    if multi:
+        for t in especies_presentes(W, cfg):
+            vista(W, cfg, t)                # las vistas, al dia una vez por fotograma
     if piel:
-        W['piel'] = build_piel_refresco(W, cfg, now, out) if refresco else build_piel(W, cfg, now, out)
+        if multi:
+            W['piel'] = piel_multi(W, cfg, now, out, refresco)
+        else:
+            W['piel'] = build_piel_refresco(W, cfg, now, out) if refresco else build_piel(W, cfg, now, out)
     if lvl >= 13:                   # fase 13: carreteras (tejido) y rios (fase 13 v2, su geometria)
-        out['tejido'], W['tejido'] = build_tejido(W, cfg)
-        out['rios'], W['rios_res'] = build_rios(W, cfg)
-        build_industria_tejido(W, cfg, now, out)        # fase 13 v7: viaductos, torres, pulsos y trenes
+        if multi:
+            out['tejido'], W['tejido'], W['rios_res'] = tejido_multi(W, cfg, now, out)
+        else:
+            out['tejido'], W['tejido'] = build_tejido(W, cfg)
+            out['rios'], W['rios_res'] = build_rios(W, cfg)
+            build_industria_tejido(W, cfg, now, out)        # fase 13 v7: viaductos, torres, pulsos y trenes
     if lvl >= 14:                   # fase 14: huellas y particulas de los destructores
         build_destructores(W, cfg, now, out)
     if lvl >= 16:                   # fase 16: lo que ensenan los cortes
         build_arqueologia(W, cfg, now, out)
     if lvl >= 17:                   # fase 17: trafico, esporas y el frente
-        build_tiempo(W, cfg, now, out)
+        if multi:                   # fase 11 v22: cada uno en sus celdas
+            for t in sorted(especies_presentes(W, cfg)):
+                with en_vista(t):
+                    build_tiempo(vista(W, cfg, t, 'frame'), cfg_especie(cfg, t), now, out)
+        else:
+            build_tiempo(W, cfg, now, out)
     if lvl >= 18:                   # fase 18: luz local y, fuera de la actuacion, el diagnostico
         out['luz_local'] = build_luz_local(W, cfg, now)
         out['diagnostico'] = [] if hide_beacons or not cfg.get('diagnostico', 0) else build_diagnostico(W, cfg)
@@ -6047,6 +6102,1127 @@ def estado_idx(cfg, occ):
     return 4
 
 
+# -----------------------------------------------------------------------------
+# 1. NUCLEO - la mezcla de especies (fase 11 v22, motor v121)
+# -----------------------------------------------------------------------------
+# El mundo deja de tener un solo tema. Con Tema = auto empieza en naturaleza y,
+# segun se construye terreno, la ciudad nace junto al agua y crece por contagio, y
+# la industria nace en el borde de la ciudad. La especie de una celda (tema_c: 0
+# naturaleza, 1 ciudad, 2 industria) y su familia de piezas (fam) se fijan al
+# fundarse y no cambian hasta que la celda se vacia del todo.
+#   CONSTRUIDO  celdas con especie / (celdas del globo x Topeconstruido), 0-1. No
+#               cuentan las semillas neutras heredadas (NEUTRA, hasta su primera
+#               nota) ni el mal. Simconstruido (0-100) lo fuerza para probar.
+#   TRAMO       la fila de la tabla mezcla_especies en vigor: la mas alta que
+#               construido haya alcanzado en este mundo (solo avanza; el entierro
+#               la devuelve a la primera). Da la CUOTA de cada especie: techo de
+#               celdas para ciudad e industria y parte de la biblioteca para las tres.
+#   SUCESION    1 contagio (toca ciudad o industria y esa especie esta por debajo de
+#               su cuota; si toca las dos, la mas lejos de su cuota, en empate la
+#               ciudad), 2 fundacion (fundacion abierta: puede crecer y no tiene
+#               celdas o su deficit pasa de Valvula puntos; ciudad junto a un rio o
+#               un lago, o a la formacion natural mas ocupada si no hay agua;
+#               industria tocando la ciudad, mejor si tambien toca relieve; tras
+#               Paciencia celdas sin candidata, donde caiga), 3 naturaleza.
+#   FAMILIAS    la unidad de carga: una evolucion completa de una linea (brote,
+#               cada etapa con su diseno y su variante, y el resto: obra, remates,
+#               puentes, protagonista, hibridos). Ver familias().
+# Con Tema fijo (naturaleza, ciudad o industria) toda celda nueva es de esa especie,
+# la tabla no se consulta y todo se comporta como antes de la mezcla.
+
+TEMA_MODOS = ['auto'] + TEMAS
+NAT, CIU, IND = 0, 1, 2
+NEUTRA = -2                 # tema_c de una semilla heredada sin especie hasta su primera nota
+MEZCLA_COLS = ['construido', 'naturaleza', 'ciudad', 'industria']
+MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (30.0, 70.0, 30.0, 0.0), (50.0, 50.0, 40.0, 10.0),
+              (75.0, 25.0, 50.0, 25.0), (100.0, 10.0, 50.0, 40.0))
+ORDEN_FAMILIAS = ['ciclo', 'fijo']
+MEZCLA_HIST = 512           # fundaciones recientes que se recuerdan (las autopruebas las miran)
+LINEAS = {NAT: ('vegetacion', 'relieve'), CIU: ('informal', 'planificada'), IND: ('mina', 'energia')}
+TEMA_DE_LINEA = dict((esp, t) for t, ls in LINEAS.items() for esp in ls)
+# disenos de la biblioteca que la piel pide por su nombre (parasitos, capsulas, zocalos,
+# calderas y chimeneas de la corta, torres de la refineria): van con la especie, no con una familia
+DISENOS_PIEZA = ('chabola', 'cuarto', 'capsula', 'zocalo', 'calderas', 'chimenea', 'torreref')
+
+
+def mezcla_on(cfg):
+    """Tema = auto (desde la fase 11)."""
+    return bool(cfg.get('tema_auto')) and cfg['nivel'] >= 11
+
+
+def tema_idx(W, cfg, i):
+    """La especie de la celda i (0, 1, 2). Sin especie (vacia, neutra o del mal): la
+    naturaleza con Tema = auto; con Tema fijo, la del parametro (como siempre)."""
+    tc = W.get('tema_c')
+    if tc is not None and 0 <= i < len(tc) and tc[i] >= 0:
+        return tc[i]
+    return NAT if cfg.get('tema_auto') else int(cfg.get('tema', 0)) % len(TEMAS)
+
+
+def tema_celda(W, cfg, i):
+    return TEMAS[tema_idx(W, cfg, i)]
+
+
+def tema_en(W, cfg, i):
+    """El tema con el que se trata la celda i: en una vista, el de la vista (sus celdas
+    vacias tambien); en el mundo, la especie de la celda. Con Tema fijo y un mundo de un
+    solo tema, tema_de(cfg), como siempre."""
+    if '_de' in W:
+        return tema_de(cfg)
+    return tema_celda(W, cfg, i)
+
+
+def especies_lista(W, cfg):
+    """[especie de cada celda] (se guarda: la piden los clusters y la presion)."""
+    tc = W.get('tema_c')
+    clave = (tuple(tc) if tc is not None else None, bool(cfg.get('tema_auto')), int(cfg.get('tema', 0)), N)
+    v = _MEZCLA_CACHE.get('lista')
+    if v is not None and v[0] == clave:
+        return v[1]
+    out = [tema_idx(W, cfg, i) for i in range(N)]
+    _MEZCLA_CACHE['lista'] = (clave, out)
+    return out
+
+
+def especies_presentes(W, cfg):
+    """Las especies de las celdas ocupadas (las que se dibujan)."""
+    if cfg['nivel'] < 11:
+        return frozenset([int(cfg.get('tema', 0)) % len(TEMAS)])
+    dib = _MEZCLA_CACHE.get('dibujo')     # durante build_instances el mundo no cambia: una vez
+    clave = (dib, id(W), bool(cfg.get('tema_auto')), int(cfg.get('tema', 0))) if dib is not None else None
+    if clave is not None:
+        v = _MEZCLA_CACHE.get('presentes')
+        if v is not None and v[0] == clave:
+            return v[1]
+    esp = especies_lista(W, cfg)
+    occ, vh = W['occ'], W['vh']
+    s = frozenset(e for e, o, h in zip(esp, occ, vh) if o > 0 or h > 0.005) or frozenset([tema_idx(W, cfg, -1)])
+    if clave is not None:
+        _MEZCLA_CACHE['presentes'] = (clave, s)
+    return s
+
+
+def multiespecie(W, cfg):
+    """True si el globo tiene celdas de otra especie que la del tema global: el dibujo
+    va por especies (vistas). Con Tema fijo y un mundo de un solo tema, False: el
+    camino de siempre."""
+    if cfg['nivel'] < 11:
+        return False
+    s = especies_presentes(W, cfg)
+    return len(s) > 1 or s != frozenset([NAT if cfg.get('tema_auto') else int(cfg.get('tema', 0)) % 3])
+
+
+_MEZCLA_CACHE = {}
+
+
+def _mezcla_al_dia(W):
+    """Los campos de la mezcla en un mundo (tambien en uno de antes del motor v121)."""
+    if len(W.get('tema_c') or ()) != N:
+        W['tema_c'] = [-1] * N
+    if len(W.get('fam') or ()) != N:
+        W['fam'] = [''] * N
+    M = W.get('mezcla')
+    if not isinstance(M, dict):
+        M = W['mezcla'] = {}
+    M.setdefault('tramo', 0)
+    M.setdefault('fundaciones', [0, 0, 0])
+    M.setdefault('espera', [0, 0, 0])
+    M.setdefault('hist', [])
+    M.setdefault('disp', None)          # {especie: [familias dentro de la cuota]}
+    M.setdefault('ciclo', None)         # el ciclo con el que se ordenaron las familias
+    return M
+
+
+# --- construido, tabla y tramo ------------------------------------------------------
+
+def mezcla_tabla(cfg):
+    """(filas [(desde %, nat, ciu, ind) normalizadas a 100, por umbral], avisos)."""
+    filas = cfg.get('mezcla_filas') or MEZCLA_DEF
+    clave = tuple(tuple(f) for f in filas)
+    v = _MEZCLA_CACHE.get('tabla')
+    if v is not None and v[0] == clave:
+        return v[1], v[2]
+    out, avisos = [], []
+    for f in sorted(clave, key=lambda f: f[0]):
+        q = [max(0.0, float(x)) for x in f[1:4]]
+        s = sum(q)
+        if s <= 0.0:
+            q, s = [100.0, 0.0, 0.0], 100.0
+            avisos.append('fila %s%%: sin cuotas, toda naturaleza' % _num(f[0]))
+        elif abs(s - 100.0) > 0.01:
+            avisos.append('fila %s%% suma %s: se normaliza' % (_num(f[0]), _num(s)))
+        out.append((float(f[0]),) + tuple(100.0 * x / s for x in q))
+    if not out or out[0][0] > 0.0:
+        out.insert(0, (0.0,) + tuple(MEZCLA_DEF[0][1:]))
+    _MEZCLA_CACHE['tabla'] = (clave, out, avisos)
+    return out, avisos
+
+
+def _num(x):
+    return ('%d' % int(round(x))) if abs(x - round(x)) < 1e-6 else ('%.1f' % x).replace('.', ',')
+
+
+def tramo_de(filas, pct):
+    k = 0
+    for j, f in enumerate(filas):
+        if pct + 1e-9 >= f[0]:
+            k = j
+    return k
+
+
+def celdas_de(W):
+    """[naturaleza, ciudad, industria]: las celdas con especie."""
+    c = [0, 0, 0]
+    for t in W.get('tema_c') or ():
+        if t >= 0:
+            c[t] += 1
+    return c
+
+
+def construido_real(W, cfg):
+    """0-1: celdas con especie / (celdas del globo x Topeconstruido)."""
+    n = sum(celdas_de(W))
+    return max(0.0, min(1.0, n / max(1e-9, N * max(0.05, float(cfg.get('tope_construido', 0.6))))))
+
+
+def mezcla_estado(W, cfg, avanzar=True):
+    """dict(construido %, tramo, cuota [n, c, i] 0-1, filas, avisos, siguiente umbral).
+    El tramo solo avanza (avanzar: lo guarda en el mundo); Simconstruido lo fuerza."""
+    M = _mezcla_al_dia(W)
+    filas, avisos = mezcla_tabla(cfg)
+    sim = float(cfg.get('sim_construido', -1.0))
+    if sim >= 0.0:
+        pct = min(100.0, sim)
+        k = tramo_de(filas, pct)
+    else:
+        pct = 100.0 * construido_real(W, cfg)
+        k = max(min(int(M['tramo']), len(filas) - 1), tramo_de(filas, pct))
+        if avanzar:
+            M['tramo'] = k
+    cuota = [x / 100.0 for x in filas[k][1:4]]
+    sig = filas[k + 1][0] if k + 1 < len(filas) else None
+    return dict(construido=pct, tramo=k, umbral=filas[k][0], cuota=cuota, filas=filas, avisos=avisos,
+                siguiente=sig, sim=sim >= 0.0)
+
+
+# --- la especie de una celda nueva -------------------------------------------------
+
+def _toca(W, i, t):
+    tc = W['tema_c']
+    return any(W['occ'][j] > 0 and tc[j] == t for j in NEIGH[i])
+
+
+def _toca_relieve(W, i):
+    tc = W['tema_c']
+    return any(W['occ'][j] > 0 and tc[j] == NAT and W['own'][j] == ARQ for j in NEIGH[i])
+
+
+def agua_mezcla(W, cfg):
+    """Las celdas de rio y de lago (fase 13), del tejido de la naturaleza: la ciudad se
+    funda tocandolas. Se guarda en el mundo al dibujar (agua) y aqui se recalcula si
+    hace falta."""
+    M = _mezcla_al_dia(W)
+    if cfg['nivel'] < 13 or not cfg.get('rios', 1):
+        return set()
+    sello = (tuple(W['occ']), tuple(W['tema_c']), tuple(W['own']))
+    a = M.get('agua')
+    if a is not None and _MEZCLA_CACHE.get('agua_sello') == sello:
+        return set(a)
+    V, cv = vista(W, cfg, NAT), cfg_especie(cfg, NAT)
+    with en_vista(NAT):
+        agua = celdas_agua_dulce(V, cv)
+    M['agua'] = sorted(agua)
+    _MEZCLA_CACHE['agua_sello'] = sello
+    return set(agua)
+
+
+def formacion_mas_ocupada(W, cfg):
+    """Las celdas de la formacion natural mas ocupada (su cluster, o la celda sola)."""
+    tc = W['tema_c']
+    nat = [i for i in range(N) if W['occ'][i] > 0 and tc[i] == NAT]
+    if not nat:
+        return set()
+    cl = clusters(W, cfg)
+    mejor, celdas = -1, set()
+    vistos = set()
+    for i in nat:
+        k = cl['de'][i]
+        grupo = [c for c in cl['celdas'][k] if tc[c] == NAT] if k >= 0 else [i]
+        clave = ('c', k) if k >= 0 else ('i', i)
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        s = sum(W['occ'][c] for c in grupo)
+        if s > mejor:
+            mejor, celdas = s, set(grupo)
+    return celdas
+
+
+def cumple_fundar(W, cfg, i, t, agua=None):
+    """La condicion para fundar una mancha de t en la celda i."""
+    if t == CIU:
+        agua = agua_mezcla(W, cfg) if agua is None else agua
+        if agua:
+            return i in agua or any(j in agua for j in NEIGH[i])
+        f = formacion_mas_ocupada(W, cfg)
+        return bool(f) and any(j in f for j in NEIGH[i])
+    if t == IND:
+        return _toca(W, i, CIU)
+    return True
+
+
+def especie_nueva(W, cfg, i, est=None, lote=None):
+    """(especie, como) de la celda i que se funda con Tema = auto: 'contagio',
+    'fundacion', 'paciencia' o 'naturaleza'. lote: otras candidatas del mismo
+    instante (la industria prefiere la que toca relieve)."""
+    M = _mezcla_al_dia(W)
+    est = est or mezcla_estado(W, cfg)
+    cuota = est['cuota']
+    cnt = celdas_de(W)
+    if W['tema_c'][i] >= 0:
+        cnt[W['tema_c'][i]] -= 1
+    total = float(sum(cnt) + 1)
+
+    def deficit(t):
+        return cuota[t] - cnt[t] / total
+
+    linea = W['own'][i] if W['own'][i] in (GEO, ARQ) else GEO
+
+    def puede(t):
+        return deficit(t) > 1e-9 and hay_familia_lista(W, cfg, t, linea)
+
+    def abierta(t):
+        return puede(t) and (cnt[t] == 0 or 100.0 * deficit(t) > float(cfg.get('valvula', 10.0)))
+    # 1. contagio (y la industria, que se funda en el borde de la ciudad, compite con ella)
+    cands = [t for t in (CIU, IND) if _toca(W, i, t) and puede(t)]
+    if IND not in cands and abierta(IND) and _toca(W, i, CIU):
+        mejor_rel = not lote or _toca_relieve(W, i) or not any(_toca_relieve(W, j) for j in lote
+                                                                 if _toca(W, j, CIU))
+        if mejor_rel and (not cands or deficit(IND) > deficit(CIU) + 1e-9):
+            return IND, 'fundacion'
+    if cands:
+        t = max(cands, key=lambda t: (deficit(t) + 1e-12 * (t == CIU), t == CIU))
+        return t, 'contagio'
+    # 2. fundacion
+    agua = None
+    for t in (CIU, IND):
+        if not abierta(t):
+            M['espera'][t] = 0
+            continue
+        if t == CIU:
+            agua = agua_mezcla(W, cfg)
+        if cumple_fundar(W, cfg, i, t, agua):
+            if t == IND and lote and not _toca_relieve(W, i) and \
+                    any(_toca_relieve(W, j) and cumple_fundar(W, cfg, j, IND) for j in lote):
+                continue                # otra candidata del mismo instante toca relieve: gana ella
+            return t, 'fundacion'
+        if M['espera'][t] >= int(cfg.get('paciencia', 8)):
+            return t, 'paciencia'
+    for t in (CIU, IND):                # nadie cumplia: la paciencia cuenta
+        if abierta(t):
+            M['espera'][t] += 1
+    return NAT, 'naturaleza'
+
+
+def mezcla_fundar(W, cfg, i, nucleo=None, lote=None):
+    """La especie y la familia de la celda i, que se funda (una nota en una celda
+    vacia o la primera sobre una semilla neutra heredada) o nace por desborde de su
+    nucleo (los satelites heredan especie y familia). Devuelve la especie."""
+    M = _mezcla_al_dia(W)
+    if cfg['nivel'] < 11 or not 0 <= i < N:
+        return None
+    if W['sp'][i] == MAL and cfg['nivel'] >= 33:        # el mal no tiene especie
+        W['tema_c'][i], W['fam'][i] = -1, ''
+        return None
+    if nucleo is not None and 0 <= nucleo < N and W['tema_c'][nucleo] >= 0:
+        t = W['tema_c'][nucleo]
+        W['tema_c'][i], W['fam'][i] = t, W['fam'][nucleo]
+        _mezcla_hist(W, i, t, 'satelite')
+        _mezcla_cambio(W)
+        return t
+    if not mezcla_on(cfg):              # Tema fijo: la de el, sin familias (las piezas, como siempre)
+        t = int(cfg.get('tema', 0)) % len(TEMAS)
+        W['tema_c'][i], W['fam'][i] = t, ''
+        _mezcla_cambio(W)
+        return t
+    est = mezcla_estado(W, cfg)
+    t, como = especie_nueva(W, cfg, i, est, lote)
+    if como in ('fundacion', 'paciencia'):
+        M['fundaciones'][t] += 1
+        M['espera'][t] = 0
+    toca = _toca(W, i, t) if t != NAT else True
+    cond = cumple_fundar(W, cfg, i, t) if t != NAT else None
+    W['tema_c'][i] = t
+    W['fam'][i] = elegir_familia(W, cfg, i, t)
+    _mezcla_hist(W, i, t, como, toca, cond, est['cuota'][t], celdas_de(W)[t] - 1)
+    _mezcla_cambio(W)
+    return t
+
+
+def _mezcla_hist(W, i, t, como, toca=None, agua=None, cuota=None, antes=None):
+    h = W['mezcla']['hist']
+    h.append([i, t, como, toca, agua, cuota, antes, W['fam'][i], sum(celdas_de(W))])
+    if len(h) > MEZCLA_HIST:
+        del h[:len(h) - MEZCLA_HIST]
+
+
+def _mezcla_cambio(W):
+    W['mezcla']['n'] = None             # el recuento, a rehacer en el siguiente tick
+
+
+def mezcla_vaciar(W, i):
+    """La celda se ha vaciado del todo: pierde especie y familia."""
+    if W['tema_c'][i] != -1 or W['fam'][i]:
+        W['tema_c'][i], W['fam'][i] = -1, ''
+        _mezcla_cambio(W)
+
+
+def mezcla_tick(W, cfg, now):
+    """Una vez por fotograma (y barato: N celdas): las celdas vacias pierden especie;
+    las ocupadas sin especie (un brote rescatado del mal, una celda puesta a mano) la
+    reciben con las reglas; el tramo avanza; la cola de carga procesa su parte."""
+    if cfg['nivel'] < 11:
+        return
+    M = _mezcla_al_dia(W)
+    tc, occ, sp = W['tema_c'], W['occ'], W['sp']
+    mal = cfg['nivel'] >= 33
+    nuevas = []
+    for i in range(N):
+        if occ[i] <= 0:
+            if (tc[i] != -1 or W['fam'][i]) and (not W['own'][i] or W['vh'][i] <= 0.005):
+                mezcla_vaciar(W, i)         # vacia del todo (lo que se apaga aun es de su especie)
+        elif mal and sp[i] == MAL:
+            if tc[i] != -1:
+                tc[i], W['fam'][i] = -1, ''
+                _mezcla_cambio(W)
+        elif tc[i] == -1:
+            nuevas.append(i)
+    if nuevas:
+        for i in nuevas:
+            mezcla_fundar(W, cfg, i, lote=[j for j in nuevas if j != i])
+    n = tuple(celdas_de(W))
+    if M.get('n') != n:
+        M['n'] = n
+        M['construido'] = construido_real(W, cfg)
+    if mezcla_on(cfg):
+        carga_tick(W, cfg)
+
+
+def mezcla_enterrar(W, cfg):
+    """Fin de ciclo: lo heredado queda neutro (sin especie hasta su primera nota) y
+    el tramo vuelve al primero. Con Tema = auto, cada semilla neutra lleva una
+    familia de naturaleza de las que estan cargadas (para dibujarse)."""
+    M = _mezcla_al_dia(W)
+    for i in range(N):
+        if W['occ'][i] > 0 and W['own'][i] and W['sp'][i] != MAL:
+            W['tema_c'][i] = NEUTRA
+        else:
+            W['tema_c'][i] = -1
+        W['fam'][i] = ''
+    M.update(tramo=0, fundaciones=[0, 0, 0], espera=[0, 0, 0], disp=None, ciclo=None, n=None, agua=None)
+    if mezcla_on(cfg):
+        for i in range(N):
+            if W['tema_c'][i] == NEUTRA:
+                W['fam'][i] = familia_neutra(W, cfg, i)
+
+
+# --- las familias ---------------------------------------------------------------------
+# Una familia es una evolucion completa de una linea: brote (etapa 1), cada etapa con su
+# diseno y su variante y, para la especie, lo que la piel pide por su nombre (obra,
+# remates, puentes, protagonista, hibridos y mutantes, huellas, cortes). Se forman sin
+# azar a partir del catalogo: la familia k de una linea toma en la etapa e la pareja
+# (diseno, variante) k-esima de esa etapa, asi que todas las parejas de la biblioteca
+# salen en alguna familia y con todas cargadas se tiene la biblioteca entera.
+#   vegetacion   una familia por bioma y variante (con Biomas; sin el, por variante):
+#                todos los ejemplares que una celda de ese bioma puede pedir (sus
+#                matorrales y la orilla; sus arboles, la conifera del piso montano, el
+#                sauce del rio, los de la capital de su bosque y el otro modelo de la
+#                mezcla), con la variante de la familia.
+#   relieve      sin biblioteca (malla por celda o cluster): una familia sin piezas.
+#   ciudad e industria   un diseno y una variante por etapa (en la mina, si el brote
+#                es petrolifero, la ruta de la refineria; la torsionada lleva tambien
+#                el prisma recto en el que se queda sin mutacion).
+
+def _vecinos_bioma(b):
+    k = BIOMAS.index(b)
+    return [BIOMAS[j] for j in (k - 1, k + 1) if 0 <= j < len(BIOMAS)]
+
+
+def _arboles_bioma(b):
+    """Los arboles que puede pedir una celda del bioma b (cierre por la mezcla)."""
+    if b is None:
+        return list(ARBOLES)
+    s = set()
+    for bb in [b] + _vecinos_bioma(b):
+        s.update(BIOMA_PLANTAS[bb][1])
+        s.update(BIOMA_COSTA[bb][1])
+        if bb == 'templado':
+            s.add('sauce')
+    s.add('conifera')
+    while True:                         # otra_planta: el resto de la lista que contiene a cada arbol
+        n0 = len(s)
+        for mo in list(s):
+            lista = next((v[1] for v in BIOMA_PLANTAS.values() if mo in v[1]), None)
+            if lista:
+                s.update(lista)
+        if len(s) == n0:
+            break
+    return [mo for mo in ARBOLES if mo in s]
+
+
+def _matas_bioma(b):
+    if b is None:
+        return list(MATORRALES)
+    s = set(BIOMA_PLANTAS[b][0]) | set(BIOMA_COSTA[b][0])
+    return [mo for mo in MATORRALES if mo in s]
+
+
+def _geos_ejemplares(cfg, modelos, var):
+    doble = cfg['nivel'] < 12
+    out = set()
+    for mo in modelos:
+        for d in etapas_de(mo):
+            for lejos in (False, True):
+                out.add(geometria_de(nombre_ejemplar(mo, var, d, lejos), True, doble))
+    return out
+
+
+def _geo_edi(cfg, d, v):
+    return geometria_de(nombre_edificio(d, v), True, cfg['nivel'] < 12)
+
+
+def _etapas_linea(cfg, esp):
+    """[(etapa, [disenos])] de una linea construida, como diseno_celda."""
+    tema = TEMAS[TEMA_DE_LINEA[esp]]
+    out = []
+    for e in range(1, len(TIPOS[esp]) + 1):
+        lista = [d for d in modelos_de(cfg, tema, esp, 'etapa%d' % e) if d in _GEN_EDI] or \
+            DISENOS_TIPO[TIPOS[esp][e - 1]]
+        out.append((e, lista))
+    return out
+
+
+def familias(cfg):
+    """dict(por_id {id: familia}, lineas {linea: [ids]}, comun {especie: geometrias},
+    todas {especie: geometrias}). Familia: dict(id, tema, linea, k, bioma, var,
+    etapas {etapa: (diseno, variante)}, geos)."""
+    clave = (id(_cat(cfg)), cfg['nivel'] < 12, cfg['nivel'] >= 39, variantes(cfg), VARIANTES_TD,
+             variantes_ciudad(cfg), VARIANTES_CIU_TD, variantes_ind(cfg), VARIANTES_IND_TD,
+             bool(cfg.get('biomas', 1)))
+    v = _MEZCLA_CACHE.get('familias')
+    if v is not None and v[0] == clave:
+        return v[1]
+    por_id, lineas = {}, {}
+    nv = variantes(cfg)
+    biomas = list(BIOMAS) if cfg.get('biomas', 1) else [None]
+    veg = lineas['vegetacion'] = []
+    for b in biomas:
+        modelos = _arboles_bioma(b) + _matas_bioma(b)
+        for var in range(nv):
+            fid = 'vegetacion:%s:%d' % (b or '-', var)
+            por_id[fid] = dict(id=fid, tema=NAT, linea='vegetacion', k=len(veg), bioma=b, var=var, etapas={},
+                               geos=frozenset(_geos_ejemplares(cfg, modelos, var)))
+            veg.append(fid)
+    por_id['relieve:0'] = dict(id='relieve:0', tema=NAT, linea='relieve', k=0, bioma=None, var=None, etapas={},
+                               geos=frozenset())
+    lineas['relieve'] = ['relieve:0']
+    for esp in ('informal', 'planificada', 'mina', 'energia'):
+        etapas = _etapas_linea(cfg, esp)
+        pares = dict((e, [(d, v_) for v_ in range(max(variantes_de(cfg, d) for d in lista)) for d in lista
+                          if v_ < variantes_de(cfg, d)]) for e, lista in etapas)
+        if esp == 'mina':
+            for e, lista in RUTA_PETROLEO.items():
+                pares['p%d' % e] = [(d, v_) for v_ in range(max(variantes_de(cfg, d) for d in lista))
+                                    for d in lista if v_ < variantes_de(cfg, d)]
+        F = max(len(p) for p in pares.values())
+        ids = lineas[esp] = []
+        for k in range(F):
+            et = dict((e, pares[e][k % len(pares[e])]) for e, _ in etapas)
+            if esp == 'mina' and et[1][0] in PETROLIFERAS:
+                for e in RUTA_PETROLEO:
+                    et[e] = pares['p%d' % e][k % len(pares['p%d' % e])]
+            geos = set()
+            for d, v_ in et.values():
+                geos.add(_geo_edi(cfg, d, v_))
+                if d == 'torsion' and 'prisma' in _GEN_EDI:
+                    geos.add(_geo_edi(cfg, 'prisma', min(v_, variantes_de(cfg, 'prisma') - 1)))
+            fid = '%s:%d' % (esp, k)
+            por_id[fid] = dict(id=fid, tema=TEMA_DE_LINEA[esp], linea=esp, k=k, bioma=None, var=None,
+                               etapas=et, geos=frozenset(geos))
+            ids.append(fid)
+    comun, todas = {}, {}
+    piezas = set(_geo_edi(cfg, d, v_) for d in DISENOS_PIEZA if d in _GEN_EDI for v_ in range(variantes_de(cfg, d)))
+    for t, tema in enumerate(TEMAS):
+        todas[t] = frozenset(g for g, mo, _ in geometrias_piel(cfg) if tema in temas_de_modelo(mo))
+        de_fam = set()
+        for esp in LINEAS[t]:
+            for fid in lineas[esp]:
+                de_fam |= por_id[fid]['geos']
+        comun[t] = frozenset(g for g in todas[t] if g not in de_fam or g in piezas)
+    v = dict(por_id=por_id, lineas=lineas, comun=comun, todas=todas)
+    _MEZCLA_CACHE['familias'] = (clave, v)
+    return v
+
+
+def familia_de_celda(W, cfg, i):
+    """La familia de la celda i (o None: sin familia, las piezas de siempre)."""
+    fid = W['fam'][i] if 'fam' in W and 0 <= i < len(W['fam']) else ''
+    if not fid or not mezcla_on(cfg):
+        return None
+    return familias(cfg)['por_id'].get(fid)
+
+
+def _orden_linea(W, cfg, esp):
+    """Las familias de una linea en su orden de entrada: el mapa logistico sembrado con
+    el numero de ciclo (Ordenfamilias = ciclo) o el de siempre (fijo)."""
+    ids = list(familias(cfg)['lineas'][esp])
+    if int(cfg.get('orden_familias', 0)) == 1 or len(ids) < 2:
+        return ids
+    ciclo = int(W.get('ciclo_n', 1))
+    xs = logistica(semilla_caos(ciclo, 211 + sum(ord(c) for c in esp)), 3.91, len(ids))
+    return [fid for _, fid in sorted(zip(xs, ids))]
+
+
+def orden_especie(W, cfg, t):
+    """(minimos, resto): las familias de la especie t en orden de entrada. Minimos: una
+    por linea (y por bioma en la vegetacion con Biomas)."""
+    fam = familias(cfg)
+    clave = (t, id(fam), int(W.get('ciclo_n', 1)), int(cfg.get('orden_familias', 0)), bool(cfg.get('biomas', 1)))
+    v = _MEZCLA_CACHE.setdefault('orden', {}).get(clave)
+    if v is not None:
+        return v
+    if len(_MEZCLA_CACHE['orden']) > 64:
+        _MEZCLA_CACHE['orden'].clear()
+    v = _MEZCLA_CACHE['orden'][clave] = _orden_especie(W, cfg, t, fam)
+    return v
+
+
+def _orden_especie(W, cfg, t, fam):
+    ordenes = dict((esp, _orden_linea(W, cfg, esp)) for esp in LINEAS[t])
+    minimos = []
+    for esp in LINEAS[t]:
+        o = ordenes[esp]
+        if esp == 'vegetacion' and cfg.get('biomas', 1):
+            for b in BIOMAS:
+                fid = next((f for f in o if fam['por_id'][f]['bioma'] == b), None)
+                if fid:
+                    minimos.append(fid)
+        elif o:
+            minimos.append(o[0])
+    resto = []
+    colas = [[f for f in ordenes[esp] if f not in minimos] for esp in LINEAS[t]]
+    while any(colas):                   # las lineas, alternadas
+        for c in colas:
+            if c:
+                resto.append(c.pop(0))
+    return minimos, resto
+
+
+def _en_uso(W):
+    """{familia: celdas} de las celdas del globo."""
+    out = {}
+    for f in W.get('fam') or ():
+        if f:
+            out[f] = out.get(f, 0) + 1
+    return out
+
+
+def _n_cuota(cfg, t, q):
+    fam = familias(cfg)
+    total = sum(len(fam['lineas'][esp]) for esp in LINEAS[t])
+    return int(math.ceil(q * total - 1e-9)) if q > 0 else 0
+
+
+def disponibles_al_dia(W, cfg, est=None):
+    """Las familias dentro de la cuota de cada especie: {especie: [ids]}. Entran en su
+    orden; dentro de un mundo las de ciudad e industria solo entran y las de naturaleza
+    solo salen (en orden inverso, primero las que no tienen celdas). Los minimos no
+    salen mientras la cuota sea mayor que 0."""
+    M = _mezcla_al_dia(W)
+    est = est or mezcla_estado(W, cfg)
+    ciclo = int(W.get('ciclo_n', 1))
+    if M.get('ciclo') != ciclo or not isinstance(M.get('disp'), dict):
+        M['disp'], M['ciclo'] = {}, ciclo
+    uso = _en_uso(W)
+    destino = M['disp'] if not est['sim'] else dict(M['disp'])     # Simconstruido: sin memoria
+    for t in (NAT, CIU, IND):
+        q = est['cuota'][t]
+        minimos, resto = orden_especie(W, cfg, t)
+        orden = minimos + resto
+        n = max(len(minimos), _n_cuota(cfg, t, q)) if q > 0 else 0
+        cur = [f for f in (M['disp'].get(t) or []) if f in orden]
+        if est['sim']:                  # Simconstruido: el conjunto de esa fila, sin memoria
+            cur = orden[:n] if n else []
+        elif len(cur) < n:
+            for f in orden:
+                if len(cur) >= n:
+                    break
+                if f not in cur:
+                    cur.append(f)
+        elif len(cur) > n:
+            fuera = [f for f in reversed(orden) if f in cur and f not in minimos]
+            fuera.sort(key=lambda f: (uso.get(f, 0) > 0))     # primero las que no tienen celdas
+            for f in fuera[:len(cur) - n]:
+                cur.remove(f)
+        destino[t] = cur
+    return destino
+
+
+def familia_lista(cfg, fid, cargadas=None):
+    """Cargada entera: sus geometrias y las comunes de su especie."""
+    fam = familias(cfg)
+    f = fam['por_id'].get(fid)
+    if f is None:
+        return False
+    cargadas = _CARGA['geos'] if cargadas is None else cargadas
+    return f['geos'] <= cargadas and fam['comun'][f['tema']] <= cargadas
+
+
+def estado_familia(W, cfg, fid, disp=None, uso=None):
+    """'disponible', 'cargando' (dentro de la cuota, aun no entera), 'en uso' o 'descargada'."""
+    disp = disp if disp is not None else (_mezcla_al_dia(W).get('disp') or {})
+    uso = uso if uso is not None else _en_uso(W)
+    f = familias(cfg)['por_id'].get(fid)
+    if f is None:
+        return 'descargada'
+    if fid in (disp.get(f['tema']) or ()):
+        return 'disponible' if familia_lista(cfg, fid) else 'cargando'
+    return 'en uso' if uso.get(fid) else 'descargada'
+
+
+def _linea_de(t, own):
+    return LINEAS[t][0 if own != ARQ else 1]
+
+
+def familias_listas(W, cfg, t, own=None):
+    """Las familias disponibles (dentro de la cuota y cargadas enteras) de la especie t
+    (de la linea de own, si se da)."""
+    if not _CARGA['arranque']:          # el motor recien cargado: lo pedido, entero
+        carga_tick(W, cfg)
+    disp = disponibles_al_dia(W, cfg)
+    fam = familias(cfg)
+    linea = _linea_de(t, own) if own is not None else None
+    return [fid for fid in (disp.get(t) or []) if (linea is None or fam['por_id'][fid]['linea'] == linea)
+            and familia_lista(cfg, fid)]
+
+
+def hay_familia_lista(W, cfg, t, own=None):
+    return bool(familias_listas(W, cfg, t, own))
+
+
+def elegir_familia(W, cfg, i, t):
+    """La familia de la celda i que se funda como t: entre las disponibles de su especie,
+    su linea y su bioma, con la semilla de siempre (velocidad fundadora y celda)."""
+    if not mezcla_on(cfg):
+        return ''
+    own = W['own'][i] if W['own'][i] in (GEO, ARQ) else GEO
+    cands = familias_listas(W, cfg, t, own)
+    if t == NAT and _linea_de(t, own) == 'vegetacion' and cfg.get('biomas', 1):
+        fam = familias(cfg)['por_id']
+        b = bioma_de(i)
+        cands = [f for f in cands if fam[f]['bioma'] == b] or cands
+    if not cands:
+        return ''
+    x = logistica(semilla_caos(W['vel'][i], i + 977), cfg['caos'], 1)[0]
+    return sorted(cands)[min(len(cands) - 1, int(x * len(cands)))]
+
+
+def familia_neutra(W, cfg, i):
+    """La familia con la que se dibuja una semilla neutra (naturaleza, de las cargadas)."""
+    fam = familias(cfg)
+    own = W['own'][i] if W['own'][i] in (GEO, ARQ) else GEO
+    linea = _linea_de(NAT, own)
+    cands = [f for f in fam['lineas'][linea] if familia_lista(cfg, f)]
+    if linea == 'vegetacion' and cfg.get('biomas', 1):
+        cands = [f for f in cands if fam['por_id'][f]['bioma'] == bioma_de(i)] or cands
+    if not cands:
+        return ''
+    x = logistica(semilla_caos(W['vel'][i], i + 977), cfg['caos'], 1)[0]
+    return sorted(cands)[min(len(cands) - 1, int(x * len(cands)))]
+
+
+# --- la carga, repartida entre fotogramas ----------------------------------------------
+# Cargar una geometria es ponerla en la lista del Render TOP (TouchDesigner cocina su
+# malla al dibujarla); descargarla, quitarla. Lo que se pide: las familias dentro de la
+# cuota (y las del tramo siguiente a Precarga puntos del umbral), las que tienen celdas
+# y las comunes de cada especie con cuota o con celdas. Una cola lo lleva, como mucho
+# Cargaporfotograma geometrias por fotograma; una familia no esta disponible hasta que
+# esta cargada entera, asi que ninguna celda apunta a una geometria sin cargar. La nota
+# no espera: una especie sin familias listas no crece (la celda es naturaleza).
+
+_CARGA = dict(geos=set(), cola=[], hechas=0, foto=[], arranque=False, pedidas=frozenset())
+
+
+def carga_pedida(W, cfg, est=None):
+    """(geometrias que deben estar cargadas, en orden de prioridad)."""
+    est = est or mezcla_estado(W, cfg, avanzar=False)
+    fam = familias(cfg)
+    disp = disponibles_al_dia(W, cfg, est)
+    uso = _en_uso(W)
+    orden = []                          # [(prioridad, familia)]
+    for f in uso:
+        if f in fam['por_id']:
+            orden.append(f)
+    especies = set()
+    for t in (NAT, CIU, IND):
+        if est['cuota'][t] > 0:
+            especies.add(t)
+        for f in disp.get(t) or ():
+            if f not in orden:
+                orden.append(f)
+    tc = W.get('tema_c') or ()
+    for t in set(x for x in tc if x >= 0):
+        especies.add(t)
+    if est['siguiente'] is not None and not est['sim'] and \
+            est['construido'] >= est['siguiente'] - float(cfg.get('precarga', 5.0)):
+        k = est['tramo'] + 1           # precarga: las familias que entraran al cruzar el umbral
+        q = [x / 100.0 for x in est['filas'][k][1:4]]
+        for t in (NAT, CIU, IND):
+            if q[t] <= 0:
+                continue
+            especies.add(t)
+            minimos, resto = orden_especie(W, cfg, t)
+            n = max(len(minimos), _n_cuota(cfg, t, q[t]))
+            for f in (minimos + resto)[:n]:
+                if f not in orden:
+                    orden.append(f)
+    geos = []
+    vistos = set()
+    for t in sorted(especies):          # primero lo comun de cada especie
+        for g in sorted(fam['comun'][t]):
+            if g not in vistos:
+                vistos.add(g)
+                geos.append(g)
+    for f in orden:
+        for g in sorted(fam['por_id'][f]['geos']):
+            if g not in vistos:
+                vistos.add(g)
+                geos.append(g)
+    if cfg['nivel'] >= 39 and any(x == MAL for x in W['sp']):     # el mal, con su biblioteca, en la mezcla
+        for g in sorted(_geos_mal(cfg)):
+            if g not in vistos:
+                vistos.add(g)
+                geos.append(g)
+    # celdas sin familia (de antes de Tema = auto): toda la biblioteca de su especie
+    sin = set(tema_idx(W, cfg, i) for i in range(N) if W['occ'][i] > 0 and not W['fam'][i]
+              and not (cfg['nivel'] >= 33 and W['sp'][i] == MAL) and len(tc) == N and tc[i] != NEUTRA)
+    for t in sorted(sin):
+        for g in sorted(fam['todas'][t]):
+            if g not in vistos:
+                vistos.add(g)
+                geos.append(g)
+    return geos
+
+
+def _geos_mal(cfg):
+    doble = cfg['nivel'] < 12
+    out = set(_geo_edi(cfg, d, v) for d in MALES if d in _GEN_EDI for v in range(variantes_de(cfg, d)))
+    out |= set(geometria_de(mo, True, doble) for mo in MODELOS_MAL)
+    return out
+
+
+def carga_tick(W, cfg, est=None):
+    """La cola de carga: como mucho Cargaporfotograma geometrias cargadas o descargadas
+    en este fotograma. La primera vez (motor recien cargado), lo pedido entero."""
+    est = est or mezcla_estado(W, cfg, avanzar=False)
+    C = _CARGA
+    pre = est['siguiente'] is not None and not est['sim'] and \
+        est['construido'] >= est['siguiente'] - float(cfg.get('precarga', 5.0))
+    fams, temas, sin = set(), set(), set()
+    for i in range(N):                  # lo que cambia lo pedido: las familias y especies con celdas
+        f_, t_ = W['fam'][i], W['tema_c'][i]
+        if f_:
+            fams.add(f_)
+        if t_ >= 0:
+            temas.add(t_)
+            if not f_ and W['occ'][i] > 0:
+                sin.add(t_)
+    clave = (est['tramo'], est['sim'], est['sim'] and est['construido'], pre, frozenset(fams), frozenset(temas),
+             frozenset(sin),
+             W.get('ciclo_n'), id(familias(cfg)), int(cfg.get('orden_familias', 0)),
+             cfg['nivel'] >= 39 and any(x == MAL for x in W['sp']), tuple(est['cuota']))
+    if C.get('clave') == clave and C['arranque']:
+        pedidas, ps = C['pedidas_l'], C['pedidas']
+        if ps == C['geos']:             # todo cargado: nada que hacer
+            C['cola'], C['hechas'] = [], 0
+            return 0
+    else:
+        pedidas = carga_pedida(W, cfg, est)
+        ps = frozenset(pedidas)
+        C['clave'], C['pedidas_l'] = clave, pedidas
+    if not C['arranque']:
+        C['geos'] = set(pedidas)
+        C['arranque'] = True
+        C['cola'] = []
+        C['foto'] = []                  # el arranque no cuenta: es la biblioteca que habia
+        C['hechas'] = len(pedidas)
+        C['pedidas'] = ps
+        return len(pedidas)
+    cola = [('+', g) for g in pedidas if g not in C['geos']] + \
+           [('-', g) for g in sorted(C['geos'] - ps)]
+    tope = max(1, int(cfg.get('carga_por_fotograma', 4)))
+    hechas = 0
+    for op_, g in cola[:tope]:
+        if op_ == '+':
+            C['geos'].add(g)
+        else:
+            C['geos'].discard(g)
+        hechas += 1
+    C['cola'] = cola[tope:]
+    C['hechas'] = hechas
+    C['pedidas'] = ps
+    C['foto'] = (C['foto'] + [hechas])[-600:]
+    C['max_foto'] = max(C.get('max_foto', 0), hechas)       # desde carga_reiniciar
+    C['fotos_carga'] = C.get('fotos_carga', 0) + (1 if hechas else 0)
+    if hechas:
+        _CACHE.pop('render_tema', None)
+    return hechas
+
+
+def carga_reiniciar(cargadas=None):
+    """Vuelve a empezar la carga (motor recargado, autopruebas)."""
+    _CARGA.update(geos=set(cargadas or ()), cola=[], hechas=0, foto=[], arranque=cargadas is not None,
+                  pedidas=frozenset(), clave=None, pedidas_l=[], max_foto=0, fotos_carga=0)
+
+
+# --- las vistas: cada especie, con el algoritmo de siempre, dentro de su mancha -----------
+# Con varias especies en el globo, lo que se dibuja por tema (la piel, el terreno de la
+# naturaleza, rios, carreteras, vias y red, trafico) se calcula una vez por especie sobre
+# una VISTA del mundo: el mismo W, pero las celdas de las otras especies se ven vacias
+# (ocupacion, dueno, especie, altura y carga 0). Asi un rio termina en la primera celda
+# que no es naturaleza como termina en una vacia, una carretera solo pasa por la ciudad y
+# los clusters no cruzan de especie. Cada vista tiene sus caches (la piel por turnos, el
+# tejido...) y una configuracion con su tema. La vista comparte con W todo lo demas (las
+# listas que no se enmascaran son las mismas): el dibujo no escribe en W salvo en esas.
+
+VISTA_MASCARA = dict(occ=0, own=0, sp=0, vh=0.0, h=0.0, traza=0, carga=0, rebrote=0)
+VISTA_CACHES = ('_CLUSTERS', '_TURNOS', '_TEJIDO', '_CAUCES', '_TEJ_IND', '_CULTIVOS', '_NAT_CACHE',
+                '_INFO_CIU', '_ARQ', '_RIEGO')
+_VISTAS = {}
+_VISTA_CACHES = {}
+
+
+def vista(W, cfg, t, refrescar=True):
+    """La vista de la especie t de W (el mismo dict de una vez a otra: las caches que
+    miran id(W) siguen valiendo). refrescar = 'frame': si ya se puso al dia en este
+    fotograma, tal cual."""
+    clave = (id(W), t)
+    V = _VISTAS.get(clave)
+    if V is None:
+        if len(_VISTAS) > 12:
+            _VISTAS.clear()
+        V = _VISTAS[clave] = {}
+    sello = (_TERRENO.get('sello'), id(W))
+    if refrescar == 'frame' and V.get('_sello') == sello:
+        return V
+    esp = especies_lista(W, cfg)
+    propias = dict((k, V.get(k)) for k in VISTA_MASCARA)
+    propias['par'] = V.get('par')
+    V.update(W)                         # lo que no se enmascara, compartido (en C: barato)
+    for k, v in propias.items():        # las listas enmascaradas son las de la vista
+        if v is not None:
+            V[k] = v
+        else:
+            V.pop(k, None)
+    if len(V) > len(W) + 3:             # una clave que W ya no tiene
+        for k in [k for k in V if k not in W and k not in VISTA_MASCARA and k not in ('_de', '_sello', 'par')]:
+            del V[k]
+    V['_sello'] = sello
+    V['_de'] = W
+    for k, vacio in VISTA_MASCARA.items():
+        src = W.get(k)
+        if src is None:
+            V.pop(k, None)
+            continue
+        dst = V.get(k)
+        nuevo = [a if e == t else vacio for a, e in zip(src, esp)]
+        if dst is None or dst is src or len(dst) != len(src):
+            V[k] = nuevo
+        else:
+            dst[:] = nuevo              # la misma lista: quien la tenga la ve al dia
+    par = W['par']
+    vp = V.get('par')
+    nuevo = [p if e == t and (p < 0 or esp[p] == t) else -1 for p, e in zip(par, esp)]
+    if vp is None or vp is par or len(vp) != len(par):
+        V['par'] = nuevo
+    else:
+        vp[:] = nuevo
+    return V
+
+
+def cfg_especie(cfg, t):
+    """La configuracion con el tema t (y sin el pendiente de Temaenciclo)."""
+    if '_de_cfg' in cfg:                # ya es la de una especie
+        cfg = cfg['_de_cfg']
+    _MEZCLA_CACHE['cfg_real'] = cfg
+    cs = _MEZCLA_CACHE.get('cfg_t')
+    if cs is None or cs[0] is not cfg:
+        cs = _MEZCLA_CACHE['cfg_t'] = (cfg, {})
+    c = cs[1].get(t)
+    if c is None:
+        c = dict(cfg, tema=t, _de_cfg=cfg)
+        c.pop('tema_pendiente', None)
+        cs[1][t] = c
+    return c
+
+
+def _mundo_real(W, cfg):
+    """(W, cfg) del mundo del que sale una vista (o los mismos)."""
+    Wr = W.get('_de')
+    if Wr is None:
+        return W, cfg
+    return Wr, cfg.get('_de_cfg') or _MEZCLA_CACHE.get('cfg_real') or cfg
+
+
+class en_vista(object):
+    """Con en_vista(t): las caches del dibujo son las de la especie t."""
+
+    def __init__(self, t):
+        self.t = t
+
+    def __enter__(self):
+        g = globals()
+        self.guarda = dict((k, g[k]) for k in VISTA_CACHES)
+        propias = _VISTA_CACHES.setdefault(self.t, {})
+        for k in VISTA_CACHES:
+            g[k] = propias.setdefault(k, {})
+        return self
+
+    def __exit__(self, *a):
+        globals().update(self.guarda)
+        return False
+
+
+def vistas_reiniciar():
+    _VISTAS.clear()
+    _VISTA_CACHES.clear()
+
+
+def temas_dibujables(W, cfg):
+    """Los temas cuyas piezas se dibujan: el del parametro con Tema fijo (y los de las
+    celdas de otra especie); con Tema = auto, las especies con sus piezas comunes cargadas."""
+    if not mezcla_on(cfg):
+        if '_de' in W or not multiespecie(W, cfg):
+            return (tema_de(cfg),)
+        return tuple(sorted(set([tema_de(cfg)]) | set(TEMAS[t] for t in especies_presentes(W, cfg))))
+    fam = familias(cfg)
+    return tuple(TEMAS[t] for t in (NAT, CIU, IND) if fam['comun'][t] <= _CARGA['geos'])
+
+
+def mezcla_resumen(W, cfg):
+    """Lo que dice la leyenda MEZCLA: dict(construido, tramo, cuota, globo, manchas,
+    familias [disponibles, en uso fuera de cuota] por especie, cola, avisos)."""
+    est = mezcla_estado(W, cfg, avanzar=False)
+    cnt = celdas_de(W)
+    tot = float(max(1, sum(cnt)))
+    disp = disponibles_al_dia(W, cfg, est)
+    uso = _en_uso(W)
+    fam = familias(cfg)
+    familias_n = []
+    for t in (NAT, CIU, IND):
+        d = [f for f in (disp.get(t) or []) if familia_lista(cfg, f)]
+        fuera = [f for f in uso if f in fam['por_id'] and fam['por_id'][f]['tema'] == t
+                 and f not in (disp.get(t) or [])]
+        familias_n.append((len(d), len(fuera)))
+    return dict(construido=est['construido'], tramo=est['umbral'], cuota=[100.0 * q for q in est['cuota']],
+                globo=[100.0 * x / tot for x in cnt], celdas=cnt, manchas=manchas(W),
+                familias=familias_n, cola=len(_CARGA['cola']), avisos=est['avisos'], sim=est['sim'])
+
+
+def manchas(W):
+    """[naturaleza, ciudad, industria]: grupos de celdas vecinas de la misma especie."""
+    tc = W.get('tema_c') or [-1] * N
+    vistos, out = set(), [0, 0, 0]
+    for i in range(N):
+        t = tc[i]
+        if t < 0 or i in vistos or W['occ'][i] <= 0:
+            continue
+        out[t] += 1
+        pila = [i]
+        vistos.add(i)
+        while pila:
+            x = pila.pop()
+            for j in NEIGH[x]:
+                if j not in vistos and tc[j] == t and W['occ'][j] > 0:
+                    vistos.add(j)
+                    pila.append(j)
+    return out
+
+
+def legend_mezcla(W, cfg):
+    """MEZCLA construido 52% (tramo 50) cuota N/C/I 50/40/10 globo 61/30/9 manchas C1 I1
+    familias 9+4/7/2 cola 3"""
+    r = mezcla_resumen(W, cfg)
+
+    def fam(x):
+        return '%d+%d' % x if x[1] else '%d' % x[0]
+    txt = '  MEZCLA   construido %d%%%s (tramo %s)   cuota N/C/I %s   globo %s   manchas C%d I%d   familias %s   cola %d' \
+        % (int(round(r['construido'])), ' (simulado)' if r['sim'] else '', _num(r['tramo']),
+           '/'.join('%d' % int(round(x)) for x in r['cuota']), '/'.join('%d' % int(round(x)) for x in r['globo']),
+           r['manchas'][CIU], r['manchas'][IND], '/'.join(fam(x) for x in r['familias']), r['cola'])
+    if r['avisos']:
+        txt += '   AVISO mezcla_especies: ' + '; '.join(r['avisos'])
+    return txt
+
+
+def piel_multi(W, cfg, now, out, refresco):
+    """La piel con varias especies: cada una sobre su vista, en el mismo out. El resumen
+    es el de la naturaleza (o el de la primera especie) con el de cada especie en
+    'especies' y la informacion de los turnos sumada."""
+    res, infos = {}, []
+    for t in sorted(especies_presentes(W, cfg)):
+        V, ct = vista(W, cfg, t, 'frame'), cfg_especie(cfg, t)
+        with en_vista(t):
+            r = build_piel_refresco(V, ct, now, out) if refresco else build_piel(V, ct, now, out)
+            infos.append(dict(_TURNOS.get('info') or {}))
+        res[t] = r or {}
+    primero = res.get(NAT) or res[min(res)]
+    total = dict(primero)
+    total['especies'] = dict((TEMAS[t], r) for t, r in res.items())
+    for t, r in res.items():            # la leyenda de la ciudad y la industria
+        if t != NAT and 'ciudad' in r:
+            total.setdefault('ciudad_' + TEMAS[t], r['ciudad'])
+    for k in ('clusters', 'piezas', 'obras', 'medias', 'compuestos'):
+        total[k] = sum(int(r.get(k, 0) or 0) for r in res.values())
+    total['max'] = max([int(r.get('max', 0) or 0) for r in res.values()] or [0])
+    info = dict(infos[0]) if infos else {}
+    for k in ('inmediatas', 'celdas', 'ms'):
+        info[k] = sum(x.get(k, 0) or 0 for x in infos)
+    info['especies'] = len(infos)
+    _TURNOS['info'] = info
+    return total
+
+
+def tejido_multi(W, cfg, now, out):
+    """Rios (naturaleza), carreteras (ciudad) y vias y red (industria), cada uno sobre
+    su vista. Devuelve (filas del tejido, resumen, resumen de los rios)."""
+    filas, res, rios = [], {}, {}
+    vias = []
+    for t in sorted(especies_presentes(W, cfg)):
+        V, ct = vista(W, cfg, t, 'frame'), cfg_especie(cfg, t)
+        with en_vista(t):
+            f, r = build_tejido(V, ct)
+            filas.extend(f)
+            for k, v in (r or {}).items():
+                res[k] = res.get(k, 0) + v if isinstance(v, (int, float)) and not isinstance(v, bool) else v
+            if t == NAT:
+                fr, rios = build_rios(V, ct)
+                out['rios'] = list(out.get('rios') or []) + list(fr)
+                _mezcla_al_dia(W)['agua'] = sorted(celdas_agua_dulce(V, ct))
+                _MEZCLA_CACHE['agua_sello'] = (tuple(W['occ']), tuple(W['tema_c']), tuple(W['own']))
+            if t == CIU:
+                vias = V.get('tejido_vias') or []
+            if t == IND:
+                build_industria_tejido(V, ct, now, out)
+                for k in ('tejido_ind', 'red_res'):
+                    if k in V:
+                        W[k] = V[k]
+    W['tejido_vias'] = vias
+    if 'rios' not in out:
+        out['rios'] = []
+    return filas, res, rios
+
+
 # --- el mapa logistico: sin azar de software ------------------------------------
 
 def semilla_caos(vel, celda):
@@ -6076,6 +7252,10 @@ def presion(W, cfg, i):
     if o <= 0:
         return 0.0
     s = W['own'][i]
+    if 'tema_c' in W and cfg['nivel'] >= 11:     # fase 11 v22: y de su especie
+        esp = especies_lista(W, cfg)
+        return o + cfg['peso_vecina'] * sum(W['occ'][j] for j in NEIGH[i]
+                                            if W['occ'][j] > 0 and W['own'][j] == s and esp[j] == esp[i])
     return o + cfg['peso_vecina'] * sum(W['occ'][j] for j in NEIGH[i]
                                         if W['occ'][j] > 0 and W['own'][j] == s)
 
@@ -6088,7 +7268,8 @@ def clusters(W, cfg):
     resultado; no lo modifiques)."""
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), cfg['umbral_vecindad'],
              cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'],
-             tuple(W['sp']) if cfg['nivel'] >= 39 and mal_propio(W, cfg) else None)
+             tuple(W['sp']) if cfg['nivel'] >= 39 and mal_propio(W, cfg) else None,
+             tuple(especies_lista(W, cfg)) if 'tema_c' in W and cfg['nivel'] >= 11 else None)
     if _CLUSTERS.get('clave') != clave:
         _CLUSTERS['clave'], _CLUSTERS['cl'] = clave, _clusters(W, cfg)
     return _CLUSTERS['cl']
@@ -6104,6 +7285,7 @@ def _clusters(W, cfg):
     P = [presion(W, cfg, i) for i in range(N)]
     padre = list(range(N))
     malp = cfg['nivel'] >= 39 and mal_propio(W, cfg)     # fase 39: el mal no se funde con el publico
+    esp = especies_lista(W, cfg) if 'tema_c' in W and cfg['nivel'] >= 11 else [0] * N   # v121: ni de especie
 
     def raiz(a):
         while padre[a] != a:
@@ -6115,7 +7297,8 @@ def _clusters(W, cfg):
         if W['occ'][i] <= 0 or not W['own'][i] or (malp and W['sp'][i] == MAL):
             continue
         for j in NEIGH[i]:
-            if j <= i or W['occ'][j] <= 0 or W['own'][j] != W['own'][i] or (malp and W['sp'][j] == MAL):
+            if j <= i or W['occ'][j] <= 0 or W['own'][j] != W['own'][i] or (malp and W['sp'][j] == MAL) \
+                    or esp[j] != esp[i]:
                 continue
             vec = P[i] >= U and P[j] >= U
             des = (W['par'][j] == i and W['occ'][i] >= cfg['th_fusion']) or \
@@ -6237,13 +7420,13 @@ FOTOS_PASO = 3               # fotogramas de stop-motion por paso
 def objetivos(W, cfg, cl=None):
     """(objetivo de la fusion, objetivo de la coronacion) de cada celda."""
     cl = cl or clusters(W, cfg)
-    tema = tema_de(cfg)
     tf, tc = [0] * N, [0] * N
     for i in range(N):
         if W['occ'][i] <= 0 or not W['own'][i]:
             continue
         if cfg['nivel'] >= 14 and W['derribo'][i]:
             continue                    # fase 14: la obra se derriba, hacia atras
+        tema = tema_en(W, cfg, i)       # fase 11 v22: la especie de la celda
         cf, cc = cadenas_de(cfg, tema, especie_de(tema, W['own'][i]))
         if cl['de'][i] >= 0:
             tf[i] = len(cf)
@@ -6432,7 +7615,7 @@ def gate_vigor(W, cfg, s, p, now, tempo):
         return
     g = max(0.0, now - t_on) / step_dur(cfg, tempo)
     W['vig'][i] = 0.5 * W['vig'][i] + 0.5 * vigor_de(cfg, g)
-    if tema_de(cfg) == 'ciudad':
+    if tema_en(W, cfg, i) == 'ciudad':
         plantas = max(1, int(cfg['plantas_ligado'])) if g >= LIGADO else 1
         for _ in range(plantas - 1):
             grow(W, cfg, i, s, W['vel'][i], now)
@@ -6761,7 +7944,8 @@ def _piel_ctx(W, cfg, now):
                             biomas=dict((b, 0) for b in BIOMAS)))
         P.update(ter=ter, cult=cult, ctx=ctx)
         P['celdas'] = [i for i in range(N) if W['vh'][i] > 0.005 and W['own'][i]
-                       and not (malp and W['sp'][i] == MAL)]     # fase 39: el mal se dibuja aparte
+                       and not (malp and W['sp'][i] == MAL)     # fase 39: el mal se dibuja aparte
+                       and tema_en(W, cfg, i) == tema]          # fase 11 v22: las de su especie
     else:                               # fase 11 v10: la ciudad legible (build_ciudad)
         P['ctx'] = _ciudad_ctx(W, cfg, now, cl, tf, bases, paso)
         P['celdas'] = sorted(P['ctx']['info'])
@@ -7009,6 +8193,7 @@ def _firma_piel(W, cfg):
     reticula, la biblioteca y cualquier parametro de la pagina Fase11."""
     f11 = tuple((k, cfg.get(k)) for k in PIEL_CFG)
     return (id(W), W.get('gen'), len(W.get('shells', ())), GRID['lo'], GRID['hi'], cfg['nivel'], cfg.get('tema'),
+            cfg.get('tema_auto'),
             id(cfg.get('catalogo')), _clave_biblio(cfg), f11, bool(cfg.get('turnos', 1)))
 
 
@@ -7218,7 +8403,7 @@ def recurso_celda(W, cfg, i):
     col = W['cols'][i] if i < len(W.get('cols', [])) else []
     for s_, _ in reversed(col or []):
         if 0 <= s_ < len(W['shells']):
-            t = W['shells'][s_].get('tema')
+            t = tema_concha(W['shells'][s_], i)     # fase 11 v22: la de esa celda
             if t in RECURSO_DE_TEMA:
                 return RECURSO_DE_TEMA[t]
             break
@@ -7228,7 +8413,7 @@ def recurso_celda(W, cfg, i):
 def lenguaje_celda(cfg, i, W=None):
     """0 frio, 1 templado, 2 calido: por la latitud (los extremos del registro,
     frio; el centro, calido), fijo o mezcla (el mapa logistico por celda)."""
-    if tema_de(cfg) == 'industria':     # fase 11 v11: en la industria, la epoca
+    if (tema_en(W, cfg, i) if W is not None else tema_de(cfg)) == 'industria':   # v11: la epoca
         return epoca_actual(cfg, W)
     modo = int(cfg.get('lenguaje', 0))
     if modo in (1, 2, 3):
@@ -7286,12 +8471,21 @@ def pasos_obra(esp, tipo):
 
 
 CONSTRUIDOS = ('ciudad', 'industria')        # los temas que salen de la biblioteca de edificios
+
+
+def _hay_construido(W, cfg):
+    """Fase 11 v22: alguna celda (o el tema) es de la ciudad o de la industria."""
+    if '_de' in W:
+        return tema_de(cfg) in CONSTRUIDOS
+    if not cfg.get('tema_auto') and tema_de(cfg) in CONSTRUIDOS:
+        return True
+    return any(t in (CIU, IND) for t in W.get('tema_c') or ())
 ESP_COD = dict(informal=1, planificada=2, mina=3, energia=4)
 COD_ESP = dict((v, k) for k, v in ESP_COD.items())
 
 
 def _codigo_edi(cfg, W, i):
-    esp = especie_de(tema_de(cfg), W['own'][i])
+    esp = especie_de(tema_en(W, cfg, i), W['own'][i])
     e = etapa_ciudad(cfg, esp, W['occ'][i])
     if W['par'][i] >= 0:
         e = min(e, 2)                   # los satelites, pequenos
@@ -7376,7 +8570,7 @@ def _paso_obra(W, i, k, now):
 def ciudad_gate(W, cfg, i, now):
     """Una nota en la celda i (desde gate_piel): la mutacion de lo que se
     construya a partir de ahora y, con Avance = gates, un paso de su obra."""
-    if tema_de(cfg) not in CONSTRUIDOS or cfg['nivel'] < 11 or not 0 <= i < N:
+    if cfg['nivel'] < 11 or not 0 <= i < N or tema_en(W, cfg, i) not in CONSTRUIDOS:
         return
     W['mut'][i] = mutacion_actual(W, cfg)
     empieza = ciudad_sync(W, cfg, i, now)
@@ -7394,7 +8588,7 @@ def colonos_logicos(W, cfg, i):
     if W['sp'][i] != HIB or W['occ'][i] <= 0:
         return 0, 0
     n = notas_colonas(W, i)
-    if tema_de(cfg) == 'industria':     # fase 11 v11: bancos de la corta; niveles del bastidor
+    if tema_en(W, cfg, i) == 'industria':     # fase 11 v11: bancos de la corta; niveles del bastidor
         if W['own'][i] == ARQ:
             return min(int(cfg['max_bancos']), int(round(cfg['bancos_por_nota'] * n))), 0
         return 0, 2 * min(int(cfg['max_bastidor']), n)
@@ -7407,11 +8601,17 @@ def ciudad_tick(W, cfg, now, paso, playing=True):
     """Las obras que van solas (Avance = pasos), el derribo hacia atras y los
     mutantes visibles, que persiguen a la logica uno por paso (los parasitos de
     abajo arriba al irse; del marco, primero las capsulas)."""
-    if tema_de(cfg) not in CONSTRUIDOS or cfg['nivel'] < 11:
+    if cfg['nivel'] < 11 or not _hay_construido(W, cfg):
         return
     espera = max(1, int(cfg['pasos_etapa'])) * paso
     pasos_av = int(cfg.get('avance', 0)) == 1
     for i in range(N):
+        if tema_en(W, cfg, i) not in CONSTRUIDOS:   # fase 11 v22: las celdas de la naturaleza, sin obra
+            if W['edi'][i] >= 0:
+                W['edi'][i], W['obra'][i], W['edi_occ'][i] = -1, 0, 0
+                W['leng'][i], W['mut'][i] = -1, -1.0
+            W['par_vis'][i] = W['marco_vis'][i] = 0
+            continue
         if W['occ'][i] <= 0:
             if W['edi'][i] >= 0:
                 ciudad_sync(W, cfg, i, now)
@@ -7437,10 +8637,10 @@ def ciudad_tick(W, cfg, now, paso, playing=True):
 
 def cerrar_obras_ciudad(W, cfg):
     """Fin de ciclo: los edificios, terminados; los mutantes, al dia."""
-    if tema_de(cfg) not in CONSTRUIDOS:
+    if not _hay_construido(W, cfg):
         return
     for i in range(N):
-        if W['occ'][i] <= 0:
+        if W['occ'][i] <= 0 or tema_en(W, cfg, i) not in CONSTRUIDOS:
             continue
         ciudad_sync(W, cfg, i, -99.0)
         if W['edi'][i] >= 0:
@@ -7453,10 +8653,10 @@ def cerrar_obras_ciudad(W, cfg):
 def obras_ciudad(W, cfg):
     """Celdas con un edificio a medias: {celda: paso}."""
     out = {}
-    if cfg['nivel'] < 11 or tema_de(cfg) not in CONSTRUIDOS:
+    if cfg['nivel'] < 11 or not _hay_construido(W, cfg):
         return out
     for i in range(N):
-        if W['occ'][i] > 0 and W['edi'][i] >= 0:
+        if W['occ'][i] > 0 and W['edi'][i] >= 0 and tema_en(W, cfg, i) in CONSTRUIDOS:
             esp, e, tipo = _de_codigo(W['edi'][i])
             p = pasos_obra(esp, tipo)
             if W['obra'][i] < len(p):
@@ -7470,8 +8670,17 @@ def diseno_celda(W, cfg, i, esp=None, e=None):
     historia, el mismo edificio); Fijartipo lo fuerza para probar."""
     if esp is None:
         esp, e, _ = _de_codigo(_codigo_edi(cfg, W, i))
-    lista = [d for d in modelos_de(cfg, tema_de(cfg), esp, 'etapa%d' % e) if d in _GEN_EDI] or \
-        DISENOS_TIPO[TIPOS[esp][e - 1]]
+    fam = familia_de_celda(W, cfg, i) if not int(cfg.get('fijar_tipo', 0)) else None
+    if fam is not None and fam['linea'] == esp and e in fam['etapas']:
+        # fase 11 v22: diseno y variante de la etapa, de su familia (no de un sorteo por etapa)
+        xs = logistica(semilla_caos(W['vel'][i], i + 131 * e), cfg['caos'], 3)
+        d, v = fam['etapas'][e]
+        mut = W['mut'][i] if W['mut'][i] >= 0 else mutacion_actual(W, cfg)
+        if d == 'torsion' and mut < 0.25:
+            d, v = 'prisma', min(v, variantes_de(cfg, 'prisma') - 1)
+        return d, min(variantes_de(cfg, d) - 1, v), int(xs[2] * 4)
+    lista = [d for d in modelos_de(cfg, TEMAS[TEMA_DE_LINEA.get(esp, 1)], esp, 'etapa%d' % e)
+             if d in _GEN_EDI] or DISENOS_TIPO[TIPOS[esp][e - 1]]
     if esp == 'mina' and e >= 2 and petrolifera(W, cfg, i):
         lista = RUTA_PETROLEO[e]        # motor v120: el pozo que sigue creciendo, refineria
     xs = logistica(semilla_caos(W['vel'][i], i + 131 * e), cfg['caos'], 3)
@@ -7496,7 +8705,7 @@ def plantas_de(cfg, W, i, occ=None):
     las que anade cada ocupacion de la etapa (el mismo modulo); en la torre
     autoconstruida, los cuartos que se ven."""
     occ = W['occ'][i] if occ is None else occ
-    esp = especie_de(tema_de(cfg), W['own'][i])
+    esp = especie_de(tema_en(W, cfg, i), W['own'][i])
     e = etapa_ciudad(cfg, esp, occ)
     if W['par'][i] >= 0:
         e = min(e, 2)
@@ -7527,7 +8736,7 @@ def lod_ciudad(W, cfg, i):
         return True
     R = top_radius(W, cfg) + RETICULA_SOBRE_DEF
     px = ENCUADRE_DEF * 720.0 / (2.0 * R)
-    lod = cfg.get('lod_ind', 60.0) if tema_de(cfg) == 'industria' else cfg.get('lod_ciudad', 60.0)
+    lod = cfg.get('lod_ind', 60.0) if tema_en(W, cfg, i) == 'industria' else cfg.get('lod_ciudad', 60.0)
     return min(SIZE_EW[i], SIZE_NS[i]) * base_radius(W, cfg, i) * px >= lod
 
 
@@ -7657,7 +8866,7 @@ def info_ciudad(W, cfg, i, cl=None, clave_cfg=None):
 
 def _info_ciudad(W, cfg, i, cl=None):
     own = W['own'][i]
-    esp = especie_de(tema_de(cfg), own)
+    esp = especie_de(tema_en(W, cfg, i), own)
     o = W['occ'][i]
     e = etapa_ciudad(cfg, esp, o)
     if W['par'][i] >= 0:
@@ -8538,6 +9747,627 @@ PRUEBA_NOTAS = (60, 64, 67, 72, 67, 64, 62, 60, 55, 60, 64, 67, 69, 67, 64, 62)
 PRUEBA_NOTAS2 = (36, 43, 41, 39, 46)
 
 
+# --- autopruebas de la mezcla de especies (fase 11 v22, motor v121) -----------------------
+
+def _mezcla_cfg(cfg, **kw):
+    """La configuracion de las autopruebas de la mezcla: Tema = auto, los valores de
+    fabrica de la pagina Fase11 v22 y el nivel 13 (rios y carreteras)."""
+    c = dict(cfg, nivel=13, tema=0, tema_auto=1, tope_construido=0.6, valvula=10.0, paciencia=8,
+             orden_familias=0, precarga=5.0, carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
+             refresco_piel=0.25, turnos=1, avance=0)
+    c.pop('tema_pendiente', None)
+    c.update(kw)
+    return c
+
+
+def _mezcla_mundo(c):
+    W = new_world()
+    ensure(W)
+    W['tema'] = c.get('tema', 0)
+    _mezcla_al_dia(W)
+    return W
+
+
+def _mezcla_nota(W, c, s, i, t, vel=100):
+    note_on(W, c, s, cell_note(i), vel, t)
+    note_off(W, c, s, cell_note(i), t + 0.04, 120.0)
+
+
+def _mezcla_sesion(c, fotos=1200, cada=3, semilla=0.37, fps=30.0, dibujar=0, W=None, t0=0.0, mirar=None):
+    """Una sesion: cada `cada` fotogramas una nota en una celda que elige el mapa logistico
+    (SEQ1 el 60 %, SEQ2 el resto). dibujar: cada cuantos fotogramas build_instances
+    (y mirar(W, c, out, t) despues). Devuelve (W, t, ms de mezcla_tick por fotograma)."""
+    W = W if W is not None else _mezcla_mundo(c)
+    xs = logistica(semilla, 3.91, 2 * fotos + 4)
+    ms = []
+    t = t0
+    g = globals()
+    f0 = g['mezcla_tick']
+
+    def reloj(*a, **k):
+        q = _time.perf_counter()
+        try:
+            return f0(*a, **k)
+        finally:
+            ms.append((_time.perf_counter() - q) * 1000.0)
+    g['mezcla_tick'] = reloj
+    try:
+        for k in range(fotos):
+            t += 1.0 / fps
+            if k % cada == 0:
+                i = int(xs[2 * k] * N) % N
+                _mezcla_nota(W, c, GEO if xs[2 * k + 1] < 0.6 else ARQ, i, t, 80 + k % 40)
+            tick(W, c, t, 120.0, True)
+            if dibujar and k % dibujar == dibujar - 1:
+                out = build_instances(W, c, t, tiles=False, refresco=True)
+                if mirar:
+                    mirar(W, c, out, t)
+    finally:
+        g['mezcla_tick'] = f0
+    return W, t, ms
+
+
+def _sin_cargar(out):
+    return sorted(g for g, f in out.items() if f and g.startswith('mod_') and g not in _CARGA['geos'])
+
+
+def _exclusivas(c, t):
+    """Las geometrias que solo son de la especie t."""
+    fam = familias(c)
+    otras = set()
+    for x in (NAT, CIU, IND):
+        if x != t:
+            otras |= fam['todas'][x]
+    return fam['todas'][t] - otras
+
+
+def _vaciar_cola(W, c, tope=2000):
+    n = 0
+    while n < tope:
+        carga_tick(W, c)
+        n += 1
+        if not _CARGA['cola'] and _CARGA['pedidas'] == _CARGA['geos']:
+            break
+    return n
+
+
+def autoprueba_mezcla(cfg):
+    """Las autopruebas de la mezcla de especies (fase 11 v22, motor v121), con mundos
+    propios: [(texto, bien, detalle)]. No toca el mundo de la sesion; la cola de carga
+    vuelve a como estaba."""
+    res = []
+    guarda = dict(_CARGA)
+    guarda['geos'] = set(_CARGA['geos'])
+    try:
+        _autoprueba_mezcla(cfg, res)
+    except Exception as e:                  # una excepcion es un fallo, no un corte de la fase
+        import traceback
+        res.append(('la autoprueba de la mezcla se ejecuto entera', False,
+                    '%s: %s' % (e, traceback.format_exc().splitlines()[-3:])))
+    finally:
+        _CARGA.clear()
+        _CARGA.update(guarda)
+        _CACHE.pop('render_tema', None)
+        _TURNOS.clear()
+        vistas_reiniciar()
+    return res
+
+
+def _autoprueba_mezcla(cfg, res):
+    c = _mezcla_cfg(cfg)
+    fam = familias(c)
+    # 1. arranque: un mundo nuevo, todo naturaleza
+    carga_reiniciar()
+    W = _mezcla_mundo(c)
+    tick(W, c, 0.01, 120.0, True)
+    est = mezcla_estado(W, c)
+    nat = fam['lineas']['vegetacion'] + fam['lineas']['relieve']
+    disp_nat = [f for f in nat if estado_familia(W, c, f) == 'disponible']
+    ajenas = sorted((_exclusivas(c, CIU) | _exclusivas(c, IND)) & _CARGA['geos'])
+    res.append(('arranque: un mundo nuevo, construido 0 y cuota 100/0/0, las %d familias de la naturaleza '
+                'disponibles y ninguna geometria de la ciudad ni de la industria cargada' % len(nat),
+                est['construido'] == 0.0 and est['cuota'] == [1.0, 0.0, 0.0] and len(disp_nat) == len(nat)
+                and not ajenas, 'disponibles %d, ajenas %s' % (len(disp_nat), ajenas[:3])))
+    # 2. tabla y tramo
+    malas = []
+    for pct, fila in zip((0, 30, 50, 75, 100), MEZCLA_DEF):
+        q = mezcla_estado(W, dict(c, sim_construido=float(pct)))['cuota']
+        if any(abs(100.0 * a - b) > 1e-6 for a, b in zip(q, fila[1:])):
+            malas.append('%d%%' % pct)
+    filas = [list(f) for f in MEZCLA_DEF]
+    filas[2] = [50.0, 50.0, 30.0, 10.0]             # suma 90
+    e90 = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas), sim_construido=50.0))
+    norm = abs(sum(e90['cuota']) - 1.0) < 1e-9 and abs(e90['cuota'][0] - 50.0 / 90.0) < 1e-9 and e90['avisos']
+    Wt = _mezcla_mundo(c)
+    Wt['mezcla']['tramo'] = 3
+    no_baja = mezcla_estado(Wt, c)['tramo'] == 3
+    res.append(('tabla y tramo: Simconstruido 0, 30, 50, 75 y 100 dan las cuotas de mezcla_especies; una fila '
+                'que no suma 100 se normaliza con aviso; bajar construido no baja el tramo',
+                not malas and norm and no_baja,
+                'mal %s; aviso %s; tramo %s' % (malas, e90['avisos'], no_baja)))
+    # 3. la sesion: notas por todo el globo hasta pasar todos los umbrales
+    carga_reiniciar()
+    sin_cargar, uso_sin, tramos, redes_mal = [], [], set(), []
+
+    def mirar(W_, c_, out, t_):
+        sin_cargar.extend(_sin_cargar(out))
+        tramos.add(W_['mezcla']['tramo'])
+        uso_sin.extend(f for f in _en_uso(W_) if f in fam['por_id'] and not familia_lista(c_, f))
+    W, t1, ms = _mezcla_sesion(c, fotos=1500, dibujar=30, mirar=mirar)
+    h = W['mezcla']['hist']
+    esp = W['tema_c']
+    cont_mal = [x for x in h if x[2] == 'contagio' and not x[3]]
+    techo_mal = [x for x in h if x[1] in (CIU, IND) and x[2] != 'satelite'
+                 and not x[6] / float(max(1, x[8])) < x[5] - 1e-9]
+    man = manchas(W)
+    fund = W['mezcla']['fundaciones']
+    ciu = [x for x in h if x[1] == CIU and x[2] in ('fundacion', 'paciencia')]
+    ind = [x for x in h if x[1] == IND and x[2] in ('fundacion', 'paciencia')]
+    res.append(('sesion: %d celdas fundadas pasan por los tramos %s; globo N/C/I %s, manchas C%d I%d '
+                '(fundaciones %d y %d)' % (len(h), sorted(_num(MEZCLA_DEF[k][0]) for k in tramos),
+                                           '/'.join(str(x) for x in celdas_de(W)), man[CIU], man[IND],
+                                           fund[CIU], fund[IND]),
+                tramos >= set(range(len(MEZCLA_DEF))) and celdas_de(W)[CIU] > 0 and celdas_de(W)[IND] > 0,
+                'tramos %s' % sorted(tramos)))
+    res.append(('contagio: toda celda de ciudad o industria que no fundo mancha tocaba a su especie al '
+                'fundarse; las manchas de cada especie no pasan de sus fundaciones',
+                not cont_mal and man[CIU] <= fund[CIU] and man[IND] <= fund[IND],
+                'contagios sin tocar %d; manchas %s, fundaciones %s' % (len(cont_mal), man, fund)))
+    res.append(('fundacion: la primera celda de la ciudad toca un rio o un lago (o la formacion natural mas '
+                'ocupada, sin agua) y toda fundacion de la industria toca la ciudad (%d y %d fundaciones)'
+                % (len(ciu), len(ind)),
+                bool(ciu) and (ciu[0][2] == 'paciencia' or ciu[0][4]) and all(x[4] or x[2] == 'paciencia'
+                                                                             for x in ind),
+                'primera %s; industria %s' % (ciu[:1], [x[:5] for x in ind if not x[4]][:3])))
+    res.append(('techo: ninguna celda se funda como ciudad o industria con su especie en la cuota o por encima '
+                '(sin los satelites)', not techo_mal, '%s' % techo_mal[:3]))
+    sat_mal = [i for i in range(N) if W['occ'][i] > 0 and W['par'][i] >= 0 and
+               (esp[i] != esp[W['par'][i]] or W['fam'][i] != W['fam'][W['par'][i]])]
+    res.append(('satelites: cada satelite tiene la especie y la familia de su nucleo (%d)'
+                % sum(1 for i in range(N) if W['occ'][i] > 0 and W['par'][i] >= 0), not sat_mal, '%s' % sat_mal[:4]))
+    mx, n_c = _CARGA.get('max_foto', 0), _CARGA.get('fotos_carga', 0)
+    res.append(('carga repartida: ningun fotograma carga o descarga mas de Cargaporfotograma (%d) geometrias '
+                '(como mucho %d, en %d fotogramas con carga) y ninguna fila apunta a una geometria sin cargar'
+                % (c['carga_por_fotograma'], mx, n_c),
+                0 < mx <= c['carga_por_fotograma'] and n_c > 0 and not sin_cargar and not uso_sin,
+                'sin cargar %s; familias en uso sin cargar %s' % (sorted(set(sin_cargar))[:4], sorted(set(uso_sin))[:3])))
+    # minimos y familias completas
+    disp = disponibles_al_dia(W, c)
+    est = mezcla_estado(W, c)
+    falta_min = []
+    for t in (NAT, CIU, IND):
+        if est['cuota'][t] <= 0:
+            continue
+        listas = [f for f in disp.get(t, []) if familia_lista(c, f)]
+        for linea in LINEAS[t]:
+            if not any(fam['por_id'][f]['linea'] == linea for f in listas):
+                falta_min.append(linea)
+        if t == NAT and c.get('biomas', 1):
+            for b in BIOMAS:
+                if not any(fam['por_id'][f]['bioma'] == b for f in listas):
+                    falta_min.append(b)
+    res.append(('minimos: con cuota mayor que 0, al menos una familia disponible por linea (y por bioma en la '
+                'naturaleza)', not falta_min, ', '.join(falta_min)))
+    incompletas = []
+    n_fam = 0
+    for t in (NAT, CIU, IND):
+        for f in disp.get(t, []):
+            if estado_familia(W, c, f) != 'disponible':
+                continue
+            n_fam += 1
+            F = fam['por_id'][f]
+            faltan = (F['geos'] | fam['comun'][t]) - _CARGA['geos']
+            for e, (d, v) in F['etapas'].items():       # brote, cada etapa (y el prisma de la torsionada)
+                for g in [_geo_edi(c, d, v)] + ([_geo_edi(c, 'prisma', min(v, variantes_de(c, 'prisma') - 1))]
+                                               if d == 'torsion' else []):
+                    if g not in _CARGA['geos']:
+                        faltan.add(g)
+            for estado in ('puente', 'protagonista', 'hibrido', 'huella', 'remate'):   # resto de la linea
+                for mo in modelos_de(c, TEMAS[t], F['linea'], estado):
+                    if mo in MODELOS or es_edificio(mo):
+                        g = geometria_de(mo, True, c['nivel'] < 12)
+                        if g not in _CARGA['geos']:
+                            faltan.add(g)
+            if t != NAT:
+                for obra in ('valla', 'foso', 'andamio', 'grua'):
+                    for mo in modelos_de(c, TEMAS[t], 'obra', obra):
+                        g = geometria_de(mo, True, c['nivel'] < 12)
+                        if g not in _CARGA['geos']:
+                            faltan.add(g)
+            if faltan:
+                incompletas.append('%s: %s' % (f, sorted(faltan)[:2]))
+    res.append(('familia completa: las %d familias disponibles tienen cargados brote, todas las etapas, obra, '
+                'remates, puentes, protagonista e hibridos' % n_fam, not incompletas and n_fam > 0,
+                '; '.join(incompletas[:3])))
+    # redes, cada una en su especie
+    for t in sorted(especies_presentes(W, c)):
+        with en_vista(t):
+            tj = tejido(vista(W, c, t), cfg_especie(c, t))
+        for r in tj.get('rios', []):    # la ultima celda es la desembocadura (vacia o de otra especie)
+            redes_mal.extend('rio %d' % x for x in r[:-1] if esp[x] in (CIU, IND) and W['occ'][x] > 0)
+        if t == CIU:
+            redes_mal.extend('carretera %d' % x for e in tj.get('vias', []) for x in e if esp[x] != CIU)
+        if t == IND:
+            redes_mal.extend('via %d' % x for e in (tj.get('fc') or {}).get('vias', []) for x in e if esp[x] != IND)
+            redes_mal.extend('red %d' % x for e in (tj.get('red') or {}).get('tramos', []) for x in e
+                             if esp[x] != IND)
+    res.append(('redes: ningun tramo de rio pasa por una celda que no sea naturaleza (acaba en la primera, la '
+                'desembocadura), ninguno de carretera por una que no sea ciudad y ninguno de via o red por una que '
+                'no sea industria',
+                not redes_mal, ', '.join(redes_mal[:4])))
+    # coste
+    med = sum(ms) / max(1, len(ms))
+    res.append(('coste: la logica de la mezcla y la cola, %.3f ms por fotograma de media en Python (pico %.2f '
+                'ms al fundar)' % (med, max(ms or [0.0])), med < 0.2, ''))
+    # 4. persistencia: erosion hasta 1, vaciado y refundacion
+    x = next((i for i in range(N) if esp[i] in (CIU, IND) and W['occ'][i] >= 1 and W['par'][i] < 0), None)
+    bien_p, det_p = False, 'sin celda construida'
+    if x is not None:
+        t0_, f0_ = esp[x], W['fam'][x]
+        W['occ'][x] = max(W['occ'][x], 5)
+        while W['occ'][x] > 1:
+            bajar_ocupacion(W, c, x)
+        t1 += 1.0 / 30
+        tick(W, c, t1, 120.0, True)
+        sigue = esp[x] == t0_ and W['fam'][x] == f0_
+        while W['occ'][x] > 0:
+            bajar_ocupacion(W, c, x)
+        for _ in range(40):
+            t1 += 1.0 / 30
+            tick(W, c, t1, 120.0, True)
+        vacia = W['tema_c'][x] == -1 and not W['fam'][x]
+        t1 += 1.0 / 30
+        _mezcla_nota(W, c, GEO, x, t1)
+        tick(W, c, t1, 120.0, True)
+        ult = W['mezcla']['hist'][-1]
+        refunda = W['tema_c'][x] >= 0 and ult[0] == x and ult[2] != 'satelite' and bool(W['fam'][x])
+        bien_p = sigue and vacia and refunda
+        det_p = 'celda %d: sigue %s, vacia %s, refundada como %s (%s)' % (x, sigue, vacia, TEMAS[W['tema_c'][x]]
+                                                                         if W['tema_c'][x] >= 0 else '-', ult[2])
+    res.append(('persistencia: una celda erosionada de 5 a 1 conserva especie y familia; vaciada y refundada, '
+                'las recibe de nuevo con las reglas', bien_p, det_p))
+    # 5. sin descargar lo implantado: la familia sale cuando se destruye su ultima celda
+    disp = disponibles_al_dia(W, c)
+    uso = _en_uso(W)
+    fuera = sorted(f for f in uso if f in fam['por_id'] and f not in disp.get(fam['por_id'][f]['tema'], []))
+    bien_d, det_d = False, 'ninguna familia en uso fuera de la cuota'
+    if fuera:
+        f = fuera[0]
+        cargada = familia_lista(c, f)
+        for i in range(N):
+            if W['fam'][i] == f:
+                while W['occ'][i] > 0:
+                    bajar_ocupacion(W, c, i)
+        k = 0
+        for k in range(600):
+            t1 += 1.0 / 30
+            tick(W, c, t1, 120.0, True)
+            if estado_familia(W, c, f) == 'descargada' and not (fam['por_id'][f]['geos'] - _CARGA['pedidas']) \
+                    & _CARGA['geos']:
+                break
+        propias = fam['por_id'][f]['geos'] - _CARGA['pedidas']
+        bien_d = cargada and not (propias & _CARGA['geos']) and k > 0 and estado_familia(W, c, f) == 'descargada'
+        det_d = '%s: en uso y cargada %s; descargada en %d fotogramas (%d geometrias propias)' % (
+            f, cargada, k + 1, len(propias))
+    res.append(('sin descargar lo implantado: una familia en uso fuera de la cuota sigue cargada; al destruir su '
+                'ultima celda se descarga en los fotogramas siguientes', bien_d, det_d))
+    # 6. el entierro: el tramo vuelve al primero y la cola vuelve a la naturaleza
+    end_cycle(W, c, t1)
+    W['ciclo_n'] = W.get('ciclo_n', 1) + 1
+    n_fotos = 0
+    for n_fotos in range(1, 1200):
+        t1 += 1.0 / 30
+        tick(W, c, t1, 120.0, True)
+        if not _CARGA['cola'] and _CARGA['geos'] == _CARGA['pedidas']:
+            break
+    est = mezcla_estado(W, c)
+    disp_nat = [f for f in nat if estado_familia(W, c, f) == 'disponible']
+    ajenas = sorted((_exclusivas(c, CIU) | _exclusivas(c, IND)) & _CARGA['geos'])
+    neutras = sum(1 for x_ in W['tema_c'] if x_ == NEUTRA)
+    res.append(('entierro (Forzarciclo con herencia): construido %d %%, cuota 100/0/0, las familias de la '
+                'naturaleza disponibles y la ciudad y la industria descargadas en %d fotogramas por la cola; '
+                '%d semillas neutras' % (int(est['construido']), n_fotos, neutras),
+                est['construido'] == 0.0 and est['cuota'] == [1.0, 0.0, 0.0] and len(disp_nat) == len(nat)
+                and not ajenas and max(_CARGA['foto'][-n_fotos:] or [0]) <= c['carga_por_fotograma'],
+                'disponibles %d de %d, ajenas %s' % (len(disp_nat), len(nat), ajenas[:3])))
+    # 7. reglas una a una, en mundos hechos a mano
+    _autoprueba_reglas(c, res)
+    # 8. clusters: dos vecinas de especies distintas no se funden
+    Wc = _mezcla_mundo(c)
+    a = 40 if N > 50 else N // 2
+    b = NEIGH[a][0]
+    for i, t in ((a, NAT), (b, CIU)):
+        Wc['occ'][i], Wc['own'][i], Wc['sp'][i], Wc['vh'][i], Wc['h'][i] = 9, GEO, GEO, 1.0, 1.0
+        Wc['tema_c'][i] = t
+    P = presion(Wc, c, a)
+    distintas = clusters(Wc, c)['de'][a] < 0 or clusters(Wc, c)['de'][a] != clusters(Wc, c)['de'][b]
+    Wc['tema_c'][b] = NAT
+    juntas = clusters(Wc, c)['de'][a] >= 0 and clusters(Wc, c)['de'][a] == clusters(Wc, c)['de'][b]
+    res.append(('clusters: dos vecinas de especies distintas no se funden aunque superen Umbralvecindad '
+                '(presion %s); de la misma especie, si' % _num(P),
+                distintas and juntas and P >= c['umbral_vecindad'], ''))
+    # 9. determinismo
+    carga_reiniciar()
+    W1, _, _ = _mezcla_sesion(c, fotos=450, semilla=0.61)
+    r1 = (list(W1['tema_c']), list(W1['fam']), [x[:3] for x in W1['mezcla']['hist']], sorted(_CARGA['geos']))
+    carga_reiniciar()
+    W2, _, _ = _mezcla_sesion(c, fotos=450, semilla=0.61)
+    r2 = (list(W2['tema_c']), list(W2['fam']), [x[:3] for x in W2['mezcla']['hist']], sorted(_CARGA['geos']))
+    res.append(('determinismo: dos ejecuciones de la misma sesion dan las mismas especies, familias, '
+                'fundaciones y carga (sin random)', r1 == r2 and len(r1[2]) > 0, ''))
+    # 10. regresion: con Tema fijo, la especie por celda no cambia nada
+    _autoprueba_fijo(cfg, res)
+
+
+def _autoprueba_reglas(c, res):
+    """Valvula, paciencia, fundacion sin agua, techo y la industria en el borde de la ciudad,
+    con mundos hechos a mano (el agua, puesta a mano)."""
+    def mundo(nat_celdas, ciu_celdas, agua):
+        W = _mezcla_mundo(c)
+        for i in nat_celdas:
+            W['occ'][i], W['own'][i], W['sp'][i], W['tema_c'][i] = 1, GEO, GEO, NAT
+        for i in ciu_celdas:
+            W['occ'][i], W['own'][i], W['sp'][i], W['tema_c'][i] = 1, GEO, GEO, CIU
+        for i in range(N):
+            if W['tema_c'][i] >= 0:
+                W['fam'][i] = familias_listas(W, c, W['tema_c'][i], W['own'][i])[0] \
+                    if familias_listas(W, c, W['tema_c'][i], W['own'][i]) else ''
+        W['mezcla']['agua'] = sorted(agua)
+        _MEZCLA_CACHE['agua_sello'] = (tuple(W['occ']), tuple(W['tema_c']), tuple(W['own']))
+        return W
+
+    def fundar(W, i):
+        W['occ'][i], W['own'][i], W['sp'][i] = 1, GEO, GEO
+        # el agua puesta a mano sigue valiendo (agua_mezcla la recalcularia al cambiar la ocupacion)
+        _MEZCLA_CACHE['agua_sello'] = (tuple(W['occ']), tuple(W['tema_c']), tuple(W['own']))
+        t = mezcla_fundar(W, c, i)
+        return t, W['mezcla']['hist'][-1][2]
+    # el globo al 30 % (tramo de la ciudad): 16 celdas de naturaleza en un hemisferio
+    cs = sorted(range(N), key=lambda i: NORMALS[i][1])
+    sur, norte = cs[:N // 2], cs[N // 2:]
+    n30 = int(math.ceil(0.31 * 0.6 * N))          # las celdas del 30 % construido
+    nat0 = sur[:n30]
+    libres = [i for i in norte if not any(j in nat0 for j in NEIGH[i])]
+    rio = libres[0]
+    cerca_rio = [j for j in NEIGH[rio] if j in libres]
+    lejos = [i for i in libres if i != rio and i not in cerca_rio and not any(j in (rio,) or j in cerca_rio
+                                                                             for j in NEIGH[i])]
+    carga_reiniciar()
+    W = mundo(nat0, [], [rio])
+    W['mezcla']['tramo'] = 1
+    _vaciar_cola(W, c)
+    # paciencia: sin celdas junto al agua, las Paciencia primeras son naturaleza y la siguiente funda
+    pac = int(c['paciencia'])
+    vistas = []
+    for i in lejos[:pac + 1]:
+        vistas.append(fundar(W, i))
+    bien_pac = all(t == NAT for t, _ in vistas[:pac]) and vistas[pac] == (CIU, 'paciencia')
+    res.append(('paciencia: con la fundacion de la ciudad abierta y sin candidata, %d celdas son naturaleza y '
+                'la siguiente funda la ciudad donde cae' % pac, bien_pac, '%s' % vistas))
+    # fundacion junto al agua
+    carga_reiniciar()
+    W = mundo(nat0, [], [rio])
+    W['mezcla']['tramo'] = 1
+    _vaciar_cola(W, c)
+    t_lejos = fundar(W, lejos[0])
+    t_rio = fundar(W, cerca_rio[0]) if cerca_rio else (None, None)
+    res.append(('fundacion: la ciudad se funda en la primera celda nueva que toca un rio o un lago, no lejos de el',
+                t_lejos[0] == NAT and t_rio == (CIU, 'fundacion'), 'lejos %s, junto al rio %s' % (t_lejos, t_rio)))
+    # sin agua: la formacion natural mas ocupada
+    carga_reiniciar()
+    W = mundo(nat0, [], [])
+    W['mezcla']['tramo'] = 1
+    for i in nat0[:3]:
+        W['occ'][i] = 6
+    _vaciar_cola(W, c)
+    f = formacion_mas_ocupada(W, c)
+    junto = [i for i in range(N) if W['occ'][i] <= 0 and any(j in f for j in NEIGH[i])]
+    otra = [i for i in range(N) if W['occ'][i] <= 0 and not any(W['occ'][j] > 0 for j in NEIGH[i])]
+    a_ = fundar(W, otra[0]) if otra else None
+    b_ = fundar(W, junto[0]) if junto else None
+    res.append(('fundacion sin agua: la ciudad se funda tocando la formacion natural mas ocupada',
+                a_ is not None and a_[0] == NAT and b_ == (CIU, 'fundacion'), 'lejos %s, junto %s' % (a_, b_)))
+    # valvula: con la ciudad en marcha y las notas lejos, otra mancha solo con mas de Valvula puntos de deficit
+    carga_reiniciar()
+    rio2 = lejos[-1]
+    ciu0 = [rio] + cerca_rio[:1]
+    cerca2 = [j for j in NEIGH[rio2] if j in libres and j not in ciu0 and not any(x in ciu0 for x in NEIGH[j])]
+    W = mundo(nat0, ciu0, [rio2])
+    W['mezcla']['tramo'] = 1
+    _vaciar_cola(W, c)
+    cnt = celdas_de(W)
+    d_alto = 100.0 * (0.30 - cnt[CIU] / float(sum(cnt) + 1))
+    alto = fundar(W, cerca2[0]) if cerca2 else None
+    # ahora la ciudad casi en su cuota: deficit por debajo de la valvula
+    otras = [x for x in norte if x not in ciu0 and x != rio2 and x not in cerca2
+             and not any(j in cerca2 for j in NEIGH[x])]
+    W2 = mundo(nat0, ciu0 + otras[:5], [rio2])
+    W2['mezcla']['tramo'] = 1
+    cnt2 = celdas_de(W2)
+    d_bajo = 100.0 * (0.30 - cnt2[CIU] / float(sum(cnt2) + 1))
+    bajo = fundar(W2, cerca2[1]) if len(cerca2) > 1 else (fundar(W2, cerca2[0]) if cerca2 else None)
+    res.append(('valvula: con las notas lejos de la ciudad, a %s puntos de deficit (mas de Valvula %s) se abre una '
+                'segunda mancha; a %s, no' % (_num(d_alto), _num(c['valvula']), _num(d_bajo)),
+                alto == (CIU, 'fundacion') and d_alto > c['valvula'] and d_bajo <= c['valvula']
+                and bajo is not None and bajo[0] == NAT, 'alto %s, bajo %s' % (alto, bajo)))
+    # techo: con la ciudad en su cuota, una celda que la toca es naturaleza
+    W3 = mundo(nat0[:6], ciu0 + [x for x in norte if x not in ciu0][:6], [])
+    W3['mezcla']['tramo'] = 1
+    cnt3 = celdas_de(W3)
+    toca = [i for i in range(N) if W3['occ'][i] <= 0 and any(W3['tema_c'][j] == CIU for j in NEIGH[i])]
+    q = fundar(W3, toca[0]) if toca else None
+    res.append(('techo: con la ciudad en su cuota (%d de %d celdas, cuota 30 %%), una celda que la toca no es '
+                'ciudad' % (cnt3[CIU], sum(cnt3)), q is not None and q[0] == NAT and
+                cnt3[CIU] / float(sum(cnt3) + 1) >= 0.30, '%s' % (q,)))
+    # la industria nace en el borde de la ciudad (tramo 50)
+    carga_reiniciar()
+    W4 = mundo(nat0 + sur[n30:n30 + 6], ciu0 + [x for x in norte if x not in ciu0][:10], [])
+    W4['mezcla']['tramo'] = 2
+    _vaciar_cola(W4, c)
+    borde = [i for i in range(N) if W4['occ'][i] <= 0 and any(W4['tema_c'][j] == CIU for j in NEIGH[i])]
+    lejos4 = [i for i in range(N) if W4['occ'][i] <= 0 and not any(W4['occ'][j] > 0 for j in NEIGH[i])]
+    p_lejos = fundar(W4, lejos4[0]) if lejos4 else None
+    p_borde = fundar(W4, borde[0]) if borde else None
+    res.append(('industria: pasado el 50 %, nace pegada a la ciudad (no lejos de ella)',
+                p_lejos is not None and p_lejos[0] == NAT and p_borde is not None and p_borde[0] == IND,
+                'lejos %s, borde %s' % (p_lejos, p_borde)))
+
+
+def _autoprueba_fijo(cfg, res):
+    """Con Tema fijo, el mundo con la especie de cada celda dibuja lo mismo que sin ella
+    (el camino de siempre) y ninguna celda recibe familia."""
+    mal = []
+    for k, tema in enumerate(TEMAS):
+        c = dict(cfg, nivel=13, tema=k, tema_auto=0, refresco_piel=0.0)
+        c.pop('tema_pendiente', None)
+        W, t, _ = _mezcla_sesion(c, fotos=240, semilla=0.29)
+        _TURNOS.clear()
+        a = build_instances(W, c, t + 0.5, tiles=True)
+        especies = set(x for x in W['tema_c'] if x != -1)
+        fams = [f for f in W['fam'] if f]
+        W2 = dict(W)
+        W2['tema_c'] = [-1] * N
+        _TURNOS.clear()
+        b = build_instances(W2, c, t + 0.5, tiles=True)
+        if a != b or especies - {k} or fams or multiespecie(W, c):
+            mal.append('%s (filas %s, especies %s, familias %d)' % (tema, 'iguales' if a == b else 'DISTINTAS',
+                                                                   sorted(especies), len(fams)))
+    res.append(('regresion: con Tema fijo en cada especie, cada celda es de esa especie, sin familias, y la piel '
+                'es la de siempre (las mismas filas que sin especie por celda)', not mal, '; '.join(mal)))
+
+
+def _celda_de_punto(p):
+    """La celda cuya normal mas se acerca a la direccion del punto p."""
+    d = _norm(p)
+    return max(range(N), key=lambda c: _dot(d, NORMALS[c]))
+
+
+def mundo_mezcla_prueba(cfg, nivel, fotos=900):
+    """Un mundo con las tres especies (una sesion en Tema = auto, al nivel dado) para las
+    autopruebas de las fases 12 a 19. Devuelve (W, c, t)."""
+    c = _mezcla_cfg(cfg, nivel=nivel)
+    carga_reiniciar()
+    W, t, _ = _mezcla_sesion(c, fotos=fotos, semilla=0.37)
+    return W, c, t
+
+
+def autoprueba_mezcla_fase(cfg, fase):
+    """Lo que cada fase de la 12 a la 19 hace con la mezcla de especies (fase 11 v22,
+    motor v121), sobre un mundo propio con las tres especies: [(texto, bien, detalle)]."""
+    res = []
+    guarda = dict(_CARGA)
+    guarda['geos'] = set(_CARGA['geos'])
+    try:
+        nivel = max(int(fase), 13)
+        W, c, t = mundo_mezcla_prueba(cfg, nivel)
+        esp = W['tema_c']
+        hay = celdas_de(W)
+        res.append(('mezcla: un mundo de prueba con las tres especies (N/C/I %s)' % '/'.join(str(x) for x in hay),
+                    all(hay), ''))
+        if not all(hay):
+            return res
+        cs = [i for i in range(N) if W['occ'][i] > 0 and esp[i] == CIU and W['par'][i] < 0]
+        ns = [i for i in range(N) if W['occ'][i] > 0 and esp[i] == NAT and W['par'][i] < 0]
+        if fase == 12:
+            ci, ni = cs[0], ns[0]
+            occ0, nocc0 = W['occ'][ci], W['occ'][ni]
+            gate_vigor(W, c, GEO, [ci, t - 2.0, 0.0, occ0], t, 120.0)
+            gate_vigor(W, c, GEO, [ni, t - 2.0, 0.0, nocc0], t, 120.0)
+            out = build_instances(W, c, t, tiles=False)
+            edis = sum(len(f) for g, f in out.items() if g.startswith('mod_edi_'))
+            vegs = sum(len(f) for g, f in out.items() if g.startswith('mod_veg_'))
+            res.append(('fase 12 con la mezcla: un gate ligado da plantas en una celda de la ciudad (%d -> %d) y vigor '
+                        'en una de la naturaleza (ocupacion igual); el material, por la especie de cada celda '
+                        '(%d edificios y %d ejemplares en el mismo globo)' % (occ0, W['occ'][ci], edis, vegs),
+                        W['occ'][ci] > occ0 and W['occ'][ni] == nocc0 and edis > 0 and vegs > 0, ''))
+        elif fase == 13:
+            build_instances(W, c, t, tiles=False)
+            mal = []
+            for k_ in sorted(especies_presentes(W, c)):
+                with en_vista(k_):
+                    tj = tejido(vista(W, c, k_), cfg_especie(c, k_))
+                for r in tj.get('rios', []):
+                    mal.extend('rio %d' % x for x in r[:-1] if esp[x] in (CIU, IND) and W['occ'][x] > 0)
+                if k_ == CIU:
+                    mal.extend('carretera %d' % x for e in tj.get('vias', []) for x in e if esp[x] != CIU)
+                if k_ == IND:
+                    mal.extend('via %d' % x for e in (tj.get('fc') or {}).get('vias', []) for x in e if esp[x] != IND)
+                    mal.extend('red %d' % x for e in (tj.get('red') or {}).get('tramos', []) for x in e
+                               if esp[x] != IND)
+            tj = W.get('tejido') or {}
+            res.append(('fase 13 con la mezcla: rios por la naturaleza (acaban en la primera celda que no lo es), '
+                        'carreteras por la ciudad (un arbol por mancha), vias y red por la industria (%d tramos de '
+                        'rio, %d de carretera)' % (tj.get('tramos_rio', 0), tj.get('tramos_via', 0)),
+                        not mal, ', '.join(mal[:4])))
+        elif fase == 14:
+            mal = [i for i in range(N) if W['occ'][i] > 0 and esp[i] >= 0 and
+                   TEMA_DE_ESP.get(especie_destructor(W, c, i)) != TEMAS[esp[i]]]
+            fuera = []
+            for i in cs + ns:
+                f = foco_catastrofe(W, c, i)
+                fuera.extend(x for x in f['zona'] if esp[x] != esp[i])
+            res.append(('fase 14 con la mezcla: el aranazo, segun la especie de la celda golpeada; la escalada '
+                        '(incendio, implosion, apagon) no sale de su mancha',
+                        not mal and not fuera, 'especie %s, fuera %s' % (mal[:3], fuera[:3])))
+        elif fase == 15:
+            reg = registro_concha(W, c)
+            temas = reg.get('temas') or []
+            ok_t = len(temas) == N and all(temas[i] == (esp[i] if W['occ'][i] > 0 and W['own'][i] else -1)
+                                           for i in range(N))
+            sh = dict(reg, occ=list(W['occ']))
+            ok_c = all(tema_concha(sh, i) == TEMAS[esp[i]] for i in range(N) if W['occ'][i] > 0 and esp[i] >= 0)
+            cuenta = [temas.count(k_) for k_ in range(3)]
+            res.append(('fase 15 con la mezcla: la concha guarda la especie de cada celda (mixta: N/C/I %s, tema %s) '
+                        'y la loseta, el recurso y los cortes la leen por celda; Temaenciclo no se aplica con auto'
+                        % ('/'.join(str(x) for x in cuenta), reg['tema']),
+                        ok_t and ok_c and reg['tema'] == TEMAS[max(range(3), key=lambda k_: (cuenta[k_], -k_))]
+                        and 'tema_pendiente' not in c, ''))
+        elif fase == 16:
+            reg = registro_concha(W, c)
+            sh = dict(reg, occ=list(W['occ']))
+            mal = [i for i in range(N) if reg['esp'][i] and TEMA_DE_ESP.get(contenido(sh, i)) != tema_concha(sh, i)]
+            calles = [i for i in reg['calles'] if contenido(sh, i) == 'calle' and tema_concha(sh, i) == 'naturaleza']
+            res.append(('fase 16 con la mezcla: lo que ensena un corte sale del registro de cada celda (sin cambio)',
+                        not mal and not calles, '%s %s' % (mal[:3], calles[:3])))
+        elif fase in (17, 19):
+            if fase == 19:
+                W['modular'].update(ruido=1.0, activo=True)
+            out = build_instances(W, c, t, tiles=False)
+            parts = out.get('particulas', [])
+            fuera = []
+            n_tr = n_es = n_sm = 0
+            for f in parts:
+                col = tuple(f[9:12])
+                cel = _celda_de_punto(f[0:3])
+                if col in (COL_FARO, COL_PILOTO):
+                    n_tr += 1
+                    if not any(esp[x] == CIU for x in [cel] + list(NEIGH[cel])):
+                        fuera.append('trafico %d' % cel)
+                elif col == COL_SMOG:
+                    n_sm += 1
+                    if not any(esp[x] in (CIU, IND) for x in [cel] + list(NEIGH[cel])):
+                        fuera.append('smog %d' % cel)
+            vias_mal = [x for e in (W.get('tejido_vias') or []) for x in e if esp[x] != CIU]
+            if fase == 17:
+                res.append(('fase 17 con la mezcla: trafico solo por las carreteras de la ciudad (%d puntos) y '
+                            'balanceo, trenes y esporas cada uno en sus celdas' % n_tr,
+                            not fuera and not vias_mal, ', '.join((fuera + ['via %d' % x for x in vias_mal])[:4])))
+            else:
+                res.append(('fase 19 con la mezcla: el smog y el humo del ruido del modular, solo sobre la ciudad y '
+                            'la industria (%d motas de smog)' % n_sm, not fuera and n_sm > 0, ', '.join(fuera[:4])))
+    except Exception as e:
+        import traceback
+        res.append(('la autoprueba de la mezcla de la fase %s se ejecuto entera' % fase, False,
+                    '%s: %s' % (e, traceback.format_exc().splitlines()[-3:])))
+    finally:
+        _CARGA.clear()
+        _CARGA.update(guarda)
+        _CACHE.pop('render_tema', None)
+        _TURNOS.clear()
+        vistas_reiniciar()
+    return res
+
+
 def _mundo_prueba_piel(cfg, segundos=20.0, eras=0, fps=30.0, tempo=120.0):
     """Un mundo para las autopruebas: el SEQ1 en semicorcheas y el SEQ2 cada 3
     pasos durante segundos, eras veces enterrado (fin de ciclo) y otra mas.
@@ -8718,11 +10548,15 @@ def autoprueba_turnos(cfg, segundos=20.0):
         casos = []
         W2, _ = _mundo_prueba_piel(c, segundos / 2.0)          # Resetmundo: otro mundo
         casos.append(('Resetmundo', W2, c))
+        # fase 11 v22: un cambio de Tema en directo solo afecta a las celdas que se fundan despues;
+        # aqui las celdas no tienen especie (siguen al tema), como un mundo de antes del motor v121
         casos.append(('Tema', W2, dict(c, tema=1)))
         casos.append(('Forzarciclo', W2, dict(c, tema=1)))
         bien, det = True, []
         now = t1 + 3.0 / fps
         for nombre, Wx, cx in casos:
+            if nombre == 'Tema':
+                Wx['tema_c'] = [-1] * N
             if nombre == 'Forzarciclo':
                 end_cycle(Wx, cx, now)
             now += 1.0 / fps
@@ -8772,8 +10606,10 @@ def _ciudad_ctx(W, cfg, now, cl, tf, bases, paso):
     info = {}
     ck = (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi'])
     malp = cfg['nivel'] >= 39 and mal_propio(W, cfg)      # fase 39: el mal se dibuja aparte
+    tema = tema_de(cfg)
     for i in range(N):
-        if W['occ'][i] > 0 and W['own'][i] and W['vh'][i] > 0.005 and not (malp and W['sp'][i] == MAL):
+        if W['occ'][i] > 0 and W['own'][i] and W['vh'][i] > 0.005 and not (malp and W['sp'][i] == MAL) \
+                and tema_en(W, cfg, i) == tema:         # fase 11 v22: las de su especie
             info[i] = info_ciudad(W, cfg, i, cl, ck)
     cerca = {}
     if cfg.get('superficie'):
@@ -9114,6 +10950,26 @@ def _eje_cluster(celdas, mascara):
 
 
 def rasgos_terreno(W, cfg, cl=None):
+    """Los rasgos del tema (_rasgos_tema) y, en la vista de la naturaleza de un mundo
+    con varias especies (fase 11 v22), los muelles de la ciudad y la industria."""
+    r, res = _rasgos_tema(W, cfg, cl)
+    if '_de' in W and cfg['nivel'] >= 11 and cfg.get('oceano') and tema_de(cfg) == 'naturaleza':
+        Wr, cr = _mundo_real(W, cfg)
+        esp = especies_lista(Wr, cr)
+        occ = [Wr['occ'][i] if esp[i] != NAT and Wr['own'][i] else 0 for i in range(N)]
+        if any(occ):
+            clave = tuple(occ)
+            v = _TERRENO.get('muelles_mezcla')
+            if v is None or v[0] != clave:
+                v = _TERRENO['muelles_mezcla'] = (clave, _muelles(dict(occ=occ, own=[1 if o else 0 for o in occ])))
+            mr, mres = v[1]
+            res = dict(res, islas=res.get('islas', 0) + mres['islas'],
+                       archipielagos=res.get('archipielagos', 0) + mres['archipielagos'])
+            r = list(r) + list(mr)
+    return r, res
+
+
+def _rasgos_tema(W, cfg, cl=None):
     """Lo que levanta el terreno: [('cono', celda, alto, k), ('cresta', a, b,
     alto_a, alto_b, collado), ('domo', celda, alto)] y el resumen (cordilleras,
     capitales). Alturas sobre el suelo local, de la ocupacion (no del stop-motion:
@@ -9730,6 +11586,18 @@ def terreno(W, cfg, cl=None):
     los rasgos o el suelo). dict(E, S: arrays TERRENO_H x TERRENO_W o None sin
     numpy, El: E como listas, centro: [E en el centro de cada celda], hmax,
     version, cordilleras, montes, ejes)."""
+    if cfg['nivel'] >= 11:              # fase 11 v22: varias especies, un solo mapa (el de la mezcla)
+        Wr, cr = _mundo_real(W, cfg)
+        if multiespecie(Wr, cr):
+            esp = especies_lista(Wr, cr)       # el suelo de cada celda en el shader (sAlturas.b)
+            _TERRENO['esp_pix'] = tuple((esp[i] + 1) if esp[i] in (CIU, IND) and Wr['occ'][i] > 0 else 0
+                                        for i in range(N))
+            Vn = vista(Wr, cr, NAT, 'frame')
+            if W is not Vn:
+                with en_vista(NAT):
+                    return terreno(Vn, cfg_especie(cr, NAT))
+        elif '_de' not in W:
+            _TERRENO['esp_pix'] = None
     sello = (id(W), _TERRENO.get('sello'), tuple(W['occ']))
     if _TERRENO.get('sello_t') == sello and _TERRENO.get('t') is not None:
         return _TERRENO['t']                # ya visto en este fotograma
@@ -10311,9 +12179,19 @@ def alturas_array():
             a[..., 3] = t['L']
         _TERRENO['array'] = a
         _TERRENO['array_agua'] = None
+    ep = _TERRENO.get('esp_pix')
+    if ep and any(ep):                      # motor v121: la especie de cada pixel (2 ciudad, 3 industria)
+        v = _TERRENO.get('array_esp')
+        if v is None or v[0] != ep or v[1] is not a:
+            por_celda = np.array(ep, dtype=np.float32)
+            P = por_celda[_rejilla(np)['celda']]
+            b = a.copy()
+            b[..., 2] = np.where(P > 0.0, P, a[..., 2])
+            v = _TERRENO['array_esp'] = (ep, a, b)
+        a = v[2]
     ag = _TERRENO.get('agua')
     if ag:                                  # motor v101: el agua de las hondonadas, en a, en negativo
-        clave = tuple(sorted(ag.items()))
+        clave = (tuple(sorted(ag.items())), id(a))      # v121: y el mapa de debajo (la especie)
         v = _TERRENO.get('array_agua')
         if v is None or v[0] != clave:
             por_celda = np.zeros(N, dtype=np.float32)
@@ -10668,6 +12546,9 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
             v = _SITIOS[clave] = (pt, d, alto_en(ter, d))
         return v
 
+    fam_ = familia_de_celda(W, cfg, i)      # fase 11 v22: la variante, la de la familia de la celda
+    var_fam = fam_['var'] if fam_ is not None and fam_.get('var') is not None else None
+
     def plantar(modelo, deriv, x, z, h, giro=0.0, incl=0.0, rumbo=0.0, var=None, recto=False):
         """Un ejemplar de la biblioteca en (x, z) de la celda, sobre el terreno,
         de alto h. Sin plantas sobre el limite del bosque ni sobre un rio; la
@@ -10682,6 +12563,8 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
             return None
         nvar = variantes(cfg)
         var = int(_hash01(i, int(1000 * x), int(1000 * z), 11) * nvar) if var is None else var % nvar
+        if var_fam is not None:
+            var = var_fam % nvar
         ej = ejemplar(cfg, modelo, var, deriv)
         h *= kb
         anch = 1.0 if recto else max(0.7, min(1.4, ancho))      # el vigor: tronco y alcance de copa
@@ -11042,6 +12925,11 @@ def rios(W, cfg, cl=None, ter=None):
     fuentes = sorted(cumbres | (caps & alto), key=lambda c: (-G[c], c))
     lista, abajo, en_rio = [], {}, set()
     tope = max(1, int(cfg['max_rio']))
+    otra = set()                        # fase 11 v22: la ciudad y la industria de una mezcla (el rio acaba en ellas)
+    if '_de' in W:
+        Wr, cr = _mundo_real(W, cfg)
+        esp = especies_lista(Wr, cr)
+        otra = set(i for i in range(N) if Wr['occ'][i] > 0 and esp[i] != NAT)
     for f in fuentes:
         if f in en_rio:                 # la cumbre ya esta en otro rio
             continue
@@ -11055,8 +12943,8 @@ def rios(W, cfg, cl=None, ter=None):
             if G[j] >= G[c] - 1e-6:
                 break                   # hondonada o llano: aqui acaba
             camino.append(j)
-            if j in en_rio:
-                break                   # confluencia
+            if j in en_rio or j in otra:
+                break                   # confluencia (o la desembocadura en la ciudad o la industria)
         if len(camino) < 2:
             continue
         for a, b in zip(camino, camino[1:]):
@@ -11267,9 +13155,9 @@ def _caudal(lista, abajo):
     return q
 
 
-def camino_corto(a, b):
+def camino_corto(a, b, permitidas=None):
     """Celdas del camino mas corto de a a b por la reticula (BFS; a igualdad,
-    por las vecinas de indice menor)."""
+    por las vecinas de indice menor). permitidas (fase 11 v22): solo por esas celdas."""
     if a == b:
         return [a]
     padre = {a: None}
@@ -11278,7 +13166,7 @@ def camino_corto(a, b):
         sig = []
         for c in frente:
             for j in sorted(NEIGH[c]):
-                if j not in padre:
+                if j not in padre and (permitidas is None or j in permitidas):
                     padre[j] = c
                     sig.append(j)
         frente = sig
@@ -11290,13 +13178,13 @@ def camino_corto(a, b):
     return out[::-1]
 
 
-def camino_traza(a, b, trazas, peso):
+def camino_traza(a, b, trazas, peso, permitidas=None):
     """Camino de a a b que prefiere las trazas heredadas (fase 15): Dijkstra
     con coste 1 por tramo y 1 - 0,9 x Pesotraza por tramo de traza; a
     igualdad, el de menos tramos y luego el de celdas menores. Devuelve
     (celdas, coste). Sin trazas o sin peso, el camino mas corto."""
     if not trazas or peso <= 0:
-        c = camino_corto(a, b)
+        c = camino_corto(a, b, permitidas)
         return c, float(len(c) - 1)
     import heapq
     barato = 1.0 - 0.9 * max(0.0, min(1.0, peso))
@@ -11310,6 +13198,8 @@ def camino_traza(a, b, trazas, peso):
         if mejor.get(c, (1e18, 0)) < (coste, n):
             continue
         for j in sorted(NEIGH[c]):
+            if permitidas is not None and j not in permitidas:
+                continue
             k = coste + (barato if (min(c, j), max(c, j)) in trazas else 1.0)
             if (k, n + 1) < mejor.get(j, (1e18, 0)):
                 mejor[j] = (k, n + 1)
@@ -11334,14 +13224,17 @@ def carreteras(W, cfg, cl=None, trazas=None):
     distancia es el coste del camino que las prefiere (Pesotraza)."""
     nodos = nodos_via(W, cfg, cl)
     peso = cfg.get('peso_traza', 0.0)
+    # fase 11 v22: en la vista de la ciudad de una mezcla, los tramos solo por la ciudad (un arbol por mancha)
+    lim = set(i for i in range(N) if W['occ'][i] > 0) if '_de' in W else None
     caminos = {}
     pares = []
     for k, a in enumerate(nodos):
         for b in nodos[k + 1:]:
             if trazas:
-                caminos[(a, b)], d = camino_traza(a, b, trazas, peso)
+                caminos[(a, b)], d = camino_traza(a, b, trazas, peso, lim)
             else:
-                d = len(camino_corto(a, b)) - 1
+                caminos[(a, b)] = camino_corto(a, b, lim)
+                d = len(caminos[(a, b)]) - 1
             pares.append((d, a, b))
     padre = dict((x, x) for x in nodos)
 
@@ -11357,7 +13250,7 @@ def carreteras(W, cfg, cl=None, trazas=None):
             continue
         padre[ra] = rb
         arbol.append((a, b, d))
-        camino = caminos[(a, b)] if trazas else camino_corto(a, b)
+        camino = caminos[(a, b)]
         for c, e in zip(camino, camino[1:]):
             if (c, e) not in tramos and (e, c) not in tramos:
                 tramos.append((c, e))
@@ -11474,6 +13367,7 @@ def ferrocarril(W, cfg, trazas):
     if not minas or not plantas:
         return out
     peso = max(0.0, float(cfg.get('peso_traza', 0.5)))
+    lim = set(i for i in range(N) if W['occ'][i] > 0) if '_de' in W else None    # v121: solo por la industria
     dist = dict((p, 0.0) for p in plantas)
     hacia = dict((p, None) for p in plantas)
     cola = [(0.0, p) for p in plantas]
@@ -11483,6 +13377,8 @@ def ferrocarril(W, cfg, trazas):
         if d > dist.get(c, 1e9) + 1e-12:
             continue
         for j in sorted(NEIGH[c]):
+            if lim is not None and j not in lim:
+                continue
             w = 1.0 - (0.5 * min(1.0, peso) if (min(c, j), max(c, j)) in trazas else 0.0)
             nd = d + w
             if nd < dist.get(j, 1e9) - 1e-12:
@@ -11778,7 +13674,7 @@ COL_RUINA = dict(vegetacion=(0.25, 0.23, 0.21), relieve=(0.38, 0.37, 0.40), info
 def especie_destructor(W, cfg, i):
     """La especie para los destructores: la de la celda, salvo la refineria (la
     mina en su ultima etapa), que arde por sus tuberias."""
-    esp = especie_de(tema_de(cfg), W['own'][i])
+    esp = especie_de(tema_en(W, cfg, i), W['own'][i])
     if esp == 'mina' and etapa_ciudad(cfg, esp, W['occ'][i]) >= 5:
         return 'refineria'
     return esp
@@ -11942,7 +13838,9 @@ def iniciar_catastrofe(W, cfg, foco, vel, now):
     el golpe la ha vaciado, en la mas alta que quede de su zona. Devuelve la
     catastrofe, o None si su zona ya tiene una en curso, no queda nada en
     pie o no queda sitio (Maxfuego)."""
-    vivas = [c for c in foco['zona'] if W['occ'][c] > 0 and W['own'][c] == foco['own']]
+    ft = TEMA_DE_ESP.get(foco['especie'])      # fase 11 v22: la escalada no sale de su especie
+    vivas = [c for c in foco['zona'] if W['occ'][c] > 0 and W['own'][c] == foco['own']
+             and (ft is None or tema_en(W, cfg, c) == ft)]
     if not vivas:
         return None
     tipo = CATASTROFE.get(foco['especie'])          # fase 11 v11: Grisu y Apagon (pagina Fase14)
@@ -12086,7 +13984,7 @@ def build_destructores(W, cfg, now, out):
     """Las huellas (el modelo de huella de su especie en cada celda vacia que
     la tiene) y las particulas: brasas y ceniza de lo que arde, polvo de los
     derrumbes, y las nubes de los accidentes, que se disipan en Pasospolvo."""
-    tema = tema_de(cfg)
+    temas = temas_dibujables(W, cfg)    # fase 11 v22: las especies con sus piezas cargadas
     lim = limit(cfg)
     paso = W.get('paso') or 0.125
     doce = cfg['nivel'] >= 12
@@ -12096,7 +13994,8 @@ def build_destructores(W, cfg, now, out):
         if not r or W['occ'][i] > 0:
             continue
         esp = RUINA_ESP[r - 1]
-        if TEMA_DE_ESP.get(esp) != tema:
+        tema = TEMA_DE_ESP.get(esp)
+        if tema not in temas:
             continue                        # los modelos del otro tema no se dibujan
         mo = (modelos_de(cfg, tema, esp, 'huella') or [None])[0]
         if mo is None:
@@ -12169,20 +14068,40 @@ def registro_concha(W, cfg):
     (1 + indice en RUINA_ESP; 0 vacia), estado y cluster (-1 ninguno); y las
     carreteras, las calles (celdas por las que pasan) y los rios."""
     tema = tema_de(cfg)
+    multi = cfg['nivel'] >= 11 and (mezcla_on(cfg) or multiespecie(W, cfg))
     cl = clusters(W, cfg)
     esp, est, clu, tipo = [0] * N, [-1] * N, [-1] * N, [''] * N
+    temas = [-1] * N
     for i in range(N):
         if W['occ'][i] > 0 and W['own'][i]:
-            esp[i] = 1 + RUINA_ESP.index(especie_de(tema, W['own'][i]))
+            ti = tema_en(W, cfg, i)     # fase 11 v22: la especie de cada celda
+            temas[i] = TEMAS.index(ti)
+            esp[i] = 1 + RUINA_ESP.index(especie_de(ti, W['own'][i]))
             est[i] = estado_idx(cfg, W['occ'][i])
             clu[i] = cl['de'][i]
-            if tema in CONSTRUIDOS and cfg['nivel'] >= 11:     # fase 11 v10: la tipologia de cada celda
+            if ti in CONSTRUIDOS and cfg['nivel'] >= 11:     # fase 11 v10: la tipologia de cada celda
                 tipo[i] = diseno_celda(W, cfg, i)[0]
-    t = tejido(W, cfg) if cfg['nivel'] >= 13 else {}
+    if multi:                           # una concha mixta: cada tejido, de su especie
+        t = dict(vias=[], rios=[])
+        if cfg['nivel'] >= 13:
+            for k in sorted(especies_presentes(W, cfg)):
+                with en_vista(k):
+                    tk = tejido(vista(W, cfg, k), cfg_especie(cfg, k))
+                t['vias'] += list(tk.get('vias', []))
+                t['rios'] += list(tk.get('rios', []))
+        cuenta = [temas.count(k) for k in range(len(TEMAS))]
+        if any(cuenta):                 # el tema de la concha: el de mas celdas
+            tema = TEMAS[max(range(len(TEMAS)), key=lambda k: (cuenta[k], -k))]
+    else:
+        t = tejido(W, cfg) if cfg['nivel'] >= 13 else {}
     vias = sorted([min(a, b), max(a, b)] for a, b in t.get('vias', []))
-    return dict(tema=tema, esp=esp, estado=est, cluster=clu, tipo=tipo, vias=vias,
-                epoca=epoca_actual(cfg, W) if tema == 'industria' else None,
-                calles=sorted(set(x for v in vias for x in v)), rios=[list(r) for r in t.get('rios', [])])
+    ind = 'industria' in [TEMAS[k] for k in temas if k >= 0] or tema == 'industria'
+    reg = dict(tema=tema, esp=esp, estado=est, cluster=clu, tipo=tipo, vias=vias,
+               epoca=epoca_actual(cfg, W) if ind else None,
+               calles=sorted(set(x for v in vias for x in v)), rios=[list(r) for r in t.get('rios', [])])
+    if multi:
+        reg['temas'] = temas
+    return reg
 
 
 def herencia_tematica(W, cfg, now, reg):
@@ -12198,6 +14117,8 @@ def herencia_tematica(W, cfg, now, reg):
                 W['rebrote'][i] = 1
                 W['t_rebrote'][i] = now
     if nuevo in CONSTRUIDOS and reg['tema'] == nuevo:      # carreteras o vias (fase 11 v11)
+        W['trazas'] = [list(v) for v in reg['vias']]
+    elif mezcla_on(cfg) and reg.get('vias'):     # fase 11 v22: la ciudad y la industria de la mezcla
         W['trazas'] = [list(v) for v in reg['vias']]
 
 
@@ -12223,12 +14144,21 @@ def tick_rebrote(W, cfg, now):
             W['dirty'] = True
 
 
+def tema_concha(sh, c):
+    """Fase 11 v22: el tema de la concha sh en la celda c. Una concha mixta (Tema = auto)
+    guarda la especie de cada celda (temas); las vacias, el de la concha."""
+    ts = sh.get('temas')
+    if ts and 0 <= c < len(ts) and ts[c] >= 0:
+        return TEMAS[ts[c]]
+    return sh.get('tema')
+
+
 def tile_material(cfg, sh, s, c):
     """(color, rugosidad) de la loseta de la celda c en la concha sh. Las
     conchas con registro (fase 15) llevan la materia de su tema sobre el color
     de su generacion; las demas, el color de la fase 8."""
     col = tile_color(cfg, sh, sh['occ'][c], s)
-    tema = sh.get('tema')
+    tema = tema_concha(sh, c)
     if tema is None:
         return col, RUG_LOSETA
     rug = RUG_LOSETA
@@ -12289,7 +14219,7 @@ def contenido(sh, c):
     e = sh['esp'][c]
     if e:
         return RUINA_ESP[e - 1]
-    if sh['tema'] in ('ciudad', 'industria') and c in sh.get('calles', ()):
+    if tema_concha(sh, c) in ('ciudad', 'industria') and c in sh.get('calles', ()):
         return 'calle'
     return None
 
@@ -12334,7 +14264,7 @@ def cimiento_de(sh, x, q):
     de la concha guarda la tipologia): pilotes bajo los pilotis, sotanos bajo el
     podio y los bloques, zapatas bajo las casas. None si no hay registro."""
     tipos = sh.get('tipo')
-    if sh.get('tema') != 'ciudad' or not tipos or x >= len(tipos) or not tipos[x]:
+    if tema_concha(sh, x) != 'ciudad' or not tipos or x >= len(tipos) or not tipos[x]:
         return None
     d = tipos[x]
     if d in INFORMALES or q == 'informal':
@@ -12418,7 +14348,7 @@ def abrir_union(W, cfg, a, b, depth, now):
     """Une los cortes de a y b por el camino mas corto: canon en naturaleza
     (el camino se corta con la profundidad del menor), galeria de metro en la
     ciudad (una zanja de una loseta con su boveda)."""
-    galeria = tema_de(cfg) in CONSTRUIDOS
+    galeria = tema_en(W, cfg, a) in CONSTRUIDOS and tema_en(W, cfg, b) in CONSTRUIDOS
     camino = camino_corto(a, b)
     prof = 1 if galeria else max(1, int(depth))
     for c in camino[1:-1]:
@@ -12542,7 +14472,7 @@ def _build_arqueologia(W, cfg, now, out):
             n_celdas += 1
         for s, x, j, a, b, q in piezas:
             sh = W['shells'][s]
-            tema = sh['tema']
+            tema = tema_concha(sh, x)           # fase 11 v22: la de esa celda (una concha puede ser mixta)
             col = COL_EXPUESTO.get(q, COL_EXPUESTO['planificada'])
             if tema == 'industria' and sh.get('epoca') is not None:    # la epoca de esa concha
                 col = _mix(col, PALETA_CIUDAD[PALETA_IND + int(sh['epoca'])][0], 0.45)
@@ -12874,7 +14804,7 @@ def ventanas_celda(W, cfg, i, bq):
     base = int(W['estacion']['ventanas'])
     f = W['frente']
     q = progreso_frente(W, cfg)
-    if tema_de(cfg) == 'industria' and not cfg.get('turno', 1):
+    if tema_en(W, cfg, i) == 'industria' and not cfg.get('turno', 1):
         f = None                        # fase 17 v3: sin Turno, el frente no cambia los focos
     if f and q is not None:
         base = int(f['de']['ventanas'])
@@ -12972,21 +14902,23 @@ def build_tiempo(W, cfg, now, out):
 # actuacion lo oculta, como la reticula y la leyenda.
 
 ENCUADRE_DEF, RETICULA_SOBRE_DEF = 0.85, 0.2     # los de la camara de globo (ver ENCUADRE)
-ESCENAS = ['naturaleza', 'ciudad', 'industria']      # fase 18 v2: la escena de la industria
-# los parametros de una escena: (nombre, naturaleza, ciudad, industria). 'luz_principal.dimmer'
-# y 'luz_relleno.dimmer' son de las luces, no de FASE1.
+ESCENAS = ['naturaleza', 'ciudad', 'industria', 'mezcla']   # fase 18 v2: la industria; v4 (motor v121): la mezcla
+# los parametros de una escena: (nombre, naturaleza, ciudad, industria, mezcla). 'luz_principal.dimmer'
+# y 'luz_relleno.dimmer' son de las luces, no de FASE1. La mezcla (Tema = auto) empieza en la
+# naturaleza y acaba con las tres especies: valores de en medio.
 ESCENA_PARS = [
-    ('Tema', 'naturaleza', 'ciudad', 'industria'),
-    ('Paleta', 'generaciones', 'mineral', 'mineral'), ('Paletatono', 20.0, 205.0, 30.0),
-    ('Paletacroma', 0.04, 0.03, 0.03),
-    ('Umbralvecindad', 4.0, 4.5, 4.5), ('Pesovecina', 0.5, 0.5, 0.5), ('Mincluster', 2, 2, 2),
-    ('Umbraldensidad', 0.6, 0.6, 0.6),
-    ('Caos', 3.91, 3.74, 3.82), ('Maxpiezas', 6, 5, 5),
-    ('Rugmin', 0.05, 0.1, 0.15), ('Rugmax', 0.85, 0.9, 0.95),
-    ('Swaymax', 6.0, 4.0, 2.0), ('Trafico', 2, 3, 2),
-    ('Luzcalida', 0.35, 0.0, 0.1),
-    ('luz_principal.dimmer', 1.15, 1.0, 0.95), ('luz_relleno.dimmer', 0.16, 0.24, 0.26),
-    ('Refrescopiel', 0.25, 0.25, 0.25),         # motor v101 (fase 18 v3): la piel por turnos, por escena
+    ('Tema', 'naturaleza', 'ciudad', 'industria', 'auto'),
+    ('Paleta', 'generaciones', 'mineral', 'mineral', 'generaciones'),
+    ('Paletatono', 20.0, 205.0, 30.0, 20.0),
+    ('Paletacroma', 0.04, 0.03, 0.03, 0.035),
+    ('Umbralvecindad', 4.0, 4.5, 4.5, 4.0), ('Pesovecina', 0.5, 0.5, 0.5, 0.5), ('Mincluster', 2, 2, 2, 2),
+    ('Umbraldensidad', 0.6, 0.6, 0.6, 0.6),
+    ('Caos', 3.91, 3.74, 3.82, 3.86), ('Maxpiezas', 6, 5, 5, 6),
+    ('Rugmin', 0.05, 0.1, 0.15, 0.08), ('Rugmax', 0.85, 0.9, 0.95, 0.9),
+    ('Swaymax', 6.0, 4.0, 2.0, 4.0), ('Trafico', 2, 3, 2, 2),
+    ('Luzcalida', 0.35, 0.0, 0.1, 0.2),
+    ('luz_principal.dimmer', 1.15, 1.0, 0.95, 1.05), ('luz_relleno.dimmer', 0.16, 0.24, 0.26, 0.2),
+    ('Refrescopiel', 0.25, 0.25, 0.25, 0.25),   # motor v101 (fase 18 v3): la piel por turnos, por escena
 ]
 ESCENA_MIGRA = {'Refresconat': 'Refrescopiel'}  # motor v101: lo que una escena guardada llamaba de otro modo
 LUZ_CALIDA = (1.00, 0.88, 0.72)             # la luz de dia de la escena de naturaleza
@@ -13005,12 +14937,12 @@ def escena_defecto(nombre):
 
 def obras_a_medias(W, cfg, cl=None):
     """Celdas de la ciudad con una obra a medias (fusion o coronacion sin acabar)."""
-    if cfg['nivel'] < 11 or tema_de(cfg) not in CONSTRUIDOS:
+    if cfg['nivel'] < 11 or not _hay_construido(W, cfg):
         return []
     tf, tc = objetivos(W, cfg, cl)
     obras = obras_ciudad(W, cfg)        # fase 11 v10: y los edificios en obra (planificada)
-    return [i for i in range(N) if (0 < W['et_f'][i] < tf[i]) or (0 < W['et_c'][i] < tc[i])
-            or (i in obras and obras[i] != 'bloque')]
+    return [i for i in range(N) if tema_en(W, cfg, i) in CONSTRUIDOS and
+            ((0 < W['et_f'][i] < tf[i]) or (0 < W['et_c'][i] < tc[i]) or (i in obras and obras[i] != 'bloque'))]
 
 
 def transitos_colgados(W, cfg):
@@ -16493,7 +18425,7 @@ def suelo_mal(W, cfg, i):
     el relieve en el centro de la celda (con Oceano, la meseta de su isla: sin ella el
     mar, que flota sobre las losetas, tapaba los edificios y solo quedaban los emblemas)."""
     r = base_radius(W, cfg, i)
-    if cfg['nivel'] >= 11 and tema_de(cfg) == 'naturaleza':
+    if cfg['nivel'] >= 11 and tema_en(W, cfg, i) == 'naturaleza':
         try:
             ter = terreno(W, cfg)
             r += ter['centro'][i]
@@ -17690,6 +19622,26 @@ def _catalogo():
     return cat
 
 
+def _mezcla_filas_td():
+    """Fase 11 v22: las filas de la tabla 'mezcla_especies' (construido naturaleza
+    ciudad industria, en %). Se relee cada medio segundo; sin tabla, la de fabrica."""
+    f = _CACHE.get('mez_frame')
+    if f is not None and 0 <= absTime.frame - f < 30 and 'mez' in _CACHE:
+        return _CACHE['mez']
+    t = parent().op('mezcla_especies')
+    filas = None
+    if t is not None and t.numRows > 1:
+        filas = []
+        for r in range(1, t.numRows):
+            try:
+                filas.append(tuple(float(str(t[r, k].val).replace(',', '.')) for k in MEZCLA_COLS))
+            except Exception:
+                pass
+        filas = tuple(filas) or None
+    _CACHE['mez'], _CACHE['mez_frame'] = filas, absTime.frame
+    return filas
+
+
 def _colores_drum(n=8):
     """Colores de las balizas de la bateria (tabla colores_drum: pad r g b) de
     los n primeros pads (9 desde la fase 21: el microfono)."""
@@ -17780,7 +19732,17 @@ def cfg():
                  pump_horz=max(0.0, _p('Pumphorz', c['pump_horz'])),
                  pump_tope=max(1.0, _p('Pumptope', c['pump_tope'])))          # v14
     if c['nivel'] >= 11:
-        c.update(tema=_menu('Tema', TEMAS, 0),
+        tm = _menu('Tema', TEMA_MODOS, 0)      # fase 11 v22: auto (la mezcla) o una especie fija
+        c.update(tema=max(0, tm - 1), tema_auto=int(tm == 0),
+                 tope_construido=max(0.05, min(1.0, _p('Topeconstruido', c['tope_construido']))),
+                 valvula=max(0.0, _p('Valvula', c['valvula'])),
+                 paciencia=max(0, int(_p('Paciencia', c['paciencia']))),
+                 orden_familias=_menu('Ordenfamilias', ORDEN_FAMILIAS, 0),
+                 precarga=max(0.0, _p('Precarga', c['precarga'])),
+                 carga_por_fotograma=max(1, int(_p('Cargaporfotograma', c['carga_por_fotograma']))),
+                 sim_construido=_p('Simconstruido', c['sim_construido']),
+                 mezcla_filas=_mezcla_filas_td())
+        c.update(
                  peso_vecina=max(0.0, _p('Pesovecina', c['peso_vecina'])),
                  umbral_vecindad=_p('Umbralvecindad', c['umbral_vecindad']),
                  min_cluster=max(2, int(_p('Mincluster', c['min_cluster']))),
@@ -17900,7 +19862,7 @@ def cfg():
     if c['nivel'] >= 15:
         c.update(peso_traza=max(0.0, min(1.0, _p('Pesotraza', c['peso_traza']))),
                  rebrote=int(_p('Rebrote', True)), tema_en_ciclo=int(_p('Temaenciclo', True)))
-        if c['tema_en_ciclo']:          # el tema del mundo manda; el del parametro espera
+        if c['tema_en_ciclo'] and not c.get('tema_auto'):   # v121: con Tema = auto no se aplica
             Wt = (me.fetch('W', None) or {}).get('tema')
             if Wt is not None and int(Wt) != int(c['tema']):
                 c['tema_pendiente'] = c['tema']
@@ -18517,7 +20479,7 @@ def frame_tick():
     terreno_al_dia_td(W, c)
     t5 = _time.perf_counter()
     partes['terreno'] = (t5 - t4) * 1000.0
-    render_tema_al_dia(c)               # motor v69: el render, solo con el tema actual
+    render_tema_al_dia(c, W)            # motor v69: el render, solo con el tema actual (v121: lo cargado)
     render_modo_al_dia(c)               # motor v95: ojo de pez con la camara rasante
     fu = parent().op('frame_u')         # motor v69: giro y uniformes, una vez por fotograma
     if fu is not None:
@@ -18538,7 +20500,8 @@ def terreno_al_dia_td(W, c):
         return
     t = terreno(W, c)
     o = parent().op('alturas')
-    sello_mapa = (t['version'], tuple(sorted((_TERRENO.get('agua') or {}).items())))     # v101: y el agua
+    sello_mapa = (t['version'], tuple(sorted((_TERRENO.get('agua') or {}).items())),     # v101: y el agua
+                  _TERRENO.get('esp_pix'))                                           # v121: y las especies
     if o is not None and _CACHE.get('alturas_v') != sello_mapa:
         _CACHE['alturas_v'] = sello_mapa
         try:
@@ -18588,7 +20551,7 @@ def uniformes_piel(W, c, now):
             paso_ = step_dur(c, tempo())
         except Exception:
             paso_ = 0.125
-        for cel, _ in rasgos_terreno(W, c)[1].get('volcanes', []):
+        for cel, _ in terreno(W, c).get('volcanes', []):     # v121: el del mapa (de la mezcla)
             erup.append((erupcion(c, cel, now, paso_), cel))
         erup.sort(key=lambda x: (-x[0], x[1]))
     for k in range(3):                      # los tres volcanes mas activos: direccion y erupcion
@@ -20095,10 +22058,25 @@ def render_modo_al_dia(c):
     return True
 
 
-def render_tema_al_dia(c):
+def geometrias_render(c, W=None):
+    """Fase 11 v22 (motor v121): las geometrias de los modelos que dibuja el Render TOP.
+    Con Tema = auto, las cargadas (la cola de carga); con Tema fijo, las del tema y,
+    si el globo tiene celdas de otra especie (un cambio de Tema en directo), las suyas."""
+    if mezcla_on(c):
+        return sorted(_CARGA['geos'])
+    activos = set(geometrias_activas(c))
+    if W is not None and multiespecie(W, c):
+        fam = familias(c)
+        for t in especies_presentes(W, c):
+            activos |= fam['todas'][t]
+    return sorted(activos)
+
+
+def render_tema_al_dia(c, W=None):
     """Motor v69: el Render TOP solo dibuja las geometrias del tema actual (con las
     ~300 de los tres temas, TouchDesigner cocinaba y dibujaba las vacias en cada
-    fotograma). Se rehace al cambiar de tema o si una fase rehizo la lista."""
+    fotograma). Se rehace al cambiar de tema o si una fase rehizo la lista. Motor v121:
+    las de geometrias_render (con Tema = auto, lo que ha cargado la cola)."""
     if c['nivel'] < 11:
         return False
     try:
@@ -20106,12 +22084,13 @@ def render_tema_al_dia(c):
         actual = str(r.par.geometry.val)
     except Exception:
         return False
-    clave = (tema_de(c), c['nivel'] < 12, variantes(c), variantes_ciudad(c), variantes_ind(c))
+    activos = geometrias_render(c, W)
+    clave = (tema_de(c), c['nivel'] < 12, variantes(c), variantes_ciudad(c), variantes_ind(c),
+             bool(c.get('tema_auto')), tuple(activos))
     if _CACHE.get('render_tema') == clave and _CACHE.get('render_str') == actual:
         return False
     nombres = actual.split()
     resto = [n for n in nombres if not n.startswith('mod_')]
-    activos = sorted(set(geometrias_activas(c)))
     k = resto.index('coronas') if 'coronas' in resto else len(resto)
     nuevo = ' '.join(resto[:k] + activos + resto[k:])
     try:
@@ -20869,8 +22848,11 @@ def _legend():
                 lines.append('  CORTE    celda %d   nucleo alcanzado' % k['nucleo'])
     if lvl >= 11:
         pz = W.get('piel') or {}
+        if c.get('tema_auto'):                  # fase 11 v22: la mezcla de especies
+            lines.append(legend_mezcla(W, c))
         lines.append('  TEMA     %s   clusters %d (max %d)   compuestos %d   piezas %d   obras %d (%d a medias)'
-                     % (tema_de(c), pz.get('clusters', 0), pz.get('max', 0), pz.get('compuestos', 0),
+                     % ('auto' if c.get('tema_auto') else tema_de(c), pz.get('clusters', 0), pz.get('max', 0),
+                        pz.get('compuestos', 0),
                         pz.get('piezas', 0), pz.get('obras', 0), pz.get('medias', 0)))
         lines.append(_legend_piel(c))           # motor v101: la piel por turnos
         if pz.get('ciudad'):                    # fase 11 v10: la ciudad legible

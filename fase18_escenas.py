@@ -2,8 +2,10 @@
 =============================================================================
 ESTRATOS - FASE 18: ESCENAS DE PRUEBA Y DIRECCION TEMATICA
 =============================================================================
-Requiere la fase 17. Cierra las dos escenas acotadas, naturaleza y ciudad,
-como presets listos para actuar.
+Requiere la fase 17. Cierra las escenas acotadas, naturaleza, ciudad e
+industria, como presets listos para actuar, y (v4, motor v121) la escena
+mezcla: Tema = auto, el mundo que empieza en naturaleza y se reparte entre las
+tres especies segun el terreno construido (fase 11 v22).
 
 QUE HACE
 --------
@@ -48,7 +50,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase18 v3  (Refrescopiel en las escenas: la piel por turnos de la fase 11 v18)'
+VERSION = 'fase18 v4  (la escena mezcla: Tema auto, la mezcla de especies de la fase 11 v22)'
 banner(VERSION)
 
 base = require_base(18)
@@ -62,7 +64,7 @@ m = motor.module
 page = get_page(base, 'Fase18')
 add_par(base, page, 'menu', 'Escena', 'Escena (carga su preset)', 'naturaleza', menu=m.ESCENAS)
 if menu_al_dia(base, 'Escena', m.ESCENAS):
-    info('v2: Escena gana la industria')
+    info('v4: Escena gana la mezcla (naturaleza / ciudad / industria / mezcla)')
 add_par(base, page, 'pulse', 'Guardarescena', 'Guardar lo que hay en la escena elegida')
 add_par(base, page, 'pulse', 'Cargarescena', 'Volver a la escena elegida')
 add_par(base, page, 'float', 'Luzcalida', 'Luz calida (0 fria de la fase 10, 1 de dia)', 0.0, 0.0, 1.0,
@@ -77,11 +79,11 @@ if tabla.numRows <= 1 or tabla[0, 0] is None or tabla[0, 0].val != 'escena':
     for esc in m.ESCENAS:
         for k, v in m.escena_defecto(esc).items():
             tabla.appendRow([esc, k, str(v)])
-    ok('tabla escenas: naturaleza, ciudad e industria, %d parametros cada una' % len(m.ESCENA_PARS))
+    ok('tabla escenas: %s, %d parametros cada una' % (', '.join(m.ESCENAS), len(m.ESCENA_PARS)))
 else:
     hay = set(tabla[r, 0].val for r in range(1, tabla.numRows))
     nuevas = [esc for esc in m.ESCENAS if esc not in hay]
-    for esc in nuevas:                      # v2: la escena de la industria, sin tocar las demas
+    for esc in nuevas:                      # v2: la industria; v4: la mezcla, sin tocar las demas
         for k, v in m.escena_defecto(esc).items():
             tabla.appendRow([esc, k, str(v)])
     # v3: Refresconat (si alguna escena lo guardo) pasa a Refrescopiel, y los parametros nuevos
@@ -221,6 +223,11 @@ def _prueba(t, m):
     t.check('Escena industria: Tema industria, paleta mineral calida, Caos 3,82, menos balanceo',
             m.tema_de(c) == 'industria' and abs(c['caos'] - 3.82) < 1e-6 and abs(c['sway_max'] - 2.0) < 1e-6
             and abs(c['paleta_tono'] - 30.0) < 1e-6)
+    escena('mezcla')                                # v4: la mezcla de especies
+    c = m.cfg()
+    t.check('v4: Escena mezcla: Tema auto (la mezcla de especies de la fase 11 v22), Caos 3,86, Luzcalida 0,2',
+            str(base.par.Tema.eval()) == 'auto' and c.get('tema_auto') == 1 and abs(c['caos'] - 3.86) < 1e-6
+            and abs(c['luz_calida'] - 0.2) < 1e-6, 'Tema %s' % base.par.Tema.eval())
     escena('ciudad')
     # 2. luz local: focos en las obras a medias
     m.reset_world()
