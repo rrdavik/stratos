@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v90'
+VERSION_COMUN = 'comun v91'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -39,6 +39,7 @@ RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'r
                 # comun v83: las geometrias del juego (fases 32 a 34) no estaban: el render no las dibujaba;
                 # trumpzilla (fase 38), el monstruo en sprite
                 'marcas', 'brotes_mal', 'tocon', 'monstruo', 'agua_juego', 'trumpzilla',
+                'godzilla',                        # comun v91 (fase 40): Godzilla, el monstruo de la creacion
                 'particulas', 'humo',
                 'luz_celda', 'luz_conchas',
                 'luz_local',                       # lo transparente (motas, humo) y las capas aditivas, al final
@@ -2570,6 +2571,8 @@ def install_core(base, carpeta, fase):
         trumpzilla_al_dia(base, carpeta)
     if base.op('emblemas_mal') is not None:    # comun v87 (fase 39): los emblemas del mal
         emblemas_al_dia(base, carpeta)
+    if base.op('godzilla') is not None:        # comun v91 (fase 40): Godzilla
+        godzilla_al_dia(base, carpeta)
     try:
         motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
     except Exception:
@@ -2854,6 +2857,7 @@ def particulas_al_dia(base, crear=False):
 
 # --- Trumpzilla: el monstruo en sprite (comun v83, fase 38, motor v112) -------------
 SPRITE_ATLAS = 'sprites/trumpzilla_emociones.png'
+GODZILLA_ATLAS = 'sprites/godzilla_emociones.png'           # comun v91 (fase 40)
 SPRITE_U = "parent().op('frame_u')['sprite_t']"
 LUCES_SPRITE = ('uLuz0', 'uLuz0Col', 'uLuz1', 'uLuz1Col', 'uLuz2', 'uLuz2Col', 'uAmbiente')   # comun v86
 
@@ -2939,6 +2943,12 @@ void main()
             d = vec2(0.025 * sin(t * 47.0), 0.010 * sin(t * 31.0));
         } else if (anim == 6) {                             // aturdido: se tambalea
             rot = 0.15 * sin(t * 3.0);
+        } else if (anim == 7) {                             // lucha (comun v91): se echa encima y da
+            float g = 0.6 + 0.4 * sin(t * 20.0);            // manotazos (hacia donde mira)
+            d = vec2(-voltea * 0.08 * g, 0.015 * abs(sin(t * 10.0)));
+            rot = voltea * 0.12 * g;
+        } else if (anim == 8) {                             // adios (comun v91): se mece; el motor lo hunde
+            rot = 0.06 * sin(t * 2.0);
         }                                                   // piedra (5): quieto
         vec2 q = vec2(P.x * k.x * w, (P.y + 0.5) * k.y * h);
         q = vec2(q.x * cos(rot) - q.y * sin(rot), q.x * sin(rot) + q.y * cos(rot));
@@ -3060,29 +3070,44 @@ def _png_medidas(ruta):
 
 
 def trumpzilla_al_dia(base, carpeta, crear=False):
+    """comun v83 (fase 38): el monstruo en sprite (ver _sprite_al_dia)."""
+    return _sprite_al_dia(base, carpeta, crear, 'trumpzilla', 'mat_sprite', 'trumpzilla_atlas', SPRITE_ATLAS,
+                          (-440, 2780), (1180, 300), (1400, 260), 'el monstruo en sprite')
+
+
+def godzilla_al_dia(base, carpeta, crear=False):
+    """comun v91 (fase 40): Godzilla, el monstruo de la creacion. La geometria 'godzilla'
+    con mat_godzilla: los shaders de Trumpzilla (sprite_vertex y sprite_pixel) con el
+    atlas sprites/godzilla_emociones.png (godzilla_atlas), del mismo formato."""
+    return _sprite_al_dia(base, carpeta, crear, 'godzilla', 'mat_godzilla', 'godzilla_atlas', GODZILLA_ATLAS,
+                          (-440, 2840), (1180, 380), (1400, 340), 'Godzilla en sprite')
+
+
+def _sprite_al_dia(base, carpeta, crear, ngeo, nmat, natlas, archivo, pos_geo, pos_atlas, pos_mat, que):
     """comun v83 (fase 38): el monstruo en sprite. La geometria 'trumpzilla' (una
     lamina instanciada desde i_trumpzilla: el sprite y su sombra) con el GLSL MAT
     mat_sprite (sprite_vertex y sprite_pixel), que lee las caras del atlas
     sprites/trumpzilla_emociones.png (Movie File In TOP trumpzilla_atlas, sampler
     sAtlas) y se anima con sprite_t de frame_u. Escribe profundidad (el sprite es
     opaco, recortado por alfa) y mezcla con alfa premultiplicado (la sombra).
-    Con Materialrespaldo, mat_respaldo. Devuelve True si quedo todo enlazado."""
+    Con Materialrespaldo, mat_respaldo. Devuelve True si quedo todo enlazado.
+    comun v91: lo mismo para Godzilla (nombre 'godzilla', mat_godzilla, godzilla_atlas)."""
     m = base.op('motor').module
     cols, filas = m.ATLAS_MON
-    ruta = carpeta + '/' + SPRITE_ATLAS
-    atlas = get_or_make(base, 'moviefileinTOP', 'trumpzilla_atlas', 1180, 300)
+    ruta = carpeta + '/' + archivo
+    atlas = get_or_make(base, 'moviefileinTOP', natlas, pos_atlas[0], pos_atlas[1])
     bien = bool(setp_any(atlas, ['file'], ruta))
     setmenu(atlas, ['inputfiltertype'], ['nearest'])
     med = _png_medidas(ruta)
     if med is None:
-        fail('trumpzilla_atlas: no encuentro %s (copia la carpeta sprites del repositorio en %s)'
-             % (SPRITE_ATLAS, carpeta))
+        fail('%s: no encuentro %s (copia la carpeta sprites del repositorio en %s)'
+             % (natlas, archivo, carpeta))
         bien = False
     vdat = get_or_make(base, 'textDAT', 'sprite_vertex', 1180, 220)
     vdat.text = SPRITE_VERTEX
     pdat = get_or_make(base, 'textDAT', 'sprite_pixel', 1180, 140)
     pdat.text = SPRITE_PIXEL
-    mat = get_or_make(base, 'glslMAT', 'mat_sprite', 1400, 260)
+    mat = get_or_make(base, 'glslMAT', nmat, pos_mat[0], pos_mat[1])
     bien = bool(setp_any(mat, ['vdat', 'vertexdat'], 'sprite_vertex')) and bien
     bien = bool(setp_any(mat, ['pdat', 'pixeldat'], 'sprite_pixel')) and bien
     for seq in ('sampler', 'vec'):
@@ -3093,9 +3118,9 @@ def trumpzilla_al_dia(base, carpeta, crear=False):
         except Exception:
             pass
     muestra = bool(setp(mat, 'sampler0name', 'sAtlas'))
-    muestra = bool(setp_any(mat, ['sampler0top'], 'trumpzilla_atlas')) and muestra
+    muestra = bool(setp_any(mat, ['sampler0top'], natlas)) and muestra
     if not muestra:
-        info('mat_sprite: pon a mano en Samplers: sAtlas -> trumpzilla_atlas')
+        info('%s: pon a mano en Samplers: sAtlas -> %s' % (nmat, natlas))
     pix = 'parent().par.Pixelsprite' if has_par(base, 'Pixelsprite') else '0'
     inc = 'parent().par.Inclinasprite' if has_par(base, 'Inclinasprite') else '30'
     bri = 'parent().par.Brillosprite' if has_par(base, 'Brillosprite') else '1'
@@ -3126,21 +3151,21 @@ def trumpzilla_al_dia(base, carpeta, crear=False):
     setp_any(mat, ['depthwriting', 'depthwrite', 'writedepth'], True)
     setmenu(mat, ['cullface'], ['neither'])
     if not mezcla:
-        info('mat_sprite: pon a mano en Common: Blending on, Source Color One, Destination Color '
-             'One Minus Source Alpha (la sombra)')
-    geo = base.op('trumpzilla')
+        info('%s: pon a mano en Common: Blending on, Source Color One, Destination Color '
+             'One Minus Source Alpha (la sombra)' % nmat)
+    geo = base.op(ngeo)
     if geo is None or crear:
-        make_instanced(base, 'trumpzilla', -440, 2780, 'mat_sprite', sop='rect', quiet=True)
-        geo = base.op('trumpzilla')
+        make_instanced(base, ngeo, pos_geo[0], pos_geo[1], nmat, sop='rect', quiet=True)
+        geo = base.op(ngeo)
     if not setp_any(geo, ['instancea'], 'a'):
-        info('trumpzilla: pon a mano Instance 2 -> Color A = a (la cara y la animacion)')
+        info('%s: pon a mano Instance 2 -> Color A = a (la cara y la animacion)' % ngeo)
         bien = False
-    setexpr(geo, 'material', _con_respaldo(base, 'mat_sprite'))
+    setexpr(geo, 'material', _con_respaldo(base, nmat))
     if bien:
-        ok('trumpzilla: el monstruo en sprite (mat_sprite, GLSL) con su sombra; atlas %s (%d x %d, %d x %d '
-           'caras)' % (SPRITE_ATLAS, med[0], med[1], cols, filas))
+        ok('%s: %s (%s, GLSL) con su sombra; atlas %s (%d x %d, %d x %d caras)'
+           % (ngeo, que, nmat, archivo, med[0], med[1], cols, filas))
     else:
-        fail('trumpzilla: algo no quedo enlazado (atlas, DAT de los shaders, sampler sAtlas o uSprite)')
+        fail('%s: algo no quedo enlazado (atlas, DAT de los shaders, sampler sAtlas o uSprite)' % ngeo)
     return bien
 
 
@@ -5465,9 +5490,11 @@ def pagina_version(base, fase, etiqueta, version):
 # --- las autopruebas de la sala (fases 24 a 31) --------------------------------
 
 def guardar_sala(base, nombres):
-    """Lo que una autoprueba de sala cambia: parametros y la tabla sala_personas."""
+    """Lo que una autoprueba de sala cambia: parametros y la tabla sala_personas.
+    comun v91: tambien Godzilla (SalaJuego lo apaga en las autopruebas de las fases 32
+    a 39, que prueban a Trumpzilla solo)."""
     guarda = {}
-    for nm in nombres:
+    for nm in list(nombres) + ['Godzilla']:
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -5528,10 +5555,11 @@ class SalaJuego(object):
     avanza a mano; una semicorchea son SEMI s (120 BPM)."""
     SEMI = 0.125
 
-    def __init__(self, base, m, t0):
+    def __init__(self, base, m, t0, godzilla=False):
         self.base, self.m = base, m
         self.reloj = [float(t0)]
         self.tb = base.op('sala_personas')
+        self.godzilla = godzilla            # comun v91: sin Godzilla (fase 40), salvo que se pida
 
     @property
     def now(self):
@@ -5550,6 +5578,8 @@ class SalaJuego(object):
             self.base.par.Modojuego = False
         except Exception:
             pass
+        if has_par(self.base, 'Godzilla'):
+            self.base.par.Godzilla = bool(self.godzilla)
         W, c = m.world(), m.cfg()
         for _ in range(conchas):
             m.end_cycle(W, c, self.reloj[0])
