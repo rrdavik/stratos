@@ -164,7 +164,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v18  (autoprueba: la bateria tampoco usa el verde menta del SEQ1, motor v105)'
+VERSION = 'fase7 v19  (autoprueba: los colores de la luz de celda con la loseta opaca, motor v124)'
 banner(VERSION)
 
 base = require_base(7)
@@ -479,7 +479,7 @@ def prueba(t):
             len(cf['perfiles']) == len(cf['tipos']) == (9 if cf['nivel'] >= 21 else 8)
             and cf['modos'][:8] == list(m.MODOS_DEFECTO) and cf['pulsos'][:8] == list(m.PULSOS_DEFECTO)
             and cf['pump_rels'][:8] == list(m.PUMP_REL_DEFECTO), '%s %s' % (cf['modos'], cf['pulsos']))
-    cd = dict(m.cfg())
+    cd = dict(m.cfg(), luz_celda_opaca=1)    # v19 (motor v124): los colores, con la loseta opaca
     cd['nivel'] = min(cd['nivel'], 13)            # la erosion de la fase 7, sin los accidentes de la 14
     cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
     cd['target_mode'], cd['balizas_drum'], cd['luz_drum'] = 0, 1, 1.0

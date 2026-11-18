@@ -46,7 +46,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase5 v4  (SEQ2 en la pagina Fase2 con el SEQ1; arquitectura, hibridos, luz ambar)'
+VERSION = 'fase5 v5  (autoprueba: el ambar del SEQ2 con la loseta opaca, motor v124)'
 banner(VERSION)
 
 base = require_base(5)
@@ -129,6 +129,7 @@ def prueba(t):
     W2 = m.new_world()
     c2 = dict(c)
     c2['nivel'] = max(5, c2['nivel'])
+    c2['luz_celda_opaca'] = 1                # motor v124: el color, con la loseta opaca
     m.note_on(W2, c2, m.ARQ, 50, 100, 1.0)
     filas = m.cell_lights(W2, c2, 1.0)
     t.check('nota del SEQ2: el centro de su celda en ambar',

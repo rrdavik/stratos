@@ -88,7 +88,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v14  (autoprueba: el giro y el balanceo se leen de frame_u, comun v49)'
+VERSION = 'fase3 v15  (autoprueba: la loseta opaca y la aditiva, motor v124)'
 banner(VERSION)
 
 base = require_base(3)
@@ -236,7 +236,7 @@ def prueba(t):
             'sin balanceo: %s' % ', '.join(sin_bal) if sin_bal else '')
     # luz de celda: la nota del SEQ1 enciende el centro de su celda
     Wl = m.new_world()
-    cl_ = dict(c)
+    cl_ = dict(c, luz_celda_opaca=1)        # motor v124: los colores, con la loseta opaca (la de antes)
     m.note_on(Wl, cl_, m.GEO, 64, 100, 1.0)
     pulso = [r for r in m.cell_lights(Wl, cl_, 1.0)]
     reposo = [r for r in m.cell_lights(Wl, cl_, 5.0)]
@@ -257,6 +257,16 @@ def prueba(t):
     tenue = abs(m.cell_lights(Wg, cl_, 12.0)[0][10] / col[1] - 0.7) < 0.01
     t.check('latido y luz del SEQ: plenos mientras la nota esta pulsada, se apagan al soltarla',
             sostenida and apagandose and apagada and tenue)
+    # motor v124: la loseta aditiva (de fabrica): Luzcelda con la nota, el 30 % de eso en reposo
+    ca_ = dict(c, luz_celda_opaca=0, luz_celda=0.6)
+    Wa = m.new_world()
+    m.note_on(Wa, ca_, m.GEO, 64, 100, 1.0)
+    p_a, r_a = m.cell_lights(Wa, ca_, 1.0), m.cell_lights(Wa, ca_, 5.0)
+    t.check('v15: la loseta aditiva, Luzcelda con la nota y casi apagada en reposo; mat_luz_celda suma',
+            len(p_a) == 1 and len(r_a) == 1 and abs(p_a[0][10] / col[1] - 0.6) < 0.01
+            and abs(r_a[0][10] / col[1] - 0.18) < 0.01 and has_par(base, 'Luzcelda')
+            and has_par(base, 'Luzceldaopaca') and has_par(base, 'Luzespecie'),
+            '%s / %s' % ([round(f[10], 3) for f in p_a], [round(f[10], 3) for f in r_a]))
     t.check('sin baliza del SEQ1', base.op('baliza') is None and base.op('baliza_chop') is None)
     st = {'ph': 0.0, 'env': 1.0}
     m.wobble_step(st, 0.25, True, False, 60.0, 4.0)      # periodo minimo 5 s

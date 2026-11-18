@@ -31,7 +31,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v91'
+VERSION_COMUN = 'comun v92'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -1036,7 +1036,7 @@ uniform vec4 uNieblaCol;    // su color
 uniform vec4 uGlitch;       // fase 19: x saturacion del modular 0-1, y tiempo (s)
 uniform vec4 uTerreno;      // fase 11 v5: y altura de los pisos, w 1 si sRampa esta enlazada
 uniform vec4 uPisos;        // x Limitebosque, y Limitenieve, z sombreado rasante (0 fuera de la naturaleza)
-uniform vec4 uBorde;        // x intensidad del borde tintado (Tintebordenat; 0 en la ciudad)
+uniform vec4 uBorde;        // x intensidad del borde tintado (Tintebordenat; comun v92, fuera de la naturaleza Luzespecie)
 uniform vec4 uTinte0;       // focos del tinte: xyz direccion (planeta), w coseno del borde exterior
 uniform vec4 uTinteCol0;    // rgb color x intensidad, w coseno del borde interior
 uniform vec4 uTinte1;
@@ -1926,8 +1926,9 @@ void main()
         // motor v97: la lava emite; el mar se lee tambien en la cara de sombra y brilla en el borde
         col += emis + (mar ? fres * vec3(0.20, 0.30, 0.38) + spec * 0.5 : vec3(0.0));
     }
-    if (uBorde.x > 0.001 && !agua && (fam < 1.5 || tierra || estrato)) {
-        // fase 11 v5: el tinte del secuenciador y de los pads, al borde (fresnel)
+    if (uBorde.x > 0.001 && !agua && (fam < 2.5 || tierra || estrato)) {
+        // fase 11 v5: el tinte del secuenciador y de los pads, al borde (fresnel);
+        // comun v92: tambien la ciudad y la industria (fam 2), en todos los temas
         vec3 d = normalize(iVert.pPos);
         vec3 tin = foco(uTinte0, uTinteCol0, d) + foco(uTinte1, uTinteCol1, d) + foco(uTinte2, uTinteCol2, d);
         // motor v100: el suelo de la celda que suena se enciende entero, no solo su borde
@@ -3848,11 +3849,21 @@ def reparar_color_instancias(base):
 
 
 def install_luz_celda(base):
-    """La luz de celda: losetas opacas a ras de la superficie, una
-    geometria para todas (centro: secuenciadores; borde: bateria)."""
+    """La luz de celda: losetas a ras de la superficie, una geometria para
+    todas (centro: secuenciadores; borde: bateria). Comun v92 (motor v124):
+    aditivas, un brillo transparente que se suma sin tapar el suelo ni la especie
+    (Luzcelda, su intensidad); con Luzceldaopaca, opacas como hasta la v91.
+    Luzespecie: el tinte del secuenciador sobre la especie fuera de la naturaleza."""
     page = get_page(base, 'Fase3')
     add_par(base, page, 'toggle', 'Luzseq', 'Luz de los secuenciadores en las celdas', True)
-    make_constant(base, 'mat_luz_celda', 780, 700, (1.0, 1.0, 1.0))
+    add_par(base, page, 'float', 'Luzcelda', 'Luz de celda: intensidad del brillo (transparente)', 0.6, 0.0, 2.0)
+    add_par(base, page, 'toggle', 'Luzceldaopaca', 'Luz de celda opaca (la de antes)', False)
+    add_par(base, page, 'float', 'Luzespecie',
+            'Luz de los secuenciadores sobre la especie (ciudad, industria y mezcla)', 0.8, 0.0, 3.0)
+    mat = make_constant(base, 'mat_luz_celda', 780, 700, (1.0, 1.0, 1.0))
+    if not luz_celda_aditiva(mat):
+        info('mat_luz_celda: pon a mano en Common: Blending = not parent().par.Luzceldaopaca, '
+             'Source Color One, Destination Color One, Depth Writing = parent().par.Luzceldaopaca')
     geo = make_instanced(base, 'luz_celda', 520, 700, 'mat_luz_celda')
     bien, det = instance_color_ok(geo)
     if not bien:
@@ -3861,6 +3872,16 @@ def install_luz_celda(base):
     install_luz_conchas(base, page)
     set_render(base)
     return geo
+
+
+def luz_celda_aditiva(mat):
+    """Comun v92: mat_luz_celda suma su color (Blending, Src y Dest = One, sin escribir
+    profundidad) salvo con Luzceldaopaca. Devuelve True si quedo enlazado."""
+    a = any(setexpr(mat, n, 'not parent().par.Luzceldaopaca') for n in ('blending', 'blend'))
+    b = setmenu(mat, ['srcblend', 'srcblendcolor'], ['one'], None)
+    d = setmenu(mat, ['destblend', 'dstblend', 'destblendcolor'], ['one'], None)
+    w = any(setexpr(mat, n, 'parent().par.Luzceldaopaca') for n in ('depthwriting', 'depthwrite', 'writedepth'))
+    return bool(a and b and d and w)
 
 
 def install_luz_conchas(base, page):
@@ -4499,8 +4520,11 @@ PIEL_UNIFORMES = [
 FAMILIAS_PIEL = ['mineral', 'dosel', 'ciudad', 'tierra', 'agua', 'plastico', 'vidrio', 'pradera',     # comun v77: 7, la pradera
                  'estrato',                         # comun v78: 8, las conchas como capas de tierra
                  'mal']                             # comun v82 (fase 33): 9, el juego (brotes del mal y monstruo)
-# familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan)
-SIN_TINTE = ('ciudad', 'agua', 'plastico', 'vidrio', 'mal')
+# familias que no necesitan los focos del tinte ni los pisos: constantes (no se evaluan).
+# comun v92: la ciudad (y la industria) si se tine con la luz de los secuenciadores; solo
+# los pisos le sobran (SIN_PISOS)
+SIN_TINTE = ('agua', 'plastico', 'vidrio', 'mal')
+SIN_PISOS = ('ciudad',)
 PIEL_SAMPLERS = [('sAlturas', 'alturas'), ('sRampa', 'rampa_hipso'), ('sCultivo', 'cultivos')]
 
 
@@ -4678,6 +4702,8 @@ def materiales_piel(base):
             if nombre == 'uTerreno':
                 vals = ('1' if fam == 'tierra' else '0',) + vals[1:3] + ('1' if rampa else '0',)
             elif fam in SIN_TINTE and (nombre.startswith('uTinte') or nombre in ('uPisos', 'uBorde')):
+                vals = ('0', '0', '0', '0')
+            elif fam in SIN_PISOS and nombre == 'uPisos':                  # comun v92
                 vals = ('0', '0', '0', '0')
             elif nombre.startswith('uBoceto') and fam != 'tierra':     # comun v62
                 vals = ('0', '0', '0', '0')

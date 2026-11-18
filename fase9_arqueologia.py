@@ -47,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v12  (autoprueba: la luz del SEQ1, verde menta desde el motor v105)'
+VERSION = 'fase9 v13  (autoprueba: el verde menta del SEQ1 con la loseta opaca, motor v124)'
 banner(VERSION)
 
 base = require_base(9)
@@ -180,7 +180,7 @@ def prueba(t):
             f.get('bomba') and f.get('k') == m.BOMBA_DESTELLO and Wr['ev']['erosion']['modo'] == 'impulso'
             and 'corte' not in Wr['ev']['erosion'] and pico > 0 and abs(v - pico) < 1e-9)
     t.check('leyenda CORTE', 'CORTE' in m.legend())
-    c9 = dict(m.cfg())
+    c9 = dict(m.cfg(), luz_celda_opaca=1)    # v13 (motor v124): el color, con la loseta opaca
     c9['nivel'] = max(9, c9['nivel'])
     W9 = m.new_world()
     m.note_on(W9, c9, m.GEO, 64, 100, 1.0)
