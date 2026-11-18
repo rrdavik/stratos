@@ -226,6 +226,9 @@
 #                 en celdas contiguas, se acercan al borde y se dan manotazos Pasoslucha
 #                 pasos (8); luego cada uno vuelve a la celda de la que venia, con una
 #                 tregua de Tregua pasos (16) en que no se cruzan. Si llega gente, se va.
+#                 Motor v124 (fase 10 v17): la camara de SUPERFICIE con los ajustes de la
+#                 captura del 18 de noviembre: Camfov 45, Encuadre 0,85, Camsuave 3,
+#                 Camaltura 1,7 y Camvel 0,6 (antes 89,5, 0,877, 3, 15 y 0,6).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -237,7 +240,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v123'
+MOTOR_VERSION = 'motor v124'
 
 import math
 import time as _time
@@ -22415,8 +22418,9 @@ def _legend_borrado(W, c):
 # resto, de fabrica). Rasante: los de la prueba en TouchDesigner del 13 de noviembre
 # (Rasanillo 8 pedia el ultimo limite entre anillos: con 7 anillos es el 6).
 _CLASICA = (('Camfov', 45.0), ('Encuadre', 0.85), ('Camsuave', 3.0), ('Camaltura', 1.7), ('Camvel', 0.6))
-# Superficie: los de la captura de la pagina Fase10 del 14 de noviembre
-_SUPERFICIE = (('Camfov', 89.5), ('Encuadre', 0.877), ('Camsuave', 3.0), ('Camaltura', 15.0), ('Camvel', 0.6))
+# Superficie: los de la captura de la pagina Fase10 del 18 de noviembre (motor v124: Camfov 45,
+# Encuadre 0,85 y Camaltura 1,7; hasta la v123, los del 14 de noviembre: 89,5, 0,877 y 15)
+_SUPERFICIE = (('Camfov', 45.0), ('Encuadre', 0.85), ('Camsuave', 3.0), ('Camaltura', 1.7), ('Camvel', 0.6))
 CAMARAS = dict(
     globo=_CLASICA,
     superficie=_SUPERFICIE,
