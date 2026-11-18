@@ -226,6 +226,14 @@
 #                 en celdas contiguas, se acercan al borde y se dan manotazos Pasoslucha
 #                 pasos (8); luego cada uno vuelve a la celda de la que venia, con una
 #                 tregua de Tregua pasos (16) en que no se cruzan. Si llega gente, se va.
+#                 Motor v124 (fase 10 v17): la camara de SUPERFICIE con los ajustes de la
+#                 captura del 18 de noviembre: Camfov 45, Encuadre 0,85, Camsuave 3,
+#                 Camaltura 1,7 y Camvel 0,6 (antes 89,5, 0,877, 3, 15 y 0,6).
+#                 Motor v124, comun v92: LA LUZ DE LOS SEQ, TRANSPARENTE. La loseta de la
+#                 celda es aditiva (un brillo que se suma, Luzcelda; Luzceldaopaca vuelve a
+#                 la opaca) y casi apagada en reposo; la especie que pinta el SEQ se tine
+#                 en todos los temas (uTinte del shader de la piel, Luzespecie; antes solo
+#                 en la naturaleza), tambien los edificios. Sin geometria nueva.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -237,7 +245,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v123'
+MOTOR_VERSION = 'motor v124'
 
 import math
 import time as _time
@@ -396,6 +404,9 @@ DEFAULT_CFG = dict(
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
     balizas_drum=1, luz_drum=1.0, vida_baliza_drum=0.8, luz_seq=1,
+    # motor v124: la loseta de luz, aditiva (transparente) con Luzcelda de intensidad; Luzceldaopaca,
+    # la de antes. Luzespecie: el tinte del secuenciador sobre la especie fuera de la naturaleza
+    luz_celda=0.6, luz_celda_opaca=0, luz_especie=0.8,
     # fase 8: la luz de los secuenciadores se extiende a las conchas de la celda
     luz_conchas=1, luz_conchas_pulso=0.35, luz_conchas_reposo=0.10, luz_conchas_alcance=4,
     erosion_vel=1, vel_ref=100,
@@ -2985,7 +2996,10 @@ def shell_lights(W, cfg, now):
 #     la celda del golpe, mas tenue en su radio; se apaga en Vidabalizadrum.
 #   - si coinciden, manda la luz mas intensa en ese instante.
 # Con formacion, la loseta se ensancha hasta asomar alrededor de su base.
-# Colores opacos, sin transparencia: no se mezclan.
+# Hasta el motor v123, colores opacos, sin transparencia: no se mezclan (Luzceldaopaca).
+# Motor v124: la loseta es ADITIVA (mat_luz_celda suma su color: un brillo transparente
+# que no tapa el suelo ni la especie), Luzcelda de intensidad y mas tenue en reposo; la
+# especie de la celda la tine el shader de la piel (uTinte, Luzespecie) en todos los temas.
 
 COL_SEQ1 = (0.10, 0.90, 1.00)       # cian hasta la fase 8
 COL_SEQ1_BLANCO = (0.95, 0.95, 0.92)  # blanco desde la fase 9 hasta el motor v104 (referencia)
@@ -3088,6 +3102,8 @@ def cell_lights(W, cfg, now):
     rows = []
     centros = seq_lights(W, cfg, now) if cfg.get('luz_seq', 1) else {}
     luz = W.get('luz', {})
+    opaca = bool(cfg.get('luz_celda_opaca', 0))     # motor v124
+    kluz = max(0.0, cfg.get('luz_celda', 0.6))
     for c in list(luz):
         pads = luz[c]
         for pd in [pd for pd in pads if nivel_pad(W, cfg, c, pd, pads[pd], now) <= 0.0]:
@@ -3121,7 +3137,10 @@ def cell_lights(W, cfg, now):
             lado_x, lado_z = max(lado_x, m_), max(lado_z, m_)
         partes = len(fuentes)
         for q, (col, env) in enumerate(fuentes):
-            b = 0.7 + 0.3 * env                    # tenue en reposo, plena con la nota o el golpe
+            if opaca:
+                b = 0.7 + 0.3 * env                # tenue en reposo, plena con la nota o el golpe
+            else:                                  # motor v124: aditiva, casi apagada en reposo
+                b = kluz * (0.3 + 0.7 * env)
             col = (col[0] * b, col[1] * b, col[2] * b)
             g = 0.80 + 0.20 * env
             sx = lado_x * g / partes
@@ -20331,6 +20350,9 @@ def cfg():
     c.update(
         nivel=_p('Nivel', 3),
         luz_seq=int(_p('Luzseq', True)),
+        luz_celda=max(0.0, _p('Luzcelda', 0.6)),                  # motor v124
+        luz_celda_opaca=int(_p('Luzceldaopaca', False)),
+        luz_especie=max(0.0, _p('Luzespecie', 0.8)),
         # v58: Luzconchas es una intensidad (0 apaga; un toggle viejo da 0 o 1)
         luz_conchas=int(_p('Luzconchas', 1.0) > 0.0),
         luz_conchas_pulso=c['luz_conchas_pulso'] * max(0.0, _p('Luzconchas', 1.0)),
@@ -21240,7 +21262,6 @@ def uniformes_piel(W, c, now):
         else:
             u['uVolcan%d' % k] = (0.0, 1.0, 0.0, 0.0)
     u['uPisos'] = (lb, ln, 0.65 if nat else 0.0, 0.0)
-    u['uBorde'] = (c.get('tinte_borde_nat', 0.0) if nat else 0.0, 0.0, 0.0, 0.0)
     u['uAgua'] = (c.get('emisivo_rio', 0.25), 0.0, 0.0, 0.0)
     if c['nivel'] >= 11:                    # fase 11 v8: hojas, bancales y mesetas
         cc = c.get('color_cultivo', DEFAULT_CFG['color_cultivo'])
@@ -21257,7 +21278,14 @@ def uniformes_piel(W, c, now):
     u['uSeq1'] = tuple(seq_color(c, 1)) + (0.0,)
     u['uSeq2'] = tuple(seq_color(c, 2)) + (0.0,)
     u['uNoche'] = (noche_nivel(W, c, now) if c['nivel'] >= 28 else 0.0, 0.0, 0.0, 0.0)     # fase 28
-    focos = focos_tinte(W, c, now) if nat else []
+    # motor v124: el tinte del secuenciador sobre la especie, en todos los temas: Tintebordenat en
+    # la naturaleza; Luzespecie en la ciudad, la industria y la mezcla (Tema = auto). Antes, solo
+    # en la naturaleza (fuera de ella solo se encendia la loseta de la celda)
+    bx = c.get('tinte_borde_nat', 0.0) if nat and not c.get('tema_auto') else c.get('luz_especie', 0.8)
+    if c['nivel'] < 11:
+        bx = 0.0
+    u['uBorde'] = (bx, 0.0, 0.0, 0.0)
+    focos = focos_tinte(W, c, now) if bx > 0.0 else []
     for k in range(3):
         if k < len(focos):
             I, cel, col = focos[k]
@@ -22415,8 +22443,9 @@ def _legend_borrado(W, c):
 # resto, de fabrica). Rasante: los de la prueba en TouchDesigner del 13 de noviembre
 # (Rasanillo 8 pedia el ultimo limite entre anillos: con 7 anillos es el 6).
 _CLASICA = (('Camfov', 45.0), ('Encuadre', 0.85), ('Camsuave', 3.0), ('Camaltura', 1.7), ('Camvel', 0.6))
-# Superficie: los de la captura de la pagina Fase10 del 14 de noviembre
-_SUPERFICIE = (('Camfov', 89.5), ('Encuadre', 0.877), ('Camsuave', 3.0), ('Camaltura', 15.0), ('Camvel', 0.6))
+# Superficie: los de la captura de la pagina Fase10 del 18 de noviembre (motor v124: Camfov 45,
+# Encuadre 0,85 y Camaltura 1,7; hasta la v123, los del 14 de noviembre: 89,5, 0,877 y 15)
+_SUPERFICIE = (('Camfov', 45.0), ('Encuadre', 0.85), ('Camsuave', 3.0), ('Camaltura', 1.7), ('Camvel', 0.6))
 CAMARAS = dict(
     globo=_CLASICA,
     superficie=_SUPERFICIE,

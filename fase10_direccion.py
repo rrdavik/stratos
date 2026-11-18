@@ -29,8 +29,9 @@ QUE HACE
                (v15, motor v96) CADA CAMARA CON SUS AJUSTES: al elegir
                Modocamara se ponen los de ese modo (motor: CAMARAS). Globo:
                Camfov 45, Encuadre 0,85, Camsuave 3, Camaltura 1,7 y Camvel
-               0,6. Superficie: Camfov 89,5, Encuadre 0,877, Camsuave 3,
-               Camaltura 15 y Camvel 0,6. Rasante: Rasaltura 0,77, Rasfov 120,
+               0,6. Superficie (v17, motor v124): Camfov 45, Encuadre 0,85,
+               Camsuave 3, Camaltura 1,7 y Camvel 0,6 (hasta la v16: 89,5, 0,877
+               y Camaltura 15). Rasante: Rasaltura 0,77, Rasfov 120,
                Rasmirada -13,6, Rasvel 3,52 y Rasanillo 6. Lo que se toque
                despues vale hasta que se vuelva a elegir el modo. Rasojo
                (ojo de pez) queda apagado de fabrica.
@@ -75,7 +76,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v16  (autoprueba: el globo y la superficie se miden sin el peso de la rasante; antes, con Modocamara en rasante, fallaba)'
+VERSION = 'fase10 v17  (superficie con los ajustes de la captura del 18 de noviembre: Camfov 45, Encuadre 0,85, Camaltura 1,7)'
 banner(VERSION)
 
 base = require_base(10)
@@ -434,7 +435,7 @@ def _rasante(t, m):
             'superficie: los suyos)',
             ras_ == dict(Rasaltura=0.77, Rasfov=120.0, Rasmirada=-13.6, Rasvel=3.52, Rasanillo=6.0)
             and cla_ == dict(Camfov=45.0, Encuadre=0.85, Camsuave=3.0, Camaltura=1.7, Camvel=0.6)
-            and dict(m.CAMARAS['superficie']) == dict(Camfov=89.5, Encuadre=0.877, Camsuave=3.0, Camaltura=15.0,
+            and dict(m.CAMARAS['superficie']) == dict(Camfov=45.0, Encuadre=0.85, Camsuave=3.0, Camaltura=1.7,
                                                      Camvel=0.6)
             and all(abs(float(getattr(base.par, n)) - v) < 1e-9 for n, v in ras_.items())
             and "'Modocamara'" in base.op('pulsos').text, '%s  %s' % (ras_, cla_))
