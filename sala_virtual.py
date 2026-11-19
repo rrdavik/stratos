@@ -47,7 +47,7 @@ QUE MONTA
                v27: con Alimentar (encendido), FASE1 ve al publico de TODAS las
                demos por su sala simulada (Fuente = simulada y la tabla
                sala_personas) y lo marca con un anillo en el globo, tambien sin
-               Modojuego (motor v128, Marcapublico). Apagado Alimentar o Activa,
+               Modojuego (motor v132, Marcapublico). Apagado Alimentar o Activa,
                FASE1 vuelve a su Fuente y a su tabla de antes. OJO: con la sala
                activa, la sala manda sobre la camara de verdad.
   MICROFONO    el Script CHOP audio_mic: lo que oye el microfono virtual
@@ -105,7 +105,7 @@ DEMO GENOZILLA (v24, Demo = genozilla)
   Vista = juego (por defecto en la demo): la sala desde la entrada y la imagen
   de FASE1 en grande, lado a lado. Capitulo (el inicial), Siguientecap,
   Buclecap y Guion en la pagina Sala.
-  v27 (sala v16, motor v129): cada capitulo empieza en el MUNDO DE FASE1, el
+  v27 (sala v16, motor v133): cada capitulo empieza en el MUNDO DE FASE1, el
   que habia al entrar en la demo (hasta la v26, en un mundo vacio). El guion
   solo despeja lo que el capitulo necesita libre (donde se para la gente de
   Construir, las vecinas del brote, la celda del monstruo del Cerco) y, si

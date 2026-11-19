@@ -90,9 +90,9 @@
 #               sala activa, FASE1 ve al publico de cualquier demo (paseo, grupo, llena,
 #               goteo...) por su sala simulada (Fuente = simulada y la tabla
 #               sala_personas, como en GENoZilla), y lo marca con un anillo en el globo
-#               (motor v128, Marcapublico: tambien sin Modojuego). Al apagar Alimentar o
+#               (motor v132, Marcapublico: tambien sin Modojuego). Al apagar Alimentar o
 #               Activa, FASE1 vuelve a su Fuente y a su tabla de antes.
-#   v16         GENOZILLA SOBRE EL MUNDO DE FASE1 (motor v129): cada capitulo empieza en
+#   v16         GENOZILLA SOBRE EL MUNDO DE FASE1 (motor v133): cada capitulo empieza en
 #               el mundo con el que entro la demo (la copia que guarda entrar), no en uno
 #               vacio; el guion solo despeja lo que el capitulo necesita libre. El Cerco,
 #               con seis visitantes (las seis vecinas del monstruo: en un mundo lleno, las
@@ -2211,7 +2211,7 @@ def capitulo(c, t, F, now, k):
         try:
             refs = F.m.demo_refs(W, c1, k, _GZ['libres'])
             if c['guion']:
-                # v16: el capitulo empieza en el mundo con el que entro la demo (motor v129)
+                # v16: el capitulo empieza en el mundo con el que entro la demo (motor v133)
                 base = (_guardado() or {}).get('W')
                 refs = F.m.guion_demo(W, c1, k, 'inicio', now, refs=refs, libres=_GZ['libres'], base=base) or refs
         except Exception as e:

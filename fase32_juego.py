@@ -29,7 +29,7 @@ QUE HACE
                celdas, como cualquier especie.
   MARCA        un anillo en la celda que mira cada persona de la sala (fase 24),
                de un solo color de la paleta humana, para que cada cual se
-               encuentre en el globo (Marcajugador). v2 (motor v128): con
+               encuentre en el globo (Marcajugador). v2 (motor v132): con
                Marcapublico (encendido), tambien con Modojuego apagado: la sala
                virtual marca a su publico en todas sus demos.
   RITMO        el juego cuenta en pasos de juego: Pasojuego semicorcheas del

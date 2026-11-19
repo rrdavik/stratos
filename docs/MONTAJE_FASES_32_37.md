@@ -10,7 +10,7 @@ Turf War de toda la sala contra un monstruo. El público construye quedándose q
 | Fase | Script | Qué hace | Motor |
 |---|---|---|---|
 | 32 | `fase32_juego.py` | Modo de juego, ronda, recuento del globo, herencia del mal y marca de jugador | v106 |
-| 32 v2 | `fase32_juego.py` | La marca del público también sin juego (`Marcapublico`, encendido): la sala virtual marca a su público en todas sus demos | v128 |
+| 32 v2 | `fase32_juego.py` | La marca del público también sin juego (`Marcapublico`, encendido): la sala virtual marca a su público en todas sus demos | v132 |
 | 33 | `fase33_monstruo.py` | El monstruo (aparición, objetivo, movimiento, devorar, crecer) y los brotes del mal | v107 |
 | 33 v4 | `fase33_monstruo.py` | GENoZilla un tercio más lento: `Pasomonstruo` 24 y `Pasogrande` 12 (antes 16 y 8) | v120 |
 | 33 v6 | `fase33_monstruo.py` | GENoZilla más lento y a saltos de media celda: `Pasomonstruo` 32 y `Pasogrande` 16 (8 y 4 negras por celda); `Saltosmonstruo`, `Tiemposalto` 0,15 s y `Botesalto` 0,15 | v126 |
@@ -93,7 +93,7 @@ JUEGO    fin   gana publico 3-1   (ronda 4: publico 30   mal 22)   Nuevapartida
 - El recuento cuenta todas las celdas del globo, también las de fuera de la cara visible, con un mundo preparado a mano; el empate es del público.
 - Fin de ronda: entierro (motivo `ronda`), ronda + 1 y recuento a cero; el mal no se hereda y la concha guarda `sp = MAL`; tras `Rondas`, espera (y no entierra más); `Nuevapartida`.
 - La marca: 8 listones en la celda de la persona, del color de la paleta humana; `Marcajugador` apagado, ninguno. La línea `JUEGO`.
-- (v2, motor v128) Con `Modojuego` apagado y una persona en la sala, su anillo sale igual (`Marcapublico`); con `Marcapublico` apagado, ninguno. Dos personas en la misma celda, un solo anillo. La sala virtual lo usa para marcar a su público en todas sus demos (sala_virtual v27).
+- (v2, motor v132) Con `Modojuego` apagado y una persona en la sala, su anillo sale igual (`Marcapublico`); con `Marcapublico` apagado, ninguno. Dos personas en la misma celda, un solo anillo. La sala virtual lo usa para marcar a su público en todas sus demos (sala_virtual v27).
 - Apagar a mitad de ronda: sin estado de juego ni brotes; las columnas y el resto de la ocupación, iguales.
 
 ---
