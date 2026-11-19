@@ -247,6 +247,13 @@
 #                 se queda en el suelo). seguir_saltos los empieza al final de cada avance
 #                 del juego. Saltosmonstruo apagado: el deslizamiento continuo de antes.
 #                 La linea MONSTRUO, con el avance: paso 5/8 (avance_mon).
+#                 Motor v127 (fase 11 v24): FUERA LA LOSA EN LA CUMBRE. El cluster
+#                 planificado de 7 o mas celdas ya no lleva una losa recta sobre todas
+#                 las torres (a la altura de la mas baja y de varias celdas de largo: en
+#                 el globo curvo atravesaba las torres altas y flotaba en los extremos,
+#                 una plataforma sin sentido). Ahora, la RED DE PASARELAS: cada torre del
+#                 cluster se une a sus vecinas con una pasarela celeste corta, a 0,8 x la
+#                 mas baja de las dos (_pasarela_celeste, la misma de 2-3 celdas).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -258,7 +265,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v126'
+MOTOR_VERSION = 'motor v127'
 
 import math
 import time as _time
@@ -3365,7 +3372,7 @@ def _modelos():
     M['ciu_corredor'] = [_losa(-0.5, 0.5, 0.0, 0.12, -0.5, 0.5), _losa(-0.5, -0.42, 0.12, 0.88, -0.5, 0.5),
                          _losa(0.42, 0.5, 0.12, 0.88, -0.5, 0.5), _losa(-0.5, 0.5, 0.88, 1.0, -0.5, 0.5)]
     M['ciu_bucle'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
-    M['ciu_losa'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]
+    M['ciu_losa'] = [_losa(-0.5, 0.5, 0.0, 1.0, -0.5, 0.5)]     # sin uso desde v127 (queda la geometria)
     # Ville Spatiale: el modulo del marco (cuatro postes y dos anillos de vigas) y el pilar
     M['ciu_marco'] = ([_losa(x - 0.03, x + 0.03, 0.0, 1.0, z - 0.03, z + 0.03) for x in (-0.47, 0.47)
                        for z in (-0.47, 0.47)]
@@ -4433,7 +4440,7 @@ def malla_ejemplar(nombre, cfg=None):
 #                Mutacion (o la saturacion del modular) dice hasta donde llegan.
 #   CLUSTER      informal: el racimo se funde en barrio (alturas hacia la
 #                capital, corredores cubiertos); planificada: torres que se
-#                buscan: pasarela celeste (2-3), bucle (4-6), losa en la cumbre (7+).
+#                buscan: pasarela celeste (2-3), bucle (4-6), red de pasarelas (7+).
 
 LENGUAJE_MODOS = ['latitud', 'frio', 'templado', 'calido', 'mezcla']
 LENGUAJES = ['frio', 'templado', 'calido']
@@ -4469,7 +4476,7 @@ INDUSTRIALES = set(DISENOS_IND)
 INFORMALES = set(d for t in TIPOS['informal'] for d in DISENOS_TIPO[t]) | {'cuarto'}
 RASCACIELOS = DISENOS_TIPO['rascacielos']
 # formas del catalogo que no son ejemplares: los hibridos y las piezas del cluster
-CIUDAD_FORMAS = ['colonia', 'marco', 'pasarela', 'bucle', 'losa', 'pasarelas', 'corredores', 'kowloon',
+CIUDAD_FORMAS = ['colonia', 'marco', 'pasarela', 'bucle', 'red', 'losa', 'pasarelas', 'corredores', 'kowloon',
                  'corta', 'integrada', 'cuenca', 'torre compartida', 'fila de torres', 'anillo de torres']
 FACHADAS = ['ciega', 'reticula', 'irregular', 'corona', 'zocalo', 'capsula', 'loggia', 'sierra',
             'incandescente', 'bandas', 'celosia']
@@ -5994,7 +6001,7 @@ def _catalogo_defecto():
     add('ciudad', 'informal', 'puente', ['ciu_pasarela'])
     add('ciudad', 'planificada', 'puente', [nombre_edificio('zocalo', 0)])
     add('ciudad', 'informal', 'protagonista', ['pasarelas', 'corredores', 'kowloon'])
-    add('ciudad', 'planificada', 'protagonista', ['pasarela', 'bucle', 'losa'])
+    add('ciudad', 'planificada', 'protagonista', ['pasarela', 'bucle', 'red'])     # v127: red (antes losa)
     add('ciudad', 'informal', 'hibrido', ['marco'])           # la planificada sobrevuela la informal
     add('ciudad', 'planificada', 'hibrido', ['colonia'])      # la informal coloniza la planificada
     add('ciudad', 'planificada', 'remate', ['ciu_aguja'])
@@ -9330,7 +9337,8 @@ def _marco_ciudad(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, now, paso, ou
 def piezas_de_cluster(W, cfg, ctx, tf):
     """{cluster: pieza} de los clusters planificados terminados (su obra de
     fusion, hecha): pasarela celeste (2-3 celdas), bucle (4-6: la capital y su
-    vecina mas alta se inclinan una hacia otra) o losa en la cumbre (7+). Con
+    vecina mas alta se inclinan una hacia otra) o red de pasarelas (7+: cada torre
+    con sus vecinas; motor v127, antes una losa recta sobre todo el cluster). Con
     Mutacion 0, solo pasarela."""
     cl = ctx['cl']
     out = {}
@@ -9356,9 +9364,21 @@ def piezas_de_cluster(W, cfg, ctx, tf):
             par = (cap, j) if j is not None else None
             if par is None:
                 clase = 0
-        out[k_] = dict(clase=clase, nombre=['pasarela', 'bucle', 'losa'][clase], par=par or (), q=1.0,
+        out[k_] = dict(clase=clase, nombre=['pasarela', 'bucle', 'red'][clase], par=par or (), q=1.0,
                        celdas=list(cs))
     return out
+
+
+def _pasarela_celeste(ctx, info, bases, a, b, alto, ancho, lim, out):
+    """Una pasarela celeste de la torre a a su vecina b, a 'alto' x la mas baja de las
+    dos y 'ancho' x la celda: un tramo corto, apoyado en las dos torres."""
+    y = alto * min(info[a]['H'], info[b]['H'])
+    dist = _len(_add(bases[b], bases[a], -1.0))
+    mid = _add(_mul(_norm(_add(bases[a], bases[b])), 0.5 * (_len(bases[a]) + _len(bases[b]))),
+               _norm(_add(normal_i(a), normal_i(b))), y)
+    out.setdefault(geometria_de('ciu_pasarela'), []).append(
+        _fila_ciu(ctx, mid, _marco_puente(a, b), (ancho * min(_cell_sizes(_len(bases[a]), a)), 0.03 * lim,
+                                                  0.8 * dist), COL_REMATE['pasarela']))
 
 
 def _piezas_cluster(W, cfg, ctx, i, pc, out):
@@ -9371,17 +9391,9 @@ def _piezas_cluster(W, cfg, ctx, i, pc, out):
     ctx['res']['protagonistas'][pc['nombre']] = ctx['res']['protagonistas'].get(pc['nombre'], 0) + 1
     if pc['clase'] == 0:                    # pasarelas celestes hacia las vecinas
         for j in cl['mascara'][i]:
-            if j not in info:
-                continue
-            y = 0.62 * min(info[i]['H'], info[j]['H'])
-            pj = bases[j]
-            dist = _len(_add(pj, bases[i], -1.0))
-            ej = _marco_puente(i, j)
-            mid = _add(_mul(_norm(_add(bases[i], pj)), 0.5 * (_len(bases[i]) + _len(pj))), n, y)
-            out.setdefault(geometria_de('ciu_pasarela'), []).append(
-                _fila_ciu(ctx, mid, ej, (0.06 * min(_cell_sizes(_len(bases[i]), i)), 0.03 * lim, 0.8 * dist),
-                          COL_REMATE['pasarela']))
-            k += 1
+            if j in info:
+                _pasarela_celeste(ctx, info, bases, i, j, 0.62, 0.06, lim, out)
+                k += 1
     elif pc['clase'] == 1:                  # bucle: un puente une las dos cimas inclinadas
         a, b = pc['par']
         y = 0.9 * min(info[a]['H'], info[b]['H'])
@@ -9392,21 +9404,16 @@ def _piezas_cluster(W, cfg, ctx, i, pc, out):
             _fila_ciu(ctx, mid, ej, (0.28 * min(_cell_sizes(_len(bases[a]), a)), 0.12 * y, 0.85 * dist),
                       COL_REMATE['bucle']))
         k += 1
-    else:                                   # losa en la cumbre que corona todas las torres
-        cs = pc['celdas']
-        cen = _norm(tuple(sum(bases[c][q] for c in cs) for q in range(3)))
-        r0 = sum(_len(bases[c]) for c in cs) / len(cs)
-        lejos_ = max(cs, key=lambda c: _len(_add(_mul(cen, r0), bases[c], -1.0)))
-        rmax = _len(_add(_mul(cen, r0), bases[lejos_], -1.0))
-        y = min([info[c]['H'] for c in cs if c in info] or [info[i]['H']])
-        nc = cen
-        d = _hacia(nc, _mul(nc, r0), bases[lejos_])
-        ejl = (_cross(nc, d), nc, d, _euler_xyz(_cross(nc, d), nc, d))
-        cw = min(_cell_sizes(r0, i))
-        out.setdefault(geometria_de('ciu_losa'), []).append(
-            _fila_ciu(ctx, _mul(nc, r0 + y), ejl, (0.45 * cw, 0.05 * lim, 2.0 * rmax + 0.4 * cw),
-                      COL_REMATE['losa']))
-        k += 1
+    else:                                   # motor v127: la red de pasarelas entre todas las torres
+        # (antes, una losa recta sobre todo el cluster a la altura de la torre mas baja: en el
+        # globo curvo atravesaba las torres altas y flotaba en los extremos, varias celdas de largo)
+        for c in pc['celdas']:
+            if c not in info:
+                continue
+            for j in cl['mascara'][c]:
+                if j > c and j in info:
+                    _pasarela_celeste(ctx, info, bases, c, j, 0.8, 0.1, lim, out)
+                    k += 1
     return k
 
 
