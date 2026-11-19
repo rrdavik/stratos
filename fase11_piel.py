@@ -86,7 +86,8 @@ CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
                Spatiale, con pilares en los callejones y capsulas). Mutacion
                (o la saturacion del modular, Mutacionfuente) dice hasta donde.
   CLUSTER      el racimo se funde en barrio; las torres se buscan: pasarela
-               celeste (2-3 celdas), bucle (4-6), losa en la cumbre (7+).
+               celeste (2-3 celdas), bucle (4-6), red de pasarelas (7+, v24:
+               cada torre con sus vecinas; antes una losa recta sin sentido).
   COLOR        el de la ciudad es suyo; una nota enciende las ventanas del
                edificio con el color de su secuenciador (Tinteventanas,
                Pasostinte). De lejos (Lodciudad), sin los remates pequenos.
@@ -402,7 +403,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v23  (Reservanaturaleza 0,3: un 30 % de lo construido siempre naturaleza; la grua por piezas)'
+VERSION = 'fase11 v24  (fuera la losa en la cumbre: el cluster de 7+ es una red de pasarelas entre sus torres)'
 banner(VERSION)
 
 base = require_base(11)
@@ -752,7 +753,7 @@ def _prueba(t, m):
                 geos[mo].add(g)
             puentes = sum(len(inst.get(g, [])) for g in geos[pm])
             prot = m.modelos_de(c, tema, esp, 'protagonista')[m.clase_cluster(n_cl)]
-            if tema in ('ciudad', 'industria'):     # v10-v11: la pieza del cluster (losa, torres...)
+            if tema in ('ciudad', 'industria'):     # v10-v11: la pieza del cluster (red, torres...)
                 n_prot = sum((W.get('piel') or {}).get('ciudad', {}).get('protagonistas', {}).values())
             else:
                 n_prot = sum(len(inst.get(g, [])) for g in geos.get(prot, ()))
@@ -1864,13 +1865,25 @@ def _prueba_ciudad_(t, m):
             W['et_f'][x] = W['ant_et_f'][x] = tf[x]
             W['mut'][x] = mut
         inst = m.build_instances(W, cc, ahora)
+        cluster_de.ultimo = (W, cl, inst)
         return W['piel'].get('ciudad', {}).get('protagonistas', {}), len(cl['celdas'].get(cl['de'][i], []))
     p2, p5, p8 = cluster_de(2), cluster_de(5), cluster_de(8)
+    # v24: la red de pasarelas del cluster de 8, un tramo corto por enlace (antes, una losa recta
+    # de varias celdas sobre todo el cluster, que atravesaba las torres y flotaba en los extremos)
+    W8, cl8, inst8 = cluster_de.ultimo
+    k8 = cl8['de'][i]
+    enlaces8 = sum(1 for x in cl8['celdas'][k8] for y in cl8['mascara'][x] if y > x)
+    vecinas8 = max(m._len(m._add(m.normal_i(x), m.normal_i(y), -1.0)) * m.base_radius(W8, m.cfg(), x)
+                   for x in cl8['celdas'][k8] for y in cl8['mascara'][x])
+    tramos8 = inst8.get(m.geometria_de('ciu_pasarela'), [])
     p5_0, _ = cluster_de(5, 0.0)
-    t.check('torres que se buscan: clusters de %d, %d y %d celdas -> %s, %s y %s; con Mutacion 0, pasarela'
-            % (p2[1], p5[1], p8[1], list(p2[0]), list(p5[0]), list(p8[0])),
-            list(p2[0]) == ['pasarela'] and list(p5[0]) == ['bucle'] and list(p8[0]) == ['losa']
-            and list(p5_0) == ['pasarela'])
+    t.check('torres que se buscan: clusters de %d, %d y %d celdas -> %s, %s y %s; con Mutacion 0, pasarela; '
+            'la red del de 8, %d tramos (uno por enlace, %d) de %.2f como mucho (vecinas a %.2f), sin losa'
+            % (p2[1], p5[1], p8[1], list(p2[0]), list(p5[0]), list(p8[0]), len(tramos8), enlaces8,
+               max([f[8] for f in tramos8] or [0.0]), vecinas8),
+            list(p2[0]) == ['pasarela'] and list(p5[0]) == ['bucle'] and list(p8[0]) == ['red']
+            and list(p5_0) == ['pasarela'] and len(tramos8) == enlaces8 > 0
+            and all(f[8] <= vecinas8 for f in tramos8) and not inst8.get(m.geometria_de('ciu_losa')))
     base.par.Mutacion = 0.5
     # 8. mutacion: la misma escena a 0 y a 1; con Mutacionfuente = saturacion la lleva el modular
     def colonia_mut(mut):
