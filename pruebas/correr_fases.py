@@ -15,7 +15,7 @@ rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
 mal donde toca.
-Con la sala virtual (sala_virtual v25), la demo GENoZilla de principio a fin
+Con la sala virtual (sala_virtual v26), la demo GENoZilla de principio a fin
 (Demo = genozilla, fotograma a fotograma): los 13 capitulos, la columna
 Comprobar de cada uno y, al acabar, FASE1 como estaba (el mundo, las armas,
 Fuente y Modojuego).

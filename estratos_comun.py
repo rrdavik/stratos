@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v94'
+VERSION_COMUN = 'comun v95'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -4394,11 +4394,109 @@ def set_additive(mat):
     return bool(a and b and d)
 
 
-def make_instanced(base, name, x, y, mat, sop='box', quiet=False):
+# comun v95: el tipo de una Sphere SOP. setp_any(..., 'polymesh') no casa con ningun nombre
+# del menu Primitive Type de TouchDesigner: no hacia nada y la esfera se quedaba en
+# 'prim', una esfera primitiva de un solo punto (sala_virtual v13 con la esfera de LEDs,
+# v26 con la bola de los monigotes). Ahora, por nombre (setmenu, comprobando que no quede
+# en 'prim') o, si no, por nombre o etiqueta (menu_por_texto).
+TIPO_ESFERA = ['type', 'primtype']                   # el parametro Primitive Type
+MALLA_ESFERA = ['polymesh', 'polygonmesh', 'mesh']   # los nombres que se prueban, por orden
+TEXTO_MALLA = ['mesh', 'poly']                       # y, si ninguno esta, por nombre o etiqueta
+
+
+def menu_por_texto(o, nombres, textos):
+    """Pone el menu en la primera opcion cuyo nombre o etiqueta contenga uno de
+    los textos. Devuelve la opcion elegida o None."""
+    for n in nombres:
+        p = getattr(o.par, n, None) if o is not None else None
+        if p is None:
+            continue
+        try:
+            opciones = list(zip(p.menuNames, p.menuLabels))
+        except Exception:
+            continue
+        for tx in textos:
+            for nm, et in opciones:
+                if tx in str(nm).lower() or tx in str(et).lower():
+                    p.val = nm
+                    return nm
+    return None
+
+
+def tipo_esfera(esfera):
+    """El Primitive Type de una Sphere SOP ('prim', 'mesh'...), o None si no lo tiene."""
+    for n in TIPO_ESFERA:
+        try:
+            p = getattr(esfera.par, n, None)
+            if p is not None:
+                return str(p.eval()).lower()
+        except Exception:
+            pass
+    return None
+
+
+def esfera_en_malla(esfera, nombres=MALLA_ESFERA, textos=TEXTO_MALLA):
+    """comun v95: pone una Sphere SOP en malla de poligonos (con vertices), no en la
+    esfera primitiva de un punto. Devuelve el tipo elegido o None si sigue en 'prim'."""
+    if setmenu(esfera, TIPO_ESFERA, list(nombres), None) and tipo_esfera(esfera) not in (None, 'prim'):
+        return tipo_esfera(esfera)
+    if menu_por_texto(esfera, TIPO_ESFERA, list(textos)) and tipo_esfera(esfera) not in (None, 'prim'):
+        return tipo_esfera(esfera)
+    return None
+
+
+def esfera_medida(geo, nombre, radio=1.0, filas=20, cols=20):
+    """comun v95: la esfera de una geometria instanciada. Sphere SOP 'bola' en malla de
+    poligonos (esfera_en_malla) y un Transform SOP 'a_la_medida' que la deja de radio
+    'radio' y centrada en el origen midiendo sus puntos (medir), como la bola de los
+    monigotes de la sala (sala_virtual v26). Devuelve el Transform SOP."""
+    bola = mk(geo, 'sphereSOP', 'bola', 0, 120)
+    for ax in ('radx', 'rady', 'radz'):
+        setp(bola, ax, radio)
+    for ax in ('tx', 'ty', 'tz'):
+        setp(bola, ax, 0.0)
+    tipo = esfera_en_malla(bola)
+    setp_any(bola, ['rows'], filas)
+    setp_any(bola, ['cols'], cols)
+    s = mk(geo, 'transformSOP', 'a_la_medida', 200, 0)
+    connect(s, bola, 0)
+    b = medir(bola)
+    if not tipo or b is None or min(b[1] - b[0], b[3] - b[2], b[5] - b[4]) < 1e-3:
+        info('%s/bola: sigue siendo una esfera primitiva (tipo %s, medidas %s); pon a mano Primitive '
+             'Type = Polygon Mesh o sus instancias no se colocaran bien' % (nombre, tipo_esfera(bola), b))
+    else:
+        setmenu(s, ['xord'], ['srt'], 0)
+        for q, ax in enumerate('xyz'):
+            k = 2.0 * radio / (b[2 * q + 1] - b[2 * q])
+            setp(s, 's' + ax, k)
+            setp(s, 't' + ax, -0.5 * (b[2 * q] + b[2 * q + 1]) * k)
+    return s
+
+
+def esferas_en_prim(base):
+    """comun v95: las Sphere SOP de las geometrias instanciadas de base que siguen en
+    'prim' (la esfera primitiva de un punto). Para las autopruebas: debe quedar vacia."""
+    malas = []
+    for g in list(getattr(base, 'children', [])):
+        if str(getattr(g, 'OPType', '')) != 'geometryCOMP':
+            continue
+        try:
+            inst = bool(getattr(g.par, 'instancing', None) or getattr(g.par, 'instance', None))
+        except Exception:
+            inst = False
+        if not inst:
+            continue
+        for s in list(getattr(g, 'children', [])):
+            if str(getattr(s, 'OPType', '')) == 'sphereSOP' and tipo_esfera(s) == 'prim':
+                malas.append('%s/%s' % (g.name, s.name))
+    return malas
+
+
+def make_instanced(base, name, x, y, mat, sop='box', quiet=False, filas=20, cols=20):
     """Geometry COMP 'name' + Script CHOP 'i_name' que pide al motor sus
     instancias. Una caja de 1x1x1 con la base en y=0 (o una esfera de radio
-    1, o con sop='select:<ruta>' el SOP de un modelo), escalada, girada y
-    coloreada por instancia."""
+    1 centrada, de filas x cols, o con sop='select:<ruta>' el SOP de un modelo),
+    escalada, girada y coloreada por instancia."""
     chop = fresh(base, 'scriptCHOP', 'i_' + name, x - 220, y)
     setp_any(chop, ['callbacks', 'callbackdat', 'dat'], 'formas_callbacks')
     geo = fresh(base, 'geometryCOMP', name, x, y)
@@ -4418,12 +4516,10 @@ def make_instanced(base, name, x, y, mat, sop='box', quiet=False):
         for ax in ('sizex', 'sizey'):
             setp(s, ax, 1.0)
     elif sop == 'sphere':
-        s = mk(geo, 'sphereSOP', 'bola', 0, 0)
-        for ax in ('radx', 'rady', 'radz'):
-            setp(s, ax, 1.0)
-        setp_any(s, ['type', 'primtype'], 'polymesh')
-        setp_any(s, ['rows'], 20)
-        setp_any(s, ['cols'], 20)
+        # comun v95: malla de poligonos de radio 1 y centrada (esfera_medida). Hasta la v94,
+        # setp_any(..., 'polymesh'), que no casa con el menu: la bola se quedaba en 'prim',
+        # una esfera primitiva de un punto, y sus instancias no se colocaban bien.
+        s = esfera_medida(geo, name, 1.0, filas, cols)
     else:
         s = mk(geo, 'boxSOP', 'bloque', 0, 0)
         for ax in ('sizex', 'sizey', 'sizez'):
@@ -4843,7 +4939,9 @@ def construir_modelo(modelos, nombre, prims, x, y, ajustadas):
         bola = mk(comp, 'sphereSOP', 'bola', 0, -240)
         for ax in ('radx', 'rady', 'radz'):
             setp(bola, ax, 0.5)
-        setmenu(bola, ['type', 'primtype'], ['polygon', 'poly'])
+        if not esfera_en_malla(bola, ['polygon', 'poly'], ['polygon', 'poly']):   # comun v95: nunca 'prim'
+            info('%s: modelos/%s/bola sigue siendo una esfera primitiva; pon a mano Primitive Type = '
+                 'Polygon' % (nombre, nombre))
         setp_any(bola, ['rows'], 6)
         setp_any(bola, ['cols'], 10)
         for ax in ('tx', 'ty', 'tz'):
@@ -5260,7 +5358,7 @@ def terreno_al_dia(base, m=None):
     s = geo.op('esfera') or mk(geo, 'sphereSOP', 'esfera', 0, 0)
     for ax in ('radx', 'rady', 'radz'):
         setp(s, ax, 1.0)
-    setmenu(s, ['type', 'primtype'], ['polymesh', 'mesh'])
+    esfera_en_malla(s, ['polymesh', 'mesh'])     # comun v95: por nombre o etiqueta, nunca 'prim'
     bien = bool(setp_any(s, ['rows'], TERRENO_FILAS)) and bool(setp_any(s, ['cols'], TERRENO_COLS))
     for attr in ('render', 'display'):
         try:

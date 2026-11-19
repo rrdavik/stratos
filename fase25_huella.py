@@ -39,7 +39,10 @@ OPERADORES (en /project1/FASE1)
   i_inclusiones, inclusiones
                Script CHOP y Geometry COMP instanciado (una esfera baja de
                poligonos por inclusion, deformada y girada por su semilla),
-               con mat_piel_plastico. En el render, tras las coronas.
+               con mat_piel_plastico. En el render, tras las coronas. v2
+               (comun v95): la esfera ('bola', 6 x 8) es una malla de
+               poligonos, no la esfera primitiva de un punto ('prim'), y el
+               Transform SOP 'a_la_medida' la deja de radio 1 y centrada.
 
 PROBAR SIN CAMARA
 -----------------
@@ -57,7 +60,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase25 v1  (huella minima: inclusiones por llegada y por parada, con su escalon)'
+VERSION = 'fase25 v2  (la esfera de las inclusiones, malla de poligonos de radio 1: nunca prim)'
 banner(VERSION)
 
 base = require_base(25)
@@ -79,11 +82,13 @@ ok('pagina Fase25: Probllegada 0,6 (1: toda llegada deja huella), Tparada 3 s')
 
 if base.op('mat_piel_plastico') is None:
     fail('mat_piel_plastico: no esta (el shader de la piel es de la fase 12)')
-geo = make_instanced(base, 'inclusiones', -880, 2300, 'mat_piel_plastico', sop='sphere')
+# pocas caras (6 x 8): son piezas pequenas, y puede haber un millar. v2: la resolucion va en
+# make_instanced, que mide la bola con ella (comun v95: malla de radio 1, nunca 'prim')
+geo = make_instanced(base, 'inclusiones', -880, 2300, 'mat_piel_plastico', sop='sphere', filas=6, cols=8)
 bola = geo.op('bola')
-if bola is not None:                    # pocas caras: son piezas pequenas, y puede haber un millar
-    setp_any(bola, ['rows'], 6)
-    setp_any(bola, ['cols'], 8)
+if bola is not None and tipo_esfera(bola) != 'prim':
+    ok('inclusiones/bola: malla de poligonos (%s, %d puntos), de radio 1 por a_la_medida'
+       % (tipo_esfera(bola), len(bola.points)))
 if not setp_any(geo, ['instancea'], 'a'):
     fail('inclusiones no lee la rugosidad: Instance 2 -> Color A = a')
 if has_par(base, 'Materialrespaldo'):
@@ -273,6 +278,19 @@ def _prueba(t, m):
             and 'inclusiones' in str(base.op('render').par.geometry.val).split()
             and base.op('mat_piel_plastico') is not None,
             '%d instancias, %d canales' % (o.numSamples, o.numChans))
+    # v2 (comun v95): la esfera de las inclusiones es una malla, no la esfera primitiva de un
+    # punto ('prim', con la que las instancias no se colocaban bien), y sale de radio 1 y centrada
+    bola = base.op('inclusiones/bola')
+    medida = base.op('inclusiones/a_la_medida')
+    bb = medir(medida) if medida is not None else None
+    t.check('v2: inclusiones/bola, malla de poligonos (no prim); a_la_medida la deja de radio 1 y '
+            'centrada, y es la que se dibuja; ninguna esfera instanciada de FASE1 en prim',
+            bola is not None and tipo_esfera(bola) not in (None, 'prim') and len(bola.points) > 1
+            and bb is not None and all(abs(v - w) < 0.02 for v, w in zip(bb, (-1.0, 1.0) * 3))
+            and bool(getattr(medida, 'render', False)) and not esferas_en_prim(base),
+            'tipo %s, medidas %s, en prim %s' % (tipo_esfera(bola) if bola is not None else None,
+                                                None if bb is None else ['%.3f' % v for v in bb],
+                                                esferas_en_prim(base)))
     for _ in range(3):
         m.end_cycle(W, c, reloj[0])
         reloj[0] += 1.0

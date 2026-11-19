@@ -45,7 +45,7 @@ la anterior NO pasa a la nueva.
 import td
 import math
 
-VERSION = 'fase12 v6  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda; leyenda ocultable; camara de globo)'
+VERSION = 'fase12 v7  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda; leyenda ocultable; camara de globo; nucleo en malla)'
 print('=' * 66)
 print('EJECUTANDO: ' + VERSION)
 print('=' * 66)
@@ -83,6 +83,38 @@ def setp_any(o, names, value):
     for n in names:
         if setp(o, n, value):
             return n
+    return None
+
+
+def malla_esfera(s):
+    """v7: la Sphere SOP en malla de poligonos. setp_any(..., 'polymesh') no casaba
+    con ningun nombre del menu Primitive Type y la dejaba en 'prim' (una esfera
+    primitiva de un punto). Por nombre (polymesh, polygonmesh, mesh) o, si no, por
+    nombre o etiqueta (mesh, poly). Devuelve el tipo elegido o None si sigue en prim."""
+    for n in ('type', 'primtype'):
+        try:
+            p = getattr(s.par, n, None)
+            nombres = [str(x) for x in p.menuNames] if p is not None else []
+            etiquetas = [str(x) for x in p.menuLabels] if p is not None else []
+        except Exception:
+            continue
+        if not nombres:
+            continue
+        bajos = [x.lower() for x in nombres]
+        elegido = next((nombres[bajos.index(w)] for w in ('polymesh', 'polygonmesh', 'mesh') if w in bajos),
+                       None)
+        if elegido is None:
+            elegido = next((nm for tx in ('mesh', 'poly') for nm, et in zip(nombres, etiquetas)
+                            if tx in nm.lower() or tx in et.lower()), None)
+        if elegido is None:
+            continue
+        try:
+            p.val = elegido
+            v = str(p.eval())
+        except Exception:
+            continue
+        if v.lower() != 'prim':
+            return v
     return None
 
 
@@ -560,9 +592,11 @@ def poblar(geo, optype, sop_name, setup):
 def _esfera(s):
     for ax in ('radx', 'rady', 'radz'):
         setp(s, ax, CORE_RADIUS)
-    setp_any(s, ['type', 'primtype'], 'polymesh')
     setp_any(s, ['rows'], 48)
     setp_any(s, ['cols'], 48)
+    # v7: malla de poligonos; con 'polymesh' se quedaba en 'prim' (una esfera primitiva de un punto)
+    if not malla_esfera(s):
+        info('nucleo/esfera: sigue siendo una esfera primitiva; pon a mano Primitive Type = Polygon Mesh')
 
 
 def _marcador(s):
