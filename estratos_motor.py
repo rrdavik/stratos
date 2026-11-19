@@ -254,6 +254,45 @@
 #                 una plataforma sin sentido). Ahora, la RED DE PASARELAS: cada torre del
 #                 cluster se une a sus vecinas con una pasarela celeste corta, a 0,8 x la
 #                 mas baja de las dos (_pasarela_celeste, la misma de 2-3 celdas).
+#                 Motor v129 (comun v97): LOS BANCOS DE LA CORTA, TALUDES DE TIERRA. El
+#                 anillo de cada banco (ciu_anillo) eran 8 cajas sueltas que, aplastadas
+#                 por la escala de la instancia y con las normales suavizadas, parecian
+#                 granos de cafe en corona. Ahora es un anillo continuo de 16 segmentos
+#                 (talud_anillo): falda exterior, berma llana y cara interior en
+#                 pendiente hasta el pie; las caras de un banco caen sobre la berma del
+#                 siguiente (una ladera escalonada, unos 35 grados). Colores de tierra
+#                 (COL_BANCO, antes mas rojizos). TouchDesigner lo dibuja con normales
+#                 planas (MODELOS_FACETADOS: un Facet SOP en su COMP de modelos).
+#                 Motor v130 (fase 16 v6): LOS RESTOS DE LOS CORTES, DISTINGUIBLES. Lo que
+#                 ensenan los cortes de la ciudad y la industria eran losas grises y pardas
+#                 parecidas (cimientos, sotanos, galeria, vagoneta, pozo). Ahora la ciudad
+#                 ensena esqueletos de edificio (arq_portico: pilares y vigas de hormigon
+#                 rotos con las armaduras al aire; en el fondo, arq_portico_caido) y
+#                 esqueletos humanos en blanco hueso (arq_osario, arq_osario_suelo),
+#                 alternos; la industria, restos de maquinaria en oxido (ind_engranajes:
+#                 una rueda dentada, un pinon, el eje y la biela; ind_engranajes_suelo).
+#                 En la pared no se estiran: van en fila, de 1 a 3 por cara, cada uno tan
+#                 ancho como alto (PROPORCION_EXPUESTA). Donde hubo mal (la concha guarda sp:
+#                 contenido = 'mal', en cualquier tema), signos de dolar dorados y calaveras
+#                 de demonio rojas con cuernos, alternos (arq_dolar, arq_demonio y sus
+#                 _suelo). La calle y la naturaleza, igual.
+#                 cimiento_de (el registro de la tipologia) ya no decide la pieza.
+#                 Motor v128 (fase 11 v25): LA MEZCLA, REESCRITA. La tabla de fabrica:
+#                 hasta el 25 % de construido todo es naturaleza; desde ahi nacen la
+#                 ciudad y la industria y, con el mundo construido entero, quedan
+#                 40/35/25. La cuota ya no va a saltos por tramos: cada fila es la
+#                 mezcla de lo construido en su umbral y entre dos filas se interpolan
+#                 las celdas de cada especie (cuota_en: lo que se construye se reparte a
+#                 ritmo constante; del 25 al 100 %, 3 de cada 15 celdas nuevas son
+#                 naturaleza, 7 ciudad y 5 industria) sobre el pico de construido del
+#                 mundo (W['mezcla']['pico']). La precarga mira la cuota a Precarga
+#                 puntos por delante. TECHONATURALEZA (3): si las notas caen lejos de
+#                 la ciudad, la naturaleza ya no se pasa de su cuota mas de 3 puntos
+#                 (antes podia quedarse en un 50 % con el mundo lleno): pasado ese
+#                 techo, la especie mas lejos de su cuota puede fundar otra mancha. La
+#                 primera industria nace en el borde de la ciudad en cuanto puede (antes
+#                 esperaba a que la ciudad llegara a su cuota). Un rio ya no nace en una
+#                 celda de ciudad o de industria (rios: el relieve no se enmascara).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -265,7 +304,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v127'
+MOTOR_VERSION = 'motor v130'
 
 import math
 import time as _time
@@ -435,7 +474,7 @@ DEFAULT_CFG = dict(
     tema=0, peso_vecina=0.5, umbral_vecindad=4.0, min_cluster=2, caos=3.91, max_piezas=6,
     avance=0, pasos_etapa=2, rebote=0.2, catalogo=None,
     # fase 11 v22 (motor v121): la mezcla de especies (tema_auto: Tema = auto)
-    tema_auto=0, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, paciencia=8, orden_familias=0, precarga=5.0,
+    tema_auto=0, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, techo_naturaleza=3.0, paciencia=8, orden_familias=0, precarga=5.0,
     carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
     # fase 11 v5: la naturaleza legible
     umbral_monte=8, max_caos_nat=5, limite_bosque=0.65, limite_nieve=0.90, altura_monte=1.0,
@@ -3196,6 +3235,50 @@ def _dot(a, b):
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
+TALUD_SEGMENTOS = 16           # motor v129: segmentos del anillo de un banco de la corta
+# modelos de cajas que TouchDesigner dibuja con normales planas (comun v97: un Facet SOP);
+# sin el, la Box SOP aplastada por la instancia se ve redondeada
+MODELOS_FACETADOS = ('ciu_anillo',)
+# el perfil del talud, en la planta unidad (radio 0,5) y alto 1: la falda exterior del borde
+# (0,5, a ras de suelo) a la berma, la berma (cresta llana) de TALUD_BERMA a TALUD_CRESTA y la
+# cara interior en pendiente hasta TALUD_PIE, a ras de suelo; las losas, de TALUD_GRUESO
+TALUD_BERMA, TALUD_CRESTA, TALUD_PIE, TALUD_GRUESO = 0.455, 0.415, 0.27, 0.03
+
+
+def _losa_talud(a_r, a_y, b_r, b_y, ang, largo, dentro):
+    """Una losa del talud de (a_r, a_y) a (b_r, b_y) en el corte radial del angulo ang
+    (grados), de largo tangencial `largo`; su cara buena mira hacia dentro (dentro) o
+    hacia fuera, y su grosor queda del otro lado."""
+    dr, dy = b_r - a_r, b_y - a_y
+    ls = math.hypot(dr, dy)
+    phi = math.atan2(dr, dy)            # el eje y local, a lo largo de la pendiente
+    k = 1.0 if dentro else -1.0         # el grosor, del lado que no se ve
+    rm = 0.5 * (a_r + b_r) + k * 0.5 * TALUD_GRUESO * math.cos(phi)
+    ym = 0.5 * (a_y + b_y) - k * 0.5 * TALUD_GRUESO * math.sin(phi)
+    ca, sa = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+    return _caja(rm * ca, ym, rm * sa, largo, ls, TALUD_GRUESO, math.degrees(phi), 90.0 - ang, 0.0)
+
+
+def talud_anillo(n=TALUD_SEGMENTOS):
+    """Motor v129: el banco de la corta como un talud de tierra: un anillo continuo de n
+    segmentos, cada uno con su falda exterior, su berma (una caja llana arriba) y su cara
+    interior hasta el pie. Antes, 8 cajas sueltas que, aplastadas por la escala de la
+    instancia (y con las normales suavizadas), parecian granos de cafe. Con la escala de la
+    corta (2 r x celda de ancho, 0,12-0,4 de alto) la cara interior queda a unos 35 grados
+    y la de un banco cae sobre la berma del siguiente: una ladera escalonada."""
+    out = []
+    paso = 2.0 * math.pi / n
+    for k in range(n):
+        a = 360.0 * k / n
+        ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+        rc = 0.5 * (TALUD_CRESTA + TALUD_BERMA)       # la berma (Ry: el eje z local, radial)
+        out.append(_caja(rc * ca, 1.0 - 0.5 * TALUD_GRUESO, rc * sa, paso * TALUD_BERMA * 1.06, TALUD_GRUESO,
+                         TALUD_BERMA - TALUD_CRESTA + 0.01, 0.0, 90.0 - a, 0.0))
+        out.append(_losa_talud(TALUD_PIE, 0.0, TALUD_CRESTA, 1.0, a, paso * TALUD_CRESTA * 1.08, True))
+        out.append(_losa_talud(0.5, 0.0, TALUD_BERMA, 1.0, a, paso * 0.5 * 1.06, False))
+    return out
+
+
 def _girar_eje(v, eje, grados):
     """Gira v alrededor del eje unitario (Rodrigues)."""
     t = math.radians(grados)
@@ -3409,9 +3492,8 @@ def _modelos():
                             + [_losa(-0.2, 0.2, 0.0, 0.4, -0.2, 0.2)])
     M['ciu_rotopala'] = [_hexa(-0.3, 0.6, 0.0, 0.8, 0.12, 90.0, 0.0, 0.0), _losa(-0.3, 0.5, 0.45, 0.55, -0.06, 0.06),
                          _losa(0.2, 0.5, 0.0, 0.3, -0.3, 0.3)]
-    # la corta: un anillo de banco (octogono hueco) y el agua acida del fondo
-    M['ciu_anillo'] = [_caja(0.43 * math.cos(math.radians(45 * k)), 0.5, 0.43 * math.sin(math.radians(45 * k)),
-                             0.16, 1.0, 0.42, 0.0, -45.0 * k, 0.0) for k in range(8)]
+    # la corta: un anillo de banco (motor v129: un talud de tierra) y el agua acida del fondo
+    M['ciu_anillo'] = talud_anillo()
     M['ciu_agua'] = [_hexa(0.0, 0.5, 0.0, 1.0, 1.0)]
     # la planta integrada: un modulo de bastidor con tuberias de colores
     M['ciu_bastidor'] = ([_losa(x - 0.03, x + 0.03, 0.0, 1.0, z - 0.03, z + 0.03) for x in (-0.47, 0.47)
@@ -3522,10 +3604,133 @@ def _modelos():
                         _caja(-0.25, 0.76, 0.5, 0.54, 0.08, 1.0, 0.0, 0.0, 35.0),
                         _caja(0.25, 0.76, 0.5, 0.54, 0.08, 1.0, 0.0, 0.0, -35.0),
                         _losa(-0.2, -0.16, 0.08, 0.13, 0.0, 1.0), _losa(0.16, 0.2, 0.08, 0.13, 0.0, 1.0)]
+    # motor v130: lo que ensenan los cortes de la ciudad y la industria, distinguible (antes,
+    # cimientos, sotanos y galerias: losas grises parecidas en las dos especies). La ciudad,
+    # esqueletos de edificio y esqueletos humanos mezclados; la industria, restos de maquinaria
+    M.update(_restos_excavacion())
     for k, prims in M.items():          # ninguno pasa de alto 1 ni baja de 0
         b = _caja_modelo(prims)
         if b[2] < -1e-6 or b[3] > 1.0 + 1e-6:
             M[k] = _a_alto_uno(prims)
+    return M
+
+
+def _engranaje(cx, cy, cz, d, dientes, grueso, plano):
+    """Motor v130: una rueda dentada: disco (prisma de 6 lados), cubo y dientes en
+    corona. plano 'xy' (en la pared: el eje hacia fuera, Z) o 'xz' (tumbada en el fondo)."""
+    rx = 90.0 if plano == 'xy' else 0.0
+    out = [_hexa(cx, cy, cz, d, grueso, rx), _hexa(cx, cy, cz, 0.28 * d, 2.2 * grueso, rx)]
+    r = 0.5 * d + 0.035
+    for k in range(dientes):
+        a = 360.0 * k / dientes
+        ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+        if plano == 'xy':
+            out.append(_caja(cx + r * ca, cy + r * sa, cz, 0.08, 0.6 * math.pi * d / dientes, grueso, 0.0, 0.0, a))
+        else:
+            out.append(_caja(cx + r * ca, cy, cz + r * sa, 0.08, grueso, 0.6 * math.pi * d / dientes, 0.0, -a, 0.0))
+    return out
+
+
+def _en_plano(x, y, sx, sy, grueso, g, plano, y0=0.0):
+    """Una caja de un dibujo plano: (x, y) en el dibujo y g grados de giro en su plano. En
+    'xy', de pie en la pared (grueso en Z); en 'xz', tumbada (el dibujo en X-Z, grueso en Y)."""
+    if plano == 'xy':
+        return _caja(x, y, 0.0, sx, sy, grueso, 0.0, 0.0, g)
+    return _caja(x, y0 + 0.5 * grueso, -(y - 0.5), sx, grueso, sy, 0.0, g, 0.0)
+
+
+def _dolar(plano):
+    """Motor v130: el signo $ de bloques (la S de cinco trazos y la barra que la cruza)."""
+    g = 0.14 if plano == 'xy' else 0.4
+    t = 0.12                            # el trazo
+    trazos = [(0.0, 0.84, 0.5, t), (-0.19, 0.69, t, 0.3), (0.0, 0.5, 0.5, t), (0.19, 0.31, t, 0.3),
+              (0.0, 0.16, 0.5, t), (0.19, 0.78, t, 0.1), (-0.19, 0.22, t, 0.1),
+              (0.0, 0.5, 0.07, 1.0)]    # la barra, de arriba abajo
+    return [_en_plano(x, y, sx, sy, g, 0.0, plano) for x, y, sx, sy in trazos]
+
+
+def _demonio(plano):
+    """Motor v130: la calavera de un demonio: craneo, mandibula, pomulos y dos cuernos
+    curvos (dos tramos cada uno) hacia arriba y hacia fuera."""
+    g = 0.3 if plano == 'xy' else 0.5
+    if plano == 'xy':
+        out = [_bola(0.0, 0.45, 0.0, 0.46, 0.44), _caja(0.0, 0.2, 0.0, 0.26, 0.12, 0.24)]
+        out += [_caja(k * 0.2, 0.36, 0.0, 0.1, 0.08, 0.22, 0.0, 0.0, -k * 20.0) for k in (-1, 1)]
+        for k in (-1, 1):
+            out += [_caja(k * 0.17, 0.68, 0.0, 0.09, 0.22, 0.09, 0.0, 0.0, -k * 35.0),
+                    _caja(k * 0.27, 0.84, 0.0, 0.06, 0.2, 0.06, 0.0, 0.0, k * 10.0)]
+        return out
+    out = [_bola(0.0, 0.25, 0.0, 0.46, 0.5), _caja(0.0, 0.1, 0.26, 0.26, 0.2, 0.12)]
+    for k in (-1, 1):
+        out += [_caja(k * 0.17, 0.2, -0.2, 0.09, 0.2, 0.24, 0.0, k * 35.0, 0.0),
+                _caja(k * 0.27, 0.2, -0.36, 0.06, 0.2, 0.2, 0.0, -k * 10.0, 0.0)]
+    return out
+
+
+def _restos_excavacion():
+    """Motor v130: las piezas de los cortes de la ciudad y la industria. En la pared (como
+    las de la fase 16): X a lo largo, Y arriba, Z hacia fuera; en el fondo: tumbadas (Y la
+    normal, aplastada por la instancia)."""
+    M = {}
+    # la ciudad: un portico de hormigon roto, con las armaduras asomando de pilares y vigas
+    M['arq_portico'] = [_losa(-0.44, -0.32, 0.0, 1.0, -0.12, 0.12),          # pilar entero
+                        _losa(-0.06, 0.06, 0.0, 0.6, -0.12, 0.12),           # pilar partido
+                        _losa(0.32, 0.44, 0.0, 0.82, -0.12, 0.12),
+                        _losa(-0.5, 0.12, 0.88, 1.0, -0.13, 0.13),           # viga alta, partida
+                        _losa(-0.5, 0.5, 0.42, 0.52, -0.13, 0.13),           # viga media
+                        _caja(0.3, 0.86, 0.0, 0.34, 0.08, 0.24, 0.0, 0.0, -24.0)]   # la otra mitad, caida
+    for x, y0, y1, g in ((-0.03, 0.6, 0.8, 12.0), (0.03, 0.6, 0.76, -16.0), (0.0, 0.6, 0.84, 3.0),
+                         (0.36, 0.82, 0.96, 18.0), (0.41, 0.82, 0.94, -10.0)):
+        M['arq_portico'].append(_caja(x, 0.5 * (y0 + y1), 0.0, 0.018, y1 - y0, 0.018, 0.0, 0.0, g))
+    M['arq_portico'] += [_caja(0.12 + 0.08 * k, 0.94 + 0.02 * k, 0.0, 0.16, 0.016, 0.016, 0.0, 0.0, -10.0 - 15 * k)
+                         for k in range(2)]                                  # varillas de la viga partida
+    M['arq_portico'] += [_caja(-0.18, 0.05, 0.0, 0.14, 0.1, 0.16, 0.0, 0.0, 14.0),
+                         _caja(0.18, 0.04, 0.0, 0.1, 0.08, 0.12, 0.0, 0.0, -20.0)]   # cascotes
+    # el mismo portico, derrumbado en el fondo: pilares tumbados, vigas cruzadas, varillas de pie
+    M['arq_portico_caido'] = [_losa(-0.48, 0.42, 0.0, 0.3, z - 0.07, z + 0.07) for z in (-0.32, 0.02, 0.34)]
+    M['arq_portico_caido'] += [_caja(-0.3, 0.42, 0.0, 0.14, 0.24, 0.9, 0.0, 12.0, 0.0),
+                               _caja(0.28, 0.4, 0.05, 0.14, 0.22, 0.8, 0.0, -18.0, 0.0)]
+    M['arq_portico_caido'] += [_caja(0.44, 0.65, z, 0.025, 0.7, 0.025, 0.0, 0.0, g)
+                               for z, g in ((-0.34, 18.0), (-0.3, -12.0), (0.0, 22.0), (0.32, -8.0))]
+    # un esqueleto humano tendido en el estrato, visto de lado en la pared
+    M['arq_osario'] = [_bola(-0.38, 0.52, 0.0, 0.2, 0.18),                    # craneo
+                       _caja(-0.34, 0.43, 0.0, 0.1, 0.05, 0.1, 0.0, 0.0, -10.0)]   # mandibula
+    M['arq_osario'] += [_caja(-0.24 + 0.065 * k, 0.5, 0.0, 0.045, 0.05, 0.06) for k in range(8)]   # columna
+    for k in range(5):                                                       # costillas
+        x = -0.2 + 0.055 * k
+        M['arq_osario'] += [_caja(x + 0.02, 0.6, 0.0, 0.022, 0.2, 0.05, 0.0, 0.0, -22.0 + 4 * k),
+                            _caja(x + 0.02, 0.4, 0.0, 0.022, 0.2, 0.05, 0.0, 0.0, 22.0 - 4 * k)]
+    M['arq_osario'] += [_caja(0.3, 0.5, 0.0, 0.1, 0.18, 0.08),                # pelvis
+                        _caja(0.42, 0.42, 0.0, 0.2, 0.035, 0.05, 0.0, 0.0, -8.0),   # femures
+                        _caja(0.42, 0.58, 0.0, 0.2, 0.035, 0.05, 0.0, 0.0, 10.0),
+                        _caja(-0.12, 0.74, 0.0, 0.22, 0.03, 0.05, 0.0, 0.0, -15.0),   # brazo
+                        _bola(0.5, 0.39, 0.0, 0.05), _bola(0.51, 0.6, 0.0, 0.05)]       # rodillas
+    # el esqueleto tendido en el fondo, visto desde arriba (las costillas, a los lados)
+    M['arq_osario_suelo'] = [_bola(-0.38, 0.4, 0.0, 0.2, 0.8), _caja(-0.33, 0.2, 0.0, 0.08, 0.4, 0.1)]
+    M['arq_osario_suelo'] += [_caja(-0.24 + 0.065 * k, 0.25, 0.0, 0.045, 0.5, 0.05) for k in range(8)]
+    for k in range(5):
+        x = -0.18 + 0.055 * k
+        M['arq_osario_suelo'] += [_caja(x, 0.3, 0.11, 0.022, 0.5, 0.2, 0.0, 22.0 - 4 * k, 0.0),
+                                  _caja(x, 0.3, -0.11, 0.022, 0.5, 0.2, 0.0, -22.0 + 4 * k, 0.0)]
+    M['arq_osario_suelo'] += [_caja(0.3, 0.3, 0.0, 0.1, 0.5, 0.18),
+                              _caja(0.42, 0.2, -0.06, 0.2, 0.35, 0.04, 0.0, 10.0, 0.0),
+                              _caja(0.42, 0.2, 0.06, 0.2, 0.35, 0.04, 0.0, -8.0, 0.0),
+                              _caja(-0.1, 0.2, 0.26, 0.24, 0.3, 0.035, 0.0, 25.0, 0.0),
+                              _caja(-0.1, 0.2, -0.26, 0.24, 0.3, 0.035, 0.0, -20.0, 0.0)]
+    # la industria: una rueda dentada grande engranada con un pinon, el eje y la biela partida
+    M['ind_engranajes'] = (_engranaje(-0.12, 0.52, 0.0, 0.56, 12, 0.14, 'xy')
+                           + _engranaje(0.3, 0.26, 0.0, 0.26, 8, 0.12, 'xy')
+                           + [_caja(0.33, 0.62, 0.05, 0.05, 0.62, 0.05, 0.0, 0.0, -32.0),     # biela
+                              _caja(-0.12, 0.52, 0.0, 0.06, 0.06, 0.5)])                       # eje
+    # el mal (motor v130): un signo de dolar dorado y la calavera de un demonio con cuernos
+    M['arq_dolar'] = _dolar('xy')
+    M['arq_dolar_suelo'] = _dolar('xz')
+    M['arq_demonio'] = _demonio('xy')
+    M['arq_demonio_suelo'] = _demonio('xz')
+    M['ind_engranajes_suelo'] = (_engranaje(-0.12, 0.25, 0.0, 0.56, 12, 0.5, 'xz')
+                                 + _engranaje(0.3, 0.2, -0.24, 0.26, 8, 0.4, 'xz')
+                                 + [_caja(0.32, 0.3, 0.2, 0.05, 0.3, 0.56, 0.0, 35.0, 0.0),
+                                    _caja(-0.12, 0.5, 0.0, 0.07, 1.0, 0.07)])
     return M
 
 
@@ -6029,13 +6234,22 @@ def _catalogo_defecto():
     # fase 16: lo que ensenan los cortes, en la pared (expuesto) y en el fondo
     for tema, esp, pared, fondo in (('naturaleza', 'vegetacion', ['fos_tronco', 'fos_tronco2'], ['fos_tronco']),
                                     ('naturaleza', 'relieve', ['fos_basalto'], ['fos_basalto']),
-                                    ('ciudad', 'informal', ['arq_cimientos'], ['arq_cimientos']),
-                                    ('ciudad', 'planificada', ['arq_sotano'], ['arq_cimientos']),
+                                    # motor v130: esqueletos de edificio y humanos mezclados (antes,
+                                    # cimientos y sotanos), y restos de maquinaria (antes, galeria,
+                                    # vagoneta y pozo en la mina; sotano y cimientos en la energia)
+                                    ('ciudad', 'informal', ['arq_portico', 'arq_osario'],
+                                     ['arq_portico_caido', 'arq_osario_suelo']),
+                                    ('ciudad', 'planificada', ['arq_portico', 'arq_osario'],
+                                     ['arq_portico_caido', 'arq_osario_suelo']),
                                     ('ciudad', 'calle', ['arq_calle'], ['arq_calle']),
-                                    ('industria', 'mina', ['ind_galeria', 'ind_vagoneta'], ['ind_pozo']),
-                                    ('industria', 'energia', ['arq_sotano'], ['arq_cimientos'])):
+                                    ('industria', 'mina', ['ind_engranajes'], ['ind_engranajes_suelo']),
+                                    ('industria', 'energia', ['ind_engranajes'], ['ind_engranajes_suelo']),
+                                    ('industria', 'refineria', ['ind_engranajes'], ['ind_engranajes_suelo'])):
         add(tema, esp, 'expuesto', pared)
         add(tema, esp, 'fondo', fondo)
+    for tema in TEMAS:                  # motor v130: lo que deja el mal, en una concha de cualquier tema
+        add(tema, 'mal', 'expuesto', ['arq_dolar', 'arq_demonio'])
+        add(tema, 'mal', 'fondo', ['arq_dolar_suelo', 'arq_demonio_suelo'])
     add('ciudad', 'galeria', 'union', ['arq_galeria'])
     add('industria', 'galeria', 'union', ['ind_galeria'])
     cadenas = {('naturaleza', 'vegetacion'): (['inclinar', 'puentes', 'hundir', 'esporas'], ['emerger']),
@@ -6122,16 +6336,21 @@ def estado_idx(cfg, occ):
 #   CONSTRUIDO  celdas con especie / (celdas del globo x Topeconstruido), 0-1. No
 #               cuentan las semillas neutras heredadas (NEUTRA, hasta su primera
 #               nota) ni el mal. Simconstruido (0-100) lo fuerza para probar.
-#   TRAMO       la fila de la tabla mezcla_especies en vigor: la mas alta que
-#               construido haya alcanzado en este mundo (solo avanza; el entierro
-#               la devuelve a la primera). Da la CUOTA de cada especie: techo de
-#               celdas para ciudad e industria y parte de la biblioteca para las tres.
+#   PICO        el construido mas alto que haya alcanzado este mundo (solo avanza;
+#               el entierro lo devuelve a 0). Con la tabla mezcla_especies da la
+#               CUOTA de cada especie (cuota_en: cada fila es la mezcla en su umbral
+#               y entre dos filas lo construido se reparte a ritmo constante): techo
+#               de celdas para ciudad e industria y parte de la biblioteca para las
+#               tres. El TRAMO es la fila del pico (la leyenda y la carga lo miran).
 #   SUCESION    1 contagio (toca ciudad o industria y esa especie esta por debajo de
 #               su cuota; si toca las dos, la mas lejos de su cuota, en empate la
 #               ciudad), 2 fundacion (fundacion abierta: puede crecer y no tiene
-#               celdas o su deficit pasa de Valvula puntos; ciudad junto a un rio o
+#               celdas o su deficit pasa de Valvula puntos o, motor v128, la
+#               naturaleza pasa de su cuota en Techonaturaleza puntos y es la mas
+#               lejos de la suya; ciudad junto a un rio o
 #               un lago, o a la formacion natural mas ocupada si no hay agua;
-#               industria tocando la ciudad, mejor si tambien toca relieve; tras
+#               industria tocando la ciudad, la primera en cuanto puede, mejor si
+#               tambien toca relieve; tras
 #               Paciencia celdas sin candidata, donde caiga), 3 naturaleza.
 #   FAMILIAS    la unidad de carga: una evolucion completa de una linea (brote,
 #               cada etapa con su diseno y su variante, y el resto: obra, remates,
@@ -6143,8 +6362,11 @@ TEMA_MODOS = ['auto'] + TEMAS
 NAT, CIU, IND = 0, 1, 2
 NEUTRA = -2                 # tema_c de una semilla heredada sin especie hasta su primera nota
 MEZCLA_COLS = ['construido', 'naturaleza', 'ciudad', 'industria']
-MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (30.0, 70.0, 30.0, 0.0), (50.0, 50.0, 40.0, 10.0),
-              (75.0, 30.0, 45.0, 25.0), (100.0, 30.0, 40.0, 30.0))     # v122: nunca menos de 30 de naturaleza
+# motor v128: hasta el 25 % todo es naturaleza; desde ahi nacen la ciudad y la industria y, con
+# el mundo construido entero, quedan 40 % naturaleza, 35 % ciudad y 25 % industria. Entre dos
+# filas lo que se construye se reparte a ritmo constante (cuota_en): del 25 al 100 %, de cada
+# 15 celdas nuevas 3 son naturaleza, 7 ciudad y 5 industria.
+MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (25.0, 100.0, 0.0, 0.0), (100.0, 40.0, 35.0, 25.0))
 ORDEN_FAMILIAS = ['ciclo', 'fijo']
 MEZCLA_HIST = 512           # fundaciones recientes que se recuerdan (las autopruebas las miran)
 LINEAS = {NAT: ('vegetacion', 'relieve'), CIU: ('informal', 'planificada'), IND: ('mina', 'energia')}
@@ -6234,6 +6456,7 @@ def _mezcla_al_dia(W):
     if not isinstance(M, dict):
         M = W['mezcla'] = {}
     M.setdefault('tramo', 0)
+    M.setdefault('pico', None)          # motor v128: el construido mas alto (%) de este mundo
     M.setdefault('fundaciones', [0, 0, 0])
     M.setdefault('espera', [0, 0, 0])
     M.setdefault('hist', [])
@@ -6294,24 +6517,47 @@ def construido_real(W, cfg):
     return max(0.0, min(1.0, n / max(1e-9, N * max(0.05, float(cfg.get('tope_construido', 0.6))))))
 
 
+def cuota_en(filas, pct):
+    """Motor v128: la cuota [n, c, i] (0-1) con construido pct. Cada fila es la mezcla
+    de lo construido en su umbral; entre dos filas, lo que se construye se reparte a
+    ritmo constante (se interpolan las celdas de cada especie, no los porcentajes: del
+    25 % 100/0/0 al 100 % 40/35/25, a 62,5 % hay 52/28/20)."""
+    k = tramo_de(filas, pct)
+    a = filas[k]
+    if k + 1 >= len(filas) or pct <= a[0] + 1e-9:
+        return [x / 100.0 for x in a[1:4]]
+    b = filas[k + 1]
+    u = (pct - a[0]) / max(1e-9, b[0] - a[0])
+    celdas = [(1.0 - u) * a[0] * qa + u * b[0] * qb for qa, qb in zip(a[1:4], b[1:4])]
+    s = sum(celdas)
+    return [x / s for x in celdas] if s > 1e-12 else [x / 100.0 for x in b[1:4]]
+
+
 def mezcla_estado(W, cfg, avanzar=True):
-    """dict(construido %, tramo, cuota [n, c, i] 0-1, filas, avisos, siguiente umbral).
-    El tramo solo avanza (avanzar: lo guarda en el mundo); Simconstruido lo fuerza."""
+    """dict(construido %, pico %, tramo, cuota [n, c, i] 0-1, cuota de la precarga,
+    filas, avisos, siguiente umbral). La cuota es la del pico: el construido mas alto
+    que haya alcanzado este mundo (solo avanza; avanzar: lo guarda; el entierro lo
+    devuelve a 0). Simconstruido lo fuerza (sin memoria)."""
     M = _mezcla_al_dia(W)
     filas, avisos = mezcla_tabla(cfg)
     sim = float(cfg.get('sim_construido', -1.0))
     if sim >= 0.0:
-        pct = min(100.0, sim)
-        k = tramo_de(filas, pct)
+        pct = pico = min(100.0, sim)
     else:
         pct = 100.0 * construido_real(W, cfg)
-        k = max(min(int(M['tramo']), len(filas) - 1), tramo_de(filas, pct))
-        if avanzar:
-            M['tramo'] = k
-    cuota = reservar_naturaleza([x / 100.0 for x in filas[k][1:4]], cfg)
+        pico = max(float(M.get('pico') or 0.0), pct)     # un mundo de antes del motor v128: el real
+    k = tramo_de(filas, pico)
+    if avanzar and sim < 0.0:
+        M['pico'], M['tramo'] = pico, k
+    cuota = reservar_naturaleza(cuota_en(filas, pico), cfg)
+    pre = None                          # precarga: la cuota a Precarga puntos por delante
+    if sim < 0.0 and pico < 100.0:
+        pre = reservar_naturaleza(cuota_en(filas, min(100.0, pico + float(cfg.get('precarga', 5.0)))), cfg)
+        if all(abs(x - y) < 1e-9 for x, y in zip(pre, cuota)):
+            pre = None
     sig = filas[k + 1][0] if k + 1 < len(filas) else None
-    return dict(construido=pct, tramo=k, umbral=filas[k][0], cuota=cuota, filas=filas, avisos=avisos,
-                siguiente=sig, sim=sim >= 0.0)
+    return dict(construido=pct, pico=pico, tramo=k, umbral=filas[k][0], cuota=cuota, cuota_pre=pre, filas=filas,
+                avisos=avisos, siguiente=sig, sim=sim >= 0.0)
 
 
 def reservar_naturaleza(cuota, cfg):
@@ -6412,13 +6658,21 @@ def especie_nueva(W, cfg, i, est=None, lote=None):
         return deficit(t) > 1e-9 and hay_familia_lista(W, cfg, t, linea)
 
     def abierta(t):
-        return puede(t) and (cnt[t] == 0 or 100.0 * deficit(t) > float(cfg.get('valvula', 10.0)))
+        if not puede(t):
+            return False
+        if cnt[t] == 0 or 100.0 * deficit(t) > float(cfg.get('valvula', 10.0)):
+            return True
+        # motor v128: el techo de la naturaleza. Pasada su cuota en mas de Techonaturaleza
+        # puntos, la especie mas lejos de la suya puede fundar otra mancha
+        return -100.0 * deficit(NAT) > float(cfg.get('techo_naturaleza', 3.0)) and \
+            deficit(t) >= max(deficit(CIU), deficit(IND)) - 1e-12
     # 1. contagio (y la industria, que se funda en el borde de la ciudad, compite con ella)
     cands = [t for t in (CIU, IND) if _toca(W, i, t) and puede(t)]
     if IND not in cands and abierta(IND) and _toca(W, i, CIU):
         mejor_rel = not lote or _toca_relieve(W, i) or not any(_toca_relieve(W, j) for j in lote
                                                                  if _toca(W, j, CIU))
-        if mejor_rel and (not cands or deficit(IND) > deficit(CIU) + 1e-9):
+        # motor v128: la primera industria nace en el borde de la ciudad en cuanto puede
+        if mejor_rel and (not cands or cnt[IND] == 0 or deficit(IND) > deficit(CIU) + 1e-9):
             return IND, 'fundacion'
     if cands:
         t = max(cands, key=lambda t: (deficit(t) + 1e-12 * (t == CIU), t == CIU))
@@ -6539,7 +6793,7 @@ def mezcla_enterrar(W, cfg):
         else:
             W['tema_c'][i] = -1
         W['fam'][i] = ''
-    M.update(tramo=0, fundaciones=[0, 0, 0], espera=[0, 0, 0], disp=None, ciclo=None, n=None, agua=None)
+    M.update(tramo=0, pico=0.0, fundaciones=[0, 0, 0], espera=[0, 0, 0], disp=None, ciclo=None, n=None, agua=None)
     if mezcla_on(cfg):
         for i in range(N):
             if W['tema_c'][i] == NEUTRA:
@@ -6893,10 +7147,8 @@ def carga_pedida(W, cfg, est=None):
     tc = W.get('tema_c') or ()
     for t in set(x for x in tc if x >= 0):
         especies.add(t)
-    if est['siguiente'] is not None and not est['sim'] and \
-            est['construido'] >= est['siguiente'] - float(cfg.get('precarga', 5.0)):
-        k = est['tramo'] + 1           # precarga: las familias que entraran al cruzar el umbral
-        q = [x / 100.0 for x in est['filas'][k][1:4]]
+    if est['cuota_pre'] is not None:   # precarga: las familias que entraran en Precarga puntos
+        q = est['cuota_pre']
         for t in (NAT, CIU, IND):
             if q[t] <= 0:
                 continue
@@ -6946,8 +7198,7 @@ def carga_tick(W, cfg, est=None):
     en este fotograma. La primera vez (motor recien cargado), lo pedido entero."""
     est = est or mezcla_estado(W, cfg, avanzar=False)
     C = _CARGA
-    pre = est['siguiente'] is not None and not est['sim'] and \
-        est['construido'] >= est['siguiente'] - float(cfg.get('precarga', 5.0))
+    pre = tuple(est['cuota_pre']) if est['cuota_pre'] is not None else None
     fams, temas, sin = set(), set(), set()
     for i in range(N):                  # lo que cambia lo pedido: las familias y especies con celdas
         f_, t_ = W['fam'][i], W['tema_c'][i]
@@ -7170,7 +7421,7 @@ def manchas(W):
 
 
 def legend_mezcla(W, cfg):
-    """MEZCLA construido 52% (tramo 50) cuota N/C/I 50/40/10 globo 61/30/9 manchas C1 I1
+    """MEZCLA construido 52% (tramo 25) cuota N/C/I 58/24/17 globo 61/24/15 manchas C1 I1
     familias 9+4/7/2 cola 3"""
     r = mezcla_resumen(W, cfg)
 
@@ -9477,7 +9728,7 @@ def _puentes_ciudad(W, cfg, ctx, i, inf, p0, n, cw, cl_, now, paso, out):
 # --- dibujar la industria (fase 11 v11) ------------------------------------------------
 
 COL_AGUA_ACIDA = (0.55, 0.20, 0.12)      # el fondo inundado de la corta: rojizo, nunca azul
-COL_BANCO = ((0.50, 0.30, 0.18), (0.42, 0.25, 0.16), (0.58, 0.36, 0.22))
+COL_BANCO = ((0.52, 0.37, 0.23), (0.44, 0.31, 0.20), (0.60, 0.44, 0.28))     # motor v129: tierra (antes, mas rojizos)
 COL_TESTIGO = (0.58, 0.27, 0.19)
 
 
@@ -9644,7 +9895,8 @@ def _obra_industria(W, cfg, ctx, i, inf, ej, p0, n, cw, cl_, sx, sz, H, paso_, q
 
 def _corta(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, luces, now, paso, out):
     """CORTA QUE DEVORA: la mina se come la planta. Un banco por nota del SEQ1
-    (Bancospornota, hasta Maxbancos), dentro de su anillo de escombreras: los
+    (Bancospornota, hasta Maxbancos; motor v129: cada uno, un talud de tierra con
+    falda, berma y cara interior, talud_anillo), dentro de su anillo de escombreras: los
     bancos suben hacia la cresta y el fondo queda a ras de suelo (no corta
     conchas: eso solo lo hace la caja). Primero se van las naves, luego la sala
     de calderas; queda la chimenea, sola, de testigo. Desde 4 bancos el fondo se
@@ -9662,7 +9914,8 @@ def _corta(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, luces, now, pas
         r_ = R0 - q * dr
         h = hc * (b - q) / float(b)
         out.setdefault(geometria_de('ciu_anillo'), []).append(
-            _fila_ciu(ctx, p0, _marco(i, 22.5 * (q % 2)), (2 * r_ * cw, h, 2 * r_ * cl_), COL_BANCO[q % 3]))
+            _fila_ciu(ctx, p0, _marco(i, 180.0 / TALUD_SEGMENTOS * (q % 2)), (2 * r_ * cw, h, 2 * r_ * cl_),
+                      COL_BANCO[q % 3]))         # motor v129: el talud; cada banco, medio segmento girado
         k += 1
     rf = R0 - b * dr                            # el fondo, a ras de suelo
     v = inf['var'] % max(1, variantes_ind(cfg))
@@ -9796,7 +10049,8 @@ PRUEBA_NOTAS2 = (36, 43, 41, 39, 46)
 def _mezcla_cfg(cfg, **kw):
     """La configuracion de las autopruebas de la mezcla: Tema = auto, los valores de
     fabrica de la pagina Fase11 v22 y el nivel 13 (rios y carreteras)."""
-    c = dict(cfg, nivel=13, tema=0, tema_auto=1, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, paciencia=8,
+    c = dict(cfg, nivel=13, tema=0, tema_auto=1, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0,
+             techo_naturaleza=3.0, paciencia=8,
              orden_familias=0, precarga=5.0, carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
              refresco_piel=0.25, turnos=1, avance=0)
     c.pop('tema_pendiente', None)
@@ -9912,19 +10166,22 @@ def _autoprueba_mezcla(cfg, res):
                 'disponibles y ninguna geometria de la ciudad ni de la industria cargada' % len(nat),
                 est['construido'] == 0.0 and est['cuota'] == [1.0, 0.0, 0.0] and len(disp_nat) == len(nat)
                 and not ajenas, 'disponibles %d, ajenas %s' % (len(disp_nat), ajenas[:3])))
-    # 2. tabla y tramo
+    # 2. tabla y tramo (motor v128: 0-25 % todo naturaleza; 100 % 40/35/25; entre filas, ritmo constante)
     malas = []
-    for pct, fila in zip((0, 30, 50, 75, 100), MEZCLA_DEF):
+    puntos = [(f[0], f[1:]) for f in MEZCLA_DEF] + [(12.5, (100.0, 0.0, 0.0)), (24.9, (100.0, 0.0, 0.0)),
+                                                     (62.5, (52.0, 28.0, 20.0))]
+    for pct, fila in puntos:
         q = mezcla_estado(W, dict(c, sim_construido=float(pct)))['cuota']
-        if any(abs(100.0 * a - b) > 1e-6 for a, b in zip(q, fila[1:])):
-            malas.append('%d%%' % pct)
+        if any(abs(100.0 * a - b) > 1e-6 for a, b in zip(q, fila)):
+            malas.append('%s%%: %s' % (_num(pct), '/'.join('%.1f' % (100.0 * x) for x in q)))
     filas = [list(f) for f in MEZCLA_DEF]
-    filas[2] = [50.0, 50.0, 30.0, 10.0]             # suma 90
-    e90 = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas), sim_construido=50.0))
-    norm = abs(sum(e90['cuota']) - 1.0) < 1e-9 and abs(e90['cuota'][0] - 50.0 / 90.0) < 1e-9 and e90['avisos']
+    filas[-1] = [100.0, 40.0, 30.0, 20.0]           # suma 90
+    e90 = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas), sim_construido=100.0))
+    norm = abs(sum(e90['cuota']) - 1.0) < 1e-9 and abs(e90['cuota'][0] - 40.0 / 90.0) < 1e-9 and e90['avisos']
     Wt = _mezcla_mundo(c)
-    Wt['mezcla']['tramo'] = 3
-    no_baja = mezcla_estado(Wt, c)['tramo'] == 3
+    Wt['mezcla']['pico'] = 62.5                     # el mundo llego al 62,5 % y se ha vaciado
+    et = mezcla_estado(Wt, c)
+    no_baja = et['pico'] == 62.5 and et['construido'] == 0.0 and abs(et['cuota'][CIU] - 0.28) < 1e-9
     filas_r = [list(f) for f in MEZCLA_DEF]
     filas_r[-1] = [100.0, 10.0, 50.0, 40.0]         # v122: una fila con menos naturaleza que la reserva
     q_r = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas_r), sim_construido=100.0))['cuota']
@@ -9935,8 +10192,9 @@ def _autoprueba_mezcla(cfg, res):
                 all(abs(a - b) < 1e-9 for a, b in zip(q_r, (0.3, 0.7 * 5 / 9, 0.7 * 4 / 9)))
                 and all(abs(a - b) < 1e-9 for a, b in zip(q_0, (0.1, 0.5, 0.4))),
                 '%s, %s' % (['%.3f' % x for x in q_r], ['%.3f' % x for x in q_0])))
-    res.append(('tabla y tramo: Simconstruido 0, 30, 50, 75 y 100 dan las cuotas de mezcla_especies; una fila '
-                'que no suma 100 se normaliza con aviso; bajar construido no baja el tramo',
+    res.append(('tabla y tramo: hasta el 25 % todo naturaleza (Simconstruido 0, 12,5, 24,9 y 25: 100/0/0), '
+                'al 100 % 40/35/25 y entre filas a ritmo constante (62,5 %: 52/28/20); una fila que no suma 100 '
+                'se normaliza con aviso; bajar construido no baja la cuota (la del pico)',
                 not malas and norm and no_baja,
                 'mal %s; aviso %s; tramo %s' % (malas, e90['avisos'], no_baja)))
     # 3. la sesion: notas por todo el globo hasta pasar todos los umbrales
@@ -10153,9 +10411,16 @@ def _autoprueba_mezcla(cfg, res):
     _autoprueba_fijo(cfg, res)
 
 
+# motor v128: la tabla de las pruebas de las reglas (la de antes, con la ciudad sola al 30 %)
+FILAS_REGLAS = ((0.0, 100.0, 0.0, 0.0), (30.0, 70.0, 30.0, 0.0), (50.0, 50.0, 40.0, 10.0), (100.0, 50.0, 40.0, 10.0))
+
+
 def _autoprueba_reglas(c, res):
     """Valvula, paciencia, fundacion sin agua, techo y la industria en el borde de la ciudad,
-    con mundos hechos a mano (el agua, puesta a mano)."""
+    con mundos hechos a mano (el agua, puesta a mano). Motor v128: con una tabla propia y el
+    construido simulado (la de fabrica abre la ciudad y la industria a la vez, en el 25 %):
+    al 30 %, 70/30/0 (la ciudad sola); al 50 %, 50/40/10."""
+    c = dict(c, mezcla_filas=FILAS_REGLAS, sim_construido=30.0)
     def mundo(nat_celdas, ciu_celdas, agua):
         W = _mezcla_mundo(c)
         for i in nat_celdas:
@@ -10188,7 +10453,6 @@ def _autoprueba_reglas(c, res):
                                                                              for j in NEIGH[i])]
     carga_reiniciar()
     W = mundo(nat0, [], [rio])
-    W['mezcla']['tramo'] = 1
     _vaciar_cola(W, c)
     # paciencia: sin celdas junto al agua, las Paciencia primeras son naturaleza y la siguiente funda
     pac = int(c['paciencia'])
@@ -10201,7 +10465,6 @@ def _autoprueba_reglas(c, res):
     # fundacion junto al agua
     carga_reiniciar()
     W = mundo(nat0, [], [rio])
-    W['mezcla']['tramo'] = 1
     _vaciar_cola(W, c)
     t_lejos = fundar(W, lejos[0])
     t_rio = fundar(W, cerca_rio[0]) if cerca_rio else (None, None)
@@ -10210,7 +10473,6 @@ def _autoprueba_reglas(c, res):
     # sin agua: la formacion natural mas ocupada
     carga_reiniciar()
     W = mundo(nat0, [], [])
-    W['mezcla']['tramo'] = 1
     for i in nat0[:3]:
         W['occ'][i] = 6
     _vaciar_cola(W, c)
@@ -10227,7 +10489,6 @@ def _autoprueba_reglas(c, res):
     ciu0 = [rio] + cerca_rio[:1]
     cerca2 = [j for j in NEIGH[rio2] if j in libres and j not in ciu0 and not any(x in ciu0 for x in NEIGH[j])]
     W = mundo(nat0, ciu0, [rio2])
-    W['mezcla']['tramo'] = 1
     _vaciar_cola(W, c)
     cnt = celdas_de(W)
     d_alto = 100.0 * (0.30 - cnt[CIU] / float(sum(cnt) + 1))
@@ -10236,7 +10497,6 @@ def _autoprueba_reglas(c, res):
     otras = [x for x in norte if x not in ciu0 and x != rio2 and x not in cerca2
              and not any(j in cerca2 for j in NEIGH[x])]
     W2 = mundo(nat0, ciu0 + otras[:5], [rio2])
-    W2['mezcla']['tramo'] = 1
     cnt2 = celdas_de(W2)
     d_bajo = 100.0 * (0.30 - cnt2[CIU] / float(sum(cnt2) + 1))
     bajo = fundar(W2, cerca2[1]) if len(cerca2) > 1 else (fundar(W2, cerca2[0]) if cerca2 else None)
@@ -10246,7 +10506,6 @@ def _autoprueba_reglas(c, res):
                 and bajo is not None and bajo[0] == NAT, 'alto %s, bajo %s' % (alto, bajo)))
     # techo: con la ciudad en su cuota, una celda que la toca es naturaleza
     W3 = mundo(nat0[:6], ciu0 + [x for x in norte if x not in ciu0][:6], [])
-    W3['mezcla']['tramo'] = 1
     cnt3 = celdas_de(W3)
     toca = [i for i in range(N) if W3['occ'][i] <= 0 and any(W3['tema_c'][j] == CIU for j in NEIGH[i])]
     q = fundar(W3, toca[0]) if toca else None
@@ -10256,7 +10515,7 @@ def _autoprueba_reglas(c, res):
     # la industria nace en el borde de la ciudad (tramo 50)
     carga_reiniciar()
     W4 = mundo(nat0 + sur[n30:n30 + 6], ciu0 + [x for x in norte if x not in ciu0][:10], [])
-    W4['mezcla']['tramo'] = 2
+    c = dict(c, sim_construido=50.0)              # mundo() y fundar() la leen al llamarlas
     _vaciar_cola(W4, c)
     borde = [i for i in range(N) if W4['occ'][i] <= 0 and any(W4['tema_c'][j] == CIU for j in NEIGH[i])]
     lejos4 = [i for i in range(N) if W4['occ'][i] <= 0 and not any(W4['occ'][j] > 0 for j in NEIGH[i])]
@@ -10323,7 +10582,14 @@ def autoprueba_mezcla_fase(cfg, fase):
         cs = [i for i in range(N) if W['occ'][i] > 0 and esp[i] == CIU and W['par'][i] < 0]
         ns = [i for i in range(N) if W['occ'][i] > 0 and esp[i] == NAT and W['par'][i] < 0]
         if fase == 12:
-            ci, ni = cs[0], ns[0]
+            # motor v128: una celda de la ciudad a la que las notas del gate ligado (Plantasligado - 1,
+            # cada una suma 1 a su carga) hagan subir de ocupacion; si ninguna lo esta, la primera,
+            # con la carga a punto (antes, cs[0] tal cual: dependia de su carga en el mundo de prueba)
+            extra = max(1, int(c['plantas_ligado'])) - 1
+            ci = next((i for i in cs if W['carga'][i] + extra >= cost(c, W['occ'][i])), cs[0])
+            if W['carga'][ci] + extra < cost(c, W['occ'][ci]):
+                W['carga'][ci] = cost(c, W['occ'][ci]) - extra
+            ni = ns[0]
             occ0, nocc0 = W['occ'][ci], W['occ'][ni]
             gate_vigor(W, c, GEO, [ci, t - 2.0, 0.0, occ0], t, 120.0)
             gate_vigor(W, c, GEO, [ni, t - 2.0, 0.0, nocc0], t, 120.0)
@@ -12985,7 +13251,7 @@ def rios(W, cfg, cl=None, ter=None):
         esp = especies_lista(Wr, cr)
         otra = set(i for i in range(N) if Wr['occ'][i] > 0 and esp[i] != NAT)
     for f in fuentes:
-        if f in en_rio:                 # la cumbre ya esta en otro rio
+        if f in en_rio or f in otra:    # la cumbre ya esta en otro rio (motor v128: o es ciudad o industria)
             continue
         camino = [f]
         while len(camino) <= tope:
@@ -14253,23 +14519,40 @@ def tile_material(cfg, sh, s, c):
 
 COL_EXPUESTO = dict(vegetacion=(0.62, 0.55, 0.44),      # fosil: piedra clara sobre el carbon
                     relieve=(0.27, 0.28, 0.32),          # columnas de basalto
-                    informal=(0.60, 0.58, 0.54), planificada=(0.52, 0.52, 0.50),
-                    calle=(0.24, 0.24, 0.25), mina=(0.40, 0.30, 0.20), energia=(0.50, 0.46, 0.42),
-                    refineria=(0.30, 0.28, 0.27))
-RUG_EXPUESTO = dict(vegetacion=0.35, relieve=0.4, informal=0.85, planificada=0.8, calle=0.7, mina=0.8,
-                    energia=0.8, refineria=0.6)
+                    # motor v130: la ciudad, hormigon claro; la industria, oxido (antes, grises y pardos
+                    # parecidos: 0,60/0,58/0,54, 0,52/0,52/0,50, 0,40/0,30/0,20, 0,50/0,46/0,42 y 0,30/0,28/0,27)
+                    informal=(0.72, 0.71, 0.67), planificada=(0.68, 0.68, 0.66),
+                    calle=(0.24, 0.24, 0.25), mina=(0.62, 0.27, 0.10), energia=(0.58, 0.30, 0.12),
+                    refineria=(0.55, 0.25, 0.10))
+RUG_EXPUESTO = dict(vegetacion=0.35, relieve=0.4, informal=0.85, planificada=0.8, calle=0.7, mina=0.35,
+                    energia=0.35, refineria=0.35)
+# motor v130: las piezas con color propio (los huesos, blanco hueso: se leen en cualquier especie)
+COL_PIEZA_EXPUESTA = dict(arq_osario=(0.95, 0.92, 0.82), arq_osario_suelo=(0.95, 0.92, 0.82),
+                          # el mal: el dolar, oro; el demonio, rojo (ROJO_MAL)
+                          arq_dolar=(0.98, 0.76, 0.18), arq_dolar_suelo=(0.98, 0.76, 0.18),
+                          arq_demonio=(0.80, 0.08, 0.08), arq_demonio_suelo=(0.80, 0.08, 0.08))
+RUG_PIEZA_EXPUESTA = dict(arq_osario=0.5, arq_osario_suelo=0.5, arq_dolar=0.2, arq_dolar_suelo=0.2,
+                          arq_demonio=0.45, arq_demonio_suelo=0.45)
+# motor v130: las piezas de pared que no se estiran (ancho / alto: 1, el cubo unidad del modelo) y van en fila,
+# hasta MAX_EN_FILA por cara: un esqueleto o un engranaje estirados 6:1 no se reconocen
+PROPORCION_EXPUESTA = dict(arq_portico=1.0, arq_osario=1.0, ind_engranajes=1.0, arq_dolar=0.8, arq_demonio=1.0)
+MAX_EN_FILA = 3
 COL_GALERIA, RUG_GALERIA = (0.58, 0.57, 0.53), 0.8
 NOMBRE_ERA = dict(vegetacion='carbon', relieve='basalto', informal='ruinas', planificada='ruinas',
-                  calle='calles', mina='galerias', energia='escoria', refineria='escoria')
-PRIORIDAD_ERA = ['vegetacion', 'planificada', 'informal', 'relieve', 'mina', 'refineria', 'energia', 'calle']
+                  calle='calles', mina='galerias', energia='escoria', refineria='escoria',
+                  mal='botin del mal')          # motor v130
+PRIORIDAD_ERA = ['mal', 'vegetacion', 'planificada', 'informal', 'relieve', 'mina', 'refineria', 'energia', 'calle']
 UNION_NOMBRE = dict(canon='canon', galeria='galeria de metro')
 
 
 def contenido(sh, c):
     """Lo que guarda la concha sh en la celda c: su especie, 'calle' (una
-    celda de la ciudad por la que pasaba una carretera) o None."""
+    celda de la ciudad por la que pasaba una carretera), 'mal' (motor v130) o None."""
     if sh.get('tema') is None:
         return None
+    sp, oc = sh.get('sp'), sh.get('occ')     # motor v130: una celda del mal (la concha guarda sp)
+    if sp and oc and 0 <= c < len(sp) and sp[c] == MAL and oc[c] > 0:
+        return 'mal'
     e = sh['esp'][c]
     if e:
         return RUINA_ESP[e - 1]
@@ -14527,29 +14810,25 @@ def _build_arqueologia(W, cfg, now, out):
         for s, x, j, a, b, q in piezas:
             sh = W['shells'][s]
             tema = tema_concha(sh, x)           # fase 11 v22: la de esa celda (una concha puede ser mixta)
-            col = COL_EXPUESTO.get(q, COL_EXPUESTO['planificada'])
+            # motor v130: sin los cimientos de cada tipo (cimiento_de): la ciudad ensena esqueletos
+            mo, v = _variante(modelos_de(cfg, tema, q, 'fondo' if j < 0 else 'expuesto'), s, x, max(j, -1))
+            if mo is None:
+                continue
+            col = COL_PIEZA_EXPUESTA.get(mo) or COL_EXPUESTO.get(q, COL_EXPUESTO['planificada'])
+            rug = RUG_PIEZA_EXPUESTA.get(mo, RUG_EXPUESTO.get(q, 0.8))
             if tema == 'industria' and sh.get('epoca') is not None:    # la epoca de esa concha
-                col = _mix(col, PALETA_CIUDAD[PALETA_IND + int(sh['epoca'])][0], 0.45)
+                col = _mix(col, PALETA_CIUDAD[PALETA_IND + int(sh['epoca'])][0], 0.15)   # v130: 0,15 (0,45)
             t0 = W['scars'].get(s * 1000 + x)
             if t0 is not None:                  # la cicatriz manda
                 col = _mix(COL_SCAR, col, max(0.0, min(1.0, (now - t0) / st)))
             th = b - a
             if j < 0:                           # en el fondo: medio enterrada
-                mo, v = _variante(modelos_de(cfg, tema, q, 'fondo'), s, x, -1)
-                mo = cimiento_de(sh, x, q) or mo     # fase 11 v10: los cimientos de cada tipo
-                if mo is None:
-                    continue
                 n = normal_i(c)
                 cw, cl_ = _cell_sizes(b, c)
                 h = 0.5 * min(th, 0.8)
                 giro = 30.0 * int(v * 6)
-                emit(mo, _mul(n, b - 0.5 * h), _marco(c, giro), (0.55 * cw, h, 0.55 * cl_), col,
-                     RUG_EXPUESTO.get(q, 0.8))
+                emit(mo, _mul(n, b - 0.5 * h), _marco(c, giro), (0.55 * cw, h, 0.55 * cl_), col, rug)
             else:                               # en la pared, asomando al corte
-                mo, v = _variante(modelos_de(cfg, tema, q, 'expuesto'), s, x, j)
-                mo = cimiento_de(sh, x, q) or mo
-                if mo is None:
-                    continue
                 cols = column_radii(W, cfg, j)
                 r_mid = next((0.5 * (ri + ro) for s_, ri, ro in cols if s_ == s), 0.5 * (a + b))
                 off, marco, ancho = _marco_pared(c, j)
@@ -14557,7 +14836,26 @@ def _build_arqueologia(W, cfg, now, out):
                 prof = min(0.3, 0.25 * ancho)
                 y0 = a + 0.1 * th
                 p = _add(_add(_mul(marco[1], y0), off, r_mid), marco[2], 0.1 * prof)
-                emit(mo, p, marco, (0.7 * ancho, 0.8 * th, prof), col, RUG_EXPUESTO.get(q, 0.8))
+                lista = modelos_de(cfg, tema, q, 'expuesto')
+                if mo not in PROPORCION_EXPUESTA:
+                    emit(mo, p, marco, (0.7 * ancho, 0.8 * th, prof), col, rug)
+                else:                           # motor v130: en fila, sin estirar (y alternas)
+                    alto = 0.8 * th
+                    w = max(PROPORCION_EXPUESTA.get(x_, 1.0) for x_ in lista) * alto
+                    k_ = max(1, min(MAX_EN_FILA, int(0.7 * ancho / max(1e-6, w))))
+                    hueco = 0.7 * ancho / k_
+                    k0 = lista.index(mo) if mo in lista else 0
+                    for e in range(k_):
+                        mo_e = lista[(k0 + e) % len(lista)]
+                        col_e, rug_e = col, rug
+                        if mo_e != mo:          # la otra pieza de la mezcla, con su color
+                            col_e = COL_PIEZA_EXPUESTA.get(mo_e) or COL_EXPUESTO.get(q, col)
+                            rug_e = RUG_PIEZA_EXPUESTA.get(mo_e, RUG_EXPUESTO.get(q, 0.8))
+                            if t0 is not None:
+                                col_e = _mix(COL_SCAR, col_e, max(0.0, min(1.0, (now - t0) / st)))
+                        dx = ((e + 0.5) / k_ - 0.5) * 0.7 * ancho
+                        emit(mo_e, _add(p, marco[0], dx), marco,
+                             (min(hueco, PROPORCION_EXPUESTA.get(mo_e, 1.0) * alto), alto, prof), col_e, rug_e)
             n_piezas += 1
     galerias = 0
     for u in W['uniones']:
@@ -20493,6 +20791,7 @@ def cfg():
                  tope_construido=max(0.05, min(1.0, _p('Topeconstruido', c['tope_construido']))),
                  reserva_naturaleza=max(0.0, min(1.0, _p('Reservanaturaleza', c['reserva_naturaleza']))),
                  valvula=max(0.0, _p('Valvula', c['valvula'])),
+                 techo_naturaleza=max(0.0, _p('Techonaturaleza', c['techo_naturaleza'])),
                  paciencia=max(0, int(_p('Paciencia', c['paciencia']))),
                  orden_familias=_menu('Ordenfamilias', ORDEN_FAMILIAS, 0),
                  precarga=max(0.0, _p('Precarga', c['precarga'])),
