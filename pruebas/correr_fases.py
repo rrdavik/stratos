@@ -15,7 +15,7 @@ rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
 mal donde toca.
-Con la sala virtual (sala_virtual v26), la demo GENoZilla de principio a fin
+Con la sala virtual (sala_virtual v27), la demo GENoZilla de principio a fin
 (Demo = genozilla, fotograma a fotograma): los 13 capitulos, la columna
 Comprobar de cada uno y, al acabar, FASE1 como estaba (el mundo, las armas,
 Fuente y Modojuego).
@@ -338,6 +338,12 @@ def main():
     if os.path.exists(os.path.join(REPO, SALA)) and not hasta:
         bien, _ = correr(sim, SALA, verbose)
         todo = todo and bien
+        # sala_virtual v27: la sala alimenta a FASE1 con su publico (Alimentar; lo prueba su
+        # autoprueba). La sesion y la partida son de FASE1, con su propia gente: sin el
+        sala = sim.op('/project1/SALA')
+        if sala is not None and getattr(sala.par, 'Alimentar', None) is not None:
+            sala.par.Alimentar = False
+            sala.op('sala_motor').module.alimentar_tick()      # sin avanzar el reloj: la sesion, la de siempre
     with contextlib.redirect_stdout(io.StringIO()):
         malas = sesion(sim)
     m = sim.op('/project1/FASE1/motor').module

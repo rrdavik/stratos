@@ -44,6 +44,12 @@ QUE MONTA
                ambar a sus pies que se cierra en Tfila mientras sigue quieta.
                Hacen ruido: pasos al andar y palmadas o toses (Ruidopublico por segundo y persona;
                Reaccion veces mas con el estrobo encendido).
+               v27: con Alimentar (encendido), FASE1 ve al publico de TODAS las
+               demos por su sala simulada (Fuente = simulada y la tabla
+               sala_personas) y lo marca con un anillo en el globo, tambien sin
+               Modojuego (motor v128, Marcapublico). Apagado Alimentar o Activa,
+               FASE1 vuelve a su Fuente y a su tabla de antes. OJO: con la sala
+               activa, la sala manda sobre la camara de verdad.
   MICROFONO    el Script CHOP audio_mic: lo que oye el microfono virtual
                (pasos, palmadas, toses, el drone de los altavoces y el sub con
                Volumendrone y el clic del estrobo), cada fuente por 1/d y con
@@ -99,6 +105,12 @@ DEMO GENOZILLA (v24, Demo = genozilla)
   Vista = juego (por defecto en la demo): la sala desde la entrada y la imagen
   de FASE1 en grande, lado a lado. Capitulo (el inicial), Siguientecap,
   Buclecap y Guion en la pagina Sala.
+  v27 (sala v16, motor v129): cada capitulo empieza en el MUNDO DE FASE1, el
+  que habia al entrar en la demo (hasta la v26, en un mundo vacio). El guion
+  solo despeja lo que el capitulo necesita libre (donde se para la gente de
+  Construir, las vecinas del brote, la celda del monstruo del Cerco) y, si
+  hacen falta conchas para cavar y no las hay, entierra copias de la superficie
+  por debajo de ella. El Cerco, con seis visitantes.
 
 COMO USARLO
 -----------
@@ -114,7 +126,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v26  (la cabeza de los monigotes, en su sitio: bola de poligonos y medida)'
+VERSION = 'sala_virtual v27  (el publico de todas las demos, marcado en FASE1; GENoZilla sobre el mundo de FASE1)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -203,6 +215,7 @@ add_par(sala, page, 'pulse', 'Recolocar', 'Recolocar los equipos con estas medid
 add_par(sala, page, 'int', 'Personas', 'Personas', 6, 0, 30, clamp=True)
 add_par(sala, page, 'menu', 'Demo', 'Demo de visita del publico', 'paseo', menu=sm.DEMOS,
         menu_labels=sm.DEMOS_ETIQUETAS)
+add_par(sala, page, 'toggle', 'Alimentar', 'FASE1 ve a este publico (Fuente = simulada) y lo marca', True)    # v27
 
 
 def menu_al_dia(nombre, nombres, etiquetas):
@@ -1119,15 +1132,22 @@ def prueba(t):
     for o, nm in ((sala, 'Personas'), (sala, 'Ruidopublico'), (sala, 'Volumendrone'), (sala, 'Modoluz'),
                   (sala, 'Hzprueba'), (sala, 'Activa'), (sala, 'Vista'), (sala, 'Bruma'), (sala, 'Demo'),
                   (sala, 'Monigotes'), (sala, 'Arcoquietud'), (sala, 'Capitulo'), (sala, 'Guion'),
-                  (fase1, 'Fuentemic'), (fase1, 'Chopmic')):
+                  (sala, 'Alimentar'), (fase1, 'Fuentemic'), (fase1, 'Chopmic')):
         try:
             guarda[(o, nm)] = getattr(o.par, nm).eval()
         except Exception:
             pass
     t0 = sm._SALA['t0']
+    import copy
+    # v27: el estado de sala del motor de FASE1 (personas, densidad y los contadores del sorteo
+    # de la presencia), como estaba: la prueba mueve gente y juega la demo, y el sorteo de lo
+    # que venga despues no debe depender de ella
+    sala1 = copy.deepcopy(dict(t.m._SALA))
     try:
         _prueba(t, t.m)
     finally:
+        t.m._SALA.clear()
+        t.m._SALA.update(sala1)
         for (o, nm), v in guarda.items():
             try:
                 getattr(o.par, nm).val = v
@@ -1472,7 +1492,67 @@ def _prueba(t, m):
             W['mic']['t'] = t_onset
     t.check('leyenda SALA', sm.legend().startswith('SALA') and 'personas' in sm.legend())
     prueba_monigotes(t, m, eq)
+    prueba_alimentar(t, m)
     prueba_genozilla(t, m)
+
+
+def prueba_alimentar(t, m):
+    """v27: el publico de cualquier demo, en FASE1 y marcado en el globo; al apagar
+    Alimentar, FASE1 como estaba."""
+    F = sm.Fase1(fase1)
+    tb = fase1.op('sala_personas')
+    if tb is None or F.par('Fuente') is None:
+        info('v27: sin la sala simulada de FASE1 (fase 22): no pruebo Alimentar')
+        return
+    sm.alimentar_sale(F)
+    pars = ('Fuente', 'Modojuego', 'Marcapublico', 'Marcajugador')
+    antes = dict((nm, F.par(nm)) for nm in pars if F.par(nm) is not None)
+    fuente0, tabla0 = F.par('Fuente'), sm._tabla_de(tb)
+    try:
+        F.poner('Fuente', 'camara')
+        fuente0 = F.par('Fuente')
+        for nm in ('Modojuego',):
+            F.poner(nm, False)
+        for nm in ('Marcapublico', 'Marcajugador'):
+            F.poner(nm, True)
+        sala.par.Demo = 'llena'
+        sala.par.Personas = 8
+        sala.par.Activa = True
+        sala.par.Alimentar = True
+        c = sm.cfg()
+        ev = sm.evitar_de(sm.equipos())
+        dentro = sm.personas(c, 40.0, ev)
+        si = sm.alimentar_tick(c, F, 40.0)
+        filas = sm._tabla_de(tb)[1:]
+        t.check('v27: Alimentar: en la demo llena, FASE1 pasa a Fuente = simulada y la tabla sala_personas '
+                'lleva a cada persona de la sala',
+                si and F.par('Fuente') == 'simulada' and len(filas) == len(dentro) > 0,
+                'Fuente %s, %d filas, %d personas' % (F.par('Fuente'), len(filas), len(dentro)))
+        import copy
+        W = copy.deepcopy(m.world())        # una copia: la prueba no toca el mundo de FASE1
+        c1 = m.cfg()
+        now = absTime.seconds + 900.0
+        for k in range(int(m.CAM_FPS * 3)):
+            m.personas_tick(W, c1, now + k / float(m.CAM_FPS), m.sala_sim_imagen(c1, m.sala_personas()))
+        gente = [p for p in m.personas_en_sala() if p.get('casilla') is not None]
+        celdas = set(m.celda_de_casilla(W, c1, p['casilla']) for p in gente)
+        marcas = m.build_instances(W, c1, now + 3.0).get('marcas', [])
+        t.check('v27: sin Modojuego, FASE1 marca en el globo la celda de cada persona (un anillo por celda)',
+                bool(gente) and len(marcas) == m.MARCA_SEGMENTOS * len(celdas),
+                '%d personas en %d celdas, %d piezas de marca' % (len(gente), len(celdas), len(marcas)))
+        sala.par.Alimentar = False
+        no = sm.alimentar_tick(sm.cfg(), F, 41.0)
+        t.check('v27: Alimentar apagado: FASE1 vuelve a su Fuente y a su tabla de antes',
+                not no and F.par('Fuente') == fuente0 and sm._tabla_de(tb) == tabla0 and sm._pub_guardado() is None,
+                'Fuente %s' % F.par('Fuente'))
+    finally:
+        sm.alimentar_sale(F)
+        for nm, v in antes.items():
+            F.poner(nm, v)
+        tb.clear()
+        for f in tabla0:
+            tb.appendRow(f)
+        m.sala_reset(cuentas=False)
 
 
 def prueba_monigotes(t, m, eq):
@@ -1587,6 +1667,37 @@ def prueba_genozilla(t, m):
     sala.par.Demo = 'genozilla'
     sala.par.Guion = True
     motor_ = fase1.op('motor')
+    # v27: la demo juega sobre el mundo de FASE1; si esta casi vacio (un proyecto recien
+    # montado), uno compuesto para la prueba, sin conchas (el guion las entierra donde cava).
+    # Al acabar, FASE1 vuelve a su mundo.
+    Worig = copy.deepcopy(motor_.fetch('W', None))
+    compuesto = False
+    try:
+        compuesto = componer_mundo(m)
+        _prueba_genozilla(t, m, copy, caps, motor_)
+    finally:
+        if compuesto:
+            motor_.store('W', Worig)
+            for k_ in ('inst', 'tiles', 'frame'):
+                m._CACHE[k_] = None
+
+
+def componer_mundo(m, minimo=12):
+    """v27: si el mundo de FASE1 tiene menos de 'minimo' celdas ocupadas, siembra una de
+    cada tres (ocupacion 1 a 6, las dos especies). Devuelve si lo hizo."""
+    W = m.world()
+    if m.occupied(W) >= minimo:
+        return False
+    c = dict(m.cfg(), presencia_activa=False)
+    now = W.get('t') or 0.0
+    for i in range(0, m.N, 3):
+        for _ in range(1 + (i // 3) % 6):
+            m.subir_escalon(W, c, m.GEO if i % 2 else m.ARQ, i, 100, now)
+    W['dirty'] = True
+    return True
+
+
+def _prueba_genozilla(t, m, copy, caps, motor_):
     W0 = copy.deepcopy(motor_.fetch('W', None))
     antes = dict((nm, getattr(fase1.par, nm).eval()) for nm in sm.ARMAS + ('Fuente', 'Modojuego', 'Tfila',
                                                                           'Barsperturn'))
@@ -1596,6 +1707,11 @@ def prueba_genozilla(t, m):
     for k, bien, que in res:
         t.check('v24: GENoZilla %d %s: %s' % (k, caps[k]['nombre'], COMPRUEBA[k]), bien, que)
     t.check('v24: GENoZilla: se juegan los 13 capitulos', len(res) == 13, '%d' % len(res))
+    cons = list(sm._GZ.get('conservas') or [])
+    t.check('v27: cada capitulo empieza en el mundo de FASE1: sus celdas ocupadas (menos las que despeja) '
+            'siguen con su ocupacion o mas',
+            len(cons) == 13 and all(n > 0 and si >= 0.8 * n for _, si, n in cons),
+            ' '.join('%d:%d/%d' % x for x in cons))
     W1 = motor_.fetch('W', None)
     despues = dict((nm, getattr(fase1.par, nm).eval()) for nm in antes)
     tb = fase1.op('escenas')

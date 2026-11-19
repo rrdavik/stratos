@@ -86,9 +86,22 @@
 #               (21,5 s): al abrirse, los otros tres se quedan donde estan (ya no lo
 #               siguen) y le da tiempo a escapar; la comprobacion mira que salga de la
 #               celda en la que lo acorralaron.
+#   v15         EL PUBLICO A FASE1 EN TODAS LAS DEMOS (Alimentar, encendido): con la
+#               sala activa, FASE1 ve al publico de cualquier demo (paseo, grupo, llena,
+#               goteo...) por su sala simulada (Fuente = simulada y la tabla
+#               sala_personas, como en GENoZilla), y lo marca con un anillo en el globo
+#               (motor v128, Marcapublico: tambien sin Modojuego). Al apagar Alimentar o
+#               Activa, FASE1 vuelve a su Fuente y a su tabla de antes.
+#   v16         GENOZILLA SOBRE EL MUNDO DE FASE1 (motor v129): cada capitulo empieza en
+#               el mundo con el que entro la demo (la copia que guarda entrar), no en uno
+#               vacio; el guion solo despeja lo que el capitulo necesita libre. El Cerco,
+#               con seis visitantes (las seis vecinas del monstruo: en un mundo lleno, las
+#               dos que no cerraba el cerco de cuatro le daban de comer). Construir y
+#               Aparece se comprueban por lo nuevo (coronas y brotes del capitulo). El
+#               Oceano de FASE1 se respeta (se apagaba: el mundo vacio era todo mar).
 # =============================================================================
 
-SALA_VERSION = 'sala v14'
+SALA_VERSION = 'sala v16'
 
 import math
 
@@ -766,7 +779,7 @@ def cfg():
                 col_monigote=(_p('Colormonigoter', COL_MONIGOTE[0]), _p('Colormonigoteg', COL_MONIGOTE[1]),
                               _p('Colormonigoteb', COL_MONIGOTE[2])),
                 capitulo=_menu('Capitulo', CAP_NOMBRES, 0), buclecap=bool(_p('Buclecap', True)),
-                guion=bool(_p('Guion', True)))
+                guion=bool(_p('Guion', True)), alimentar=bool(_p('Alimentar', True)))
 
 
 def ahora():
@@ -1364,14 +1377,20 @@ def filas(nombre):
 
 
 def frame_tick():
-    """Cada fotograma (latido_sala): la demo GENoZilla (v13), y las personas y los
-    aparatos se redibujan."""
+    """Cada fotograma (latido_sala): la demo GENoZilla (v13), el publico a FASE1
+    (v15), y las personas y los aparatos se redibujan."""
     try:
         demo_tick()
     except Exception as e:
         if not _SALA.get('err_demo'):
             _SALA['err_demo'] = True
             print('SALA  FALLO en la demo GENoZilla: %s' % e)
+    try:
+        alimentar_tick()
+    except Exception as e:
+        if not _SALA.get('err_pub'):
+            _SALA['err_pub'] = True
+            print('SALA  FALLO al pasar el publico a FASE1: %s' % e)
     if not _p('Activa', True):
         return
     for nm in ('i_personas', 'i_personas_bolas', 'i_personas_conos', 'i_arcos', 'i_equipos', 'i_haces'):
@@ -1527,6 +1546,12 @@ def _texto_monitor():
         pass
     if _GZ.get('activo'):                       # v13: la demo GENoZilla
         lineas.append(legend_demo())
+    if _pub_guardado() is not None:             # v15: el publico a FASE1
+        try:
+            m = op('/project1/FASE1').op('motor').module
+            lineas.append('FASE1  ve al publico (Fuente simulada): %d personas en su suelo' % len(m.personas_en_sala()))
+        except Exception:
+            pass
     try:
         m = op('/project1/FASE1').op('motor').module
         mc = m.world().get('mic') or {}
@@ -1574,6 +1599,8 @@ def legend(frame=None):
 #   ('monstruo', db, dl, dx, dz)    la celda del monstruo desplazada db bandas y dl
 #                                   meridianos (celda_desplazada del motor)
 #   ('casilla', sitio, j, dx, dz)   la casilla j de un sitio del guion (una fila)
+#   ('vecina_mon', j)               (v16) la vecina j del monstruo que no cierra el cerco
+#                                   de cuatro (vecinas_cerco del motor)
 #   ('suelo', columna, fila)        un punto del suelo en casillas de la demo web
 #                                   (11 x 9; 0, 0 junto a la pantalla, a la izquierda)
 #   'fuera'                         sale por la puerta
@@ -1696,10 +1723,12 @@ CAPITULOS = [
                              'devorado.',
          dur=21.5, pars=dict(Armacerco=True, Tfila=60.0),      # v14: 2,5 s mas (el monstruo, mas lento)
          coreo=[[-1.0, j, ('monstruo', db, dl)] for j, (db, dl) in enumerate(((0, -1), (0, 1), (1, 0), (-1, 0)))]
+         + [[-1.0, 4, ('vecina_mon', 0)], [-1.0, 5, ('vecina_mon', 1)]]      # v16: las otras dos vecinas
          + _sigue(0, ('monstruo', 0, -1), 0.0, 14.5) + _sigue(1, ('monstruo', 0, 1), 0.0, 14.5)
          + _sigue(2, ('monstruo', 1, 0), 0.0, 14.5) + _sigue(3, ('monstruo', -1, 0), 0.0, 14.0)
+         + _sigue(4, ('vecina_mon', 0), 0.0, 14.5) + _sigue(5, ('vecina_mon', 1), 0.0, 14.5)
          + [[14.5, 3, ('suelo', 10, 8)]],
-         rotulos=[(0.0, 'Cuatro visitantes rodean al monstruo grande mientras aparece.'),
+         rotulos=[(0.0, 'Seis visitantes rodean al monstruo grande mientras aparece.'),
                   (4.6, 'Acorralado: no alcanza nada que comer y pierde un escalon por compas.'),
                   (9.0, 'El giro mueve las celdas: para mantener el cerco hay que caminar con ellas.'),
                   (15.0, 'Si alguien se va, el cerco se abre y se escapa.')]),
@@ -1753,7 +1782,7 @@ CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
 # lo que la demo pone en FASE1 mientras dura (y devuelve al salir)
 PARS_DEMO = dict(Fuente='simulada', Modojuego=True)
 PARS_CAPITULO = sorted(set(k for cp in CAPITULOS for k in cp['pars']) | set(ARMAS)
-                       | {'Barsperturn', 'Umbralaparicion', 'Oceano'})
+                       | {'Barsperturn', 'Umbralaparicion'})
 
 
 def antetitulo(k):
@@ -1942,6 +1971,13 @@ def destino_a_punto(c, F, d, refs, evitar=()):
             return None
         dx, dz, j = list(d[3:6]) + [0.0, 0.0, 0][len(d[3:6]):]
         p = punto_de_celda(m, W, c1, m.celda_desplazada(mc, d[1], d[2]), _GZ.get('libres'), j)
+    elif kind == 'vecina_mon':          # v16: las vecinas que no cierra el cerco de cuatro
+        J = W.get('juego') or {}
+        mc = (J.get('mon') or {}).get('celda')
+        vs = m.vecinas_cerco(mc) if mc is not None and hasattr(m, 'vecinas_cerco') else []
+        if not vs:
+            return None
+        p = punto_de_celda(m, W, c1, vs[int(d[1]) % len(vs)], _GZ.get('libres'))
     elif kind == 'casilla':
         k = _ref(refs, (d[1], d[2])) if len(d) > 2 and isinstance(d[1], str) else _ref(refs, d[1])
         dx, dz = (list(d[3:5]) + [0.0, 0.0])[:2]
@@ -2063,7 +2099,7 @@ def entrar(c, t, F, now):
     la demo y empieza en Capitulo. Si ya habia algo guardado (la sala se recargo a
     mitad), no lo pisa."""
     import copy
-    _GZ.update(activo=True, acabada=False, tramos={}, saltar=False, resultados=[], cap=None)
+    _GZ.update(activo=True, acabada=False, tramos={}, saltar=False, resultados=[], cap=None, conservas=[])
     if _guardado() is None and F is not None:
         try:
             F.m.guardar_escena(GZ_HUECO)
@@ -2121,6 +2157,7 @@ def salir(F, cfg_sala=None):
             tb.clear()
             for f in g['tabla']:
                 tb.appendRow(f)
+        _GZ['ultima_tabla'] = None      # v15: la tabla es la de antes; la proxima se escribe entera
         try:
             F.m.sala_reset(cuentas=False)
         except Exception:
@@ -2137,7 +2174,8 @@ def _cap_pars(F, k, c):
     quiere = dict((a, False) for a in ARMAS)
     quiere['Barsperturn'] = GIRO_DEMO
     quiere['Umbralaparicion'] = 1.0     # el monstruo aparece cuando lo dice el guion
-    quiere['Oceano'] = False            # motor v118: con Oceano, un mundo vacio es mar y el monstruo solo anda por tierra
+    # v16: el Oceano de FASE1 se respeta (hasta la v15 se apagaba: con el, el mundo vacio de cada
+    # capitulo era todo mar y el monstruo solo anda por tierra; sobre el mundo de FASE1 no hace falta)
     quiere.update(cp['pars'])
     antes = {}
     for nm, v in quiere.items():
@@ -2173,10 +2211,26 @@ def capitulo(c, t, F, now, k):
         try:
             refs = F.m.demo_refs(W, c1, k, _GZ['libres'])
             if c['guion']:
-                refs = F.m.guion_demo(W, c1, k, 'inicio', now, refs=refs, libres=_GZ['libres']) or refs
+                # v16: el capitulo empieza en el mundo con el que entro la demo (motor v129)
+                base = (_guardado() or {}).get('W')
+                refs = F.m.guion_demo(W, c1, k, 'inicio', now, refs=refs, libres=_GZ['libres'], base=base) or refs
         except Exception as e:
             print('SALA  GENoZilla: el guion del capitulo %d fallo (%s)' % (k, e))
         _GZ['refs'] = refs
+        try:                            # v16: lo que ya habia, para comprobar solo lo nuevo
+            Wc = F.W()
+            _GZ['reg']['coronas0'] = set(x for x in range(len(Wc['occ'])) if Wc['occ'][x] >= c1['th_crown'])
+            # y cuanto del mundo de FASE1 se conserva: sus celdas ocupadas (menos las que el
+            # capitulo despeja, cava o hace brote a proposito) siguen con su ocupacion o mas
+            occ0 = ((_guardado() or {}).get('W') or {}).get('occ')
+            if occ0 is not None and len(occ0) == len(Wc['occ']):
+                r_ = refs or {}
+                desp = set(r_.get('despejar') or ()) | set(r_.get('canal') or ()) | {r_.get('brote')}
+                cand = [x for x in range(len(occ0)) if occ0[x] > 0 and x not in desp]
+                _GZ['reg']['conserva'] = (sum(1 for x in cand if Wc['occ'][x] >= occ0[x]), len(cand))
+                _GZ.setdefault('conservas', []).append((k,) + _GZ['reg']['conserva'])
+        except Exception:
+            pass
     quien = set()
     for j, (tt, i, d) in enumerate(cp['coreo']):
         if tt < 0:
@@ -2301,6 +2355,89 @@ def demo_tick():
     gz_tick(cfg(), ahora(), fase1(), absTime.seconds)
 
 
+# =============================================================================
+# v15: EL PUBLICO A FASE1 EN TODAS LAS DEMOS (Alimentar)
+# =============================================================================
+# La sala hace de camara cenital en cualquier demo: escribe su gente en la tabla
+# sala_personas de FASE1 (a_la_tabla, solo cuando cambia) y pone Fuente = simulada.
+# Lo que habia antes (la Fuente y la tabla) se guarda en el storage de la sala
+# ('pub_guardado', sobrevive a recargar el motor) y se devuelve al apagar Alimentar o
+# Activa. En la demo GENoZilla escribe la tabla su director (gz_tick); aqui solo se
+# mantiene lo guardado.
+
+PUB_CLAVE = 'pub_guardado'
+
+
+def _pub_guardado():
+    try:
+        return parent().fetch(PUB_CLAVE, None, search=False)
+    except Exception:
+        return _SALA.get(PUB_CLAVE)
+
+
+def _pub_guardar(v):
+    _SALA[PUB_CLAVE] = v
+    try:
+        if v is None:
+            parent().unstore(PUB_CLAVE)
+        else:
+            parent().store(PUB_CLAVE, v)
+    except Exception:
+        pass
+
+
+def _tabla_de(tb):
+    return [[x.val for x in tb.row(r)] for r in range(tb.numRows)] if tb is not None else None
+
+
+def alimentar_entra(F):
+    """Guarda la Fuente y la tabla sala_personas de FASE1 y pone Fuente = simulada."""
+    if _pub_guardado() is None:
+        _pub_guardar(dict(fuente=F.par('Fuente'), tabla=_tabla_de(F.base.op('sala_personas'))))
+    F.poner('Fuente', 'simulada')
+    _GZ['ultima_tabla'] = None
+
+
+def alimentar_sale(F, g=None):
+    """FASE1 vuelve a la Fuente y a la tabla de antes de alimentarla."""
+    g = _pub_guardado() if g is None else g
+    if g is None:
+        return False
+    if F is not None:
+        if g.get('fuente') is not None:
+            F.poner('Fuente', g['fuente'])
+        tb = F.base.op('sala_personas')
+        if tb is not None and g.get('tabla') is not None:
+            tb.clear()
+            for f in g['tabla']:
+                tb.appendRow(f)
+        try:
+            F.m.sala_reset(cuentas=False)
+        except Exception:
+            pass
+    _GZ['ultima_tabla'] = None
+    _pub_guardar(None)
+    return True
+
+
+def alimentar_tick(c=None, F=None, t=None):
+    """Cada fotograma: con Activa y Alimentar, la gente de la sala a FASE1. Devuelve
+    si la sala alimenta a FASE1."""
+    c = cfg() if c is None else c
+    F = fase1() if F is None else F
+    quiere = c['activa'] and c['alimentar'] and F is not None and F.par('Fuente') is not None
+    if not quiere:
+        if _pub_guardado() is not None:
+            alimentar_sale(F)
+        return False
+    if _pub_guardado() is None:
+        alimentar_entra(F)
+    if _GZ.get('activo'):               # en GENoZilla, la tabla la escribe gz_tick
+        return True
+    a_la_tabla(c, F, ahora() if t is None else t, evitar_de(equipos_o_defecto(c)))
+    return True
+
+
 # --- lo que se mira para comprobar cada capitulo ---------------------------------
 
 def observar(F, now, tc):
@@ -2317,9 +2454,14 @@ def observar(F, now, tc):
         reg['tam_max'] = max(reg.get('tam_max', 0.0), mo.get('tam', 0.0))
         reg.setdefault('acum_ini', mo.get('acum', 0))
         reg['acum_min'] = min(reg.get('acum_min', 99), mo.get('acum', 0))
-        reg['caidas'] = max(reg.get('caidas', 0), mo.get('caidas', 0))
         if mo.get('estado') == 'cae' and mo.get('acum', 0) == 0:
             reg['caida0'] = True
+        # v16: o cae y pierde lo devorado entre dos miradas (en el mundo de FASE1, lo que su
+        # vecina ha desbordado en la zanja se lo come en el mismo fotograma de la caida)
+        if mo.get('caidas', 0) > reg.get('caidas', 0) and mo.get('acum', 0) <= 1 < reg.get('acum_prev', 0):
+            reg['caida0'] = True
+        reg['caidas'] = max(reg.get('caidas', 0), mo.get('caidas', 0))
+        reg['acum_prev'] = mo.get('acum', 0)
         if mo.get('acorralado'):
             reg['acorralado'] = True
             reg.setdefault('celda_cerco', mo.get('celda'))      # v14: de donde tiene que escapar
@@ -2364,13 +2506,15 @@ def comprobar_capitulo(F, k, reg, now):
         cas = m._SALA.get('casillas') or {}
         celdas = set(m.celda_de_casilla(W, c1, q) for q in cas)
         vacias = [x for x in celdas if W['occ'][x] <= 0]
-        coronas = [x for x in range(N) if W['occ'][x] >= c1['th_crown']]
+        # v16: en el mundo de FASE1 ya puede haber coronas: cuentan las de este capitulo
+        coronas = [x for x in range(N) if W['occ'][x] >= c1['th_crown'] and x not in reg.get('coronas0', ())]
         return (bool(celdas) and not vacias and bool(coronas),
-                '%d celdas con gente, %d vacias, coronas %s' % (len(celdas), len(vacias), coronas))
+                '%d celdas con gente, %d vacias, coronas nuevas %s' % (len(celdas), len(vacias), coronas))
     if k == 2:
-        mal = [x for x in range(N) if W['occ'][x] > 0 and W['sp'][x] == m.MAL]
-        return (bool(mal) and reg.get('tam_max', 0.0) >= 1.0 - 1e-9,
-                '%d brotes del mal, tamano maximo %.2f' % (len(mal), reg.get('tam_max', 0.0)))
+        # v16: los brotes que deja este monstruo (en el mundo de FASE1 puede haber mal de antes)
+        mal = J.get('brotes', 0)
+        return (mal >= 1 and reg.get('tam_max', 0.0) >= 1.0 - 1e-9,
+                '%d brotes del mal, tamano maximo %.2f' % (mal, reg.get('tam_max', 0.0)))
     if k == 3:
         b = refs.get('brote')
         if b is None:

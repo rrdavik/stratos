@@ -29,7 +29,9 @@ QUE HACE
                celdas, como cualquier especie.
   MARCA        un anillo en la celda que mira cada persona de la sala (fase 24),
                de un solo color de la paleta humana, para que cada cual se
-               encuentre en el globo (Marcajugador).
+               encuentre en el globo (Marcajugador). v2 (motor v128): con
+               Marcapublico (encendido), tambien con Modojuego apagado: la sala
+               virtual marca a su publico en todas sus demos.
   RITMO        el juego cuenta en pasos de juego: Pasojuego semicorcheas del
                pulso (fase 17), por defecto 4 (una negra).
   LEYENDA      JUEGO    ronda 2/4   4:12   publico 38   mal 14   (globo)
@@ -54,7 +56,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase32 v1  (el devorador: modo de juego, ronda, recuento del globo y marca de jugador)'
+VERSION = 'fase32 v2  (la marca del publico tambien sin juego: Marcapublico)'
 banner(VERSION)
 
 base = require_base(32)
@@ -72,9 +74,10 @@ add_par(base, page, 'int', 'Rondas', 'Rondas', 4, 1, 12, clamp=True)
 add_par(base, page, 'int', 'Pasojuego', 'Paso de juego (semicorcheas)', 4, 1, 16, clamp=True)
 add_par(base, page, 'float', 'Herenciamal', 'Herencia del mal', 0.0, 0.0, 1.0, clamp=True)
 add_par(base, page, 'toggle', 'Marcajugador', 'Marca de jugador', True)
+add_par(base, page, 'toggle', 'Marcapublico', 'Marca tambien sin juego', True)     # v2
 add_par(base, page, 'pulse', 'Nuevapartida', 'Nueva partida')
 ok('pagina Fase32: Modojuego (apagado), Duracionronda 360 s, Rondas 4, Pasojuego 4, Herenciamal 0, '
-   'Marcajugador, Nuevapartida')
+   'Marcajugador, Marcapublico (v2: la marca tambien sin juego), Nuevapartida')
 
 # -----------------------------------------------------------------------------
 # OPERADORES
@@ -97,7 +100,8 @@ leeme(base, 32, """FASE 32 - EL DEVORADOR: MODO DE JUEGO Y RONDA
   ocupadas que no son del mal; mal: las del mal; empate, publico), entierro
   como Forzarciclo y ronda siguiente; tras Rondas, espera (Nuevapartida).
   En modo juego solo entierra la ronda. Herenciamal 0: el mal no se hereda.
-  Marcajugador: un anillo en la celda de cada persona. Pasojuego: el paso de
+  Marcajugador: un anillo en la celda de cada persona (Marcapublico: tambien
+  con Modojuego apagado). Pasojuego: el paso de
   juego en semicorcheas (4, una negra). Geometria marcas.""")
 
 print_report()
@@ -110,7 +114,7 @@ print_report()
 PARS32 = ('Fuente', 'Alturamin', 'Alturamax', 'Anchosala', 'Fondosala', 'Tamcasilla', 'Separacioncabezas',
           'Confirmapersona', 'Simcasilla', 'Espejo', 'Anchoangular', 'Latnorte', 'Latsur', 'Probllegada',
           'Tparada', 'Temaenciclo', 'Modojuego', 'Duracionronda', 'Rondas', 'Herenciamal', 'Umbralaparicion',
-          'Simbalance', 'Colapsoon')
+          'Simbalance', 'Colapsoon', 'Marcapublico')
 
 
 def prueba(t):
@@ -263,6 +267,17 @@ def _prueba(t, m, copy):
             'juego' not in W and W['occ'] == esperado and W['cols'] == cols_ and W['sp'][mal[0]] == 0,
             '%d celdas' % m.occupied(W))
     t.check('fuera del modo juego, la linea JUEGO dice apagado', 'apagado' in m._legend_juego(W, c))
+
+    # 7. v2: la marca del publico sin juego (Marcapublico)
+    cols, filas = m.rejilla_sala(c)
+    k = 4 * cols + 5
+    S.camara(W, c, [k], n=3)
+    con = m.build_instances(W, m.cfg(), S.now).get('marcas', [])
+    base.par.Marcapublico = False
+    sin = m.build_instances(W, m.cfg(), S.now).get('marcas', [])
+    base.par.Marcapublico = True
+    t.check('v2: Modojuego apagado y una persona en la sala: su anillo (Marcapublico); apagado, sin anillo',
+            len(con) == m.MARCA_SEGMENTOS and sin == [], '%d filas con, %d sin' % (len(con), len(sin)))
     o = base.op('i_marcas')
     t.check('marcas e i_marcas (Geometry COMP instanciado)', o is not None and base.op('marcas') is not None)
 
