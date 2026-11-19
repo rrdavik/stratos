@@ -254,6 +254,14 @@
 #                 una plataforma sin sentido). Ahora, la RED DE PASARELAS: cada torre del
 #                 cluster se une a sus vecinas con una pasarela celeste corta, a 0,8 x la
 #                 mas baja de las dos (_pasarela_celeste, la misma de 2-3 celdas).
+#                 Motor v128 (fase 40 v3): GODZILLA SOLO ANDA POR TIERRA, como Trumpzilla
+#                 (en la v123 nadaba): con Oceano y Montierra no entra en el mar ni en
+#                 las hondonadas inundadas, aparece en tierra (si todo lo vacio es mar,
+#                 en una isla) y se retira de la lucha por tierra. Para los dos
+#                 monstruos, las CARRETERAS Y VIAS que cruzan el agua son su puente
+#                 entre tierras: una celda de mar por la que pasa una carretera de la
+#                 ciudad o una via del tren de la industria (celdas_via; W['vias_ind'])
+#                 cuenta como tierra.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -265,7 +273,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v127'
+MOTOR_VERSION = 'motor v128'
 
 import math
 import time as _time
@@ -7217,7 +7225,7 @@ def tejido_multi(W, cfg, now, out):
     """Rios (naturaleza), carreteras (ciudad) y vias y red (industria), cada uno sobre
     su vista. Devuelve (filas del tejido, resumen, resumen de los rios)."""
     filas, res, rios = [], {}, {}
-    vias = []
+    vias, vias_ind = [], []
     for t in sorted(especies_presentes(W, cfg)):
         V, ct = vista(W, cfg, t, 'frame'), cfg_especie(cfg, t)
         with en_vista(t):
@@ -7234,10 +7242,12 @@ def tejido_multi(W, cfg, now, out):
                 vias = V.get('tejido_vias') or []
             if t == IND:
                 build_industria_tejido(V, ct, now, out)
+                vias_ind = V.get('vias_ind') or []
                 for k in ('tejido_ind', 'red_res'):
                     if k in V:
                         W[k] = V[k]
     W['tejido_vias'] = vias
+    W['vias_ind'] = vias_ind
     if 'rios' not in out:
         out['rios'] = []
     return filas, res, rios
@@ -13379,6 +13389,7 @@ def build_tejido(W, cfg):
     """(filas de la geometria 'tejido', resumen para la leyenda)."""
     t = tejido(W, cfg)
     W['tejido_vias'] = t['vias'] if tema_de(cfg) == 'ciudad' else []
+    W['vias_ind'] = list(t['vias']) if tema_de(cfg) == 'industria' else []    # v128: caminos de los monstruos
     if tema_de(cfg) == 'industria':     # fase 13 v7: vias y red
         return build_tejido_industria(W, cfg, t)
     filas = []
@@ -17493,18 +17504,27 @@ MAR_TIERRA = 0.02               # motor v118: por debajo de esto sobre el nivel 
 _MAR_MON = {}
 
 
+def celdas_via(W):
+    """Motor v128: las celdas por las que pasa una carretera (la ciudad) o una via del
+    tren (la industria), las que se dibujan. Sobre el mar son el puente de los monstruos."""
+    return frozenset(x for k in ('tejido_vias', 'vias_ind') for e in (W.get(k) or []) for x in e[:2])
+
+
 def mar_mon(W, cfg):
-    """Motor v118 (fase 39, Montierra): las celdas que son mar para el monstruo, que
-    solo anda por tierra. Con Oceano (motor v120: en todos los temas): las vacias cuyo terreno (suelo y
-    relieve en su centro) queda a ras del nivel del mar y las hondonadas inundadas
-    (W['agua']). Las ocupadas son islas; las zanjas del juego, su trampa (no cuentan).
+    """Motor v118 (fase 39, Montierra): las celdas que son mar para los monstruos, que
+    solo andan por tierra (motor v128: Trumpzilla y Godzilla). Con Oceano (motor v120:
+    en todos los temas): las vacias cuyo terreno (suelo y relieve en su centro) queda a
+    ras del nivel del mar y las hondonadas inundadas (W['agua']). Las ocupadas son
+    islas; las zanjas del juego, su trampa (no cuentan); motor v128: las celdas por las
+    que pasa una carretera o una via del tren (celdas_via), su puente entre tierras.
     Sin Oceano, todo es tierra."""
     if cfg['nivel'] < 39 or not cfg.get('mon_tierra', 1) or not cfg.get('oceano'):     # v120: todos los temas
         return frozenset()
     S = suelos_fotograma(W, cfg)
     agua = W.get('agua') or {}
     zj = (W.get('juego') or {}).get('zanjas') or {}
-    clave = (id(W), S, tuple(W['occ']), tuple(sorted(agua.items())), tuple(sorted(zj)))
+    vias = celdas_via(W)
+    clave = (id(W), S, tuple(W['occ']), tuple(sorted(agua.items())), tuple(sorted(zj)), vias)
     if _MAR_MON.get('clave') == clave:
         return _MAR_MON['v']
     try:
@@ -17512,7 +17532,7 @@ def mar_mon(W, cfg):
     except Exception:
         centro = [0.0] * N
     g = min(S)
-    v = frozenset(c for c in range(N) if W['occ'][c] <= 0 and c not in zj
+    v = frozenset(c for c in range(N) if W['occ'][c] <= 0 and c not in zj and c not in vias
                   and (S[c] + centro[c] - g < MAR_TIERRA or agua.get(c, 0.0) > S[c] + 1e-3))
     _MAR_MON['clave'], _MAR_MON['v'] = clave, v
     return v
@@ -17521,11 +17541,11 @@ def mar_mon(W, cfg):
 def dijkstra_mon(W, cfg, src, muro=(), tierra=True):
     """(coste, previa) de cada celda alcanzable desde src por vecinas6: entrar en
     una zanja cuesta Costezanja; no entra en el agua ni en el muro. Motor v118: con
-    Montierra, tampoco en el mar (solo anda por tierra)."""
+    Montierra, tampoco en el mar (solo anda por tierra; motor v128, los dos monstruos)."""
     import heapq
     J = W['juego']
     zj, agua = J['zanjas'], J['agua']
-    mar = mar_mon(W, cfg) if tierra else ()     # motor v123: Godzilla (tierra=False) nada
+    mar = mar_mon(W, cfg) if tierra else ()     # motor v128: tambien Godzilla (v123 nadaba)
     if mar:
         muro = set(muro) | mar
     cz = max(1.0, float(cfg['coste_zanja']))
@@ -17548,7 +17568,8 @@ def dijkstra_mon(W, cfg, src, muro=(), tierra=True):
 
 def objetivo(W, cfg, m, muro=(), comer=None, tierra=True):
     """(celda objetivo, camino) con mayor occ / (1 + coste); desempate _hash01.
-    Motor v123: comer (comestible; Godzilla, comestible_bien) y tierra (Godzilla nada)."""
+    Motor v123: comer (comestible; Godzilla, comestible_bien). tierra: solo por tierra
+    (Montierra; motor v128, Godzilla tambien)."""
     if m['celda'] is None:
         return None, []
     comer = comestible if comer is None else comer
@@ -19181,7 +19202,9 @@ def sim_rescate(W, cfg, now):
 #   COME MAL   su objetivo es la celda del mal de mayor occ / (1 + coste) (el pequeno
 #              no puede con fusiones ni coronas del mal); devora con el mismo ritmo y
 #              Danomonstruo que Trumpzilla, crece igual (tam, forma grande) y anda al
-#              mismo paso. NADA: el mar no le para (Montierra es solo para Trumpzilla).
+#              mismo paso. SOLO POR TIERRA, como Trumpzilla (motor v128; en la v123
+#              nadaba): con Oceano y Montierra no entra en el mar; pasa por lo
+#              construido, la tierra firme y las carreteras y vias que cruzan el agua.
 #              El agua de las zanjas es muro y entrar en una cuesta Costezanja, pero
 #              no cae ni se ahoga: las zanjas y las armas son del publico contra el mal.
 #   CREA       la celda del mal que vacia recibe un BROTE DE LA CREACION: occ 1 con la
@@ -19309,8 +19332,10 @@ def celda_aparicion_bien(W, cfg, vis=None):
         libre = [i for i in grupo if W['occ'][i] <= 0 and i not in J['zanjas'] and i not in mar and i not in lejos]
         if libre:
             break
-    if not libre:                       # todo lo vacio es mar: nada hasta alli
-        libre = [i for i in vis if W['occ'][i] <= 0 and i not in J['zanjas'] and i not in lejos]
+    if not libre:                       # v128: todo lo vacio es mar: en una isla, como Trumpzilla
+        libre = [i for i in vis if W['occ'][i] > 0 and W['sp'][i] != MAL and i not in J['zanjas'] and i not in lejos]
+    if not libre:
+        libre = [i for i in vis if W['occ'][i] > 0 and i not in J['zanjas'] and i not in lejos]
     if not libre:
         return None
     lon0 = float(cfg.get('lon_central', 0.0))
@@ -19337,7 +19362,7 @@ def aparecer_godzilla(W, cfg, now, celda):
 
 def recalcular_bien(W, cfg, g, now=None):
     g['recalc'] = 0
-    t, camino = objetivo(W, cfg, g, muro_tregua(W, cfg, g), comer=comestible_bien, tierra=False)
+    t, camino = objetivo(W, cfg, g, muro_tregua(W, cfg, g), comer=comestible_bien)    # v128: por tierra
     g['objetivo'], g['camino'] = t, camino
     if g['estado'] in ('busca', 'devora'):
         g['estado'] = 'devora' if t is not None and t == g['celda'] else 'busca'
@@ -19408,7 +19433,8 @@ def godzilla_reloj(W, cfg, now):
 
 def mover_godzilla(W, cfg, now):
     """Una semicorchea: avanza por su camino una celda cada Pasomonstruo (Pasogrande)
-    semicorcheas, como Trumpzilla; la zanja cuesta Costezanja. No le para el mar."""
+    semicorcheas, como Trumpzilla; la zanja cuesta Costezanja. Motor v128: solo por
+    tierra, como Trumpzilla (si el mar le corta el camino, recalcula)."""
     if not godzilla_on(W, cfg):
         return
     J = W['juego']
@@ -19419,7 +19445,7 @@ def mover_godzilla(W, cfg, now):
         g['mov'] = 0.0
         return
     nxt = g['camino'][0]
-    if J['agua'].get(nxt, 0) > 0 or nxt not in NEIGH[g['celda']]:
+    if J['agua'].get(nxt, 0) > 0 or nxt not in NEIGH[g['celda']] or nxt in mar_mon(W, cfg):
         g['retira'] = None
         recalcular_bien(W, cfg, g, now)
         return
@@ -19552,7 +19578,7 @@ def terminar_lucha(W, cfg, now):
     empieza la tregua (Tregua pasos)."""
     J = W['juego']
     m, g = J['mon'], J.get('bien')
-    for x, r, tierra in ((m, g, True), (g, m, False)):
+    for x, r, tierra in ((m, g, True), (g, m, True)):     # v128: Godzilla tambien por tierra
         if x is None or x['estado'] != 'lucha':
             continue
         rc = r['celda'] if r is not None and r.get('celda') is not None else None
@@ -19650,7 +19676,8 @@ def sim_lucha(W, cfg, now):
     if not activo_mon(m) or m['estado'] == 'lucha':
         m = aparecer(W, cfg, now, max(0, min(N - 1, int(cfg['sim_celda_mon']))))
     J['tregua'] = J['lucha'] = None
-    v = min(NEIGH[m['celda']], key=lambda x: (W['occ'][x] > 0, _hash01(x, 41)))
+    mar = mar_mon(W, cfg)
+    v = min(NEIGH[m['celda']], key=lambda x: (x in mar, W['occ'][x] > 0, _hash01(x, 41)))
     aparecer_godzilla(W, cfg, now, v)
     encuentro(W, cfg, now)
     return 'LUCHA    Trumpzilla en la celda %d, Godzilla en la %d: %s' % (
