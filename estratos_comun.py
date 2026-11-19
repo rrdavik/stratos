@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v93'
+VERSION_COMUN = 'comun v94'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -3819,6 +3819,18 @@ def retirar_balizas(base):
     set_render(base)
 
 
+# comun v94: geometrias instanciadas SIN color por instancia. La pradera la instancia el
+# Pattern CHOP n_pradera, que solo da el numero (canal chan1): si se le enlaza Color R/G/B
+# = r g b, TouchDesigner avisa en cada fotograma "instance attribute 'r' could not be found".
+SIN_COLOR_INSTANCIA = ('pradera',)
+
+
+def quitar_color_instancia(geo):
+    """comun v94: la geometria no lee color por instancia (Color R/G/B vacios)."""
+    for _, names in INST_COLOR_PARS:
+        setp_any(geo, names, '')
+
+
 def reparar_color_instancias(base):
     """Las geometrias instanciadas creadas antes de comun v10 (formaciones,
     coronas, estratos) y la reticula de fase12_base.py v2 enlazaban su color
@@ -3828,6 +3840,9 @@ def reparar_color_instancias(base):
     reparadas, malas = [], []
     for geo in list(base.children):
         if str(getattr(geo, 'OPType', '')) != 'geometryCOMP':
+            continue
+        if geo.name in SIN_COLOR_INSTANCIA:      # comun v94: no tienen r g b por instancia
+            quitar_color_instancia(geo)
             continue
         try:
             src = str(geo.par.instanceop.eval() or '')
@@ -5153,6 +5168,9 @@ def pradera_al_dia(base):
         pass
     bien = bool(setp(geo, 'instanceop', 'n_pradera')) and bien
     setp_any(geo, ['instancing', 'instance'], True)
+    # comun v94: n_pradera no tiene r g b (el color lo pone el shader): Color R/G/B vacios,
+    # o TouchDesigner avisa en cada fotograma de que no encuentra 'r', 'g' y 'b'
+    quitar_color_instancia(geo)
     # si esta version de TouchDesigner deja fijar el numero de instancias a mano, tambien
     if setmenu(geo, ['instancecountmode'], ['manual']):
         setexpr(geo, 'numinstances', PRADERA_N)

@@ -1194,6 +1194,10 @@ def _prueba_oceano(t, m):
             and all(2.0 <= u_[0] < 3.0 for u_ in Um)
             and m.uniformes_piel(m.new_world(), dict(c, tema=1), 10.0)['uPradera'][0] == 0.0
             and 'pradera' in str(base.op('render').par.geometry.val).split())
+    # comun v94: n_pradera no tiene r g b; con Color R/G/B enlazados TouchDesigner avisa en cada fotograma
+    t.check('pradera: no pide color por instancia (Color R/G/B vacios: n_pradera no tiene r g b)',
+            pr is not None and all(str(getattr(pr.par, n).eval()) == ''
+                                   for n in ('instancer', 'instanceg', 'instanceb') if hasattr(pr.par, n)))
     Wc = mundo(range(m.N), m.GEO, 9)
     for x in range(0, m.N, 3):
         Wc['own'][x] = Wc['sp'][x] = m.ARQ
