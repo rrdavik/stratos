@@ -192,7 +192,7 @@
 #                 discoteca del mal, con focos que barren el cielo; neon en las
 #                 construcciones finales del mal y sus yates en el mar; los demonios
 #                 grandes, un 30 % mas pequenos. GENoZilla anda un tercio mas lento
-#                 (Pasomonstruo 24, Pasogrande 12).
+#                 (Pasomonstruo 24, Pasogrande 12; v126: 32 y 16).
 #                 Motor v121 (fase 11 v22): la MEZCLA DE ESPECIES. Tema = auto (de
 #                 fabrica): el mundo empieza en naturaleza y, segun se construye
 #                 terreno (construido, sobre Topeconstruido), la tabla mezcla_especies da
@@ -237,6 +237,16 @@
 #                 Motor v125, comun v93: SIN LOSETA DE LUZ en el centro de la celda: fuera
 #                 cell_lights, la geometria luz_celda (i_luz_celda, mat_luz_celda) y
 #                 Luzcelda y Luzceldaopaca. La nota se ve en la especie y en las conchas.
+#                 Motor v126 (fase 33 v6): GENoZILLA MAS LENTO Y A SALTOS. Pasomonstruo 32
+#                 (8 negras por celda) y Pasogrande 16 (4). pos_monstruo lo dibuja a saltos
+#                 de media celda (destino_mon): en su celda hasta la mitad de need, a media
+#                 celda desde la mitad, la siguiente al llegar; la logica no cambia (sigue
+#                 en su celda hasta llegar: alli le cuentan la zanja, el pisoton, el cerco
+#                 y el agua). Cada salto dura Tiemposalto s (0,15) con una curva suave y un
+#                 bote de Botesalto (0,15) x su alto (bote_monstruo; la sombra del sprite
+#                 se queda en el suelo). seguir_saltos los empieza al final de cada avance
+#                 del juego. Saltosmonstruo apagado: el deslizamiento continuo de antes.
+#                 La linea MONSTRUO, con el avance: paso 5/8 (avance_mon).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -248,7 +258,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v125'
+MOTOR_VERSION = 'motor v126'
 
 import math
 import time as _time
@@ -489,8 +499,8 @@ DEFAULT_CFG = dict(
     # fases 32 a 37: el juego «El devorador» (lo apagado por defecto: Modojuego y las armas)
     modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1,
     umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3, dano_monstruo=0.5,
-    paso_monstruo=24, paso_grande=12, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
-    sim_celda_mon=0,
+    paso_monstruo=32, paso_grande=16, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
+    sim_celda_mon=0, saltos_monstruo=1, tiempo_salto=0.15, bote_salto=0.15,
     zanja_juego=1, profundidad_agua=4, ritmo_agua=4, desborde_agua=2, ahoga=0.5,
     aliados=3, t_aliados=3.0, luz_juego=1,
     arma_cerco=0, arma_pison=0, arma_estatuas=0, arma_grito=0, arma_relampago=0,
@@ -17115,7 +17125,8 @@ def valores_dmx(W, cfg, now, filas):
 #   FASE 33  el monstruo: aparece al construirse Umbralaparicion de la cara
 #            visible, por el borde por el que entran las celdas con el giro;
 #            elige su objetivo con un Dijkstra (occ / (1 + coste)); avanza una
-#            celda cada Pasomonstruo semicorcheas; devora Ritmodevora x
+#            celda cada Pasomonstruo semicorcheas (32; v126: dibujado a saltos de
+#            media celda, Saltosmonstruo); devora Ritmodevora x
 #            Danomonstruo escalones por paso de juego con _undo_note (lo ultimo construido primero, sin
 #            pasar por erosion(): fuera del balance de la fase 23); crece con lo
 #            devorado y en forma grande va mas deprisa y puede con fusiones y
@@ -17342,6 +17353,8 @@ def juego_avanzar(W, cfg, now, semis):
         k += 1
         semicorchea_juego(W, cfg, now)
     J['semi_f'] = max(0.0, J['semi_f'])
+    if cfg['nivel'] >= 33:
+        seguir_saltos(W, cfg, now)      # motor v126: los saltos de media celda que empiezan ahora
     if mal_propio(W, cfg):              # fase 39: la rama y la obra de cada celda del mal
         mal_tick(W, cfg, now)
     pub, mal = recuento(W)
@@ -17634,10 +17647,23 @@ def paso_mon(cfg, m):
     return max(1, int(cfg['paso_grande'] if grande(m) else cfg['paso_monstruo']))
 
 
+def need_mon(W, cfg, m, nxt=None):
+    """Las semicorcheas que le cuesta pasar a la celda siguiente del camino (nxt):
+    Pasomonstruo (Pasogrande en forma grande); entrar en una zanja, o salir de su
+    fondo, Costezanja veces mas. Lo comparten Trumpzilla y Godzilla."""
+    if nxt is None:
+        nxt = m['camino'][0] if m.get('camino') else None
+    zj = W['juego']['zanjas']
+    k = max(1.0, float(cfg['coste_zanja'])) if (nxt in zj or m['celda'] in zj) else 1.0
+    return paso_mon(cfg, m) * k
+
+
 def mover_monstruo(W, cfg, now):
     """Una semicorchea: el monstruo avanza por su camino una celda cada
     Pasomonstruo (Pasogrande) semicorcheas; entrar en una zanja, o salir de su
-    fondo, cuesta Costezanja veces mas."""
+    fondo, cuesta Costezanja veces mas. Motor v126: con Saltosmonstruo se dibuja a
+    saltos de media celda (pos_monstruo); la logica no cambia: sigue en su celda
+    hasta que mov llega a need."""
     J = W['juego']
     m = J['mon']
     if m['estado'] not in ('aparece', 'busca', 'devora', 'cae') or m['celda'] is None:
@@ -17649,9 +17675,7 @@ def mover_monstruo(W, cfg, now):
     if J['agua'].get(nxt, 0) > 0 or nxt not in NEIGH[m['celda']] or nxt in mar_mon(W, cfg):
         recalcular_objetivo(W, cfg, m, now)         # el agua (o el mar, v118) corto el camino
         return
-    zj = J['zanjas']
-    k = max(1.0, float(cfg['coste_zanja'])) if (nxt in zj or m['celda'] in zj) else 1.0
-    need = paso_mon(cfg, m) * k
+    need = need_mon(W, cfg, m, nxt)
     m['mov'] += factor_ruido(W, cfg)
     if m['mov'] + 1e-9 < need:
         return
@@ -17890,8 +17914,83 @@ def filas_anillo(W, cfg, c, col):
     return rows
 
 
+def destino_mon(W, cfg, m):
+    """Motor v126: donde se dibuja el monstruo, sin el salto en curso: [celda, siguiente,
+    f], la fraccion f del camino de su celda a la siguiente. Con Saltosmonstruo, a
+    saltos: 0 hasta la mitad de need y 0,5 desde la mitad (la celda entera, al llegar:
+    entonces ya es su celda); sin, continuo (mov / need, hasta 0,95). Con f 0, siguiente
+    None. None en la lucha (pos_monstruo la dibuja aparte) o sin celda."""
+    c = m.get('celda')
+    if c is None or m['estado'] == 'lucha':
+        return None
+    if not m.get('camino') or m['estado'] == 'cae':
+        return [c, None, 0.0]
+    nx = m['camino'][0]
+    need = need_mon(W, cfg, m, nx)
+    if cfg.get('saltos_monstruo', 1):
+        f = 0.0 if m['mov'] + 1e-9 < need / 2.0 else 0.5    # media celda a mitad de camino
+    else:
+        f = max(0.0, min(0.95, m['mov'] / need))
+    return [c, nx, f] if f > 0.0 else [c, None, 0.0]
+
+
+def _pos_destino(W, cfg, d):
+    """(punto, normal) de un destino [celda, siguiente, f] (destino_mon)."""
+    c, nx, f = d
+    n = normal_i(c)
+    r = base_radius(W, cfg, c)
+    if nx is not None and f > 0.0:
+        n = _norm(_mix(n, normal_i(nx), f))
+        r = r + (base_radius(W, cfg, nx) - r) * f
+    return _mul(n, r), n
+
+
+def seguir_saltos(W, cfg, now):
+    """Motor v126 (fase 33 v6): al final de cada avance del juego, si el destino
+    dibujado de un monstruo (Trumpzilla y Godzilla) ha cambiado a uno contiguo (media
+    celda, la celda entera, otro camino), empieza un salto de Tiemposalto s desde el
+    destino de antes. Si salta a otro sitio (aparece, la demo lo pone), sin salto."""
+    J = W.get('juego') or {}
+    for m in (J.get('mon'), J.get('bien')):
+        if m is None:
+            continue
+        d = destino_mon(W, cfg, m) if cfg.get('saltos_monstruo', 1) else None
+        prev = m.get('pos_obj')
+        if d is None:
+            m['salto'] = None
+        elif prev is not None and list(prev) != d and \
+                set(x for x in prev[:2] if x is not None) & set(x for x in d[:2] if x is not None):
+            m['salto'] = dict(t=float(now), desde=list(prev), hacia=list(d))
+        m['pos_obj'] = d
+
+
+def _avance_salto(W, cfg, m, now, d):
+    """La fraccion (0 a 1) del salto en curso hacia el destino d; None sin salto."""
+    sl = m.get('salto')
+    T = float(cfg.get('tiempo_salto', 0.15))
+    if not sl or d is None or not cfg.get('saltos_monstruo', 1) or T <= 1e-9 or list(sl['hacia']) != list(d):
+        return None
+    now = (W.get('t') or 0.0) if now is None else now
+    u = (now - sl['t']) / T
+    return u if 0.0 <= u < 1.0 else None
+
+
+def bote_monstruo(W, cfg, m, now=None):
+    """Motor v126: la altura del bote del salto en curso, en veces el alto del
+    monstruo (Botesalto en el centro del salto; 0 sin salto). La suma quien lo
+    dibuja (su sombra se queda en el suelo)."""
+    if m.get('celda') is None or m['estado'] == 'lucha':
+        return 0.0
+    u = _avance_salto(W, cfg, m, now, destino_mon(W, cfg, m))
+    if u is None:
+        return 0.0
+    return max(0.0, float(cfg.get('bote_salto', 0.15))) * math.sin(math.pi * u)
+
+
 def pos_monstruo(W, cfg, m, now=None):
-    """(punto, normal) del monstruo: entre su celda y la siguiente del camino.
+    """(punto, normal) del monstruo, en el suelo: su destino (destino_mon; motor
+    v126: con Saltosmonstruo, a saltos de media celda) y, durante un salto, de camino
+    hacia el con una curva suave (el bote lo da bote_monstruo).
     Motor v123: en la lucha, se acerca al borde con la celda de su rival (en
     T_LUCHA_ACERCA s, hasta LUCHA_BORDE del camino)."""
     c = m['celda']
@@ -17907,14 +18006,16 @@ def pos_monstruo(W, cfg, m, now=None):
             n2 = _norm(_mix(n, normal_i(x), f))
             return _mul(n2, r + (base_radius(W, cfg, x) - r) * f), n2
         return _mul(n, r), n
-    if m['camino'] and m['estado'] not in ('cae',):
-        nx = m['camino'][0]
-        J = W['juego']
-        k = max(1.0, float(cfg['coste_zanja'])) if (nx in J['zanjas'] or c in J['zanjas']) else 1.0
-        f = max(0.0, min(0.95, m['mov'] / (paso_mon(cfg, m) * k)))
-        n = _norm(_mix(n, normal_i(nx), f))
-        r = r + (base_radius(W, cfg, nx) - r) * f
-    return _mul(n, r), n
+    d = destino_mon(W, cfg, m)
+    p, n = _pos_destino(W, cfg, d)
+    u = _avance_salto(W, cfg, m, now, d)
+    if u is not None:                   # el salto: de donde estaba a su destino, con una curva suave
+        e = u * u * (3.0 - 2.0 * u)
+        p0, n0 = _pos_destino(W, cfg, m['salto']['desde'])
+        r = _len(p0) + (_len(p) - _len(p0)) * e
+        n = _norm(_mix(n0, n, e))
+        p = _mul(n, r)
+    return p, n
 
 
 def filas_monstruo(W, cfg, m):
@@ -17924,7 +18025,7 @@ def filas_monstruo(W, cfg, m):
     c = m['celda']
     cw, cl = _cell_sizes(_len(p), c)
     s = max(0.05, m['tam']) * 0.5 * min(cw, cl)
-    centro = _add(p, n, s * 0.9)
+    centro = _add(p, n, s * 0.9 + bote_monstruo(W, cfg, m) * 1.8 * s)     # v126: el bote del salto
     rows = [_row(centro, n, s, s * 0.9, s, COL_MONSTRUO) + [0.5 + 2 * MAL_PARTE['cuerpo']]]
     e, t = tangents(n)
     for lado in (-1.0, 1.0):
@@ -18459,7 +18560,8 @@ def _filas_sprite(W, cfg, m, now, e, a, f, alto):
     if f <= 0.0:
         rows.append(_fila_m(_add(p, n, 0.01 * h), marco, 0.42 * w, 0.01 * h, 0.42 * w,
                             (SOMBRA_OPACIDAD, 0.0, 0.0)) + [float(SPRITE_SOMBRA)])
-    rows.append(_fila_m(_add(p, n, -f * h), marco, w, h, w, (k, k, k))
+    b = bote_monstruo(W, cfg, m, now) if f <= 0.0 else 0.0     # motor v126: el bote del salto (la sombra, abajo)
+    rows.append(_fila_m(_add(p, n, (b - f) * h), marco, w, h, w, (k, k, k))
                 + [float(EMOCIONES_MON.index(e) + 16 * ANIMS_MON.index(a))])
     return rows
 
@@ -19314,10 +19416,8 @@ def mover_godzilla(W, cfg, now):
         g['retira'] = None
         recalcular_bien(W, cfg, g, now)
         return
-    zj = J['zanjas']
-    k = max(1.0, float(cfg['coste_zanja'])) if (nxt in zj or g['celda'] in zj) else 1.0
     g['mov'] += 1.0
-    if g['mov'] + 1e-9 < paso_mon(cfg, g) * k:
+    if g['mov'] + 1e-9 < need_mon(W, cfg, g, nxt):
         return
     g['mov'] = 0.0
     g['de'] = g['celda']
@@ -20045,10 +20145,24 @@ def _legend_monstruo(W, c):
     cara = ''
     if c['nivel'] >= 38 and c.get('sprite_mon', 1):        # fase 38: la cara de Trumpzilla
         cara = '   cara %s' % emocion_mon(W, c, m, W.get('t') or 0.0)[0]
-    return '  MONSTRUO #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d  x%s%s%s' % (
+    av = avance_mon(W, c, m)
+    return '  MONSTRUO #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d  x%s%s%s%s' % (
         m['n'], m['estado'], m['celda'], m['objetivo'] if m['objetivo'] is not None else '-', m['tam'],
         min(m['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), ('%g' % ritmo).replace('.', ','),
-        '   GRANDE' if grande(m) else '', cara)
+        '  paso %d/%d' % av if av else '', '   GRANDE' if grande(m) else '', cara)
+
+
+def avance_mon(W, c, m):
+    """Motor v126 (fase 33 v6): el avance hacia la celda siguiente, en pasos de juego
+    (negras): (hechos, los que cuesta la celda), p. ej. (5, 8); (3, 4) en grande; (11,
+    16) dentro de una zanja. None si no anda (sin camino, cae, parado, la lucha)."""
+    if m.get('celda') is None or not m.get('camino') or m['estado'] not in ('aparece', 'busca', 'devora'):
+        return None
+    if parado(W, c, m, W.get('t') or 0.0):
+        return None
+    pj = float(max(1, int(c['paso_juego'])))
+    need = need_mon(W, c, m)
+    return int(math.floor(m['mov'] / pj + 1e-9)), max(1, int(math.ceil(need / pj - 1e-9)))
 
 
 def _legend_zanja(W, c):
@@ -20596,7 +20710,10 @@ def cfg():
                  recalculo=max(1, int(_p('Recalculo', c['recalculo']))),
                  espera_monstruo=max(0.0, _p('Esperamonstruo', c['espera_monstruo'])),
                  ver_objetivo=int(bool(_p('Verobjetivo', True))),
-                 sim_celda_mon=max(0, int(_p('Simceldamon', 0))))
+                 sim_celda_mon=max(0, int(_p('Simceldamon', 0))),
+                 saltos_monstruo=int(bool(_p('Saltosmonstruo', True))),
+                 tiempo_salto=max(0.0, float(_p('Tiemposalto', c['tiempo_salto']))),
+                 bote_salto=max(0.0, float(_p('Botesalto', c['bote_salto']))))
     if c['nivel'] >= 34:
         c.update(zanja_juego=int(bool(_p('Zanjajuego', True))),
                  profundidad_agua=max(1, int(_p('Profundidadagua', c['profundidad_agua']))),

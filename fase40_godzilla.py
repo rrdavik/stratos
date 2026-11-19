@@ -62,7 +62,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase40 v1  (Godzilla, el monstruo de la creacion, y la lucha con Trumpzilla)'
+VERSION = 'fase40 v2  (autoprueba al dia con el paso de la fase 33 v6: 8 pasos por celda)'
 banner(VERSION)
 
 base = require_base(40)
@@ -241,7 +241,8 @@ def _prueba(t, m, copy):
     g = m.aparecer_godzilla(W, c, S.now, junto)
     cara0 = m.emocion_godzilla(W, c, g, S.now)
     fz = m.build_instances(W, c, S.now).get('godzilla', [])
-    S.pasos(W, c, 7)
+    celda_pasos = int(c['paso_monstruo']) // int(c['paso_juego'])     # v2: 8 pasos por celda (fase 33 v6)
+    S.pasos(W, c, celda_pasos + 1)
     cara1 = m.emocion_godzilla(W, c, g, S.now)
     S.pasos(W, c, 3)
     J = W['juego']
@@ -298,7 +299,7 @@ def _prueba(t, m, copy):
             and quietos == ('lucha', 'lucha', a, v, 3, 2) and 'manotazos 7/8' in leg
             and fin == ('busca', 'busca', d1, d2, None),
             '%s %s %s %s fin %s' % (lucha, caras, quietos, leg.strip(), fin))
-    S.pasos(W, c, 7)
+    S.pasos(W, c, int(c['paso_monstruo']) // int(c['paso_juego']) + 1)     # v2: una celda, 8 pasos
     vuelta = (mo['celda'], g['celda'])
     muro = m.muro_tregua(W, c, mo)
     tregua = m.en_tregua(W)
