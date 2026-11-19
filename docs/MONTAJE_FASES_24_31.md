@@ -9,6 +9,7 @@
 |---|---|---|---|
 | 24 | `fase24_personas.py` | Personas: cabezas, seguimiento, casillas ocupadas y la celda que miran | v83 |
 | 25 | `fase25_huella.py` | Huella mínima: inclusiones por llegada y por parada, con su escalón | v84 |
+| 25 v2 | `fase25_huella.py` | La esfera de las inclusiones, malla de polígonos de radio 1 y centrada: nunca la esfera primitiva de un punto (comun v95) | v84 |
 | 26 | `fase26_borrado.py` | Borrado: la erosión borra las inclusiones que quedan sobre su escalón | v85 |
 | 27 | `fase27_clasificacion.py` | Clasificación al enterrar: estrato humano o concha limpia, y el colapso | v86 |
 | 28 | `fase28_noche.py` | Noche de enterramiento: la esfera se apaga y emiten las inclusiones horneadas | v87 |
@@ -107,7 +108,7 @@ Las inclusiones son mundo: viven en `W['incl']` (`[escalon, tipo, t, k]`: tipo 1
 
 | Operador | Qué es |
 |---|---|
-| `i_inclusiones`, `inclusiones` | Script CHOP y Geometry COMP instanciado: una esfera de pocas caras por inclusión, deformada y girada por su semilla, con `mat_piel_plastico`. En el render, tras las coronas |
+| `i_inclusiones`, `inclusiones` | Script CHOP y Geometry COMP instanciado: una esfera de pocas caras por inclusión, deformada y girada por su semilla, con `mat_piel_plastico`. En el render, tras las coronas. Dentro (v2, comun v95): `bola` (Sphere SOP en malla de polígonos, 6 × 8) y `a_la_medida` (Transform SOP que la deja de radio 1 y centrada; es la que se dibuja) |
 | `mat_piel_plastico`, `mat_piel_vidrio` | Dos familias nuevas del shader de la piel (`uFamilia` 5 y 6). La segunda es para la fulgurita de la fase 29 |
 
 ### Parámetros (página Fase25)
@@ -133,7 +134,12 @@ Las llegadas y las paradas son las de este mundo (las que dejaron inclusión, si
 - la inclusión guarda el escalón de su celda (0 en una vacía) y la celda del instante en que se confirmó la persona;
 - la paleta humana: ningún tono prohibido y luminosidad distinta de la de los pads;
 - el tope de 12 por celda; una instancia por inclusión, pequeña, en el suelo de su celda y con rugosidad 0,1–0,2; `i_inclusiones` en el render; la tapa a 0,85; al enterrar se vacían;
-- `Simponer` por la sala simulada y la línea `HUELLA`.
+- `Simponer` por la sala simulada y la línea `HUELLA`;
+- (v2) `inclusiones/bola` es una malla de polígonos, no `prim`; `a_la_medida` la deja de radio 1 y centrada (mide sus puntos: −1 a 1 en los tres ejes) y es la que se dibuja; y ninguna Sphere SOP de una geometría instanciada de FASE1 sigue en `prim` (`esferas_en_prim`).
+
+**La esfera de las inclusiones (v2, comun v95).** `make_instanced` (rama `sop='sphere'`) pedía el tipo de la Sphere SOP con `setp_any(s, ['type', 'primtype'], 'polymesh')`, y `'polymesh'` no es ningún nombre del menú *Primitive Type* de TouchDesigner: la esfera se quedaba en `prim`, una esfera primitiva de un solo punto, y sus instancias no se colocaban bien. Es lo mismo que le pasaba a la esfera de LEDs de la sala (sala_virtual v13) y a la cabeza de los monigotes (sala_virtual v26), y se arregla igual: `esfera_en_malla` elige el tipo con `setmenu(..., ['polymesh', 'polygonmesh', 'mesh'])` comprobando que no quede en `prim` o, si no, con `menu_por_texto(..., ['mesh', 'poly'])`, por nombre o etiqueta; y `esfera_medida` añade el Transform SOP `a_la_medida`, que la deja de radio 1 y centrada midiendo sus puntos (`medir`). Si aun así sigue en `prim`, el informe lo dice (`..  inclusiones/bola: sigue siendo una esfera primitiva`): pon a mano *Primitive Type* = *Polygon Mesh*. La resolución (6 × 8) va ahora en la llamada (`make_instanced(..., filas=6, cols=8)`), para medir la bola con ella. Relanza la fase 25 para rehacer `inclusiones`.
+
+Comun v95 también pasa por `esfera_en_malla` la copa redonda de los modelos (`modelos/<nombre>/bola`, Polygon) y el terreno (como antes, *Polygon Mesh* o *Mesh*), y los scripts de las fases 1 y 2 (`fase1 v3`, `fase2 v4`, `fase12 v7`) ponen el núcleo y la baliza en malla del mismo modo. El TouchDesigner simulado (`pruebas/td_simulado.py`) reproduce el fallo: su menú *Primitive Type* no tiene `polymesh` ni acepta un nombre que no tiene (el valor no cambia), y su Transform SOP ya mueve los puntos (escala, giro y traslación), así que la autoprueba falla con el código de antes.
 
 Además, `xvfb-run -a python3 pruebas/glsl_piel.py` compila el shader de la piel con las familias nuevas en un OpenGL de verdad.
 

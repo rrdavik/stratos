@@ -127,9 +127,14 @@ _MENUS_SALA = dict(driver=['default', 'asio'],
 _MENUS_TIPO = {('kinectTOP', 'image'): ['color', 'depth', 'infrared', 'playerindex', 'colorpointcloud',
                                         'depthpointcloud'],
                ('kinectTOP', 'hwversion'): ['version1', 'version2'],
-               # el tipo de la Sphere SOP: las etiquetas son las de TouchDesigner; los nombres, sin comprobar
-               ('sphereSOP', 'type'): ['prim', 'poly', 'polymesh', 'mesh', 'nurbs', 'bezier']}
+               # el tipo de la Sphere SOP: las etiquetas son las de TouchDesigner; los nombres, sin
+               # comprobar, salvo uno: 'polymesh' NO es ninguno (sala_virtual v13 y v26, comun v95: con
+               # setp 'polymesh' la esfera se quedaba en 'prim'). El de Polygon Mesh no lo sabemos: aqui
+               # uno que no casa con ninguna conjetura, para que solo la etiqueta lo encuentre.
+               ('sphereSOP', 'type'): ['prim', 'poly', 'polygonmesh_sin_comprobar', 'mesh', 'nurbs', 'bezier']}
 _ETIQUETAS_TIPO = {('sphereSOP', 'type'): ['Primitive', 'Polygon', 'Polygon Mesh', 'Mesh', 'NURBS', 'Bezier']}
+# menus que, como en TouchDesigner, no aceptan un nombre que no tienen (el valor no cambia)
+_MENUS_ESTRICTOS = {('sphereSOP', 'type')}
 _CAMARAS = ('orbbecTOP', 'kinectTOP')
 # su imagen (ancho, alto) sin aparato y con el: el Kinect TOP sin Kinect no da error,
 # saca una imagen de relleno de 128 x 128 (TouchDesigner, 15 de noviembre de 2026)
@@ -197,6 +202,8 @@ class Par(object):
         prev = self._val
         if self.menuNames and isinstance(v, int) and not isinstance(v, bool):
             v = self.menuNames[max(0, min(len(self.menuNames) - 1, v))]
+        if getattr(self, '_menu_estricto', False) and str(v) not in self.menuNames:
+            raise ValueError('Invalid menu value %r for parameter %s' % (v, self.name))
         if self.kind == 'int':
             v = int(round(float(v)))
         elif self.kind == 'float':
@@ -313,6 +320,7 @@ class ParCollection(object):
                 p.menuNames = list(menu)
                 p.menuLabels = list(_ETIQUETAS_TIPO.get((self._owner.OPType, name), menu))
                 p._val = menu[0]
+                p._menu_estricto = (self._owner.OPType, name) in _MENUS_ESTRICTOS
             self._pars[name] = p
         if p is None:
             raise AttributeError(name)
@@ -468,14 +476,14 @@ class Channel(object):
 # -----------------------------------------------------------------------------
 # GEOMETRIA DE LOS SOP (lo justo: la Sphere SOP y el Script SOP)
 # -----------------------------------------------------------------------------
-# Una Sphere SOP en malla (polymesh, mesh, polygon) da rows x cols puntos con un
+# Una Sphere SOP en malla (Polygon Mesh, Mesh, Polygon) da rows x cols puntos con un
 # uv por vertice, como en TouchDesigner; la primitiva (prim, por defecto) un solo
 # punto. Un Script SOP llama a onCook de su DAT de callbacks: clear, copy,
 # appendPoint, appendPoly, points, prims y los atributos de punto y de vertice
 # (crear un uv de punto si ya hay uno de vertice da el error de TouchDesigner).
 # Los demas SOP dejan pasar la geometria de su entrada, o ninguna.
 
-_MALLA = ('polymesh', 'mesh', 'polygon', 'poly')
+_MALLA = ('polygonmesh_sin_comprobar', 'mesh', 'polygon', 'poly')
 
 
 class _Attrib(object):
@@ -652,6 +660,46 @@ def _esfera(op):
     return g
 
 
+def _transformar(op, g):
+    """Un Transform SOP mueve los puntos de su entrada: escala (s por scale), giro (en
+    el orden rord, grados) y traslacion, en el orden xord (srt por defecto). Sin pivote."""
+    import math
+
+    def num(nm, d):
+        try:
+            return float(getattr(op.par, nm).eval())
+        except Exception:
+            return d
+    k = num('scale', 1.0)
+    esc = [num('s' + a, 1.0) * k for a in 'xyz']
+    gir = {a: math.radians(num('r' + a, 0.0)) for a in 'xyz'}
+    tra = [num('t' + a, 0.0) for a in 'xyz']
+    xord = str(op.par.xord.eval() or 'srt').lower()
+    rord = str(op.par.rord.eval() or 'xyz').lower()
+
+    def girar(p):
+        for a in rord:
+            c, s = math.cos(gir[a]), math.sin(gir[a])
+            x, y, z = p
+            if a == 'x':
+                p = [x, c * y - s * z, s * y + c * z]
+            elif a == 'y':
+                p = [c * x + s * z, y, -s * x + c * z]
+            else:
+                p = [c * x - s * y, s * x + c * y, z]
+        return p
+    for q in g.points:
+        p = list(q._pos)
+        for paso in xord:
+            if paso == 's':
+                p = [v * e for v, e in zip(p, esc)]
+            elif paso == 'r':
+                p = girar(p)
+            elif paso == 't':
+                p = [v + d for v, d in zip(p, tra)]
+        q._pos = [float(v) for v in p]
+
+
 class OP(object):
     def __init__(self, sim, optype, name, parent):
         self.sim, self.OPType = sim, optype
@@ -713,6 +761,8 @@ class OP(object):
             else:
                 ins = [i for i in self.inputs if i.OPType.endswith('SOP')]
                 self._geo = ins[0]._geometria().copia() if ins else _Geo()
+                if self.OPType == 'transformSOP':
+                    _transformar(self, self._geo)
         return self._geo
 
     @property

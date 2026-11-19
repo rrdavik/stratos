@@ -4,6 +4,8 @@
 > **Actualización:** las fases 1 y 2 se aplican ahora con un solo script, `fase12_base.py`, que incluye el arreglo del render (`fix_render_fase2.py` ya no hace falta) y la retícula de polo a polo: polos en `Notapolosur` y `Notapolonorte` (entre do1 y do8) y un anillo por octava en medio; `Notapolosur`, `Notapolonorte` y `Fuerarango` están en la página Fase3. Lo que sigue describe el montaje original de 96 celdas; para la retícula actual, mira `MONTAJE_FASES_3_10.md`.
 >
 > **fase12 v3:** ya no hay baliza. Cada nota del SEQ1 enciende en cian el centro de su celda, con un pulso, y la deja tenue hasta la siguiente (geometría `luz_celda`); es la misma luz de celda que da el motor desde la fase 3. La retícula pinta ya el color de cada marca (Instance 2 → Color R/G/B = `r g b`). Donde este documento habla de la baliza, léase la luz de celda.
+>
+> **Núcleo y baliza en malla (fase1 v3, fase2 v4, fase12 v7; noviembre de 2026).** Pedían el tipo de su Sphere SOP con `setp_any(..., 'polymesh')`, que no es ningún nombre del menú *Primitive Type* de TouchDesigner: se quedaban en `prim`, una esfera primitiva de un solo punto (la baliza, además, instanciada). Ahora `malla_esfera` elige `polymesh`, `polygonmesh` o `mesh` si están y, si no, la opción cuyo nombre o etiqueta dice *mesh* o *poly*, comprobando que no quede en `prim`; si queda, el informe lo dice. Es el mismo arreglo de `make_instanced` (comun v95, ver la fase 25 en `MONTAJE_FASES_24_31.md`).
 
 ---
 
@@ -17,8 +19,8 @@ Una esfera con una retícula de 96 celdas gira al tempo del proyecto, que marca 
 
 | Archivo | Para qué | Cuándo ejecutarlo |
 |---|---|---|
-| `fase1_tempo_beatstep.py` | Construye la fase 1 (se identifica como `fase1 v2`) | Primero |
-| `fase2_seq1_baliza.py` | Añade la fase 2 encima (se identifica como `fase2 v3`) | Después de la fase 1 |
+| `fase1_tempo_beatstep.py` | Construye la fase 1 (se identifica como `fase1 v3`; v3: el núcleo, malla de polígonos) | Primero |
+| `fase2_seq1_baliza.py` | Añade la fase 2 encima (se identifica como `fase2 v4`; v4: la baliza, malla de polígonos) | Después de la fase 1 |
 | `fix_render_fase2.py` | Repara el render si aplicaste la fase 2 anterior (`fase2 v2`) | Solo en ese caso |
 | `contador_master_beat.py` | Referencia para midicontrolx: cómo contar pulsos de reloj | No se ejecuta en FASE1 |
 | `MONTAJE_FASE1.md` | Este documento | — |

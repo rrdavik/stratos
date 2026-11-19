@@ -41,7 +41,7 @@ salen en el Textport con su resultado.
 
 import td
 
-VERSION = 'fase2 v3  (SEQ1 canal 13 -> baliza; render corregido)'
+VERSION = 'fase2 v4  (SEQ1 canal 13 -> baliza; la esfera, malla de poligonos)'
 print('=' * 66)
 print('EJECUTANDO: ' + VERSION)
 print('=' * 66)
@@ -98,6 +98,38 @@ def setp_any(o, names, value):
     for n in names:
         if setp(o, n, value):
             return n
+    return None
+
+
+def malla_esfera(s):
+    """v4: la Sphere SOP en malla de poligonos. setp_any(..., 'polymesh') no casaba
+    con ningun nombre del menu Primitive Type y la dejaba en 'prim' (una esfera
+    primitiva de un punto). Por nombre (polymesh, polygonmesh, mesh) o, si no, por
+    nombre o etiqueta (mesh, poly). Devuelve el tipo elegido o None si sigue en prim."""
+    for n in ('type', 'primtype'):
+        try:
+            p = getattr(s.par, n, None)
+            nombres = [str(x) for x in p.menuNames] if p is not None else []
+            etiquetas = [str(x) for x in p.menuLabels] if p is not None else []
+        except Exception:
+            continue
+        if not nombres:
+            continue
+        bajos = [x.lower() for x in nombres]
+        elegido = next((nombres[bajos.index(w)] for w in ('polymesh', 'polygonmesh', 'mesh') if w in bajos),
+                       None)
+        if elegido is None:
+            elegido = next((nm for tx in ('mesh', 'poly') for nm, et in zip(nombres, etiquetas)
+                            if tx in nm.lower() or tx in et.lower()), None)
+        if elegido is None:
+            continue
+        try:
+            p.val = elegido
+            v = str(p.eval())
+        except Exception:
+            continue
+        if v.lower() != 'prim':
+            return v
     return None
 
 
@@ -317,9 +349,13 @@ esfera = mk(baliza, 'sphereSOP', 'esfera_baliza', 0, 0)
 R_EXPR = "parent(2).op('baliza_chop')['radius'][0]"   # el valor, no el canal
 for ax in ('radx', 'rady', 'radz'):
     setexpr(esfera, ax, R_EXPR)
-setp_any(esfera, ['type', 'primtype'], 'polymesh')
 setp_any(esfera, ['rows'], 24)
 setp_any(esfera, ['cols'], 24)
+# v4: malla de poligonos; con 'polymesh' se quedaba en 'prim' (una esfera primitiva de un punto)
+if malla_esfera(esfera):
+    ok('baliza/esfera_baliza: malla de poligonos (%s)' % esfera.par.type.eval())
+else:
+    fail('baliza/esfera_baliza: sigue siendo una esfera primitiva; pon a mano Primitive Type = Polygon Mesh')
 for attr in ('render', 'display'):
     try:
         setattr(esfera, attr, True)
