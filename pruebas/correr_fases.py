@@ -10,7 +10,7 @@ Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
 camino del MIDI real, fotograma a fotograma; desde la fase 21, onsets del
 microfono: palmadas de la sala virtual, que la sesion oye por su microfono
 virtual) y evalua todas las expresiones.
-Desde la fase 35, una partida del juego «El devorador» (fases 32 a 37): dos
+Desde la fase 35, una partida del juego «El devorador» (fases 32 a 37, sin Godzilla): dos
 rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
@@ -130,6 +130,10 @@ def partida(sim, fps=30.0, ronda=60.0):
     base.par.Modojuego = True
     tfila = base.par.Tfila.eval()
     base.par.Tfila = 1.0                # las filas cavan al segundo: el monstruo sigue en su celda
+    godz = getattr(base.par, 'Godzilla', None)      # la partida prueba a Trumpzilla solo, como las
+    godz0 = godz.eval() if godz is not None else None   # autopruebas de las fases 32 a 39 (comun v91)
+    if godz is not None:
+        godz.val = False
     paso = 60.0 / 120.0 / 4
     fpp = fps * paso
     notas = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76]
@@ -248,6 +252,8 @@ def partida(sim, fps=30.0, ronda=60.0):
     hechos['estado'] = J['estado']
     base.par.Modojuego = False
     base.par.Tfila = tfila
+    if godz is not None:
+        godz.val = godz0
     poner([])
     for _ in range(int((base.par.Noche.eval() + 1.0) * fps)):     # que acabe la noche del ultimo entierro
         sim.fotograma(1.0 / fps)

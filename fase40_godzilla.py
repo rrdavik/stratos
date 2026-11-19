@@ -19,8 +19,10 @@ QUE HACE
                Esperamonstruo s despues.
   DEVORA       el mal: va a por la celda del mal de mayor occ / (1 + coste) (el
                pequeno no puede con fusiones ni coronas), con el ritmo, el dano
-               (Danomonstruo), el paso y el crecimiento de Trumpzilla. Nada: el
-               mar no le para. No cae en las zanjas ni se ahoga (son del publico
+               (Danomonstruo), el paso y el crecimiento de Trumpzilla. Solo anda
+               por tierra, como Trumpzilla (v3, Montierra): no entra en el mar; pasa
+               por lo construido, la tierra firme y las carreteras y vias que
+               cruzan el agua. No cae en las zanjas ni se ahoga (son del publico
                contra el mal), pero el agua es muro y la zanja cuesta.
   CREA         la celda del mal que vacia recibe un BROTE DE LA CREACION: occ 1,
                con la especie del ultimo secuenciador que la toco. Es del publico
@@ -62,7 +64,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase40 v2  (autoprueba al dia con el paso de la fase 33 v6: 8 pasos por celda)'
+VERSION = 'fase40 v3  (Godzilla solo anda por tierra, como Trumpzilla; las carreteras y vias cruzan el agua)'
 banner(VERSION)
 
 base = require_base(40)
@@ -102,7 +104,8 @@ leeme(base, 40, """FASE 40 - GODZILLA, EL MONSTRUO DE LA CREACION
   Hace por la creacion lo que Trumpzilla por el mal. Con la sala vacia Tvacia
   s (Godzillasala = vacia; siempre, tambien con gente) y Malgodzilla celdas del
   mal, aparece, va a por la celda del mal mas prospera, la devora con el ritmo
-  de Trumpzilla y deja un brote de la creacion (del publico). Nada. Si llega
+  de Trumpzilla y deja un brote de la creacion (del publico). Solo anda por
+  tierra (lo construido, tierra firme, carreteras y vias), como Trumpzilla. Si llega
   gente, saluda y se va. Si los dos monstruos quedan en celdas contiguas, se
   acercan al borde y se dan manotazos Pasoslucha pasos (8); luego cada uno
   vuelve a la celda de la que venia, con Tregua pasos (16) sin cruzarse.
@@ -117,7 +120,7 @@ print_report()
 
 PARS40 = ('Fuente', 'Probllegada', 'Temaenciclo', 'Modojuego', 'Umbralaparicion', 'Simbalance', 'Colapsoon',
           'Spritemonstruo', 'Emocion', 'Godzilla', 'Godzillasala', 'Tvacia', 'Malgodzilla', 'Pasoslucha',
-          'Tregua', 'Altogodzilla', 'Emociongodzilla', 'Simceldamon')
+          'Tregua', 'Altogodzilla', 'Emociongodzilla', 'Simceldamon', 'Tema', 'Oceano', 'Montierra')
 
 
 def prueba(t):
@@ -353,6 +356,38 @@ def _prueba(t, m, copy):
             r1 == r2 and r1[3] > 0 and r1[2]['mal'] < solo[2]['mal'],
             'mal %d con Godzilla, %d sin; publico %d / %d' % (r1[2]['mal'], solo[2]['mal'], r1[2]['publico'],
                                                             solo[2]['publico']))
+
+    # 8. v3: con Oceano, Godzilla solo anda por tierra, como Trumpzilla; las carreteras cruzan el agua
+    base.par.Tema = 'naturaleza'
+    base.par.Oceano = True
+    base.par.Montierra = True
+    base.par.Modojuego = True
+    W, c = S.nuevo(4)
+    c = dict(c, t_vacia=0.0)
+    dist, _ = m.dijkstra_mon(dict(W, juego=dict(zanjas={}, agua={})), dict(c, nivel=38), a)
+    b = min(x for x in dist if abs(dist[x] - 2.0) < 1e-9)
+    puente = [x for x in m.NEIGH[a] if b in m.NEIGH[x]][0]
+    _poner(m, W, a, 2)                              # su isla: una celda del publico
+    _mal(m, W, c, b, 2, S.now)                      # la presa, en la isla de enfrente
+    W['tejido_vias'], W['vias_ind'] = [], []
+    mar = m.mar_mon(W, c)
+    g = m.aparecer_godzilla(W, c, S.now, a)
+    sin_puente = (g['objetivo'], list(g['camino']))
+    W['tejido_vias'] = [(a, puente), (puente, b)]   # una carretera sobre el agua
+    m.recalcular_bien(W, c, g, S.now)
+    por_via = (g['objetivo'], list(g['camino']), puente in m.mar_mon(W, c))
+    W['tejido_vias'] = []
+    m.recalcular_bien(W, c, g, S.now)
+    g['camino'] = [puente, b]                       # un camino viejo que cruza el mar: no lo sigue
+    g['mov'] = 1e6
+    m.mover_godzilla(W, c, S.now)
+    no_nada = (g['celda'], g['objetivo'])
+    t.check('con Oceano, Godzilla solo anda por tierra, como Trumpzilla: con mar entre su isla y el mal no tiene '
+            'objetivo ni lo cruza; con una carretera sobre el agua va por ella',
+            puente in mar and a not in mar and b not in mar and sin_puente == (None, [])
+            and por_via == (b, [puente, b], False) and no_nada == (a, None),
+            'mar %d celdas; sin puente %s, por la carretera %s, camino viejo %s'
+            % (len(mar), sin_puente, por_via, no_nada))
 
 
 run_test(base, prueba)

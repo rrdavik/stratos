@@ -6,6 +6,7 @@
 | Fase | Script | Qué hace | Motor | Comun |
 |---|---|---|---|---|
 | 40 | `fase40_godzilla.py` | Godzilla (aparece con la sala vacía, devora el mal, crea) y la lucha con Trumpzilla | v123 | v91 |
+| 40 v3 | `fase40_godzilla.py` | Godzilla solo anda por tierra, como Trumpzilla; para los dos, las carreteras y vías que cruzan el agua son camino | v131 | v97 |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase40_godzilla.py').read())
@@ -27,7 +28,7 @@ También cambia `estratos_comun.py` (v91): `SalaJuego` apaga `Godzilla` en las a
 
 **Crea.** La celda del mal que vacía recibe un **brote de la creación**: ocupación 1 con la especie del último secuenciador que la tocó (fase 35; si ninguno, la de su origen). Es del público, cuenta en el recuento y crece con las notas como cualquier otra. Con la especie del mal (fase 39), la valla cae.
 
-**Nada.** El mar no le para (`Montierra` es solo para Trumpzilla): puede cruzar a una isla del mal. Las zanjas son del público contra el mal: el agua de una zanja es muro para él y entrar en una cuesta `Costezanja`, pero no cae ni se ahoga. Las armas de la fase 37 no le tocan.
+**Solo anda por tierra (v3),** con las reglas de Trumpzilla (`Montierra`, fase 39): con `Oceano` no entra en el mar ni en las hondonadas inundadas. Pasa por lo construido (las islas), la tierra firme y las **carreteras y vías del tren que cruzan el agua** (motor v131: una celda de mar con carretera o vía cuenta como tierra, también para Trumpzilla). Si entre él y el mal solo hay mar, se queda en *calma*. Aparece en tierra (si todo lo vacío es mar, en una isla) y tras la lucha se retira por tierra. En la v1 nadaba. Las zanjas son del público contra el mal: el agua de una zanja es muro para él y entrar en una cuesta `Costezanja`, pero no cae ni se ahoga. Las armas de la fase 37 no le tocan.
 
 ### La lucha
 
@@ -35,7 +36,7 @@ Si los dos monstruos quedan en **celdas contiguas** (o en la misma), empieza la 
 
 1. **Se acercan al borde.** Cada uno avanza hacia la celda del otro hasta el 38 % del camino (en 0,6 s) y se miran.
 2. **Manotazos** durante `Pasoslucha` pasos de juego (8: dos compases a 4 semicorcheas por paso). Ni andan ni devoran. Por turnos de 0,3 s, uno da (cara *furia*, se echa encima) y el otro recibe (cara *mueca*, tiembla).
-3. **Cada uno se va por donde vino**: vuelve a la celda de la que venía (si no vale —es la del otro, agua o, para Trumpzilla, mar—, a la vecina más lejos del otro).
+3. **Cada uno se va por donde vino**: vuelve a la celda de la que venía (si no vale —es la del otro, agua o mar—, a la vecina más lejos del otro).
 4. **Tregua** de `Tregua` pasos (16): ninguno pasa por la celda del otro ni por sus vecinas, y no vuelven a pelear aunque se crucen.
 
 Si uno deja de luchar a mitad (Trumpzilla se ahoga o cae en una zanja, llega gente y Godzilla se va), la lucha se acaba.
@@ -117,7 +118,7 @@ LUCHA    tregua 9 pasos   (luchas 2)
 
 ## Pruebas
 
-`python3 pruebas/correr_fases.py` corre las fases 3 a 40 en el TouchDesigner simulado. La autoprueba de la fase 40 (siete comprobaciones):
+`python3 pruebas/correr_fases.py` corre las fases 3 a 40 en el TouchDesigner simulado. La autoprueba de la fase 40 (ocho comprobaciones):
 
 - El atlas, `godzilla`, `i_godzilla`, `mat_godzilla` y el render.
 - Sin Godzilla, o con gente en la sala, la misma partida da lo mismo que tras la fase 39; con la sala vacía, Godzilla sale.
@@ -126,3 +127,4 @@ LUCHA    tregua 9 pasos   (luchas 2)
 - La lucha: se acercan al borde mirándose, manotazos por turnos, 8 pasos quietos, cada uno vuelve a la celda de la que venía, la tregua y la lucha siguiente.
 - `Simlucha`, la leyenda, `Godzilla` apagado (acaba la lucha) y `Modojuego` apagado.
 - Una ronda con la sala vacía: con Godzilla el mal acaba con menos celdas que sin él, y dos veces la misma ronda dan lo mismo (determinista).
+- (v3) Con `Oceano`: con mar entre su isla y el mal no tiene objetivo ni cruza el mar por un camino viejo; con una carretera sobre el agua, va por ella.
