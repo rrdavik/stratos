@@ -64,15 +64,15 @@ el motor.
 
 LATIDO Y GATE (v11): mientras la nota esta pulsada (del note on al note
 off) la formacion se hincha un 12 % y se tine del color de su
-secuenciador, y el centro de la celda brilla a plena luz y crece; al
-soltarla, todo se apaga en ~0,25 s hasta el reposo tenue. Una nota corta
+secuenciador; al soltarla, se apaga en ~0,25 s. Una nota corta
 da un destello; una ligada, una formacion encendida todo lo que suena.
 
-LUZ DE CELDA (v9): sin balizas. La baliza cian de las fases 1 y 2 se
-retira; cada nota del SEQ1 enciende el CENTRO de su celda en cian (blanco
-desde la fase 9): un pulso con la nota y tenue hasta la siguiente, para
-que se vea donde esta. Con formacion, el centro se ensancha hasta asomar
-alrededor de su base. Interruptor: Luzseq (pagina Fase3).
+LUZ DE LA NOTA (v16, motor v125): sin balizas ni loseta. La baliza cian y
+la loseta de luz de las fases 1 y 2 se retiran (luz_celda, i_luz_celda y
+mat_luz_celda; desde la v9 hasta la v15 la loseta encendia el centro de la
+celda; en la v15, Luzcelda y Luzceldaopaca, tambien quitados). La nota se
+ve en la formacion que se tine, en la especie (focos del tinte de la piel,
+Luzespecie, desde la fase 11) y en las conchas. Interruptor: Luzseq.
 
 COMO USARLO
 -----------
@@ -88,7 +88,7 @@ Si cambias de carpeta, cambia tambien CARPETA aqui abajo.
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase3 v15  (autoprueba: la loseta opaca y la aditiva, motor v124)'
+VERSION = 'fase3 v16  (sin loseta de luz en la celda: la nota se ve en la especie, motor v125)'
 banner(VERSION)
 
 base = require_base(3)
@@ -227,46 +227,43 @@ def prueba(t):
     leg = m.legend()
     t.check('leyenda MUNDO', 'MUNDO' in leg and ('ocupadas %d/%d' % (m.occupied(W), m.N)) in leg)
     # comun v52: giran y se balancean con 'planeta' (hijas suyas en la jerarquia 3D)
-    sin_bal = [n for n in ('nucleo', 'reticula', 'luz_celda', 'formas_pulidas', 'formas_porosas')
+    sin_bal = [n for n in ('nucleo', 'reticula', 'formas_pulidas', 'formas_porosas')
                if not gira_con_planeta(base.op(n))]
     pl = base.op('planeta')
     t.check('balanceo del eje en el planeta: las geometrias son hijas de planeta, que gira y se balancea',
             not sin_bal and pl is not None and "frame_u')['rx']" in (pl.par.rx.expr or '')
             and "frame_u')['ry']" in (pl.par.ry.expr or ''),
             'sin balanceo: %s' % ', '.join(sin_bal) if sin_bal else '')
-    # luz de celda: la nota del SEQ1 enciende el centro de su celda
+    # v16 (motor v125): la nota del SEQ1 enciende su celda en la especie (focos del tinte),
+    # con su color mientras suena y apagada al rato; sin loseta de luz
     Wl = m.new_world()
-    cl_ = dict(c, luz_celda_opaca=1)        # motor v124: los colores, con la loseta opaca (la de antes)
+    cl_ = dict(c)
     m.note_on(Wl, cl_, m.GEO, 64, 100, 1.0)
-    pulso = [r for r in m.cell_lights(Wl, cl_, 1.0)]
-    reposo = [r for r in m.cell_lights(Wl, cl_, 5.0)]
     col = m.seq_color(cl_, 1)
-    t.check('nota del SEQ1: el centro de su celda en su color, y tenue hasta la siguiente',
-            len(pulso) == 1 and len(reposo) == 1
-            and abs(pulso[0][9] - col[0]) < 1e-6 and reposo[0][10] < pulso[0][10]
-            and abs(reposo[0][10] / col[1] - 0.7) < 0.01,
-            '%d / %d losetas' % (len(pulso), len(reposo)))
+    pulso = m.focos_tinte(Wl, cl_, 1.0)
+    reposo = m.focos_tinte(Wl, cl_, 5.0)
+    t.check('nota del SEQ1: su celda se enciende con su color (foco del tinte) y se apaga despues',
+            len(pulso) == 1 and pulso[0][1] == m.note_cell(64) and pulso[0][2] == col
+            and pulso[0][0] > 0.99 and not reposo, '%d / %d focos' % (len(pulso), len(reposo)))
     # el latido y la luz duran lo que dura la nota (gate)
     Wg = m.new_world()
     celda = m.note_cell(64)
     m.note_on(Wg, cl_, m.GEO, 64, 100, 10.0)
-    sostenida = m._latido(Wg, celda, 10.6) == 1.0 and m.cell_lights(Wg, cl_, 10.6)[0][10] > 0.99 * col[1]
+    f_ = m.focos_tinte(Wg, cl_, 10.6)
+    sostenida = m._latido(Wg, celda, 10.6) == 1.0 and len(f_) == 1 and f_[0][0] > 0.99
     m.note_off(Wg, cl_, m.GEO, 64, 10.7, 120.0)
     apagandose = 0.0 < m._latido(Wg, celda, 10.8) < 1.0
     apagada = m._latido(Wg, celda, 12.0) == 0.0
-    tenue = abs(m.cell_lights(Wg, cl_, 12.0)[0][10] / col[1] - 0.7) < 0.01
+    tenue = not m.focos_tinte(Wg, cl_, 12.0)
     t.check('latido y luz del SEQ: plenos mientras la nota esta pulsada, se apagan al soltarla',
             sostenida and apagandose and apagada and tenue)
-    # motor v124: la loseta aditiva (de fabrica): Luzcelda con la nota, el 30 % de eso en reposo
-    ca_ = dict(c, luz_celda_opaca=0, luz_celda=0.6)
-    Wa = m.new_world()
-    m.note_on(Wa, ca_, m.GEO, 64, 100, 1.0)
-    p_a, r_a = m.cell_lights(Wa, ca_, 1.0), m.cell_lights(Wa, ca_, 5.0)
-    t.check('v15: la loseta aditiva, Luzcelda con la nota y casi apagada en reposo; mat_luz_celda suma',
-            len(p_a) == 1 and len(r_a) == 1 and abs(p_a[0][10] / col[1] - 0.6) < 0.01
-            and abs(r_a[0][10] / col[1] - 0.18) < 0.01 and has_par(base, 'Luzcelda')
-            and has_par(base, 'Luzceldaopaca') and has_par(base, 'Luzespecie'),
-            '%s / %s' % ([round(f[10], 3) for f in p_a], [round(f[10], 3) for f in r_a]))
+    inst_ = m.build_instances(Wl, cl_, 1.0)
+    t.check('v16: sin loseta de luz en la celda (ni luz_celda, i_luz_celda, mat_luz_celda, '
+            'Luzcelda ni Luzceldaopaca); Luzseq y Luzespecie siguen',
+            'luz_celda' not in inst_ and not any(base.op(n) for n in ('luz_celda', 'i_luz_celda', 'mat_luz_celda'))
+            and not has_par(base, 'Luzcelda') and not has_par(base, 'Luzceldaopaca')
+            and has_par(base, 'Luzseq') and has_par(base, 'Luzespecie')
+            and 'luz_celda' not in str(base.op('render').par.geometry.eval()))
     t.check('sin baliza del SEQ1', base.op('baliza') is None and base.op('baliza_chop') is None)
     st = {'ph': 0.0, 'env': 1.0}
     m.wobble_step(st, 0.25, True, False, 60.0, 4.0)      # periodo minimo 5 s

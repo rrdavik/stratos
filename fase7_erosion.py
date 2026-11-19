@@ -98,7 +98,7 @@ impares, caen donde esta el SEQ1) y:
      semicorcheas, 0,8 x el paso). Un golpe durante la caida salta otra vez
      al pico, en seco. Es la transformacion final, en cada fotograma: no
      cambia la altura real. La velocidad escala el pico entre 0,6 y 1. Los satelites que nacen en las vecinas no se hinchan.
-  3. LUZ. luz_celda de la celda golpeada, con el color del pad, sube a su
+  3. LUZ. La luz de la celda golpeada (v20: en la especie, sin loseta), con el color del pad, sube a su
      intensidad maxima en el mismo fotograma del pico y cae con la misma
      curva: el golpe se lee aunque la estructura sea pequena. No tapa al
      secuenciador (si suena en la celda, el centro se parte). El destello
@@ -119,7 +119,8 @@ el ciclo y heredan mas: los mundos pueden acortarse.
 EL GOLPE SE VE COMO UNA NOTA (v9)
 ---------------------------------
 Sin balizas ni sectores: cada golpe ilumina, igual que una nota de un
-secuenciador, el centro de las celdas que erosiona (loseta luz_celda) y su
+secuenciador, las celdas que erosiona (hasta la v19 tambien la loseta
+luz_celda del centro; desde la v20, motor v125, la especie: focos del tinte) y su
 formacion, que se hincha y se tine, con el color de su pad (tabla
 colores_drum): plena en la celda del golpe, la mitad en el primer anillo y
 un cuarto en el segundo. Se apaga en Vidabalizadrum segundos. Si en la
@@ -164,7 +165,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase7 v19  (autoprueba: los colores de la luz de celda con la loseta opaca, motor v124)'
+VERSION = 'fase7 v20  (sin loseta de luz: el golpe se ve en la formacion y la especie, motor v125)'
 banner(VERSION)
 
 base = require_base(7)
@@ -421,7 +422,7 @@ leeme(base, 7, """FASE 7 - EROSION E IMPULSO
   altura, huella.
   Perfiles del usuario: 1 bombo impulso +3, 2 caja (-15, radio 1, corta 3),
   3 tom impulso +2, 4-8 aranazos.
-  El golpe se ve como una nota: el centro de la celda y la formacion con
+  El golpe se ve como una nota: la formacion y la especie de la celda con
   el color de su pad (colores_drum), en las celdas que erosiona; se apaga
   en Vidabalizadrum s. Luzdrum: intensidad (0 la apaga).
   Presupuesto: por encima de Umbraldensidad, radios x2.
@@ -479,7 +480,7 @@ def prueba(t):
             len(cf['perfiles']) == len(cf['tipos']) == (9 if cf['nivel'] >= 21 else 8)
             and cf['modos'][:8] == list(m.MODOS_DEFECTO) and cf['pulsos'][:8] == list(m.PULSOS_DEFECTO)
             and cf['pump_rels'][:8] == list(m.PUMP_REL_DEFECTO), '%s %s' % (cf['modos'], cf['pulsos']))
-    cd = dict(m.cfg(), luz_celda_opaca=1)    # v19 (motor v124): los colores, con la loseta opaca
+    cd = dict(m.cfg())
     cd['nivel'] = min(cd['nivel'], 13)            # la erosion de la fase 7, sin los accidentes de la 14
     cd['perfiles'], cd['tipos'] = list(m.PERFILES_DEFECTO), list(m.TIPOS_DEFECTO)
     cd['target_mode'], cd['balizas_drum'], cd['luz_drum'] = 0, 1, 1.0
@@ -534,16 +535,9 @@ def prueba(t):
     t.check('tabla editada en la v13: capacidad pasa a pulsos con sus numeros (el tom, 4)',
             cambios == ['capacidad -> pulsos'] and ft13.filas[0] == COLS and ft13.filas[3][5] == '4',
             str(ft13.filas[:4]))
-    # luz de celda: colores dibujados en el centro de una celda
+    # v20 (motor v125): sin loseta; la luz de la celda son los focos del tinte de la especie
     def centro_de(Wx, cx, now, celda):
-        nn = m.normal_i(celda)
-        out = []
-        for f in m.cell_lights(Wx, cx, now):
-            p = f[:3]
-            r = math.sqrt(sum(v * v for v in p))
-            if r > 0 and sum(p[q] / r * nn[q] for q in range(3)) > 0.9999:
-                out.append(tuple(round(v, 3) for v in f[9:12]))
-        return out
+        return [tuple(round(v, 3) for v in f[2]) for f in m.focos_tinte(Wx, cx, now) if f[1] == celda]
     redondo = lambda col: tuple(round(v, 3) for v in col)
 
     def tinte_formacion(Wx, cx, now, celda):
@@ -572,14 +566,13 @@ def prueba(t):
     centro = centro_de(W3, cd, 2.01, i)
     con_golpe = tinte_formacion(W3, cd, 2.01, i)
     acerca = lambda c_: sum(abs(c_[q] - col_caja[q]) for q in range(3))
-    t.check('golpe: el centro de la celda con el color del pad, como una nota',
+    t.check('golpe: la celda se enciende con el color del pad, como una nota',
             len(centro) == 1 and acerca(centro[0]) < 0.05, str(centro))
     t.check('golpe: la formacion se tine del color del pad, como con una nota',
             con_golpe is not None and acerca(con_golpe) < acerca(sin_golpe) - 0.2,
             '%s -> %s' % (sin_golpe and [round(v, 2) for v in sin_golpe],
                           con_golpe and [round(v, 2) for v in con_golpe]))
-    bien, det = instance_color_ok(base.op('luz_celda'))
-    t.check('luz_celda pinta el color de cada instancia (lo que se dibuja)', bien, det)
+    t.check('v20: sin loseta de luz en la celda (luz_celda)', base.op('luz_celda') is None)
     # 2. en la celda del SEQ1: el golpe manda mientras dura; despues vuelve el SEQ1
     W3s = m.new_world()
     m.note_on(W3s, cd, 1, 64, 100, 5.0)
@@ -587,13 +580,13 @@ def prueba(t):
     m.light_cell(W3s, cd, i, 6, 1.0, 6.0)           # charles en reposo del SEQ1
     durante = centro_de(W3s, cd, 6.01, i)
     despues = centro_de(W3s, cd, 6.0 + cd['vida_baliza_drum'] + 0.01, i)
-    t.check('golpe en la celda del SEQ1: se ve el pad; al apagarse, vuelve el SEQ1',
-            len(durante) == 1 and len(despues) == 1
-            and sum(abs(durante[0][q] - m.drum_color(cd, 6)[q]) for q in range(3)) < 0.1
-            and sum(abs(despues[0][q] - m.seq_color(cd, 1)[q] * 0.7) for q in range(3)) < 0.1,
+    t.check('golpe en la celda del SEQ1: manda el pad mientras dura; al apagarse, la celda se apaga',
+            len(durante) >= 1 and not despues
+            and sum(abs(durante[0][q] - m.drum_color(cd, 6)[q]) for q in range(3)) < 0.1,
             '%s / %s' % (durante, despues))
-    t.check('sin otras senales de bateria: una sola loseta por celda, sin borde',
-            len(m.cell_lights(W3s, cd, 6.01)) == 1 and not hasattr(m, 'PAD_DIRS'))
+    pad6 = redondo(m.drum_color(cd, 6))
+    t.check('sin otras senales de bateria: una sola luz del pad por celda, sin borde',
+            durante.count(pad6) == 1 and not hasattr(m, 'PAD_DIRS'))
     # 3. un golpe: la celda a plena luz, el radio mas tenue, y se apaga
     W3b = m.new_world()
     m.note_on(W3b, cd, 1, 64, 100, 0.0)
@@ -606,7 +599,7 @@ def prueba(t):
     t.check('el golpe ilumina la celda y su radio, mas tenue al alejarse',
             nivel.get(ev['celda'], 0) > max(a1) > max(a2) > 0, '%d celdas' % len(nivel))
     t.check('se apaga en Vidabalizadrum',
-            not m.cell_lights(dict(W3b, last={1: None, 2: None}), cd,
+            not m.focos_tinte(dict(W3b, last={1: None, 2: None}), cd,
                               2.0 + cd['vida_baliza_drum'] + 1e-3))
     # 4. se ve con formacion, vacia y con huella
     W5 = m.new_world()
@@ -736,9 +729,6 @@ def prueba(t):
     t.check('ningun color es cian, ambar, blanco ni el verde menta del SEQ1',
             all(sum(abs(a - b) for a, b in zip(col, ref)) > 0.3
                 for col in cd['colores_drum'] for ref in (cian, ambar, blanco, m.COL_SEQ1_VERDE)))
-    geo = base.op('luz_celda')
-    t.check('luz_celda gira y se balancea con el planeta (hija de planeta)',
-            geo is not None and gira_con_planeta(geo))
     t.check('leyenda EROSION (pad 4)', 'EROSION' in m.legend() and 'IMPULSO' not in m.legend())
     prueba_impulso(t, m, cd)
 
@@ -1051,9 +1041,8 @@ def prueba_impulso(t, m, cd):
     W8 = mundo(3)
     m.note_on(W8, c10, 1, 64, 100, 6.0)
     m.erosion(W8, c10, 0, 100, 6.0)
-    cent = [f for f in m.cell_lights(W8, c10, 6.0)
-            if max(range(m.N), key=lambda x: sum(f[q] * m.normal_i(x)[q] for q in range(3))) == i]
-    t.check('la luz del impulso no tapa la del SEQ1: el centro se parte en los dos colores',
+    cent = [f for f in m.focos_tinte(W8, c10, 6.0) if f[1] == i]     # v20 (motor v125): sin loseta
+    t.check('la luz del impulso no tapa la del SEQ1: se ven los dos colores',
             len(cent) == 2, str(len(cent)))
     # v16: la pagina mas corta; cada intensidad a 0 apaga lo suyo
     fuera = [nm for nm in ('Balizasdrum', 'Erosionvel', 'Pumpon', 'Multradio', 'Pumphold',

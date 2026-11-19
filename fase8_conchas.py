@@ -104,7 +104,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase8 v14  (la paleta con Tema auto reserva las bandas de las tres especies)'
+VERSION = 'fase8 v15  (autoprueba: sin loseta de luz, el golpe sobre una celda tenida se ve en la especie, motor v125)'
 banner(VERSION)
 
 base = require_base(8)
@@ -465,13 +465,13 @@ def prueba(t):
     Wl['scars'][fondo[0] * 1000 + a] = 40.0
     la2 = de_celda(m.shell_lights(Wl, cl, 40.1), a)
     t.check('una loseta con cicatriz reciente no se tine', len(la2) == len(la) - 1)
-    # bateria: la loseta del pad sigue viendose en el centro de la celda tenida
+    # bateria: la luz del pad se sigue viendo en la celda tenida (v15, motor v125: en la especie)
     cl7 = dict(cl)
     cl7['perfiles'] = [(0, 0, 0)] * 8
     m.erosion(Wl, cl7, 3, 100, 40.2)
     ev = Wl['ev']['erosion']
-    luz_c = de_celda(m.cell_lights(Wl, cl7, 40.25), ev['celda'])
-    t.check('golpe de bateria sobre una celda tenida: se ve su luz en el centro',
+    luz_c = [f for f in m.focos_tinte(Wl, cl7, 40.25) if f[1] == ev['celda']]
+    t.check('golpe de bateria sobre una celda tenida: se ve su luz',
             len(luz_c) >= 1)
     # interruptor
     cl['luz_conchas'] = 0

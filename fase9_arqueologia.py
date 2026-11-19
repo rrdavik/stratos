@@ -47,7 +47,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase9 v13  (autoprueba: el verde menta del SEQ1 con la loseta opaca, motor v124)'
+VERSION = 'fase9 v14  (autoprueba: el verde menta del SEQ1, sin loseta de luz, motor v125)'
 banner(VERSION)
 
 base = require_base(9)
@@ -180,13 +180,13 @@ def prueba(t):
             f.get('bomba') and f.get('k') == m.BOMBA_DESTELLO and Wr['ev']['erosion']['modo'] == 'impulso'
             and 'corte' not in Wr['ev']['erosion'] and pico > 0 and abs(v - pico) < 1e-9)
     t.check('leyenda CORTE', 'CORTE' in m.legend())
-    c9 = dict(m.cfg(), luz_celda_opaca=1)    # v13 (motor v124): el color, con la loseta opaca
+    c9 = dict(m.cfg())
     c9['nivel'] = max(9, c9['nivel'])
     W9 = m.new_world()
     m.note_on(W9, c9, m.GEO, 64, 100, 1.0)
-    f9 = m.cell_lights(W9, c9, 1.0)
+    f9 = m.focos_tinte(W9, c9, 1.0)                 # v14 (motor v125): sin loseta, en la especie
     t.check('la luz del SEQ1 es verde menta desde la fase 9 (motor v105)',
-            f9 and tuple(round(x, 3) for x in f9[0][9:12])
+            f9 and tuple(round(x, 3) for x in f9[0][2])
             == tuple(round(x, 3) for x in m.COL_SEQ1_VERDE))
 
 

@@ -24,8 +24,8 @@ QUE HACE
                  - a las luces: el color de luz_principal, luz_relleno y
                    luz_destello se multiplica por 1 - noche (lo que dibuja
                    con Phong se apaga con ellas);
-                 - a las capas de luz y a las particulas (luz_celda,
-                   luz_conchas, luz_local, particulas, humo...): el color de
+                 - a las capas de luz y a las particulas (luz_conchas,
+                   luz_local, particulas, humo...; luz_celda hasta el motor v124): el color de
                    sus instancias, por 1 - noche.
                Nada se recompila ni sale del render.
   LEYENDA      NOCHE    4.0 s   quedan 2.3   emiten 12 inclusiones y 1 escision
@@ -48,7 +48,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase28 v2  (la luz de relleno se apaga de noche aunque la fase 10 le haya dado su color)'
+VERSION = 'fase28 v3  (autoprueba: sin loseta de luz en la celda, motor v125)'
 banner(VERSION)
 
 base = require_base(28)
@@ -138,7 +138,7 @@ def _prueba(t, m):
     apagadas = all(f[9] == f[10] == f[11] == 0.0 for k in capas for f in out[k])
     t.check('durante la noche: uNoche 1, las capas de luz a 0 y las losetas recien horneadas con sus motas '
             'emitiendo (alfa + 100), y solo ellas',
-            u['uNoche'][0] == 1.0 and apagadas and 'luz_celda' in capas and not out.get('particulas')
+            u['uNoche'][0] == 1.0 and apagadas and capas and 'luz_celda' not in out and not out.get('particulas')
             and len(emiten) == 6 and sh['banda'] == 'humana' and m.emiten_noche(W, c) == (3, 0),
             '%d losetas emiten; capas %s' % (len(emiten), capas))
     W['noche'] = [absTime.seconds - 1.0, absTime.seconds + 3.0]     # las luces leen el reloj de TouchDesigner
