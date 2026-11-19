@@ -7,9 +7,10 @@ No se ejecuta solo: lo carga cada script de fase. Contiene:
   - utilidades para crear nodos y parametros (las mismas de fase12_base.py)
   - install_core(): instala o refresca el 'motor' y los DAT que lo usan
     (midi_callbacks, latido, reticula_callbacks, formas_callbacks, pulsos)
-    y la luz de celda (luz_celda). Todas las fases lo llaman: relanzar una
-    fase deja siempre el motor al dia. Tambien retira las balizas de
-    versiones anteriores (baliza, baliza2, balizas_drum, luz_drum).
+    y la luz de los secuenciadores (luz_conchas, Luzseq, Luzespecie). Todas las
+    fases lo llaman: relanzar una fase deja siempre el motor al dia. Tambien
+    retira las balizas de versiones anteriores (baliza, baliza2, balizas_drum,
+    luz_drum) y, desde la v93, la loseta de luz de la celda (luz_celda).
   - make_instanced(): un Geometry COMP alimentado por un Script CHOP del motor
     (una caja, una esfera o, desde la fase 11, un modelo del catalogo)
   - instanciar_modelos(): las geometrias de los modelos (fase 11: pulida y
@@ -31,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v92'
+VERSION_COMUN = 'comun v93'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -41,7 +42,7 @@ RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'r
                 'marcas', 'brotes_mal', 'tocon', 'monstruo', 'agua_juego', 'trumpzilla',
                 'godzilla',                        # comun v91 (fase 40): Godzilla, el monstruo de la creacion
                 'particulas', 'humo',
-                'luz_celda', 'luz_conchas',
+                'luz_conchas',                     # comun v93: sin luz_celda (la loseta de luz)
                 'luz_local',                       # lo transparente (motas, humo) y las capas aditivas, al final
                 # comun v88: los emblemas y demonios del mal (fase 39), despues de todo: son neon
                 # opaco con luz propia (las capas aditivas, dibujadas encima, podian lavarlos)
@@ -123,7 +124,7 @@ def diagnostico_render(base):
     malos = []
     for nm in ['motor', 'latido', 'ritmo', 'reticula_chop', 'formas_callbacks',
                'i_formas_pulidas', 'i_formas_porosas', 'i_coronas', 'i_estratos',
-               'i_luz_celda', 'i_rios', 'mat_piel_agua', 'camara', 'render', 'rotulo', 'con_rotulo',
+               'i_rios', 'mat_piel_agua', 'camara', 'render', 'rotulo', 'con_rotulo',
                'salida']:
         o = base.op(nm)
         if o is None:
@@ -665,7 +666,7 @@ def onValueChange(par, prev):
 '''
 
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
-# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_celda;
+# (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_conchas;
 # desde la fase 11, i_particulas y un i_mod_... por modelo del catalogo;
 # desde la fase 13, i_tejido: rios y carreteras).
 # Desde la fase 12 las filas de los modelos traen un canal mas, 'a': la
@@ -2558,7 +2559,7 @@ def install_core(base, carpeta, fase):
     set_camera(base)
     set_legend(base)                 # antes de retirar baliza_callbacks
     retirar_balizas(base)
-    install_luz_celda(base)
+    install_luz_seq(base)
     reparar_color_instancias(base)
     apply_wobble(base)
     patch_ritmo(base)
@@ -3848,40 +3849,37 @@ def reparar_color_instancias(base):
     return not malas
 
 
-def install_luz_celda(base):
-    """La luz de celda: losetas a ras de la superficie, una geometria para
-    todas (centro: secuenciadores; borde: bateria). Comun v92 (motor v124):
-    aditivas, un brillo transparente que se suma sin tapar el suelo ni la especie
-    (Luzcelda, su intensidad); con Luzceldaopaca, opacas como hasta la v91.
-    Luzespecie: el tinte del secuenciador sobre la especie fuera de la naturaleza."""
+# comun v93 (motor v125): la loseta de luz del centro de la celda, fuera (la de las fases 1 y 2
+# la crea fase12_base.py con estos mismos nodos; desde la fase 3 se retira)
+LOSETA_VIEJA = ('luz_celda', 'i_luz_celda', 'mat_luz_celda')
+LOSETA_PARS = ('Luzcelda', 'Luzceldaopaca')
+
+
+def install_luz_seq(base):
+    """La luz de los secuenciadores: Luzseq (la enciende), Luzespecie (el tinte sobre la
+    especie fuera de la naturaleza, comun v92) y la capa de las conchas (luz_conchas).
+    Comun v93: retira la loseta de luz del centro de la celda (luz_celda, i_luz_celda,
+    mat_luz_celda) y sus parametros (Luzcelda, Luzceldaopaca)."""
     page = get_page(base, 'Fase3')
     add_par(base, page, 'toggle', 'Luzseq', 'Luz de los secuenciadores en las celdas', True)
-    add_par(base, page, 'float', 'Luzcelda', 'Luz de celda: intensidad del brillo (transparente)', 0.6, 0.0, 2.0)
-    add_par(base, page, 'toggle', 'Luzceldaopaca', 'Luz de celda opaca (la de antes)', False)
     add_par(base, page, 'float', 'Luzespecie',
             'Luz de los secuenciadores sobre la especie (ciudad, industria y mezcla)', 0.8, 0.0, 3.0)
-    mat = make_constant(base, 'mat_luz_celda', 780, 700, (1.0, 1.0, 1.0))
-    if not luz_celda_aditiva(mat):
-        info('mat_luz_celda: pon a mano en Common: Blending = not parent().par.Luzceldaopaca, '
-             'Source Color One, Destination Color One, Depth Writing = parent().par.Luzceldaopaca')
-    geo = make_instanced(base, 'luz_celda', 520, 700, 'mat_luz_celda')
-    bien, det = instance_color_ok(geo)
-    if not bien:
-        fail('luz_celda no lee el color por instancia (%s): Instance 2 -> Color R/G/B = '
-             'r g b, Color Mode = Replace' % det)
+    quitados = []
+    for nm in LOSETA_VIEJA:
+        o = base.op(nm)
+        if o is None:
+            continue
+        try:
+            o.destroy()
+            quitados.append(nm)
+        except Exception as e:
+            info('no pude borrar %s: %s; borralo a mano' % (nm, e))
+    quitados += [nm for nm in LOSETA_PARS if remove_par(base, nm)]
+    if quitados:
+        ok('sin loseta de luz en la celda (la nota se ve en la especie y en las conchas): '
+           'quitados %s' % ', '.join(quitados))
     install_luz_conchas(base, page)
     set_render(base)
-    return geo
-
-
-def luz_celda_aditiva(mat):
-    """Comun v92: mat_luz_celda suma su color (Blending, Src y Dest = One, sin escribir
-    profundidad) salvo con Luzceldaopaca. Devuelve True si quedo enlazado."""
-    a = any(setexpr(mat, n, 'not parent().par.Luzceldaopaca') for n in ('blending', 'blend'))
-    b = setmenu(mat, ['srcblend', 'srcblendcolor'], ['one'], None)
-    d = setmenu(mat, ['destblend', 'dstblend', 'destblendcolor'], ['one'], None)
-    w = any(setexpr(mat, n, 'parent().par.Luzceldaopaca') for n in ('depthwriting', 'depthwrite', 'writedepth'))
-    return bool(a and b and d and w)
 
 
 def install_luz_conchas(base, page):

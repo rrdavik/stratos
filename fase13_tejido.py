@@ -95,7 +95,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase13 v10  (la mezcla de especies: cada red dentro de su especie, un arbol por mancha)'
+VERSION = 'fase13 v11  (autoprueba: sin loseta de luz, la nota sobre una celda con rio se ve en la especie, motor v125)'
 banner(VERSION)
 
 base = require_base(13)
@@ -355,25 +355,21 @@ def _prueba(t, m):
             'paleta de conchas',
             m._en_banda(250.0) and m._en_banda(245.0)
             and all(abs(a - b) < 1e-6 for a, b in zip(m.COL_RIO, m.oklch_to_srgb(0.65, 0.18, 250.0)[0])))
-    # 4. una nota del SEQ1 en una celda con rio: la celda se ilumina y el rio sigue azul y fuera de la loseta
+    # 4. una nota del SEQ1 en una celda con rio: la celda se ilumina (v11, motor v125: foco del tinte,
+    #    sin loseta) y el rio sigue azul
     ca = m.cauces(W, c)
     cel = next(iter(sorted(ca['por_celda']))) if ca['por_celda'] else -1
     antes = [list(f) for f in filas]
     if cel >= 0:
         m.note_on(W, c, m.GEO, m.cell_note(cel), 100, absTime.seconds + 10.0, 120.0)
     inst = m.build_instances(W, c, absTime.seconds + 10.0)
-    luz = [f for f in inst.get('luz_celda', [])
-           if sum(f[q] * m.NORMALS[cel][q] for q in range(3)) > 0.999 * math.sqrt(sum(v * v for v in f[:3]))]
-    lado = max([max(f[6], f[8]) for f in luz] or [0.0]) / max(1e-6, m.suelo(W, c, cel))
-    lejos = min([math.acos(max(-1.0, min(1.0, sum(d[q] * m.NORMALS[cel][q] for q in range(3)))))
-                 for d, _ in ca['por_celda'].get(cel, [])] or [0.0])
-    t.check('nota del SEQ1 sobre una celda con rio: la loseta se ilumina y el rio sigue azul, sin pasar por ella',
+    luz = [f for f in m.focos_tinte(W, c, absTime.seconds + 10.0) if f[1] == cel]
+    t.check('nota del SEQ1 sobre una celda con rio: la celda se ilumina y el rio sigue azul',
             # motor v97: con Oceano la nota hace crecer la isla y el cauce sube con ella (y la
             # desembocadura se mueve): se comprueba que las cintas siguen ahi y con su color
             cel >= 0 and luz and inst.get('rios')
-            and set(tuple(f[9:12]) for f in inst.get('rios', [])) == set(tuple(f[9:12]) for f in antes)
-            and lejos > 0.5 * lado,
-            'celda %d, rio a %.3f rad del centro, loseta %.3f' % (cel, lejos, 0.5 * lado))
+            and set(tuple(f[9:12]) for f in inst.get('rios', [])) == set(tuple(f[9:12]) for f in antes),
+            'celda %d, %d focos' % (cel, len(luz)))
     # 5. veinte conchas apiladas: ninguna del azul de los rios
     t.check('veinte conchas apiladas: ningun tono de concha en la banda del azul de los rios (235-275)',
             not any(235.0 <= h_hue(n, c['paleta_tono']) < 275.0 for n in range(20))

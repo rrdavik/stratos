@@ -16,10 +16,10 @@ pasa a HIBRIDA, conservando ambos rastros:
   - geologia colonizada   -> macizo aterrazado (plantas rectas en la ladera)
   - arquitectura colonizada -> torre mineralizada (excrecencias en los flancos)
 
-El SEQ2 no tiene baliza (v2): cada nota suya enciende el CENTRO de su
-celda en ambar, con pulso y tenue hasta la siguiente. Si el SEQ1 y el
-SEQ2 estan en la misma celda, el centro se parte en dos mitades: SEQ1 al
-oeste, SEQ2 al este.
+El SEQ2 no tiene baliza (v2): cada nota suya enciende su celda en ambar.
+Desde la v6 (motor v125) sin loseta en el centro: la luz va a la formacion,
+a la especie (los focos del tinte de la piel) y a las conchas. Si el SEQ1 y
+el SEQ2 estan en la misma celda, se ven los dos colores.
 
 LOS PARAMETROS DEL SEQ2 (pagina Fase2, debajo de los del SEQ1)
 --------------------------------------------------------------
@@ -46,7 +46,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase5 v5  (autoprueba: el ambar del SEQ2 con la loseta opaca, motor v124)'
+VERSION = 'fase5 v6  (sin loseta de luz: el ambar del SEQ2 en la especie, motor v125)'
 banner(VERSION)
 
 base = require_base(5)
@@ -103,7 +103,7 @@ set_render(base)
 leeme(base, 5, """FASE 5 - DOS ESPECIES
   SEQ1 (Canal) construye geologia; SEQ2 (Canal2) construye arquitectura.
   Una especie sobre la otra la coloniza: celda hibrida.
-  Centro de la celda en ambar = SEQ2 (con el SEQ1, partido en dos).
+  Luz ambar en la celda = SEQ2 (con el SEQ1, los dos colores).
   Canal2 / Filtrar2 / Nota2 = Canal / Filtrar / Nota del SEQ1, en la misma
   pagina (Fase2).
   Prueba: Nota2 + Sembrar2.""")
@@ -125,21 +125,20 @@ def prueba(t):
     t.check('SEQ2 sobre geologia -> hibrida', W['sp'][i] == m.HIB and W['own'][i] == m.GEO)
     t.check('el material lo sigue fijando el fundador', W['vel'][i] == 30)
     t.check('SEQ2 en celda vacia -> arquitectura', W['own'][j] == m.ARQ)
-    # luz de celda: el SEQ2 en ambar; con el SEQ1 en la misma celda, los dos
+    # v6 (motor v125): la luz del SEQ2 en ambar (focos del tinte); con el SEQ1 en la misma celda, los dos
     W2 = m.new_world()
     c2 = dict(c)
     c2['nivel'] = max(5, c2['nivel'])
-    c2['luz_celda_opaca'] = 1                # motor v124: el color, con la loseta opaca
     m.note_on(W2, c2, m.ARQ, 50, 100, 1.0)
-    filas = m.cell_lights(W2, c2, 1.0)
-    t.check('nota del SEQ2: el centro de su celda en ambar',
-            len(filas) == 1 and tuple(round(x, 3) for x in filas[0][9:12])
+    focos = m.focos_tinte(W2, c2, 1.0)
+    t.check('nota del SEQ2: su celda se enciende en ambar',
+            len(focos) == 1 and tuple(round(x, 3) for x in focos[0][2])
             == tuple(round(x, 3) for x in m.COL_SEQ2))
     m.note_on(W2, c2, m.GEO, 50, 100, 1.0)
-    filas = m.cell_lights(W2, c2, 1.0)
-    cols = set(tuple(round(x, 3) for x in f[9:12]) for f in filas)
-    t.check('SEQ1 y SEQ2 en la misma celda: se ven los dos (centro partido)',
-            len(filas) == 2 and len(cols) == 2)
+    focos = m.focos_tinte(W2, c2, 1.0)
+    cols = set(tuple(round(x, 3) for x in f[2]) for f in focos)
+    t.check('SEQ1 y SEQ2 en la misma celda: se ven los dos',
+            len(focos) == 2 and len(cols) == 2)
     t.check('sin baliza del SEQ2', base.op('baliza2') is None and base.op('i_baliza2') is None)
     t.check('leyenda SEQ2', 'SEQ2' in m.legend())
     # Nota2 y Filtrar2, como Nota y Filtrar del SEQ1

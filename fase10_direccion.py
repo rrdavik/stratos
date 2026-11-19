@@ -76,7 +76,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase10 v17  (superficie con los ajustes de la captura del 18 de noviembre: Camfov 45, Encuadre 0,85, Camaltura 1,7)'
+VERSION = 'fase10 v18  (autoprueba: sin loseta de luz, en actuacion la luz del golpe se ve en la especie, motor v125)'
 banner(VERSION)
 
 base = require_base(10)
@@ -297,8 +297,9 @@ def prueba(t):
     t.midi(0x9C, 0x40, 0x64)
     m.erosion(m.world(), m.cfg(), 0, 100, 0.0)            # el pad 1 ilumina su celda
     inst = m.build_instances(m.world(), m.cfg(), 0.1, hide_beacons=m.performance())
-    t.check('modo actuacion: sin reticula; la luz de celda se ve',
-            inst['luz_celda'] and 'baliza2' not in inst and not int(base.par.Showgrid))
+    t.check('modo actuacion: sin reticula; la luz del golpe se ve (v18: en la especie, sin loseta)',
+            m.focos_tinte(m.world(), m.cfg(), 0.1) and 'luz_celda' not in inst and 'baliza2' not in inst
+            and not int(base.par.Showgrid))
     base.par.Modoactuacion = before
     m.on_value('Modoactuacion', before)
     t.check('al quitarlo vuelve la reticula', bool(int(base.par.Showgrid)) == (not before))

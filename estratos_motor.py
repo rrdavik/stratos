@@ -234,6 +234,9 @@
 #                 la opaca) y casi apagada en reposo; la especie que pinta el SEQ se tine
 #                 en todos los temas (uTinte del shader de la piel, Luzespecie; antes solo
 #                 en la naturaleza), tambien los edificios. Sin geometria nueva.
+#                 Motor v125, comun v93: SIN LOSETA DE LUZ en el centro de la celda: fuera
+#                 cell_lights, la geometria luz_celda (i_luz_celda, mat_luz_celda) y
+#                 Luzcelda y Luzceldaopaca. La nota se ve en la especie y en las conchas.
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -245,7 +248,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v124'
+MOTOR_VERSION = 'motor v125'
 
 import math
 import time as _time
@@ -404,9 +407,9 @@ DEFAULT_CFG = dict(
     scar_time=4.0, flash=3.0,
     # fase 7: luz de la bateria en las celdas que golpea
     balizas_drum=1, luz_drum=1.0, vida_baliza_drum=0.8, luz_seq=1,
-    # motor v124: la loseta de luz, aditiva (transparente) con Luzcelda de intensidad; Luzceldaopaca,
-    # la de antes. Luzespecie: el tinte del secuenciador sobre la especie fuera de la naturaleza
-    luz_celda=0.6, luz_celda_opaca=0, luz_especie=0.8,
+    # motor v124: Luzespecie, el tinte del secuenciador sobre la especie fuera de la naturaleza
+    # (motor v125: sin loseta de luz en la celda)
+    luz_especie=0.8,
     # fase 8: la luz de los secuenciadores se extiende a las conchas de la celda
     luz_conchas=1, luz_conchas_pulso=0.35, luz_conchas_reposo=0.10, luz_conchas_alcance=4,
     erosion_vel=1, vel_ref=100,
@@ -2568,7 +2571,7 @@ def _luz_formacion(W, cfg, i, now):
 
 
 # --- pumping (fase 7 v12): la celda golpeada por un impulso se hincha ----------
-SIN_BOMBA = ('particulas', 'luz_celda', 'luz_conchas', 'estratos')
+SIN_BOMBA = ('particulas', 'luz_conchas', 'estratos')
 _MODELO_DE_GEO = {}
 
 
@@ -2738,7 +2741,7 @@ def _build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False
     lvl = cfg['nivel']
     _TERRENO['sello'] = _TERRENO.get('sello', 0) + 1     # un fotograma: el terreno se mira una vez
     lim = limit(cfg)
-    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[], luz_celda=[],
+    out = dict(formas_pulidas=[], formas_porosas=[], coronas=[], estratos=[],
                luz_conchas=[])
     R = top_radius(W, cfg)
     piel = lvl >= 11
@@ -2852,7 +2855,7 @@ def _build_instances(W, cfg, now, hide_beacons=False, tiles=True, refresco=False
     luz_mal = out.pop('luz_mal', None)  # motor v120: los haces, el neon y los yates del mal, en la luz local
     if luz_mal and lvl >= 18:
         out['luz_local'] = list(out.get('luz_local') or []) + luz_mal
-    out['luz_celda'] = cell_lights(W, cfg, now)  # parte del mundo: tambien en actuacion
+    podar_luz(W, cfg, now)          # motor v125: sin loseta de luz; los golpes apagados, fuera
     out['luz_conchas'] = shell_lights(W, cfg, now)
     if lvl >= 8 and tiles:
         out['estratos'] = build_tiles(W, cfg, now)
@@ -2985,21 +2988,17 @@ def shell_lights(W, cfg, now):
     return rows
 
 
-# --- luz de celda (sin balizas) -----------------------------------------------
-# Cada celda cuenta con luz lo que le esta pasando: una loseta opaca en el
-# centro de la celda y la propia formacion (se hincha y se tine) con el
-# color de quien acaba de tocarla.
-#   - una nota de un SEQ: su color mientras suena (gate) y tenue hasta su
-#     siguiente nota. Si estan los dos, el centro se parte: SEQ1 al oeste,
-#     SEQ2 al este.
-#   - un golpe de bateria (motor v21): igual, con el color del pad; plena en
-#     la celda del golpe, mas tenue en su radio; se apaga en Vidabalizadrum.
-#   - si coinciden, manda la luz mas intensa en ese instante.
-# Con formacion, la loseta se ensancha hasta asomar alrededor de su base.
-# Hasta el motor v123, colores opacos, sin transparencia: no se mezclan (Luzceldaopaca).
-# Motor v124: la loseta es ADITIVA (mat_luz_celda suma su color: un brillo transparente
-# que no tapa el suelo ni la especie), Luzcelda de intensidad y mas tenue en reposo; la
-# especie de la celda la tine el shader de la piel (uTinte, Luzespecie) en todos los temas.
+# --- la luz de quien toca la celda (sin balizas) ----------------------------------
+# Lo que le pasa a cada celda se ve con el color de quien acaba de tocarla:
+#   - una nota de un SEQ: su color mientras suena (gate) y se apaga en SEQ_DECAY
+#     al soltarla; un golpe de bateria (motor v21), el color del pad, pleno en la
+#     celda del golpe y mas tenue en su radio, hasta Vidabalizadrum.
+#   - se ve en la propia formacion (se hincha y se tine, build_instances), en la
+#     especie (los focos uTinte del shader de la piel: Tintebordenat en la
+#     naturaleza, Luzespecie en el resto) y en las conchas (shell_lights).
+# Hasta el motor v124 tambien encendia una loseta en el centro de la celda
+# (luz_celda: opaca hasta la v123; aditiva, con Luzcelda y Luzceldaopaca, en la
+# v124). Motor v125: QUITADA, con su geometria y sus parametros.
 
 COL_SEQ1 = (0.10, 0.90, 1.00)       # cian hasta la fase 8
 COL_SEQ1_BLANCO = (0.95, 0.95, 0.92)  # blanco desde la fase 9 hasta el motor v104 (referencia)
@@ -3009,7 +3008,6 @@ COL_SEQ1_BLANCO = (0.95, 0.95, 0.92)  # blanco desde la fase 9 hasta el motor v1
 COL_SEQ1_VERDE = (0.615, 1.00, 0.70)
 COL_SEQ2 = (1.00, 0.62, 0.25)       # ambar
 SEQ_DECAY = 0.25                    # el pulso de la nota cae en 1/4 de segundo
-LUZ_LIFT = 0.02
 
 
 def seq_color(cfg, s):
@@ -3038,11 +3036,6 @@ def light_cell(W, cfg, c, pad, w, now):
     if old is not None and not es_impulso(cfg, pad) and light_level(cfg, old, now) > w + 1e-9:
         return
     pads[int(pad)] = [now, float(w)]
-
-
-def _tile(n, e, t, base, dx, dz, sx, sz, h, col):
-    p = _add(_add(_mul(n, base + LUZ_LIFT), e, dx), t, dz)
-    return _row(p, n, sx, h, sz, col)
 
 
 def seq_lights(W, cfg, now):
@@ -3093,61 +3086,16 @@ def drum_color(cfg, pad):
     return cols[int(pad) % len(cols)]
 
 
-def cell_lights(W, cfg, now):
-    """Losetas de luz del centro de las celdas. Secuenciadores y bateria se
-    ven igual: la loseta del centro (y la formacion, ver build_instances)
-    con el color de quien acaba de tocar la celda. Si coinciden, manda la
-    luz mas intensa en ese instante (un golpe, por ser el ultimo, suele
-    ganar a un secuenciador en reposo)."""
-    rows = []
-    centros = seq_lights(W, cfg, now) if cfg.get('luz_seq', 1) else {}
+def podar_luz(W, cfg, now):
+    """Quita de W['luz'] los golpes ya apagados (lo hacia cell_lights hasta el motor v124):
+    los focos del tinte (focos_tinte) solo recorren los encendidos."""
     luz = W.get('luz', {})
-    opaca = bool(cfg.get('luz_celda_opaca', 0))     # motor v124
-    kluz = max(0.0, cfg.get('luz_celda', 0.6))
     for c in list(luz):
         pads = luz[c]
         for pd in [pd for pd in pads if nivel_pad(W, cfg, c, pd, pads[pd], now) <= 0.0]:
             del pads[pd]
         if not pads:
             del luz[c]
-    for c in sorted(set(centros) | set(luz)):
-        if c >= N:
-            continue
-        I, pad = drum_light(W, cfg, c, now)
-        lista = sorted(centros.get(c, []))
-        if pad is not None and lista and es_impulso(cfg, pad):
-            # fase 7 v12: el impulso no tapa al secuenciador: el centro se parte
-            fuentes = [(seq_color(cfg, s_), env) for s_, env in lista] + [(drum_color(cfg, pad), I)]
-        elif pad is not None and I >= max([env for _, env in lista] or [0.0]):
-            fuentes = [(drum_color(cfg, pad), I)]
-        else:
-            fuentes = [(seq_color(cfg, s_), env) for s_, env in lista]
-        if not fuentes:
-            continue
-        n = normal_i(c)
-        e, t = tangents(n)
-        base = base_radius(W, cfg, c)
-        cw, cl = _cell_sizes(base, c)
-        if is_pole(c):
-            cw, cl = cw * 1.25, cl * 1.25
-        lado_x, lado_z = 0.34 * cw, 0.34 * cl
-        if W['vh'][c] > 0.005 and W['own'][c]:           # asoma alrededor de la base
-            sc = cfg['sat_size'] if W['par'][c] >= 0 else 1.0
-            m_ = 0.52 * min(cw, cl) * sc
-            lado_x, lado_z = max(lado_x, m_), max(lado_z, m_)
-        partes = len(fuentes)
-        for q, (col, env) in enumerate(fuentes):
-            if opaca:
-                b = 0.7 + 0.3 * env                # tenue en reposo, plena con la nota o el golpe
-            else:                                  # motor v124: aditiva, casi apagada en reposo
-                b = kluz * (0.3 + 0.7 * env)
-            col = (col[0] * b, col[1] * b, col[2] * b)
-            g = 0.80 + 0.20 * env
-            sx = lado_x * g / partes
-            dx = (q - 0.5 * (partes - 1)) * sx
-            rows.append(_tile(n, e, t, base, dx, 0.0, sx * 0.96, lado_z * g,
-                              0.06 + 0.22 * env, col))
-    return rows
 
 
 def world_dir(v, angle_deg, tilt_deg, wobble_deg=0.0):
@@ -11266,7 +11214,7 @@ def malla_pradera():
 #            a del mapa de alturas lleva la lava (el crater y 3 coladas), que el shader
 #            enciende; un penacho de humo (la geometria 'humo') y, cada ERUPCION_CADA
 #            compases, una erupcion de ERUPCION_DURA: brasas, ceniza y la lava al rojo.
-OCEANO_LIFT = 0.012          # el mar, sobre la loseta (por debajo de la luz de la celda, LUZ_LIFT)
+OCEANO_LIFT = 0.012          # el mar, sobre la loseta
 ISLA_ALTO = (0.055, 0.008)   # alto de la meseta de la isla: base + por ocupacion (hasta 8)
 ISLA_K = (0.60, 0.06, 0.9)   # su radio, x media celda: base + por ocupacion, tope (v98: no se traga el mar)
 ISTMO_DESDE = 3
@@ -16084,13 +16032,13 @@ def vaciar_inclusiones(W):
 #     multiplica por 1 - noche y las motas recien horneadas suben su emisivo;
 #   - a las luces: el color de luz_principal, luz_relleno y luz_destello se
 #     multiplica por 1 - noche (lo que dibuja con Phong se apaga con ellas);
-#   - a las capas de luz y a las particulas (luz_celda, luz_conchas, luz_local,
+#   - a las capas de luz y a las particulas (luz_conchas, luz_local,
 #     particulas, humo...): el color de sus instancias, por 1 - noche.
 # Nada se recompila ni sale del render.
 
 NOCHE_SALIDA = 0.4              # s que tarda en volver la luz al acabar la noche
 ALFA_RECIENTE = 100.0           # lo que suma al alfa una loseta recien horneada (el shader lo lee)
-NOCHE_CAPAS = ('luz_celda', 'luz_conchas', 'luz_local', 'particulas', 'humo', 'vagones', 'diagnostico',
+NOCHE_CAPAS = ('luz_conchas', 'luz_local', 'particulas', 'humo', 'vagones', 'diagnostico',
                'coronas')
 NOCHE_FUERA = ('particulas', 'humo')    # transparentes: a oscuras del todo, no se dibujan
 
@@ -20176,7 +20124,7 @@ def _legend_armas(W, c):
 _CACHE = {'frame': None, 'inst': None, 'printed': {}}
 
 CHOP_NAMES = ['i_formas_pulidas', 'i_formas_porosas', 'i_coronas',
-              'i_estratos', 'i_luz_celda', 'i_luz_conchas']
+              'i_estratos', 'i_luz_conchas']      # motor v125: sin i_luz_celda
 
 
 def chop_names(c=None):
@@ -20350,8 +20298,6 @@ def cfg():
     c.update(
         nivel=_p('Nivel', 3),
         luz_seq=int(_p('Luzseq', True)),
-        luz_celda=max(0.0, _p('Luzcelda', 0.6)),                  # motor v124
-        luz_celda_opaca=int(_p('Luzceldaopaca', False)),
         luz_especie=max(0.0, _p('Luzespecie', 0.8)),
         # v58: Luzconchas es una intensidad (0 apaga; un toggle viejo da 0 o 1)
         luz_conchas=int(_p('Luzconchas', 1.0) > 0.0),
@@ -20867,8 +20813,8 @@ def _say(key, text):
 
 def _seq1_beacon(note):
     """La ultima nota del SEQ1 queda en Nota (pagina Fase2): la usa Sembrar
-    y la leyenda. Ya no hay baliza: la luz del centro de la celda la da el
-    motor (cell_lights)."""
+    y la leyenda. Ya no hay baliza ni, desde el motor v125, loseta de luz:
+    la nota se ve en la especie (uTinte) y en las conchas (shell_lights)."""
     try:
         parent().par.Nota = int(note)
     except Exception:
@@ -21300,9 +21246,10 @@ def uniformes_piel(W, c, now):
 
 
 def focos_tinte(W, c, now):
-    """[(intensidad, celda, color)]: lo que tine el borde de la naturaleza: la
-    nota de cada secuenciador y el golpe de pad mas fuerte, los tres mas
-    intensos (el albedo no se tine: fase 11 v5)."""
+    """[(intensidad, celda, color)]: lo que tine el borde de la especie (en la
+    naturaleza; motor v124, en todos los temas): la nota de cada secuenciador y el
+    golpe de pad mas fuerte, los tres mas intensos (el albedo no se tine: fase 11
+    v5). Motor v125: es la luz de quien toca la celda (ya no hay loseta)."""
     out = []
     if c.get('luz_seq', 1):
         for cel, lista in seq_lights(W, c, now).items():
