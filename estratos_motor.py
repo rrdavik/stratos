@@ -263,6 +263,20 @@
 #                 siguiente (una ladera escalonada, unos 35 grados). Colores de tierra
 #                 (COL_BANCO, antes mas rojizos). TouchDesigner lo dibuja con normales
 #                 planas (MODELOS_FACETADOS: un Facet SOP en su COMP de modelos).
+#                 Motor v130 (fase 16 v6): LOS RESTOS DE LOS CORTES, DISTINGUIBLES. Lo que
+#                 ensenan los cortes de la ciudad y la industria eran losas grises y pardas
+#                 parecidas (cimientos, sotanos, galeria, vagoneta, pozo). Ahora la ciudad
+#                 ensena esqueletos de edificio (arq_portico: pilares y vigas de hormigon
+#                 rotos con las armaduras al aire; en el fondo, arq_portico_caido) y
+#                 esqueletos humanos en blanco hueso (arq_osario, arq_osario_suelo),
+#                 alternos; la industria, restos de maquinaria en oxido (ind_engranajes:
+#                 una rueda dentada, un pinon, el eje y la biela; ind_engranajes_suelo).
+#                 En la pared no se estiran: van en fila, de 1 a 3 por cara, cada uno tan
+#                 ancho como alto (PROPORCION_EXPUESTA). Donde hubo mal (la concha guarda sp:
+#                 contenido = 'mal', en cualquier tema), signos de dolar dorados y calaveras
+#                 de demonio rojas con cuernos, alternos (arq_dolar, arq_demonio y sus
+#                 _suelo). La calle y la naturaleza, igual.
+#                 cimiento_de (el registro de la tipologia) ya no decide la pieza.
 #                 Motor v128 (fase 11 v25): LA MEZCLA, REESCRITA. La tabla de fabrica:
 #                 hasta el 25 % de construido todo es naturaleza; desde ahi nacen la
 #                 ciudad y la industria y, con el mundo construido entero, quedan
@@ -290,7 +304,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v129'
+MOTOR_VERSION = 'motor v130'
 
 import math
 import time as _time
@@ -3590,10 +3604,133 @@ def _modelos():
                         _caja(-0.25, 0.76, 0.5, 0.54, 0.08, 1.0, 0.0, 0.0, 35.0),
                         _caja(0.25, 0.76, 0.5, 0.54, 0.08, 1.0, 0.0, 0.0, -35.0),
                         _losa(-0.2, -0.16, 0.08, 0.13, 0.0, 1.0), _losa(0.16, 0.2, 0.08, 0.13, 0.0, 1.0)]
+    # motor v130: lo que ensenan los cortes de la ciudad y la industria, distinguible (antes,
+    # cimientos, sotanos y galerias: losas grises parecidas en las dos especies). La ciudad,
+    # esqueletos de edificio y esqueletos humanos mezclados; la industria, restos de maquinaria
+    M.update(_restos_excavacion())
     for k, prims in M.items():          # ninguno pasa de alto 1 ni baja de 0
         b = _caja_modelo(prims)
         if b[2] < -1e-6 or b[3] > 1.0 + 1e-6:
             M[k] = _a_alto_uno(prims)
+    return M
+
+
+def _engranaje(cx, cy, cz, d, dientes, grueso, plano):
+    """Motor v130: una rueda dentada: disco (prisma de 6 lados), cubo y dientes en
+    corona. plano 'xy' (en la pared: el eje hacia fuera, Z) o 'xz' (tumbada en el fondo)."""
+    rx = 90.0 if plano == 'xy' else 0.0
+    out = [_hexa(cx, cy, cz, d, grueso, rx), _hexa(cx, cy, cz, 0.28 * d, 2.2 * grueso, rx)]
+    r = 0.5 * d + 0.035
+    for k in range(dientes):
+        a = 360.0 * k / dientes
+        ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+        if plano == 'xy':
+            out.append(_caja(cx + r * ca, cy + r * sa, cz, 0.08, 0.6 * math.pi * d / dientes, grueso, 0.0, 0.0, a))
+        else:
+            out.append(_caja(cx + r * ca, cy, cz + r * sa, 0.08, grueso, 0.6 * math.pi * d / dientes, 0.0, -a, 0.0))
+    return out
+
+
+def _en_plano(x, y, sx, sy, grueso, g, plano, y0=0.0):
+    """Una caja de un dibujo plano: (x, y) en el dibujo y g grados de giro en su plano. En
+    'xy', de pie en la pared (grueso en Z); en 'xz', tumbada (el dibujo en X-Z, grueso en Y)."""
+    if plano == 'xy':
+        return _caja(x, y, 0.0, sx, sy, grueso, 0.0, 0.0, g)
+    return _caja(x, y0 + 0.5 * grueso, -(y - 0.5), sx, grueso, sy, 0.0, g, 0.0)
+
+
+def _dolar(plano):
+    """Motor v130: el signo $ de bloques (la S de cinco trazos y la barra que la cruza)."""
+    g = 0.14 if plano == 'xy' else 0.4
+    t = 0.12                            # el trazo
+    trazos = [(0.0, 0.84, 0.5, t), (-0.19, 0.69, t, 0.3), (0.0, 0.5, 0.5, t), (0.19, 0.31, t, 0.3),
+              (0.0, 0.16, 0.5, t), (0.19, 0.78, t, 0.1), (-0.19, 0.22, t, 0.1),
+              (0.0, 0.5, 0.07, 1.0)]    # la barra, de arriba abajo
+    return [_en_plano(x, y, sx, sy, g, 0.0, plano) for x, y, sx, sy in trazos]
+
+
+def _demonio(plano):
+    """Motor v130: la calavera de un demonio: craneo, mandibula, pomulos y dos cuernos
+    curvos (dos tramos cada uno) hacia arriba y hacia fuera."""
+    g = 0.3 if plano == 'xy' else 0.5
+    if plano == 'xy':
+        out = [_bola(0.0, 0.45, 0.0, 0.46, 0.44), _caja(0.0, 0.2, 0.0, 0.26, 0.12, 0.24)]
+        out += [_caja(k * 0.2, 0.36, 0.0, 0.1, 0.08, 0.22, 0.0, 0.0, -k * 20.0) for k in (-1, 1)]
+        for k in (-1, 1):
+            out += [_caja(k * 0.17, 0.68, 0.0, 0.09, 0.22, 0.09, 0.0, 0.0, -k * 35.0),
+                    _caja(k * 0.27, 0.84, 0.0, 0.06, 0.2, 0.06, 0.0, 0.0, k * 10.0)]
+        return out
+    out = [_bola(0.0, 0.25, 0.0, 0.46, 0.5), _caja(0.0, 0.1, 0.26, 0.26, 0.2, 0.12)]
+    for k in (-1, 1):
+        out += [_caja(k * 0.17, 0.2, -0.2, 0.09, 0.2, 0.24, 0.0, k * 35.0, 0.0),
+                _caja(k * 0.27, 0.2, -0.36, 0.06, 0.2, 0.2, 0.0, -k * 10.0, 0.0)]
+    return out
+
+
+def _restos_excavacion():
+    """Motor v130: las piezas de los cortes de la ciudad y la industria. En la pared (como
+    las de la fase 16): X a lo largo, Y arriba, Z hacia fuera; en el fondo: tumbadas (Y la
+    normal, aplastada por la instancia)."""
+    M = {}
+    # la ciudad: un portico de hormigon roto, con las armaduras asomando de pilares y vigas
+    M['arq_portico'] = [_losa(-0.44, -0.32, 0.0, 1.0, -0.12, 0.12),          # pilar entero
+                        _losa(-0.06, 0.06, 0.0, 0.6, -0.12, 0.12),           # pilar partido
+                        _losa(0.32, 0.44, 0.0, 0.82, -0.12, 0.12),
+                        _losa(-0.5, 0.12, 0.88, 1.0, -0.13, 0.13),           # viga alta, partida
+                        _losa(-0.5, 0.5, 0.42, 0.52, -0.13, 0.13),           # viga media
+                        _caja(0.3, 0.86, 0.0, 0.34, 0.08, 0.24, 0.0, 0.0, -24.0)]   # la otra mitad, caida
+    for x, y0, y1, g in ((-0.03, 0.6, 0.8, 12.0), (0.03, 0.6, 0.76, -16.0), (0.0, 0.6, 0.84, 3.0),
+                         (0.36, 0.82, 0.96, 18.0), (0.41, 0.82, 0.94, -10.0)):
+        M['arq_portico'].append(_caja(x, 0.5 * (y0 + y1), 0.0, 0.018, y1 - y0, 0.018, 0.0, 0.0, g))
+    M['arq_portico'] += [_caja(0.12 + 0.08 * k, 0.94 + 0.02 * k, 0.0, 0.16, 0.016, 0.016, 0.0, 0.0, -10.0 - 15 * k)
+                         for k in range(2)]                                  # varillas de la viga partida
+    M['arq_portico'] += [_caja(-0.18, 0.05, 0.0, 0.14, 0.1, 0.16, 0.0, 0.0, 14.0),
+                         _caja(0.18, 0.04, 0.0, 0.1, 0.08, 0.12, 0.0, 0.0, -20.0)]   # cascotes
+    # el mismo portico, derrumbado en el fondo: pilares tumbados, vigas cruzadas, varillas de pie
+    M['arq_portico_caido'] = [_losa(-0.48, 0.42, 0.0, 0.3, z - 0.07, z + 0.07) for z in (-0.32, 0.02, 0.34)]
+    M['arq_portico_caido'] += [_caja(-0.3, 0.42, 0.0, 0.14, 0.24, 0.9, 0.0, 12.0, 0.0),
+                               _caja(0.28, 0.4, 0.05, 0.14, 0.22, 0.8, 0.0, -18.0, 0.0)]
+    M['arq_portico_caido'] += [_caja(0.44, 0.65, z, 0.025, 0.7, 0.025, 0.0, 0.0, g)
+                               for z, g in ((-0.34, 18.0), (-0.3, -12.0), (0.0, 22.0), (0.32, -8.0))]
+    # un esqueleto humano tendido en el estrato, visto de lado en la pared
+    M['arq_osario'] = [_bola(-0.38, 0.52, 0.0, 0.2, 0.18),                    # craneo
+                       _caja(-0.34, 0.43, 0.0, 0.1, 0.05, 0.1, 0.0, 0.0, -10.0)]   # mandibula
+    M['arq_osario'] += [_caja(-0.24 + 0.065 * k, 0.5, 0.0, 0.045, 0.05, 0.06) for k in range(8)]   # columna
+    for k in range(5):                                                       # costillas
+        x = -0.2 + 0.055 * k
+        M['arq_osario'] += [_caja(x + 0.02, 0.6, 0.0, 0.022, 0.2, 0.05, 0.0, 0.0, -22.0 + 4 * k),
+                            _caja(x + 0.02, 0.4, 0.0, 0.022, 0.2, 0.05, 0.0, 0.0, 22.0 - 4 * k)]
+    M['arq_osario'] += [_caja(0.3, 0.5, 0.0, 0.1, 0.18, 0.08),                # pelvis
+                        _caja(0.42, 0.42, 0.0, 0.2, 0.035, 0.05, 0.0, 0.0, -8.0),   # femures
+                        _caja(0.42, 0.58, 0.0, 0.2, 0.035, 0.05, 0.0, 0.0, 10.0),
+                        _caja(-0.12, 0.74, 0.0, 0.22, 0.03, 0.05, 0.0, 0.0, -15.0),   # brazo
+                        _bola(0.5, 0.39, 0.0, 0.05), _bola(0.51, 0.6, 0.0, 0.05)]       # rodillas
+    # el esqueleto tendido en el fondo, visto desde arriba (las costillas, a los lados)
+    M['arq_osario_suelo'] = [_bola(-0.38, 0.4, 0.0, 0.2, 0.8), _caja(-0.33, 0.2, 0.0, 0.08, 0.4, 0.1)]
+    M['arq_osario_suelo'] += [_caja(-0.24 + 0.065 * k, 0.25, 0.0, 0.045, 0.5, 0.05) for k in range(8)]
+    for k in range(5):
+        x = -0.18 + 0.055 * k
+        M['arq_osario_suelo'] += [_caja(x, 0.3, 0.11, 0.022, 0.5, 0.2, 0.0, 22.0 - 4 * k, 0.0),
+                                  _caja(x, 0.3, -0.11, 0.022, 0.5, 0.2, 0.0, -22.0 + 4 * k, 0.0)]
+    M['arq_osario_suelo'] += [_caja(0.3, 0.3, 0.0, 0.1, 0.5, 0.18),
+                              _caja(0.42, 0.2, -0.06, 0.2, 0.35, 0.04, 0.0, 10.0, 0.0),
+                              _caja(0.42, 0.2, 0.06, 0.2, 0.35, 0.04, 0.0, -8.0, 0.0),
+                              _caja(-0.1, 0.2, 0.26, 0.24, 0.3, 0.035, 0.0, 25.0, 0.0),
+                              _caja(-0.1, 0.2, -0.26, 0.24, 0.3, 0.035, 0.0, -20.0, 0.0)]
+    # la industria: una rueda dentada grande engranada con un pinon, el eje y la biela partida
+    M['ind_engranajes'] = (_engranaje(-0.12, 0.52, 0.0, 0.56, 12, 0.14, 'xy')
+                           + _engranaje(0.3, 0.26, 0.0, 0.26, 8, 0.12, 'xy')
+                           + [_caja(0.33, 0.62, 0.05, 0.05, 0.62, 0.05, 0.0, 0.0, -32.0),     # biela
+                              _caja(-0.12, 0.52, 0.0, 0.06, 0.06, 0.5)])                       # eje
+    # el mal (motor v130): un signo de dolar dorado y la calavera de un demonio con cuernos
+    M['arq_dolar'] = _dolar('xy')
+    M['arq_dolar_suelo'] = _dolar('xz')
+    M['arq_demonio'] = _demonio('xy')
+    M['arq_demonio_suelo'] = _demonio('xz')
+    M['ind_engranajes_suelo'] = (_engranaje(-0.12, 0.25, 0.0, 0.56, 12, 0.5, 'xz')
+                                 + _engranaje(0.3, 0.2, -0.24, 0.26, 8, 0.4, 'xz')
+                                 + [_caja(0.32, 0.3, 0.2, 0.05, 0.3, 0.56, 0.0, 35.0, 0.0),
+                                    _caja(-0.12, 0.5, 0.0, 0.07, 1.0, 0.07)])
     return M
 
 
@@ -6097,13 +6234,22 @@ def _catalogo_defecto():
     # fase 16: lo que ensenan los cortes, en la pared (expuesto) y en el fondo
     for tema, esp, pared, fondo in (('naturaleza', 'vegetacion', ['fos_tronco', 'fos_tronco2'], ['fos_tronco']),
                                     ('naturaleza', 'relieve', ['fos_basalto'], ['fos_basalto']),
-                                    ('ciudad', 'informal', ['arq_cimientos'], ['arq_cimientos']),
-                                    ('ciudad', 'planificada', ['arq_sotano'], ['arq_cimientos']),
+                                    # motor v130: esqueletos de edificio y humanos mezclados (antes,
+                                    # cimientos y sotanos), y restos de maquinaria (antes, galeria,
+                                    # vagoneta y pozo en la mina; sotano y cimientos en la energia)
+                                    ('ciudad', 'informal', ['arq_portico', 'arq_osario'],
+                                     ['arq_portico_caido', 'arq_osario_suelo']),
+                                    ('ciudad', 'planificada', ['arq_portico', 'arq_osario'],
+                                     ['arq_portico_caido', 'arq_osario_suelo']),
                                     ('ciudad', 'calle', ['arq_calle'], ['arq_calle']),
-                                    ('industria', 'mina', ['ind_galeria', 'ind_vagoneta'], ['ind_pozo']),
-                                    ('industria', 'energia', ['arq_sotano'], ['arq_cimientos'])):
+                                    ('industria', 'mina', ['ind_engranajes'], ['ind_engranajes_suelo']),
+                                    ('industria', 'energia', ['ind_engranajes'], ['ind_engranajes_suelo']),
+                                    ('industria', 'refineria', ['ind_engranajes'], ['ind_engranajes_suelo'])):
         add(tema, esp, 'expuesto', pared)
         add(tema, esp, 'fondo', fondo)
+    for tema in TEMAS:                  # motor v130: lo que deja el mal, en una concha de cualquier tema
+        add(tema, 'mal', 'expuesto', ['arq_dolar', 'arq_demonio'])
+        add(tema, 'mal', 'fondo', ['arq_dolar_suelo', 'arq_demonio_suelo'])
     add('ciudad', 'galeria', 'union', ['arq_galeria'])
     add('industria', 'galeria', 'union', ['ind_galeria'])
     cadenas = {('naturaleza', 'vegetacion'): (['inclinar', 'puentes', 'hundir', 'esporas'], ['emerger']),
@@ -14373,23 +14519,40 @@ def tile_material(cfg, sh, s, c):
 
 COL_EXPUESTO = dict(vegetacion=(0.62, 0.55, 0.44),      # fosil: piedra clara sobre el carbon
                     relieve=(0.27, 0.28, 0.32),          # columnas de basalto
-                    informal=(0.60, 0.58, 0.54), planificada=(0.52, 0.52, 0.50),
-                    calle=(0.24, 0.24, 0.25), mina=(0.40, 0.30, 0.20), energia=(0.50, 0.46, 0.42),
-                    refineria=(0.30, 0.28, 0.27))
-RUG_EXPUESTO = dict(vegetacion=0.35, relieve=0.4, informal=0.85, planificada=0.8, calle=0.7, mina=0.8,
-                    energia=0.8, refineria=0.6)
+                    # motor v130: la ciudad, hormigon claro; la industria, oxido (antes, grises y pardos
+                    # parecidos: 0,60/0,58/0,54, 0,52/0,52/0,50, 0,40/0,30/0,20, 0,50/0,46/0,42 y 0,30/0,28/0,27)
+                    informal=(0.72, 0.71, 0.67), planificada=(0.68, 0.68, 0.66),
+                    calle=(0.24, 0.24, 0.25), mina=(0.62, 0.27, 0.10), energia=(0.58, 0.30, 0.12),
+                    refineria=(0.55, 0.25, 0.10))
+RUG_EXPUESTO = dict(vegetacion=0.35, relieve=0.4, informal=0.85, planificada=0.8, calle=0.7, mina=0.35,
+                    energia=0.35, refineria=0.35)
+# motor v130: las piezas con color propio (los huesos, blanco hueso: se leen en cualquier especie)
+COL_PIEZA_EXPUESTA = dict(arq_osario=(0.95, 0.92, 0.82), arq_osario_suelo=(0.95, 0.92, 0.82),
+                          # el mal: el dolar, oro; el demonio, rojo (ROJO_MAL)
+                          arq_dolar=(0.98, 0.76, 0.18), arq_dolar_suelo=(0.98, 0.76, 0.18),
+                          arq_demonio=(0.80, 0.08, 0.08), arq_demonio_suelo=(0.80, 0.08, 0.08))
+RUG_PIEZA_EXPUESTA = dict(arq_osario=0.5, arq_osario_suelo=0.5, arq_dolar=0.2, arq_dolar_suelo=0.2,
+                          arq_demonio=0.45, arq_demonio_suelo=0.45)
+# motor v130: las piezas de pared que no se estiran (ancho / alto: 1, el cubo unidad del modelo) y van en fila,
+# hasta MAX_EN_FILA por cara: un esqueleto o un engranaje estirados 6:1 no se reconocen
+PROPORCION_EXPUESTA = dict(arq_portico=1.0, arq_osario=1.0, ind_engranajes=1.0, arq_dolar=0.8, arq_demonio=1.0)
+MAX_EN_FILA = 3
 COL_GALERIA, RUG_GALERIA = (0.58, 0.57, 0.53), 0.8
 NOMBRE_ERA = dict(vegetacion='carbon', relieve='basalto', informal='ruinas', planificada='ruinas',
-                  calle='calles', mina='galerias', energia='escoria', refineria='escoria')
-PRIORIDAD_ERA = ['vegetacion', 'planificada', 'informal', 'relieve', 'mina', 'refineria', 'energia', 'calle']
+                  calle='calles', mina='galerias', energia='escoria', refineria='escoria',
+                  mal='botin del mal')          # motor v130
+PRIORIDAD_ERA = ['mal', 'vegetacion', 'planificada', 'informal', 'relieve', 'mina', 'refineria', 'energia', 'calle']
 UNION_NOMBRE = dict(canon='canon', galeria='galeria de metro')
 
 
 def contenido(sh, c):
     """Lo que guarda la concha sh en la celda c: su especie, 'calle' (una
-    celda de la ciudad por la que pasaba una carretera) o None."""
+    celda de la ciudad por la que pasaba una carretera), 'mal' (motor v130) o None."""
     if sh.get('tema') is None:
         return None
+    sp, oc = sh.get('sp'), sh.get('occ')     # motor v130: una celda del mal (la concha guarda sp)
+    if sp and oc and 0 <= c < len(sp) and sp[c] == MAL and oc[c] > 0:
+        return 'mal'
     e = sh['esp'][c]
     if e:
         return RUINA_ESP[e - 1]
@@ -14647,29 +14810,25 @@ def _build_arqueologia(W, cfg, now, out):
         for s, x, j, a, b, q in piezas:
             sh = W['shells'][s]
             tema = tema_concha(sh, x)           # fase 11 v22: la de esa celda (una concha puede ser mixta)
-            col = COL_EXPUESTO.get(q, COL_EXPUESTO['planificada'])
+            # motor v130: sin los cimientos de cada tipo (cimiento_de): la ciudad ensena esqueletos
+            mo, v = _variante(modelos_de(cfg, tema, q, 'fondo' if j < 0 else 'expuesto'), s, x, max(j, -1))
+            if mo is None:
+                continue
+            col = COL_PIEZA_EXPUESTA.get(mo) or COL_EXPUESTO.get(q, COL_EXPUESTO['planificada'])
+            rug = RUG_PIEZA_EXPUESTA.get(mo, RUG_EXPUESTO.get(q, 0.8))
             if tema == 'industria' and sh.get('epoca') is not None:    # la epoca de esa concha
-                col = _mix(col, PALETA_CIUDAD[PALETA_IND + int(sh['epoca'])][0], 0.45)
+                col = _mix(col, PALETA_CIUDAD[PALETA_IND + int(sh['epoca'])][0], 0.15)   # v130: 0,15 (0,45)
             t0 = W['scars'].get(s * 1000 + x)
             if t0 is not None:                  # la cicatriz manda
                 col = _mix(COL_SCAR, col, max(0.0, min(1.0, (now - t0) / st)))
             th = b - a
             if j < 0:                           # en el fondo: medio enterrada
-                mo, v = _variante(modelos_de(cfg, tema, q, 'fondo'), s, x, -1)
-                mo = cimiento_de(sh, x, q) or mo     # fase 11 v10: los cimientos de cada tipo
-                if mo is None:
-                    continue
                 n = normal_i(c)
                 cw, cl_ = _cell_sizes(b, c)
                 h = 0.5 * min(th, 0.8)
                 giro = 30.0 * int(v * 6)
-                emit(mo, _mul(n, b - 0.5 * h), _marco(c, giro), (0.55 * cw, h, 0.55 * cl_), col,
-                     RUG_EXPUESTO.get(q, 0.8))
+                emit(mo, _mul(n, b - 0.5 * h), _marco(c, giro), (0.55 * cw, h, 0.55 * cl_), col, rug)
             else:                               # en la pared, asomando al corte
-                mo, v = _variante(modelos_de(cfg, tema, q, 'expuesto'), s, x, j)
-                mo = cimiento_de(sh, x, q) or mo
-                if mo is None:
-                    continue
                 cols = column_radii(W, cfg, j)
                 r_mid = next((0.5 * (ri + ro) for s_, ri, ro in cols if s_ == s), 0.5 * (a + b))
                 off, marco, ancho = _marco_pared(c, j)
@@ -14677,7 +14836,26 @@ def _build_arqueologia(W, cfg, now, out):
                 prof = min(0.3, 0.25 * ancho)
                 y0 = a + 0.1 * th
                 p = _add(_add(_mul(marco[1], y0), off, r_mid), marco[2], 0.1 * prof)
-                emit(mo, p, marco, (0.7 * ancho, 0.8 * th, prof), col, RUG_EXPUESTO.get(q, 0.8))
+                lista = modelos_de(cfg, tema, q, 'expuesto')
+                if mo not in PROPORCION_EXPUESTA:
+                    emit(mo, p, marco, (0.7 * ancho, 0.8 * th, prof), col, rug)
+                else:                           # motor v130: en fila, sin estirar (y alternas)
+                    alto = 0.8 * th
+                    w = max(PROPORCION_EXPUESTA.get(x_, 1.0) for x_ in lista) * alto
+                    k_ = max(1, min(MAX_EN_FILA, int(0.7 * ancho / max(1e-6, w))))
+                    hueco = 0.7 * ancho / k_
+                    k0 = lista.index(mo) if mo in lista else 0
+                    for e in range(k_):
+                        mo_e = lista[(k0 + e) % len(lista)]
+                        col_e, rug_e = col, rug
+                        if mo_e != mo:          # la otra pieza de la mezcla, con su color
+                            col_e = COL_PIEZA_EXPUESTA.get(mo_e) or COL_EXPUESTO.get(q, col)
+                            rug_e = RUG_PIEZA_EXPUESTA.get(mo_e, RUG_EXPUESTO.get(q, 0.8))
+                            if t0 is not None:
+                                col_e = _mix(COL_SCAR, col_e, max(0.0, min(1.0, (now - t0) / st)))
+                        dx = ((e + 0.5) / k_ - 0.5) * 0.7 * ancho
+                        emit(mo_e, _add(p, marco[0], dx), marco,
+                             (min(hueco, PROPORCION_EXPUESTA.get(mo_e, 1.0) * alto), alto, prof), col_e, rug_e)
             n_piezas += 1
     galerias = 0
     for u in W['uniones']:
