@@ -15,8 +15,16 @@ QUE HACE
   NATURALEZA   sima: en la veta de carbon, troncos fosiles aplastados en
                horizontal (donde hubo bosque) y columnas de basalto (donde
                hubo relieve).
-  CIUDAD       excavacion: cimientos (ciudad informal), sotanos (planificada)
-               y tramos de calle con su colector (donde pasaban carreteras).
+  CIUDAD       excavacion (v6, motor v130): esqueletos de edificio (porticos
+               de hormigon rotos con las armaduras al aire) y esqueletos
+               humanos en blanco hueso, alternos; y tramos de calle con su
+               colector (donde pasaban carreteras). Antes, cimientos y sotanos.
+  INDUSTRIA    (v6) restos de maquinaria: engranajes de oxido con su eje y la
+               biela partida. Antes, galerias, vagonetas, pozos y sotanos.
+  MAL          (v6) donde hubo mal (la concha guarda sp), signos de dolar
+               dorados y calaveras de demonio rojas con cuernos, alternos.
+  EN FILA      (v6) en la pared, esqueletos, engranajes, dolares y demonios no
+               se estiran: van en fila, de 1 a 3 por cara.
   DONDE        solo dentro del corte: en el fondo de cada celda cortada y en
                las paredes de sus vecinas mas altas, como mucho
                Detalleexpuesto piezas por celda, una por era antes de
@@ -54,7 +62,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase16 v5  (la mezcla de especies: los cortes leen el registro de cada celda)'
+VERSION = 'fase16 v6  (restos distinguibles: esqueletos en la ciudad, maquinaria en la industria, dolares y demonios del mal)'
 banner(VERSION)
 
 base = require_base(16)
@@ -184,10 +192,23 @@ def _prueba(t, m):
     nombres = [nm for _, nm in eras]
     t.check('el corte ensena varias eras, de los dos temas (%s)' % ', '.join(nombres),
             len(eras) >= 3 and 'carbon' in nombres and 'ruinas' in nombres)
-    t.check('piezas expuestas: troncos fosiles, basalto, cimientos o sotanos (%d)' % n_filas,
+    t.check('piezas expuestas: troncos fosiles, basalto y (v6) esqueletos de edificio o humanos (%d)' % n_filas,
             n_filas > 0 and any(g.startswith('mod_fos_tronco') for g in expuestas)
-            and any(g.startswith('mod_arq_') for g in expuestas),
+            and any(g.startswith(('mod_arq_portico', 'mod_arq_osario')) for g in expuestas)
+            and not any(v and g.startswith(('mod_arq_cimientos', 'mod_arq_sotano')) for g, v in expuestas.items()),
             ' '.join('%s %d' % (g[4:], len(v)) for g, v in sorted(expuestas.items()) if v))
+    # v6 (motor v130): la industria ensena maquinaria y el mal, dolares y demonios (en una concha
+    # hecha a mano: el mal llega en la fase 33)
+    sh_mal = dict(tema='ciudad', esp=[1] * m.N, sp=[m.MAL] + [m.GEO] * (m.N - 1), occ=[2] * m.N)
+    t.check('restos v6: el mal ensena dolares y demonios; la industria, engranajes (pared %s, fondo %s; %s)'
+            % (m.modelos_de(c, 'ciudad', 'mal', 'expuesto'), m.modelos_de(c, 'ciudad', 'mal', 'fondo'),
+               m.modelos_de(c, 'industria', 'mina', 'expuesto')),
+            m.contenido(sh_mal, 0) == 'mal' and m.contenido(sh_mal, 1) != 'mal'
+            and m.modelos_de(c, 'ciudad', 'mal', 'expuesto') == ['arq_dolar', 'arq_demonio']
+            and m.modelos_de(c, 'naturaleza', 'mal', 'fondo') == ['arq_dolar_suelo', 'arq_demonio_suelo']
+            and all(m.modelos_de(c, 'industria', q, 'expuesto') == ['ind_engranajes'] for q in ('mina', 'energia'))
+            and all(mo in m.MODELOS for mo in ('arq_dolar', 'arq_demonio', 'ind_engranajes', 'arq_portico',
+                                                 'arq_osario', 'arq_osario_suelo', 'arq_portico_caido')))
     # 3. solo dentro del corte: cada pieza, junto a una celda del corte
     R = m.top_radius(W, c)
     dentro = True

@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v96'
+VERSION_COMUN = 'comun v97'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -4982,14 +4982,31 @@ def construir_modelo(modelos, nombre, prims, x, y, ajustadas):
         setmenu(xf, ['xord'], ['srt'], 0)
         setmenu(xf, ['rord'], ['xyz'], 0)
         unir(xf, todo, k)
+    fin = todo
+    if nombre in getattr(m_motor_facetados, 'lista', ()):
+        # comun v97 (motor v129): normales planas (puntos unicos por cara): el talud de la
+        # corta aplastado por la instancia ya no se ve redondeado
+        fin = mk(comp, 'facetSOP', 'facetas', 500, 0)
+        connect(fin, todo, 0)
+        bien = setp_any(fin, ['unique', 'uniquepoints'], True) and \
+            setp_any(fin, ['postnml', 'postcomputenml', 'computenormals'], True)
+        if not bien:
+            info('%s: no pude fijar el Facet SOP (Unique Points y Post-Compute Normals); ponlo a mano en '
+                 'modelos/%s/facetas' % (nombre, nombre))
     out = mk(comp, 'nullSOP', 'salida', 600, 0)
-    connect(out, todo, 0)
+    connect(out, fin, 0)
     for attr in ('render', 'display'):
         try:
             setattr(out, attr, True)
         except Exception:
             pass
     return comp
+
+
+class m_motor_facetados(object):
+    """comun v97: los modelos con normales planas (MODELOS_FACETADOS del motor), que
+    construir_modelos fija antes de construirlos."""
+    lista = ()
 
 
 EJEMPLAR_CB = r'''# Script SOP de un ejemplar de la biblioteca (fase 11 v8): pide al motor la
@@ -5078,6 +5095,7 @@ def construir_modelos(base, m, solo_nuevos=False):
         modelos = fresh(base, 'baseCOMP', 'modelos', 1100, 900)
     ajustadas = []
     hechos = piezas = 0
+    m_motor_facetados.lista = tuple(getattr(m, 'MODELOS_FACETADOS', ()))     # comun v97
     for k, nm in enumerate(sorted(m.MODELOS)):
         if solo_nuevos and modelos.op(nm) is not None:
             continue

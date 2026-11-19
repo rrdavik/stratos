@@ -6,7 +6,7 @@
 | Fase | Script | Qué hace | Motor | Comun |
 |---|---|---|---|---|
 | 40 | `fase40_godzilla.py` | Godzilla (aparece con la sala vacía, devora el mal, crea) y la lucha con Trumpzilla | v123 | v91 |
-| 40 v3 | `fase40_godzilla.py` | Godzilla solo anda por tierra, como Trumpzilla; para los dos, las carreteras y vías que cruzan el agua son camino | v128 | v96 |
+| 40 v3 | `fase40_godzilla.py` | Godzilla solo anda por tierra, como Trumpzilla; para los dos, las carreteras y vías que cruzan el agua son camino | v131 | v97 |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase40_godzilla.py').read())
@@ -28,7 +28,7 @@ También cambia `estratos_comun.py` (v91): `SalaJuego` apaga `Godzilla` en las a
 
 **Crea.** La celda del mal que vacía recibe un **brote de la creación**: ocupación 1 con la especie del último secuenciador que la tocó (fase 35; si ninguno, la de su origen). Es del público, cuenta en el recuento y crece con las notas como cualquier otra. Con la especie del mal (fase 39), la valla cae.
 
-**Solo anda por tierra (v3),** con las reglas de Trumpzilla (`Montierra`, fase 39): con `Oceano` no entra en el mar ni en las hondonadas inundadas. Pasa por lo construido (las islas), la tierra firme y las **carreteras y vías del tren que cruzan el agua** (motor v128: una celda de mar con carretera o vía cuenta como tierra, también para Trumpzilla). Si entre él y el mal solo hay mar, se queda en *calma*. Aparece en tierra (si todo lo vacío es mar, en una isla) y tras la lucha se retira por tierra. En la v1 nadaba. Las zanjas son del público contra el mal: el agua de una zanja es muro para él y entrar en una cuesta `Costezanja`, pero no cae ni se ahoga. Las armas de la fase 37 no le tocan.
+**Solo anda por tierra (v3),** con las reglas de Trumpzilla (`Montierra`, fase 39): con `Oceano` no entra en el mar ni en las hondonadas inundadas. Pasa por lo construido (las islas), la tierra firme y las **carreteras y vías del tren que cruzan el agua** (motor v131: una celda de mar con carretera o vía cuenta como tierra, también para Trumpzilla). Si entre él y el mal solo hay mar, se queda en *calma*. Aparece en tierra (si todo lo vacío es mar, en una isla) y tras la lucha se retira por tierra. En la v1 nadaba. Las zanjas son del público contra el mal: el agua de una zanja es muro para él y entrar en una cuesta `Costezanja`, pero no cae ni se ahoga. Las armas de la fase 37 no le tocan.
 
 ### La lucha
 
