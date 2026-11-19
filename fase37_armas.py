@@ -37,7 +37,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase37 v1  (el devorador: cerco, pisoton, estatuas, grito y relampago, apagadas de fabrica)'
+VERSION = 'fase37 v2  (autoprueba al dia con GENoZilla mas lento: una celda en 16 semicorcheas con el ruido)'
 banner(VERSION)
 
 base = require_base(37)
@@ -210,7 +210,8 @@ def _prueba(t, m, copy):
     mo = m.aparecer(W, c, S.now, a)
     W['ruido']['total'] = c['umbral_corte']
     S.semis(W, c, int(c['paso_monstruo']) // 2)
-    t.check('estatuas: el ruido de sala multiplica la velocidad hasta x2 (una celda en 8 semicorcheas)',
+    t.check('estatuas: el ruido de sala multiplica la velocidad hasta x2 (una celda en %d semicorcheas, la mitad '
+            'de Pasomonstruo)' % (int(c['paso_monstruo']) // 2),
             mo['celda'] != a and m.factor_ruido(W, c) == 2.0)
 
     # 4. grito

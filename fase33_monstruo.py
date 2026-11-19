@@ -17,8 +17,14 @@ QUE HACE
                el agua es muro) y el objetivo de mayor ocupacion / (1 + coste).
                El pequeno no elige fusiones ni coronas (los umbrales de la fase
                4). Con Verobjetivo, un tocon en la celda objetivo (D6).
-  MOVIMIENTO   una celda por el camino cada Pasomonstruo semicorcheas
-               (Pasogrande en forma grande). Sin objetivo, quieto.
+  MOVIMIENTO   una celda por el camino cada Pasomonstruo semicorcheas (32: 8
+               negras; Pasogrande 16, 4 negras, en forma grande; en zanja, x
+               Costezanja). Sin objetivo, quieto. v6: con Saltosmonstruo avanza a
+               SALTOS DE MEDIA CELDA: en su celda hasta la mitad, a media celda
+               desde la mitad (sigue siendo de su celda: alli le cuentan la zanja,
+               el pisoton, el cerco y el agua) y en la siguiente al llegar. Cada
+               salto dura Tiemposalto s (0,15) con un bote de Botesalto x su alto
+               (0,15). Apagado, se desliza como antes.
   DEVORAR      en su objetivo, en cada paso de juego, Ritmodevora escalones
                (Ritmogrande en forma grande) con _undo_note: cae primero lo
                ultimo construido (satelites, coronas, altura), como en la
@@ -40,7 +46,8 @@ QUE HACE
                conservan la geometria de su especie de origen y llevan un velo
                de la familia de material nueva mal (mat_piel_mal: casi negro,
                croma baja y brillo propio debil). El tocon, en su COMP 'tocon'.
-  LEYENDA      MONSTRUO #3  devora  celda 40 -> 52  tam 0.62  acum 5/8  x2
+  LEYENDA      MONSTRUO #3  busca  celda 40 -> 52  tam 0.62  acum 5/8  x1  paso 5/8
+               (paso: negras hechas hacia la celda siguiente / las que cuesta)
 
 OPERADORES (en /project1/FASE1)
 -------------------------------
@@ -65,7 +72,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v5  (Trumpzilla hace la mitad de dano: Danomonstruo 0,5)'
+VERSION = 'fase33 v6  (GENoZilla mas lento y a saltos de media celda: Pasomonstruo 32, Pasogrande 16)'
 banner(VERSION)
 
 base = require_base(33)
@@ -85,11 +92,14 @@ add_par(base, page, 'int', 'Ritmogrande', 'Ritmo grande (escalones por paso)', 3
 # v5: la mitad de dano. Multiplica Ritmodevora y Ritmogrande (2 x 0,5 = 1 escalon por paso;
 # 3 x 0,5 = 1,5: alterna 1 y 2). Sin publico, el monstruo ganaba la partida entera
 add_par(base, page, 'float', 'Danomonstruo', 'Dano del monstruo (x ritmo)', 0.5, 0.0, 2.0, clamp=True)
-add_par(base, page, 'int', 'Pasomonstruo', 'Paso del monstruo (semicorcheas)', 24, 1, 128, clamp=True)
-add_par(base, page, 'int', 'Pasogrande', 'Paso grande (semicorcheas)', 12, 1, 128, clamp=True)
+add_par(base, page, 'int', 'Pasomonstruo', 'Paso del monstruo (semicorcheas)', 32, 1, 128, clamp=True)
+add_par(base, page, 'int', 'Pasogrande', 'Paso grande (semicorcheas)', 16, 1, 128, clamp=True)
 # v4: GENoZilla anda un tercio mas lento (16 -> 24 y 8 -> 12 semicorcheas por celda). Un
 # proyecto con los valores de antes pasa a los nuevos una sola vez; el tope sube a 128
-for _nm, _viejo, _nuevo in (('Pasomonstruo', 16, 24), ('Pasogrande', 8, 12)):
+# v6: mas lento aun: 8 negras por celda (32 semicorcheas) y 4 en grande (16). Una sola vez
+# tambien: 16 -> 24 -> 32 y 8 -> 12 -> 16; lo cambiado a mano (20, por ejemplo) se respeta
+for _nm, _viejo, _nuevo in (('Pasomonstruo', 16, 24), ('Pasogrande', 8, 12),
+                            ('Pasomonstruo', 24, 32), ('Pasogrande', 12, 16)):
     renew_default(base, _nm, _viejo, _nuevo)
     try:
         _p = getattr(base.par, _nm)
@@ -99,6 +109,10 @@ for _nm, _viejo, _nuevo in (('Pasomonstruo', 16, 24), ('Pasogrande', 8, 12)):
     except Exception:
         pass
 add_par(base, page, 'float', 'Costezanja', 'Coste en zanja', 2.0, 1.0, 5.0, clamp=True)
+# v6: a saltos de media celda (pos_monstruo del motor v126); apagado, el deslizamiento de antes
+add_par(base, page, 'toggle', 'Saltosmonstruo', 'Saltos de media celda', True)
+add_par(base, page, 'float', 'Tiemposalto', 'Tiempo de cada salto (s)', 0.15, 0.0, 1.0, clamp=True)
+add_par(base, page, 'float', 'Botesalto', 'Bote del salto (x alto)', 0.15, 0.0, 1.0, clamp=True)
 add_par(base, page, 'int', 'Recalculo', 'Recalculo de objetivo (pasos)', 4, 1, 32, clamp=True)
 add_par(base, page, 'float', 'Esperamonstruo', 'Espera de reaparicion (s)', 8.0, 0.0, 120.0, clamp=True)
 add_par(base, page, 'toggle', 'Verobjetivo', 'Ver objetivo', True)
@@ -106,8 +120,9 @@ add_par(base, page, 'pulse', 'Simmonstruo', 'Simular monstruo')
 add_par(base, page, 'int', 'Simceldamon', 'Celda del monstruo simulado', 0, 0, m.N - 1)
 ok('pagina Fase33: Umbralaparicion 0,25, Tamanoinicial 0,5, Ocupacionmax 8, Ritmodevora 2, Ritmogrande 3, '
    'Danomonstruo 0,5 (v5: la mitad de dano), '
-   'Pasomonstruo 24, Pasogrande 12 (v4: un tercio mas lento), Costezanja 2, Recalculo 4, Esperamonstruo 8 s, Verobjetivo, Simmonstruo, '
-   'Simceldamon')
+   'Pasomonstruo 32, Pasogrande 16 (v6: 8 y 4 negras por celda), Costezanja 2, '
+   'Saltosmonstruo (v6: a saltos de media celda), Tiemposalto 0,15 s, Botesalto 0,15, '
+   'Recalculo 4, Esperamonstruo 8 s, Verobjetivo, Simmonstruo, Simceldamon')
 
 # -----------------------------------------------------------------------------
 # OPERADORES
@@ -131,7 +146,8 @@ leeme(base, 33, """FASE 33 - EL MONSTRUO Y LOS BROTES DEL MAL
   cara visible, por el borde de entrada del giro. Objetivo (cada Recalculo
   pasos o al vaciar una celda): Dijkstra, mayor ocupacion / (1 + coste); el
   pequeno no come fusiones ni coronas. Avanza una celda cada Pasomonstruo
-  semicorcheas; devora Ritmodevora x Danomonstruo (0,5: la mitad) escalones
+  semicorcheas (32: 8 negras), a saltos de media celda (Saltosmonstruo,
+  Tiemposalto 0,15 s, Botesalto 0,15); devora Ritmodevora x Danomonstruo (0,5: la mitad) escalones
   por paso (lo ultimo construido primero; fuera del balance). tam crece con lo devorado hasta 1 en
   Ocupacionmax: forma grande (Pasogrande, Ritmogrande, come coronas). Cada
   celda vaciada deja un brote del mal (occ 1), que crece como cualquier celda
@@ -147,7 +163,7 @@ print_report()
 
 PARS33 = ('Fuente', 'Simcasilla', 'Probllegada', 'Tparada', 'Temaenciclo', 'Modojuego', 'Duracionronda',
           'Umbralaparicion', 'Simceldamon', 'Simbalance', 'Colapsoon', 'Loncentral', 'Spritemonstruo',
-          'Especiemal')
+          'Especiemal', 'Saltosmonstruo', 'Pasomonstruo', 'Pasogrande')
 
 
 def prueba(t):
@@ -283,22 +299,120 @@ def _prueba(t, m, copy):
     S.pasos(W, c, 1)
     d2 = occ0 - W['occ'][b] - d1
     t.check('tam crece con acum (0,5 + 0,5 x acum / 8) y llega a 1 en Ocupacionmax; en forma grande devora '
-            'Ritmogrande x Danomonstruo (3 x 0,5 = 1,5: 1 y 2) por paso y avanza cada Pasogrande semicorcheas',
+            'Ritmogrande x Danomonstruo (3 x 0,5 = 1,5: 1 y 2) por paso y avanza cada Pasogrande (16) semicorcheas',
             tams == [(2, 0.625), (4, 0.75), (6, 0.875), (8, 1.0)] and grande and (d1, d2) == (1, 2)
             and mo['acum'] == 11 and pequeno == (None, int(c['paso_monstruo'])) and mo['objetivo'] == b
             and m.paso_mon(c, mo) == int(c['paso_grande']), '%s, %d y %d' % (tams, d1, d2))
 
-    # 6. el movimiento: una celda cada Pasomonstruo semicorcheas
-    W, c = S.nuevo(4)
+    # 6. el movimiento: una celda cada Pasomonstruo semicorcheas (v6: 32, 8 negras; 16 en grande; el doble en
+    # zanja) y, con Saltosmonstruo, dibujado a saltos de media celda
+    W, c = S.nuevo(8)
     lejos = _a_distancia(m, W, c, a, 3)
+    tiempos = {}
+    for forma in ('pequeno', 'grande', 'zanja'):
+        W, c = S.nuevo(8)
+        _poner(m, W, lejos, 3)
+        if forma == 'zanja':
+            m.cavar_zanja(W, c, a, 2, S.now)        # sale del fondo de una zanja: Costezanja veces mas
+        mo = m.aparecer(W, c, S.now, a)
+        if forma == 'grande':
+            mo['acum'] = int(c['ocupacion_max'])
+            m.actualizar_tam(c, mo)
+            m.recalcular_objetivo(W, c, mo, S.now)
+        nx = mo['camino'][0] if mo['camino'] else None
+        sitios = [m._pos_destino(W, c, d)[0] for d in ([a, None, 0.0], [a, nx, 0.5], [nx, None, 0.0])]
+        traza, celdas, leyendas = [], [], {}
+        for k in range(1, 2 * int(c['paso_monstruo']) * 2 + 1):
+            S.semis(W, c, 1)
+            p = m.pos_monstruo(W, c, mo, S.now + 1.0)[0]        # pasado el salto
+            traza.append(next((q for q, x in enumerate(sitios) if m._len(m._add(p, x, -1.0)) < 1e-6), -1))
+            celdas.append(mo['celda'])
+            leyendas[k] = m._legend_monstruo(W, c)
+            if mo['celda'] != a:
+                break
+        tiempos[forma] = (len(celdas), traza, celdas, leyendas)
+    esperado = dict(pequeno=int(c['paso_monstruo']), grande=int(c['paso_grande']),
+                    zanja=int(round(c['paso_monstruo'] * c['coste_zanja'])))
+    t.check('v6: entra en la celda siguiente a las Pasomonstruo (32) semicorcheas exactas, no a las 31; en grande '
+            'a las Pasogrande (16); saliendo de una zanja, el doble (64)',
+            esperado == dict(pequeno=32, grande=16, zanja=64)
+            and all(tiempos[f][0] == esperado[f] and tiempos[f][2][-2] == a and tiempos[f][2][-1] in m.NEIGH[a]
+                    for f in esperado), '%s' % dict((f, tiempos[f][0]) for f in tiempos))
+    t.check('v6: a saltos de media celda: la posicion dibujada es la de su celda hasta la semicorchea 15, media '
+            'celda de la 16 a la 31 y la celda siguiente en la 32; en grande, el corte en la 8 (y la 16); en zanja, '
+            'en la 32 (y la 64)',
+            all(tiempos[f][1] == [0] * (esperado[f] // 2 - 1) + [1] * (esperado[f] // 2) + [2] for f in esperado),
+            ' | '.join('%s %s' % (f, ''.join(str(x) for x in tiempos[f][1])) for f in tiempos))
+    t.check('v6: la linea MONSTRUO cuenta el avance en negras: paso 5/8 en pequeno, 3/4 en grande, 11/16 en '
+            'zanja', '  paso 5/8' in tiempos['pequeno'][3][20] and '  paso 3/4' in tiempos['grande'][3][12]
+            and '  paso 11/16' in tiempos['zanja'][3][44] and '  paso 0/8' in tiempos['pequeno'][3][1],
+            '%s | %s' % (tiempos['pequeno'][3][20].strip(), tiempos['zanja'][3][44].strip()))
+
+    # el salto: Tiemposalto s, con una curva suave y un bote de Botesalto x su alto
+    W, c = S.nuevo(4)
     _poner(m, W, lejos, 3)
     mo = m.aparecer(W, c, S.now, a)
-    S.semis(W, c, int(c['paso_monstruo']) - 1)
-    quieto = mo['celda']
-    S.semis(W, c, 1)
-    t.check('avanza una celda por el camino cada Pasomonstruo (24) semicorcheas', quieto == a
-            and mo['celda'] != a and mo['celda'] in m.NEIGH[a] and mo['objetivo'] == lejos,
-            '%s -> %s' % (quieto, mo['celda']))
+    nx = mo['camino'][0]
+    S.semis(W, c, int(c['paso_monstruo']) // 2)
+    t0, T = S.now, float(c['tiempo_salto'])
+    pa, ph = m._pos_destino(W, c, [a, None, 0.0])[0], m._pos_destino(W, c, [a, nx, 0.5])[0]
+    cerca = lambda p, q: m._len(m._add(p, q, -1.0)) < 1e-6      # noqa: E731
+    p0, pm, p1 = (m.pos_monstruo(W, c, mo, t0 + x * T)[0] for x in (0.0, 0.5, 1.0))
+    b0, bm, b1 = (m.bote_monstruo(W, c, mo, t0 + x * T) for x in (0.0, 0.5, 1.0))
+    t.check('v6: cada salto dura Tiemposalto (0,15) s: sale de donde estaba, a mitad de salto va a mitad de camino '
+            'con el bote en lo alto (Botesalto 0,15 x su alto) y aterriza a los Tiemposalto s, sin bote',
+            abs(T - 0.15) < 1e-9 and cerca(p0, pa) and not cerca(pm, pa) and not cerca(pm, ph) and cerca(p1, ph)
+            and b0 == 0.0 and abs(bm - 0.15) < 1e-9 and b1 == 0.0 and mo['celda'] == a,
+            'bote %.3f %.3f %.3f' % (b0, bm, b1))
+    fz = m.filas_trumpzilla(W, dict(c, nivel=38), mo, t0 + 0.5 * T) if hasattr(m, 'filas_trumpzilla') else []
+    t.check('v6: el sprite (fase 38) salta igual: el bote lo sube Botesalto x su alto y la sombra se queda en el '
+            'suelo', len(fz) == 2 and abs(m._dot(m._add(fz[1][:3], pm, -1.0), m.normal_i(a)) -
+                                           0.15 * fz[1][7]) < 0.02 * fz[1][7]
+            and m._dot(m._add(fz[0][:3], pm, -1.0), m.normal_i(a)) < 0.02 * fz[1][7], '%d filas' % len(fz))
+
+    # media celda: sigue siendo de la celda de la que sale
+    m.cavar_zanja(W, c, a, 2, S.now)
+    t.check('v6: en la media celda sigue en la celda de la que sale: una zanja que se abre en ella lo hace caer',
+            mo['estado'] == 'cae' and mo['celda'] == a and mo['caidas'] == 1
+            and cerca(m.pos_monstruo(W, c, mo, S.now + 1.0)[0], m._pos_destino(W, c, [a, None, 0.0])[0]),
+            '%s en %s' % (mo['estado'], mo['celda']))
+
+    # Saltosmonstruo apagado: el deslizamiento continuo de antes
+    base.par.Saltosmonstruo = False
+    W, c = S.nuevo(4)
+    _poner(m, W, lejos, 3)
+    mo = m.aparecer(W, c, S.now, a)
+    nx = mo['camino'][0]
+    S.semis(W, c, 8)
+    cont8 = cerca(m.pos_monstruo(W, c, mo, S.now)[0], m._pos_destino(W, c, [a, nx, 0.25])[0])
+    S.semis(W, c, 12)
+    cont20 = cerca(m.pos_monstruo(W, c, mo, S.now)[0], m._pos_destino(W, c, [a, nx, 20.0 / 32.0])[0])
+    sin_bote = m.bote_monstruo(W, c, mo, S.now)
+    base.par.Saltosmonstruo = True
+    t.check('v6: con Saltosmonstruo apagado, la posicion es continua como antes (mov / need), sin bote',
+            cont8 and cont20 and sin_bote == 0.0 and not c['saltos_monstruo'])
+
+    # proyectos viejos: 24 y 12 pasan a 32 y 16 una sola vez; un valor puesto a mano se respeta
+    claves = ['Pasomonstruo:24:32', 'Pasogrande:12:16']
+    hechas = list(base.fetch('migraciones', [], search=False) or [])
+    pm0, pg0 = base.par.Pasomonstruo.eval(), base.par.Pasogrande.eval()
+    try:
+        base.store('migraciones', [x for x in hechas if x not in claves])
+        base.par.Pasomonstruo, base.par.Pasogrande = 24, 12
+        renew_default(base, 'Pasomonstruo', 24, 32)
+        renew_default(base, 'Pasogrande', 12, 16)
+        viejo = (base.par.Pasomonstruo.eval(), base.par.Pasogrande.eval())
+        base.par.Pasomonstruo = 24
+        otra = renew_default(base, 'Pasomonstruo', 24, 32)
+        base.store('migraciones', [x for x in hechas if x not in claves])
+        base.par.Pasomonstruo = 20
+        renew_default(base, 'Pasomonstruo', 24, 32)
+        mano = base.par.Pasomonstruo.eval()
+    finally:
+        base.store('migraciones', hechas)
+        base.par.Pasomonstruo, base.par.Pasogrande = pm0, pg0
+    t.check('v6: un proyecto con Pasomonstruo 24 y Pasogrande 12 pasa a 32 y 16 (una sola vez); uno con 20 se '
+            'queda en 20', viejo == (32, 16) and not otra and mano == 20, '%s, %s' % (viejo, mano))
 
     # 7. la aparicion: la cara visible construida y el borde de entrada
     base.par.Umbralaparicion = 0.25

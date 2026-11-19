@@ -12,6 +12,7 @@ Turf War de toda la sala contra un monstruo. El público construye quedándose q
 | 32 | `fase32_juego.py` | Modo de juego, ronda, recuento del globo, herencia del mal y marca de jugador | v106 |
 | 33 | `fase33_monstruo.py` | El monstruo (aparición, objetivo, movimiento, devorar, crecer) y los brotes del mal | v107 |
 | 33 v4 | `fase33_monstruo.py` | GENoZilla un tercio más lento: `Pasomonstruo` 24 y `Pasogrande` 12 (antes 16 y 8) | v120 |
+| 33 v6 | `fase33_monstruo.py` | GENoZilla más lento y a saltos de media celda: `Pasomonstruo` 32 y `Pasogrande` 16 (8 y 4 negras por celda); `Saltosmonstruo`, `Tiemposalto` 0,15 s y `Botesalto` 0,15 | v126 |
 | 34 | `fase34_zanjas.py` | Zanjas de las filas, caída del monstruo y agua | v108 |
 | 35 | `fase35_rescate.py` | Rescatar brotes entre cuatro | v109 |
 | 36 | `fase36_luzjuego.py` | La luz de sala cuenta la partida | v110 |
@@ -105,7 +106,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase33_monstruo.py').read())
 
 - **Aparición (D2).** Cuando la fracción de celdas de la cara visible (las que tienen casilla en la sala) con `occ > 0` y `sp != MAL` llega a `Umbralaparicion`, el monstruo aparece en la celda vacía de la cara visible más cercana al borde por el que entran las celdas con el giro (el sentido en que avanza `Loncentral`), con desempate `_hash01`, y tamaño `Tamanoinicial`.
 - **Objetivo.** Cada `Recalculo` pasos de juego, siempre que vacía una celda y cuando el objetivo deja de ser comestible: un Dijkstra por `vecinas6` (la vecindad de la fase 4) en el que entrar en una zanja cuesta `Costezanja` y el agua es muro. El objetivo es el de mayor `occ / (1 + coste)` (desempate `_hash01`). El pequeño no elige fusiones (`occ` desde `Umbralram + Pasoumbral`) ni coronas (desde `Umbralram + 2 Pasoumbral`): los umbrales de la página Fase4.
-- **Movimiento.** Una celda por el camino cada `Pasomonstruo` semicorcheas (`Pasogrande` en forma grande). Sin objetivo, quieto. Entre dos celdas se dibuja a medio camino.
+- **Movimiento.** Una celda por el camino cada `Pasomonstruo` semicorcheas (32: 8 negras; `Pasogrande` 16, 4 negras, en forma grande; dentro de una zanja, × `Costezanja`: 16 y 8 negras). Sin objetivo, quieto. Desde la fase 33 v6 (motor v126), con `Saltosmonstruo`, se dibuja **a saltos de media celda**: en su celda hasta la mitad del paso, a media celda desde la mitad y en la celda siguiente al llegar (`pos_monstruo`, `destino_mon`). La lógica no cambia: en la media celda sigue siendo de la celda de la que sale, y ahí le cuentan la caída en zanja, el pisotón, el cerco y el agua. Cada salto dura `Tiemposalto` s con una curva suave y un bote de `Botesalto` × su alto (la sombra del sprite se queda en el suelo); el sprite de la fase 38 y Godzilla (fase 40) saltan igual. Con `Saltosmonstruo` apagado, el deslizamiento continuo de antes.
 - **Devorar.** En su objetivo, en cada paso de juego quita `Ritmodevora` × `Danomonstruo` escalones de ocupación (`Ritmogrande` × `Danomonstruo` en forma grande; desde la fase 33 v5 / motor v122, `Danomonstruo` 0,5: la mitad de daño, 1 escalón por paso de pequeño y 1,5 —alterna 1 y 2— de grande) con `_undo_note()`, en el orden de la erosión: primero los satélites, luego la altura (y, de paso, las inclusiones que quedan por encima, fase 26). No pasa por `erosion()`: no cuenta en el balance de la fase 23. Cada escalón suma 1 a `acum`.
 - **Crecer.** `tam = Tamanoinicial + (1 − Tamanoinicial) × min(1, acum / Ocupacionmax)`. En 1, forma grande: más rápido, devora a `Ritmogrande` y puede con fusiones y coronas.
 - **Brote del mal.** La celda que llega a `occ = 0` se vacía y recibe un brote: `occ = 1`, `sp = MAL`. El monstruo busca otro objetivo.
@@ -131,13 +132,14 @@ El alfa de cada instancia lleva rugosidad + 2 × parte (0 velo, 1 cuerpo, 2 ojos
 
 ### Parámetros (página Fase33)
 
-`Umbralaparicion` 0,25 · `Tamanoinicial` 0,5 · `Ocupacionmax` 8 · `Ritmodevora` 2 · `Ritmogrande` 3 · `Danomonstruo` 0,5 (fase 33 v5) · `Pasomonstruo` 24 · `Pasogrande` 12 (fase 33 v4; antes 16 y 8) · `Costezanja` 2 · `Recalculo` 4 · `Esperamonstruo` 8 s · `Verobjetivo` encendido · `Simmonstruo` (pulso: aparece ya) · `Simceldamon` 0
+`Umbralaparicion` 0,25 · `Tamanoinicial` 0,5 · `Ocupacionmax` 8 · `Ritmodevora` 2 · `Ritmogrande` 3 · `Danomonstruo` 0,5 (fase 33 v5) · `Pasomonstruo` 32 · `Pasogrande` 16 (fase 33 v6; 24 y 12 en la v4, 16 y 8 antes) · `Costezanja` 2 · `Saltosmonstruo` encendido · `Tiemposalto` 0,15 s · `Botesalto` 0,15 (fase 33 v6) · `Recalculo` 4 · `Esperamonstruo` 8 s · `Verobjetivo` encendido · `Simmonstruo` (pulso: aparece ya) · `Simceldamon` 0
 
 ### Leyenda
 
 ```
-MONSTRUO #3  devora  celda 40 -> 52  tam 0.62  acum 5/8  x2
-MONSTRUO #3  devora  celda 52 -> 52  tam 1.00  acum 8/8  x3   GRANDE
+MONSTRUO #3  busca  celda 40 -> 52  tam 0.62  acum 5/8  x1  paso 5/8
+MONSTRUO #3  busca  celda 41 -> 52  tam 1.00  acum 8/8  x1,5  paso 3/4   GRANDE
+MONSTRUO #3  devora  celda 52 -> 52  tam 1.00  acum 9/8  x1,5   GRANDE
 MONSTRUO #2  espera   cara visible 18% (aparece al 25%)
 MONSTRUO #2  muere   reaparece en 5.5 s
 ```
@@ -154,6 +156,7 @@ MONSTRUO #2  muere   reaparece en 5.5 s
 - El desborde del mal no entra en una celda del público; en una vacía deja un satélite del mal.
 - `tam` crece con `acum` y llega a 1 en `Ocupacionmax`; en forma grande devora 3 por paso y avanza cada `Pasogrande`.
 - Una celda cada `Pasomonstruo` semicorcheas; la aparición al llegar `Umbralaparicion`, por el borde de entrada; `Simmonstruo`.
+- v6: entra en la celda siguiente a las 32 semicorcheas exactas (no a las 31), a las 16 en grande y a las 64 saliendo de una zanja. Con `Saltosmonstruo`, la posición dibujada es la de su celda hasta la semicorchea 15, media celda de la 16 a la 31 y la siguiente en la 32 (en grande, el corte en la 8); el salto dura `Tiemposalto` con el bote de `Botesalto` × su alto (también el sprite, con la sombra en el suelo); una zanja que se abre en la celda de origen mientras está en la media celda lo hace caer; apagado, la posición es continua; la línea `MONSTRUO` cuenta `paso 5/8`, `3/4` y `11/16`; un proyecto con 24 y 12 pasa a 32 y 16 y uno con 20 se queda en 20.
 - Dos ejecuciones con la misma sesión simulada dan el mismo resultado (determinismo).
 - Las geometrías, `Verobjetivo`, la línea `MONSTRUO` y la familia 9 del shader.
 
@@ -332,6 +335,7 @@ Una por arma con su interruptor encendido y las demás apagadas; con todas apaga
 - **`Duracionronda` y `Rondas`**: 360 s y 4 (D5). Para enseñar el juego, 120 s y 2.
 - **`Umbralaparicion`**: con poca gente el 25 % de la cara visible tarda en llenarse; bájalo si el monstruo no llega, o usa `Simmonstruo`.
 - **`Pasomonstruo` / `Pasogrande`**: desde la fase 33 v4 (motor v120) GENoZilla anda un tercio más lento: el pequeño da un paso cada compás y medio (24 semicorcheas; antes 16) y el grande cada 12 (antes 8). Un proyecto con los valores de antes pasa a los nuevos una sola vez; el tope sube a 128. Si la sala no llega a cortarle el camino, súbelo.
+- **Fase 33 v6 (motor v126): más lento y a saltos.** `Pasomonstruo` 32 (8 negras por celda, media celda cada 4) y `Pasogrande` 16 (4 negras, media celda cada 2); quien tenía 24 y 12 pasa a 32 y 16 una sola vez, y un valor puesto a mano se respeta. Si los saltos se ven bruscos, sube `Tiemposalto`; si el bote distrae, baja `Botesalto` (0: sin bote); `Saltosmonstruo` apagado vuelve al deslizamiento continuo.
 - **`Tfila`** (fase 29) y **`Conchasporpersona`**: deciden lo rápido que se cava y lo honda que queda la zanja; con pocas conchas en el planeta (al empezar la jornada) las zanjas salen poco hondas. Entierra unas cuantas conchas antes de abrir la partida.
 - **`Profundidadagua`** y **`Ahoga`**: una fila de 4 ahoga con 4 conchas por debajo; si el público no consigue reunir a 4, prueba 3.
 - **`Aliados`** y **`Taliados`**: cuatro personas tres segundos. Con la cámara real, mira la línea `RESCATE` para ver si las celdas vecinas caen en las casillas que esperas (las celdas son más anchas que las casillas).
