@@ -10,6 +10,7 @@
 | 24 | `fase24_personas.py` | Personas: cabezas, seguimiento, casillas ocupadas y la celda que miran | v83 |
 | 25 | `fase25_huella.py` | Huella mínima: inclusiones por llegada y por parada, con su escalón | v84 |
 | 25 v2 | `fase25_huella.py` | La esfera de las inclusiones, malla de polígonos de radio 1 y centrada: nunca la esfera primitiva de un punto (comun v95) | v84 |
+| 25 v3 | `fase25_huella.py` | Pone en malla las esferas instanciadas que quedaban en `prim` porque las montaron fases anteriores al comun v95 (`monstruo` y `brotes_mal` de la fase 33): RECARGAR TODO se paraba en la fase 25 hasta relanzar la 33 (comun v96, `reparar_esferas_prim`) | v84 |
 | 26 | `fase26_borrado.py` | Borrado: la erosión borra las inclusiones que quedan sobre su escalón | v85 |
 | 27 | `fase27_clasificacion.py` | Clasificación al enterrar: estrato humano o concha limpia, y el colapso | v86 |
 | 28 | `fase28_noche.py` | Noche de enterramiento: la esfera se apaga y emiten las inclusiones horneadas | v87 |
