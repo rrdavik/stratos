@@ -60,7 +60,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase25 v2  (la esfera de las inclusiones, malla de poligonos de radio 1: nunca prim)'
+VERSION = 'fase25 v3  (pone en malla las esferas instanciadas que quedaban en prim)'
 banner(VERSION)
 
 base = require_base(25)
@@ -89,6 +89,14 @@ bola = geo.op('bola')
 if bola is not None and tipo_esfera(bola) != 'prim':
     ok('inclusiones/bola: malla de poligonos (%s, %d puntos), de radio 1 por a_la_medida'
        % (tipo_esfera(bola), len(bola.points)))
+# v3 (comun v96): las esferas instanciadas que montaron fases anteriores al comun v95
+# (monstruo y brotes_mal de la fase 33) siguen en 'prim' hasta relanzar su fase; RECARGAR
+# TODO se paraba aqui. Se ponen en malla ya.
+hechas, siguen = reparar_esferas_prim(base)
+if hechas:
+    ok('esferas instanciadas de antes del comun v95, en malla: %s' % ', '.join(hechas))
+if siguen:
+    info('siguen en prim (pon a mano Primitive Type = Polygon Mesh): %s' % ', '.join(siguen))
 if not setp_any(geo, ['instancea'], 'a'):
     fail('inclusiones no lee la rugosidad: Instance 2 -> Color A = a')
 if has_par(base, 'Materialrespaldo'):

@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v95'
+VERSION_COMUN = 'comun v96'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -4490,6 +4490,20 @@ def esferas_en_prim(base):
             if str(getattr(s, 'OPType', '')) == 'sphereSOP' and tipo_esfera(s) == 'prim':
                 malas.append('%s/%s' % (g.name, s.name))
     return malas
+
+
+def reparar_esferas_prim(base):
+    """comun v96: pone en malla las Sphere SOP de las geometrias instanciadas de base que
+    siguen en 'prim'. Son las que montaron fases anteriores al comun v95 (monstruo y
+    brotes_mal de la fase 33, por ejemplo) y que no se rehacen hasta relanzar su fase:
+    la de make_instanced ya era de radio 1 y centrada, asi que basta con cambiarle el tipo.
+    Devuelve (reparadas, las que siguen en prim)."""
+    hechas = []
+    for nombre in esferas_en_prim(base):
+        esfera = base.op(nombre)
+        if esfera is not None and esfera_en_malla(esfera):
+            hechas.append(nombre)
+    return hechas, esferas_en_prim(base)
 
 
 def make_instanced(base, name, x, y, mat, sop='box', quiet=False, filas=20, cols=20):
