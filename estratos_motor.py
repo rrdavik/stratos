@@ -254,6 +254,15 @@
 #                 una plataforma sin sentido). Ahora, la RED DE PASARELAS: cada torre del
 #                 cluster se une a sus vecinas con una pasarela celeste corta, a 0,8 x la
 #                 mas baja de las dos (_pasarela_celeste, la misma de 2-3 celdas).
+#                 Motor v129 (comun v97): LOS BANCOS DE LA CORTA, TALUDES DE TIERRA. El
+#                 anillo de cada banco (ciu_anillo) eran 8 cajas sueltas que, aplastadas
+#                 por la escala de la instancia y con las normales suavizadas, parecian
+#                 granos de cafe en corona. Ahora es un anillo continuo de 16 segmentos
+#                 (talud_anillo): falda exterior, berma llana y cara interior en
+#                 pendiente hasta el pie; las caras de un banco caen sobre la berma del
+#                 siguiente (una ladera escalonada, unos 35 grados). Colores de tierra
+#                 (COL_BANCO, antes mas rojizos). TouchDesigner lo dibuja con normales
+#                 planas (MODELOS_FACETADOS: un Facet SOP en su COMP de modelos).
 #                 Motor v128 (fase 11 v25): LA MEZCLA, REESCRITA. La tabla de fabrica:
 #                 hasta el 25 % de construido todo es naturaleza; desde ahi nacen la
 #                 ciudad y la industria y, con el mundo construido entero, quedan
@@ -281,7 +290,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v128'
+MOTOR_VERSION = 'motor v129'
 
 import math
 import time as _time
@@ -3212,6 +3221,50 @@ def _dot(a, b):
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 
+TALUD_SEGMENTOS = 16           # motor v129: segmentos del anillo de un banco de la corta
+# modelos de cajas que TouchDesigner dibuja con normales planas (comun v97: un Facet SOP);
+# sin el, la Box SOP aplastada por la instancia se ve redondeada
+MODELOS_FACETADOS = ('ciu_anillo',)
+# el perfil del talud, en la planta unidad (radio 0,5) y alto 1: la falda exterior del borde
+# (0,5, a ras de suelo) a la berma, la berma (cresta llana) de TALUD_BERMA a TALUD_CRESTA y la
+# cara interior en pendiente hasta TALUD_PIE, a ras de suelo; las losas, de TALUD_GRUESO
+TALUD_BERMA, TALUD_CRESTA, TALUD_PIE, TALUD_GRUESO = 0.455, 0.415, 0.27, 0.03
+
+
+def _losa_talud(a_r, a_y, b_r, b_y, ang, largo, dentro):
+    """Una losa del talud de (a_r, a_y) a (b_r, b_y) en el corte radial del angulo ang
+    (grados), de largo tangencial `largo`; su cara buena mira hacia dentro (dentro) o
+    hacia fuera, y su grosor queda del otro lado."""
+    dr, dy = b_r - a_r, b_y - a_y
+    ls = math.hypot(dr, dy)
+    phi = math.atan2(dr, dy)            # el eje y local, a lo largo de la pendiente
+    k = 1.0 if dentro else -1.0         # el grosor, del lado que no se ve
+    rm = 0.5 * (a_r + b_r) + k * 0.5 * TALUD_GRUESO * math.cos(phi)
+    ym = 0.5 * (a_y + b_y) - k * 0.5 * TALUD_GRUESO * math.sin(phi)
+    ca, sa = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+    return _caja(rm * ca, ym, rm * sa, largo, ls, TALUD_GRUESO, math.degrees(phi), 90.0 - ang, 0.0)
+
+
+def talud_anillo(n=TALUD_SEGMENTOS):
+    """Motor v129: el banco de la corta como un talud de tierra: un anillo continuo de n
+    segmentos, cada uno con su falda exterior, su berma (una caja llana arriba) y su cara
+    interior hasta el pie. Antes, 8 cajas sueltas que, aplastadas por la escala de la
+    instancia (y con las normales suavizadas), parecian granos de cafe. Con la escala de la
+    corta (2 r x celda de ancho, 0,12-0,4 de alto) la cara interior queda a unos 35 grados
+    y la de un banco cae sobre la berma del siguiente: una ladera escalonada."""
+    out = []
+    paso = 2.0 * math.pi / n
+    for k in range(n):
+        a = 360.0 * k / n
+        ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+        rc = 0.5 * (TALUD_CRESTA + TALUD_BERMA)       # la berma (Ry: el eje z local, radial)
+        out.append(_caja(rc * ca, 1.0 - 0.5 * TALUD_GRUESO, rc * sa, paso * TALUD_BERMA * 1.06, TALUD_GRUESO,
+                         TALUD_BERMA - TALUD_CRESTA + 0.01, 0.0, 90.0 - a, 0.0))
+        out.append(_losa_talud(TALUD_PIE, 0.0, TALUD_CRESTA, 1.0, a, paso * TALUD_CRESTA * 1.08, True))
+        out.append(_losa_talud(0.5, 0.0, TALUD_BERMA, 1.0, a, paso * 0.5 * 1.06, False))
+    return out
+
+
 def _girar_eje(v, eje, grados):
     """Gira v alrededor del eje unitario (Rodrigues)."""
     t = math.radians(grados)
@@ -3425,9 +3478,8 @@ def _modelos():
                             + [_losa(-0.2, 0.2, 0.0, 0.4, -0.2, 0.2)])
     M['ciu_rotopala'] = [_hexa(-0.3, 0.6, 0.0, 0.8, 0.12, 90.0, 0.0, 0.0), _losa(-0.3, 0.5, 0.45, 0.55, -0.06, 0.06),
                          _losa(0.2, 0.5, 0.0, 0.3, -0.3, 0.3)]
-    # la corta: un anillo de banco (octogono hueco) y el agua acida del fondo
-    M['ciu_anillo'] = [_caja(0.43 * math.cos(math.radians(45 * k)), 0.5, 0.43 * math.sin(math.radians(45 * k)),
-                             0.16, 1.0, 0.42, 0.0, -45.0 * k, 0.0) for k in range(8)]
+    # la corta: un anillo de banco (motor v129: un talud de tierra) y el agua acida del fondo
+    M['ciu_anillo'] = talud_anillo()
     M['ciu_agua'] = [_hexa(0.0, 0.5, 0.0, 1.0, 1.0)]
     # la planta integrada: un modulo de bastidor con tuberias de colores
     M['ciu_bastidor'] = ([_losa(x - 0.03, x + 0.03, 0.0, 1.0, z - 0.03, z + 0.03) for x in (-0.47, 0.47)
@@ -9530,7 +9582,7 @@ def _puentes_ciudad(W, cfg, ctx, i, inf, p0, n, cw, cl_, now, paso, out):
 # --- dibujar la industria (fase 11 v11) ------------------------------------------------
 
 COL_AGUA_ACIDA = (0.55, 0.20, 0.12)      # el fondo inundado de la corta: rojizo, nunca azul
-COL_BANCO = ((0.50, 0.30, 0.18), (0.42, 0.25, 0.16), (0.58, 0.36, 0.22))
+COL_BANCO = ((0.52, 0.37, 0.23), (0.44, 0.31, 0.20), (0.60, 0.44, 0.28))     # motor v129: tierra (antes, mas rojizos)
 COL_TESTIGO = (0.58, 0.27, 0.19)
 
 
@@ -9697,7 +9749,8 @@ def _obra_industria(W, cfg, ctx, i, inf, ej, p0, n, cw, cl_, sx, sz, H, paso_, q
 
 def _corta(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, luces, now, paso, out):
     """CORTA QUE DEVORA: la mina se come la planta. Un banco por nota del SEQ1
-    (Bancospornota, hasta Maxbancos), dentro de su anillo de escombreras: los
+    (Bancospornota, hasta Maxbancos; motor v129: cada uno, un talud de tierra con
+    falda, berma y cara interior, talud_anillo), dentro de su anillo de escombreras: los
     bancos suben hacia la cresta y el fondo queda a ras de suelo (no corta
     conchas: eso solo lo hace la caja). Primero se van las naves, luego la sala
     de calderas; queda la chimenea, sola, de testigo. Desde 4 bancos el fondo se
@@ -9715,7 +9768,8 @@ def _corta(W, cfg, ctx, i, inf, ej, p0, cw, cl_, sx, sz, H, rug, luces, now, pas
         r_ = R0 - q * dr
         h = hc * (b - q) / float(b)
         out.setdefault(geometria_de('ciu_anillo'), []).append(
-            _fila_ciu(ctx, p0, _marco(i, 22.5 * (q % 2)), (2 * r_ * cw, h, 2 * r_ * cl_), COL_BANCO[q % 3]))
+            _fila_ciu(ctx, p0, _marco(i, 180.0 / TALUD_SEGMENTOS * (q % 2)), (2 * r_ * cw, h, 2 * r_ * cl_),
+                      COL_BANCO[q % 3]))         # motor v129: el talud; cada banco, medio segmento girado
         k += 1
     rf = R0 - b * dr                            # el fondo, a ras de suelo
     v = inf['var'] % max(1, variantes_ind(cfg))

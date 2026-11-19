@@ -41,7 +41,8 @@ TEMA INDUSTRIA (v11)
             (Epoca), en directo: cada planta conserva la suya.
   MUTANTES  CORTA (mina sobre energia: Bancospornota, Maxbancos; se come las
             naves, luego las calderas; queda la chimenea; agua acida y
-            rotopala desde 4 bancos; no corta conchas) e INTEGRADA (energia
+            rotopala desde 4 bancos; no corta conchas; v26: cada banco, un
+            talud de tierra con berma) e INTEGRADA (energia
             sobre mina: Maxbastidor niveles que los castilletes atraviesan).
   CLUSTER   cuenca minera (terriles fundidos y cable aereo); torres que se
             alinean: compartida (2-3), fila (4-6), anillo (7+).
@@ -411,7 +412,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v25  (la mezcla: naturaleza sola hasta el 25 %, al 100 % 40/35/25 a ritmo constante; Techonaturaleza 3)'
+VERSION = 'fase11 v26  (los bancos de la corta, taludes de tierra con normales planas; motor v129, comun v97)'
 banner(VERSION)
 
 base = require_base(11)
@@ -2231,6 +2232,19 @@ def _prueba_industria_(t, m):
             [x[0] for x in res5] == [1, 3, 5] and [x[1] for x in res5] == [1, 3, 5] and not any(x[2] for x in res5)
             and res5[0][3] == 1 and res5[2][3] == 0 and all(x[4] == 1 for x in res5) and res5[2][5] == 1
             and res5[0][5] == 0 and all(x[6] for x in res5), str(res5))
+    # v26 (motor v129, comun v97): cada banco, un talud de tierra continuo con normales planas
+    if hasattr(m, 'talud_anillo'):
+        an = m.MODELOS['ciu_anillo']
+        lo = m._caja_modelo(an)
+        comp_an = base.op('modelos/ciu_anillo')
+        fac = comp_an.op('facetas') if comp_an is not None else None
+        sal = comp_an.op('salida') if comp_an is not None else None
+        t.check('corta: cada banco es un talud de tierra (%d segmentos con falda, berma y cara interior; la '
+                'planta llena el radio 0,5 y el alto 1) dibujado con normales planas (modelos/ciu_anillo/facetas)'
+                % m.TALUD_SEGMENTOS,
+                len(an) == 3 * m.TALUD_SEGMENTOS and abs(lo[1] - 0.5) < 0.01 and abs(lo[3] - 1.0) < 1e-6
+                and lo[2] > -0.01 and fac is not None and sal is not None and fac in sal.inputs,
+                'piezas %d, caja %s, facetas %s' % (len(an), ['%.3f' % x for x in lo], fac))
     # 6. planta integrada: complejo minero y 1 y 3 notas del SEQ2
     res6 = []
     vel_m = 100                                 # v21: una mina que no empezo como pozo de petroleo
