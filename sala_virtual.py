@@ -114,7 +114,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v25  (pulsos_sala sin el error onValueChange)'
+VERSION = 'sala_virtual v26  (la cabeza de los monigotes, en su sitio: bola de poligonos y medida)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -401,6 +401,25 @@ def onValueChange(par, prev):
 SM = "parent().op('sala_motor').module"
 
 
+def menu_por_texto(o, nombres, textos):
+    """Pone el menu en la primera opcion cuyo nombre o etiqueta contenga uno de
+    los textos. Devuelve la opcion elegida o None."""
+    for n in nombres:
+        p = getattr(o.par, n, None) if o is not None else None
+        if p is None:
+            continue
+        try:
+            opciones = list(zip(p.menuNames, p.menuLabels))
+        except Exception:
+            continue
+        for tx in textos:
+            for nm, et in opciones:
+                if tx in str(nm).lower() or tx in str(et).lower():
+                    p.val = nm
+                    return nm
+    return None
+
+
 def instanciado(name, x, y, mat, sop='box'):
     """Geometry COMP 'name' instanciada desde el Script CHOP 'i_name': una caja
     de 1 x 1 x 1 con la base en y = 0, una esfera de diametro 1 centrada
@@ -418,12 +437,34 @@ def instanciado(name, x, y, mat, sop='box'):
         except Exception:
             pass
     if sop == 'sphere':
-        s = mk(geo, 'sphereSOP', 'bola', 0, 0)
+        # v26: la bola de los monigotes (cabeza y hombros), malla de poligonos. Hasta la
+        # v25 se pedia con setp('polymesh'), que no casa con ningun nombre del menu (como
+        # le pasaba a la esfera hasta la v13): se quedaba en Primitive Type = prim, una
+        # esfera primitiva de un solo punto, y sus instancias salian en el suelo. Ahora,
+        # por nombre o etiqueta, y un Transform SOP la deja en diametro 1 y centrada,
+        # midiendo sus puntos.
+        bola = mk(geo, 'sphereSOP', 'bola', 0, 120)
         for ax in ('radx', 'rady', 'radz'):
-            setp(s, ax, 0.5)
-        setp_any(s, ['type', 'primtype'], 'polymesh')
-        setp_any(s, ['rows'], 12)
-        setp_any(s, ['cols'], 16)
+            setp(bola, ax, 0.5)
+        for ax in ('tx', 'ty', 'tz'):
+            setp(bola, ax, 0.0)
+        malla = ((setmenu(bola, ['type', 'primtype'], ['polymesh', 'polygonmesh', 'mesh'], None)
+                  and str(bola.par.type.eval()) != 'prim')
+                 or menu_por_texto(bola, ['type', 'primtype'], ['mesh', 'poly']))
+        setp_any(bola, ['rows'], 12)
+        setp_any(bola, ['cols'], 16)
+        s = mk(geo, 'transformSOP', 'a_la_unidad', 200, 0)
+        connect(s, bola, 0)
+        b = medir(bola)
+        if not malla or b is None or min(b[1] - b[0], b[3] - b[2], b[5] - b[4]) < 1e-3:
+            info('%s/bola: sigue siendo una esfera primitiva (medidas %s); pon a mano Primitive Type = '
+                 'Polygon Mesh o la cabeza de los monigotes saldra en el suelo' % (name, b))
+        else:
+            setmenu(s, ['xord'], ['srt'], 0)
+            for q, ax in enumerate('xyz'):
+                k = 1.0 / (b[2 * q + 1] - b[2 * q])
+                setp(s, 's' + ax, k)
+                setp(s, 't' + ax, -0.5 * (b[2 * q] + b[2 * q + 1]) * k)
     elif sop == 'haz':
         cono = mk(geo, 'tubeSOP', 'cono', 0, 120)
         setp_any(cono, ['rad1'], 0.5)
@@ -522,25 +563,6 @@ for ax in ('radx', 'rady', 'radz'):
 setp_any(bola, ['type', 'primtype'], 'polymesh')
 setp_any(bola, ['rows'], 40)
 setp_any(bola, ['cols'], 40)
-
-
-def menu_por_texto(o, nombres, textos):
-    """Pone el menu en la primera opcion cuyo nombre o etiqueta contenga uno de
-    los textos. Devuelve la opcion elegida o None."""
-    for n in nombres:
-        p = getattr(o.par, n, None) if o is not None else None
-        if p is None:
-            continue
-        try:
-            opciones = list(zip(p.menuNames, p.menuLabels))
-        except Exception:
-            continue
-        for tx in textos:
-            for nm, et in opciones:
-                if tx in str(nm).lower() or tx in str(et).lower():
-                    p.val = nm
-                    return nm
-    return None
 
 
 # v13: la esfera era una esfera primitiva de un solo punto (Primitive Type = prim: setp con
@@ -1535,6 +1557,10 @@ def prueba_monigotes(t, m, eq):
             not sm.filas_arco(0.0, 0.0, 0.0) and len(medio) == sm.ARCO_SEGS // 2
             and len(sm.filas_arco(0.0, 0.0, 2.0)) == sm.ARCO_SEGS and all(f[1] < 0.02 for f in medio)
             and tuple(medio[0][9:12]) == tuple(sm.AMBAR))
+    bb = medir(sala.op('personas_bolas/a_la_unidad')) if sala.op('personas_bolas/a_la_unidad') else None
+    t.check('v26: la bola de los monigotes (cabeza y hombros), de diametro 1 y centrada',
+            bb is not None and all(abs(v - w) < 0.02 for v, w in zip(bb, (-0.5, 0.5) * 3)),
+            'medidas %s' % (None if bb is None else ['%.3f' % v for v in bb]))
     sm._PIEZAS['clave'] = None
     con = sm.piezas_personas(dict(c, arco_quietud=True), eq, 120.0, t_arco=4.0)
     sm._PIEZAS['clave'] = None
