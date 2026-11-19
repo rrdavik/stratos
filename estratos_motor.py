@@ -301,6 +301,23 @@
 #                 entre tierras: una celda de mar por la que pasa una carretera de la
 #                 ciudad o una via del tren de la industria (celdas_via; W['vias_ind'])
 #                 cuenta como tierra.
+#                 Motor v132 (fase 32 v2): LA MARCA DEL PUBLICO SIN JUEGO. Con Marcapublico
+#                 (encendido), el anillo de cada persona de la sala sale tambien con
+#                 Modojuego apagado (filas_marcas): la sala virtual lo ensena en todas sus
+#                 demos, no solo en GENoZilla. Pocas filas (MARCA_SEGMENTOS por persona) y
+#                 su Script CHOP solo se recocina cuando cambian.
+#                 Motor v133 (sala v16): LA DEMO GENOZILLA SOBRE EL MUNDO DE FASE1. Cada
+#                 capitulo ya no empieza en un mundo vacio: guion_demo recibe el mundo con
+#                 el que entro la demo (base, la copia que guarda la sala) y lo pone en el
+#                 sitio (_demo_mundo). Solo se tocan las celdas que el capitulo necesita
+#                 libres (_demo_despejar: las de la gente de Construir, las vecinas del
+#                 brote, la celda del monstruo del Cerco); las siembras solo suben lo que
+#                 ya hay. Con zanjas (Cebo, Canal, Grito, Relampago), si la cara visible
+#                 tiene menos de DEMO_CONCHAS conchas debajo, se entierran copias de la
+#                 superficie por debajo de ella (_demo_conchas): el mundo se ve igual y
+#                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
+#                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
+#                 mundo de verdad (sin la siembra al azar del globo).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -312,7 +329,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v131'
+MOTOR_VERSION = 'motor v133'
 
 import math
 import time as _time
@@ -551,7 +568,7 @@ DEFAULT_CFG = dict(
     # fase 31: las escisiones en el historico
     carpeta_historico='',
     # fases 32 a 37: el juego «El devorador» (lo apagado por defecto: Modojuego y las armas)
-    modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1,
+    modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1, marca_publico=1,
     umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3, dano_monstruo=0.5,
     paso_monstruo=32, paso_grande=16, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0, saltos_monstruo=1, tiempo_salto=0.15, bote_salto=0.15,
@@ -18171,14 +18188,11 @@ def build_juego(W, cfg, now, out):
     if lvl >= 40:
         out['godzilla'] = []
     if not juego_on(W, cfg):
+        if cfg.get('marca_publico', 1):     # motor v132: la marca del publico, tambien sin juego
+            out['marcas'] = filas_marcas(W, cfg)
         return out
     J = W['juego']
-    if cfg.get('marca_jugador', 1):
-        col = paleta_humana(cfg, MARCA_K)
-        for p in personas_en_sala():
-            if p.get('casilla') is None:
-                continue
-            out['marcas'] += filas_anillo(W, cfg, celda_de_casilla(W, cfg, p['casilla']), col)
+    out['marcas'] = filas_marcas(W, cfg)
     if lvl >= 39:                       # fase 39: el mal con su especie (sin el velo provisional)
         J['mal_res'] = build_mal(W, cfg, now, out)
     if lvl >= 33:
@@ -18222,6 +18236,24 @@ def build_juego(W, cfg, now, out):
             out['agua_juego'].append(_row(_mul(normal_i(c), fondo), normal_i(c), 0.98 * cw, h, 0.98 * cl, col)
                                      + [RUG_RIO])
     return out
+
+
+def filas_marcas(W, cfg):
+    """El anillo de cada persona de la sala (fase 24) en la celda que mira su casilla,
+    del color de la paleta humana (Marcajugador). Dos personas en la misma celda, un anillo."""
+    if not cfg.get('marca_jugador', 1):
+        return []
+    col = paleta_humana(cfg, MARCA_K)
+    rows, hechas = [], set()
+    for p in personas_en_sala():
+        if p.get('casilla') is None:
+            continue
+        c = celda_de_casilla(W, cfg, p['casilla'])
+        if c is None or c in hechas:
+            continue
+        hechas.add(c)
+        rows += filas_anillo(W, cfg, c, col)
+    return rows
 
 
 def filas_anillo(W, cfg, c, col):
@@ -20132,6 +20164,8 @@ def demo_refs(W, cfg, cap, libres=None):
     if cap == 0:
         r['siembra'] = [(cel(5.5, 2.0), 3), (cel(7.0, 4.0), 4), (cel(8.5, 5.0), 2), (cel(8.5, 1.5), 5),
                         (cel(3.0, 6.5), 2)]
+    elif cap == 1:                      # v133: donde se para la gente de Construir quietos, libre
+        r['despejar'] = [cel(cx, cy) for cx, cy in DEMO_QUIETOS]
     elif cap == 2:
         r['siembra'] = [(cel(4.0, 2.5), 4), (cel(2.5, 5.0), 3), (cel(5.5, 4.0), 5), (cel(7.0, 4.0), 9),
                         (cel(7.0, 5.0), 7), (cel(5.5, 7.0), 2), (cel(9.0, 3.5), 3)]
@@ -20140,6 +20174,8 @@ def demo_refs(W, cfg, cap, libres=None):
         r['musica'] = [r['brote']]
         if cap == 3:
             r['siembra'] = [(cel(8.5, 6.5), 4)]
+            # v133: el mal no desborda sobre el publico (D4): sus vecinas, libres para que crezca
+            r['despejar'] = list(NEIGH[r['brote']]) if r['brote'] is not None else []
         else:
             r['aliadas'] = _vecinas_a_la_vista(W, cfg, r['brote'], max(1, int(cfg.get('aliados', 3))), libres)
     elif cap == 5:
@@ -20164,6 +20200,10 @@ def demo_refs(W, cfg, cap, libres=None):
     elif cap == 7:
         r['monstruo'] = cel(6.0, 4.0)
         r['muros'] = [celda_desplazada(r['monstruo'], db, dl) for db, dl in DEMO_CERCO]
+        # v133: en un mundo lleno, las vecinas que no cierra el cerco de cuatro le darian de
+        # comer: dos visitantes mas las cierran (vecinas_cerco). Y su celda, sin nada que comer.
+        r['muros'] += vecinas_cerco(r['monstruo'])
+        r['despejar'] = [r['monstruo']]
     elif cap == 8:
         r['monstruo'] = cel(6.0, 4.0)
         r['siembra'] = [(r['monstruo'], 16), (cel(3.0, 6.5), 4)]
@@ -20199,6 +20239,17 @@ def demo_refs(W, cfg, cap, libres=None):
 
 
 DEMO_CERCO = ((0, -1), (0, 1), (1, 0), (-1, 0))     # las cuatro vecinas del cerco (bandas, meridianos)
+# v133: las casillas (de la demo web) donde se para la gente de Construir quietos (la coreografia de la sala)
+DEMO_QUIETOS = ((6, 1), (9, 1), (4, 3), (8, 3), (2, 5), (6, 5), (9, 6), (4, 7), (7, 5), (1, 8), (2, 7))
+
+
+def vecinas_cerco(c):
+    """Motor v133: las vecinas de la celda c que no son las cuatro del cerco (DEMO_CERCO),
+    de la de menor numero a la de mayor."""
+    if c is None:
+        return []
+    cuatro = set(celda_desplazada(c, db, dl) for db, dl in DEMO_CERCO)
+    return sorted(v for v in NEIGH[c] if v not in cuatro)
 
 
 def _camino_demo(src, dst, zanjas=(), coste=2.0):
@@ -20268,6 +20319,81 @@ def _demo_vaciar(W, cfg, now, conchas=0):
     return W
 
 
+ESTRATOS_DEMO = ('shells', 'cols', 'gen', 'compacta')     # lo que _demo_conchas cambia: lo enterrado
+
+
+def _demo_mundo(W, cfg, now, base, conchas=0):
+    """Motor v133: el mundo de FASE1 con el que entro la demo (una copia de base) en el
+    sitio (el mismo diccionario W). Sin las zanjas fijadas de una partida de antes (la
+    demo empieza la suya). Con conchas, al menos esas debajo de la cara visible
+    (_demo_conchas). Si base no vale (otra reticula), de cero (_demo_vaciar)."""
+    import copy
+    sync_grid()
+    key = [GRID['lo'], GRID['hi']]
+    if not isinstance(base, dict) or len(base.get('occ') or ()) != N or base.get('grid', key) != key:
+        return _demo_vaciar(W, cfg, now, conchas)
+    nuevo = copy.deepcopy(base)
+    nuevo['grid'] = key
+    W.clear()
+    W.update(nuevo)
+    ensure(W)
+    W.pop('bloqueadas', None)
+    if conchas:
+        _demo_conchas(W, cfg, now, conchas)
+    W['noche'] = None
+    W['aviso'] = 'demo: el mundo de FASE1'
+    W['dirty'] = True
+    _CACHE['inst'] = None
+    _CACHE['tiles'] = None
+    _CACHE['frame'] = None
+    return W
+
+
+def _demo_conchas(W, cfg, now, conchas, celdas=None):
+    """Motor v133: que cada celda de la cara visible (o de celdas) tenga al menos
+    'conchas' losetas debajo, para que las filas de la demo tengan por donde cavar. Las
+    que falten se entierran (end_cycle, sin oceano: todas las celdas dejan su loseta) y
+    luego la superficie vuelve a ser la de antes: todo menos lo enterrado
+    (ESTRATOS_DEMO). Devuelve las conchas enterradas."""
+    import copy
+    celdas = list(cara_visible(cfg) if celdas is None else celdas)
+    if not celdas:
+        return 0
+    falta = int(conchas) - min(len(W['cols'][c]) for c in celdas)
+    if falta <= 0:
+        return 0
+    sup = dict((k, copy.deepcopy(v)) for k, v in W.items() if k not in ESTRATOS_DEMO)
+    seco = dict(cfg, oceano=0)
+    for _ in range(falta):
+        end_cycle(W, seco, now)
+    for k in list(W.keys()):
+        if k not in ESTRATOS_DEMO and k not in sup:
+            del W[k]
+    W.update(sup)
+    W['dirty'] = True
+    return falta
+
+
+def _demo_despejar(W, cfg, celdas):
+    """Motor v133: las celdas, vacias (y sin sus satelites ni sus inclusiones): el
+    capitulo las necesita libres en el mundo de FASE1. Devuelve las vaciadas."""
+    out = []
+    for c in sorted(set(x for x in celdas if x is not None)):
+        for j in [c] + list(satellites_of(W, c)):
+            if W['occ'][j] <= 0 and W['sp'][j] == 0:
+                continue
+            _clear_cell(W, j)
+            W['sp'][j] = W['own'][j] = W['traza'][j] = 0
+            W['vh'][j] = 0.0
+            W['huella'][j] = 0.0
+            if 'incl' in W:
+                W['incl'][j] = []
+            out.append(j)
+    if out:
+        W['dirty'] = True
+    return out
+
+
 def _demo_juego(W, cfg, now):
     """Modojuego y Nuevapartida: la ronda 1 empieza ahora."""
     if cfg['nivel'] < 32 or not cfg.get('modo_juego'):
@@ -20313,11 +20439,12 @@ def _demo_brote(W, cfg, celda, occ, now):
     return celda
 
 
-def guion_demo(W, cfg, capitulo, evento='inicio', now=None, t=0.0, refs=None, libres=None):
+def guion_demo(W, cfg, capitulo, evento='inicio', now=None, t=0.0, refs=None, libres=None, base=None):
     """El guion de la demo GENoZilla (motor v119): con evento 'inicio' prepara FASE1
     para el capitulo (al empezar su titulo); con 'tick', cada fotograma, lo que pasa a
     su hora (t, s desde que acaba el titulo) y la musica de la demo. Solo actua con
-    Demo = genozilla. Devuelve los sitios del capitulo (demo_refs) o lo hecho."""
+    Demo = genozilla. Devuelve los sitios del capitulo (demo_refs) o lo hecho.
+    Motor v133: base, el mundo de FASE1 con el que entro la demo (sin el, de cero)."""
     if not demo_genozilla():
         return None
     now = (W.get('t') or 0.0) if now is None else now
@@ -20325,17 +20452,21 @@ def guion_demo(W, cfg, capitulo, evento='inicio', now=None, t=0.0, refs=None, li
     if evento == 'inicio':
         refs = refs if refs is not None else demo_refs(W, cfg, cap, libres)
         _GUION.update(cap=cap, hechos=set(), t_nota=None, sueltas=[], refs=refs, muertes=0)
-        _demo_inicio(W, cfg, cap, now, refs)
+        _demo_inicio(W, cfg, cap, now, refs, base)
         return refs
     if _GUION.get('cap') != cap:
         return None
     return _demo_tick(W, cfg, cap, now, float(t), _GUION.get('refs') or {})
 
 
-def _demo_inicio(W, cfg, cap, now, r):
+def _demo_inicio(W, cfg, cap, now, r, base=None):
     cfg = dict(cfg, presencia_activa=False)     # lo que siembra el guion prende entero (sin el sorteo de la fase 22)
     conchas = DEMO_CONCHAS if cap in (5, 6, 10, 11) else 0
-    _demo_vaciar(W, cfg, now, conchas)
+    if base is None:
+        _demo_vaciar(W, cfg, now, conchas)
+    else:                               # motor v133: el mundo de FASE1, y libre solo lo que hace falta
+        _demo_mundo(W, cfg, now, base, conchas)
+        _demo_despejar(W, cfg, r.get('despejar', ()))
     _demo_juego(W, cfg, now)
     for celda, occ in r.get('siembra', ()):
         _demo_sembrar(W, cfg, celda, occ, now, ARQ if (celda or 0) % 3 == 0 else GEO)
@@ -20355,8 +20486,8 @@ def _demo_inicio(W, cfg, cap, now, r):
             m['aturdido'] = now + DEMO_TITULO + 4.6
     elif cap == 9:
         _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=9)
-    elif cap == 12:
-        for i in range(N):              # el globo entero: publico y mal
+    elif cap == 12 and base is None:
+        for i in range(N):              # el globo entero: publico y mal (v133: solo sin el mundo de FASE1)
             x = _hash01(i, 77, 12)
             if x < 0.42:
                 _demo_sembrar(W, cfg, i, 1 + int(_hash01(i, 78) * 6), now, GEO if i % 2 else ARQ)
@@ -20407,9 +20538,26 @@ def _demo_tick(W, cfg, cap, now, t, r):
         elif cap == 12 and t >= 3.0 and _una_vez('fin'):
             J['t0'] = now - float(cfg['duracion_ronda'])    # el fin de ronda, ya
             hecho.append('fin de ronda')
+        if cap == 5 and t >= 6.0:       # v133: el monstruo, a por la torre
+            hecho += _demo_cebo(W, cfg, J['mon'], r.get('torre'))
     if cap in DEMO_MUSICA and t >= 0.0:
         hecho += _demo_musica(W, cfg, now, r.get('musica'))
     return hecho
+
+
+def _demo_cebo(W, cfg, m, torre):
+    """Motor v133, Cebo y zanja trampa: en el mundo de FASE1 habria cebos mejores que la
+    torre (mas ocupacion o mas cerca); el guion la mantiene como su objetivo, por el camino
+    de siempre (el que corta la fila)."""
+    if torre is None or m.get('celda') is None or m['estado'] not in ('busca', 'devora') \
+            or m.get('objetivo') == torre or W['occ'][torre] <= 0:
+        return []
+    t, camino = objetivo(W, cfg, m, comer=lambda W_, c_, m_, x: x == torre)
+    if t is None:
+        return []
+    m['objetivo'], m['camino'] = t, camino
+    m['estado'] = 'devora' if t == m['celda'] else 'busca'
+    return ['a por la torre %d' % t]
 
 
 def _demo_musica(W, cfg, now, solo=None):
@@ -21029,7 +21177,8 @@ def cfg():
                  rondas=max(1, int(_p('Rondas', c['rondas']))),
                  paso_juego=max(1, int(_p('Pasojuego', c['paso_juego']))),
                  herencia_mal=max(0.0, min(1.0, _p('Herenciamal', c['herencia_mal']))),
-                 marca_jugador=int(bool(_p('Marcajugador', True))))
+                 marca_jugador=int(bool(_p('Marcajugador', True))),
+                 marca_publico=int(bool(_p('Marcapublico', True))))
     if c['nivel'] >= 33:
         c.update(umbral_aparicion=max(0.0, min(1.0, _p('Umbralaparicion', c['umbral_aparicion']))),
                  tam_inicial=max(0.1, min(1.0, _p('Tamanoinicial', c['tam_inicial']))),
