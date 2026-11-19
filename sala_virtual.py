@@ -114,7 +114,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v24  (monigotes, arco de quietud y la demo GENoZilla con su vista juego)'
+VERSION = 'sala_virtual v25  (pulsos_sala sin el error onValueChange)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -386,8 +386,15 @@ def onFrameStart(frame):
 '''
 
 PULSOS_SALA = r'''# Botones de la pagina Sala -> sala_motor
+# v25: onValueChange vacio. El Parameter Execute DAT trae Value Change encendido y, sin
+# esta funcion, TouchDesigner daba 'Cannot find function named: onValueChange' cada vez
+# que cambiaba un parametro de la sala.
 def onPulse(par):
     op('sala_motor').module.on_pulse(par.name)
+    return
+
+
+def onValueChange(par, prev):
     return
 '''
 
@@ -984,6 +991,7 @@ setp_any(pulsos, ['pars'], '*')
 setp_any(pulsos, ['custom'], True)
 setp_any(pulsos, ['builtin'], False)
 setp_any(pulsos, ['onpulse'], True)
+setp_any(pulsos, ['valuechange'], False)      # v25: solo los botones (onPulse)
 ok('latido_sala y pulsos_sala: la sala avanza cada fotograma; Palmada y Reiniciarsala')
 
 print_report()
