@@ -254,6 +254,22 @@
 #                 una plataforma sin sentido). Ahora, la RED DE PASARELAS: cada torre del
 #                 cluster se une a sus vecinas con una pasarela celeste corta, a 0,8 x la
 #                 mas baja de las dos (_pasarela_celeste, la misma de 2-3 celdas).
+#                 Motor v128 (fase 11 v25): LA MEZCLA, REESCRITA. La tabla de fabrica:
+#                 hasta el 25 % de construido todo es naturaleza; desde ahi nacen la
+#                 ciudad y la industria y, con el mundo construido entero, quedan
+#                 40/35/25. La cuota ya no va a saltos por tramos: cada fila es la
+#                 mezcla de lo construido en su umbral y entre dos filas se interpolan
+#                 las celdas de cada especie (cuota_en: lo que se construye se reparte a
+#                 ritmo constante; del 25 al 100 %, 3 de cada 15 celdas nuevas son
+#                 naturaleza, 7 ciudad y 5 industria) sobre el pico de construido del
+#                 mundo (W['mezcla']['pico']). La precarga mira la cuota a Precarga
+#                 puntos por delante. TECHONATURALEZA (3): si las notas caen lejos de
+#                 la ciudad, la naturaleza ya no se pasa de su cuota mas de 3 puntos
+#                 (antes podia quedarse en un 50 % con el mundo lleno): pasado ese
+#                 techo, la especie mas lejos de su cuota puede fundar otra mancha. La
+#                 primera industria nace en el borde de la ciudad en cuanto puede (antes
+#                 esperaba a que la ciudad llegara a su cuota). Un rio ya no nace en una
+#                 celda de ciudad o de industria (rios: el relieve no se enmascara).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -265,7 +281,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v127'
+MOTOR_VERSION = 'motor v128'
 
 import math
 import time as _time
@@ -435,7 +451,7 @@ DEFAULT_CFG = dict(
     tema=0, peso_vecina=0.5, umbral_vecindad=4.0, min_cluster=2, caos=3.91, max_piezas=6,
     avance=0, pasos_etapa=2, rebote=0.2, catalogo=None,
     # fase 11 v22 (motor v121): la mezcla de especies (tema_auto: Tema = auto)
-    tema_auto=0, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, paciencia=8, orden_familias=0, precarga=5.0,
+    tema_auto=0, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, techo_naturaleza=3.0, paciencia=8, orden_familias=0, precarga=5.0,
     carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
     # fase 11 v5: la naturaleza legible
     umbral_monte=8, max_caos_nat=5, limite_bosque=0.65, limite_nieve=0.90, altura_monte=1.0,
@@ -6122,16 +6138,21 @@ def estado_idx(cfg, occ):
 #   CONSTRUIDO  celdas con especie / (celdas del globo x Topeconstruido), 0-1. No
 #               cuentan las semillas neutras heredadas (NEUTRA, hasta su primera
 #               nota) ni el mal. Simconstruido (0-100) lo fuerza para probar.
-#   TRAMO       la fila de la tabla mezcla_especies en vigor: la mas alta que
-#               construido haya alcanzado en este mundo (solo avanza; el entierro
-#               la devuelve a la primera). Da la CUOTA de cada especie: techo de
-#               celdas para ciudad e industria y parte de la biblioteca para las tres.
+#   PICO        el construido mas alto que haya alcanzado este mundo (solo avanza;
+#               el entierro lo devuelve a 0). Con la tabla mezcla_especies da la
+#               CUOTA de cada especie (cuota_en: cada fila es la mezcla en su umbral
+#               y entre dos filas lo construido se reparte a ritmo constante): techo
+#               de celdas para ciudad e industria y parte de la biblioteca para las
+#               tres. El TRAMO es la fila del pico (la leyenda y la carga lo miran).
 #   SUCESION    1 contagio (toca ciudad o industria y esa especie esta por debajo de
 #               su cuota; si toca las dos, la mas lejos de su cuota, en empate la
 #               ciudad), 2 fundacion (fundacion abierta: puede crecer y no tiene
-#               celdas o su deficit pasa de Valvula puntos; ciudad junto a un rio o
+#               celdas o su deficit pasa de Valvula puntos o, motor v128, la
+#               naturaleza pasa de su cuota en Techonaturaleza puntos y es la mas
+#               lejos de la suya; ciudad junto a un rio o
 #               un lago, o a la formacion natural mas ocupada si no hay agua;
-#               industria tocando la ciudad, mejor si tambien toca relieve; tras
+#               industria tocando la ciudad, la primera en cuanto puede, mejor si
+#               tambien toca relieve; tras
 #               Paciencia celdas sin candidata, donde caiga), 3 naturaleza.
 #   FAMILIAS    la unidad de carga: una evolucion completa de una linea (brote,
 #               cada etapa con su diseno y su variante, y el resto: obra, remates,
@@ -6143,8 +6164,11 @@ TEMA_MODOS = ['auto'] + TEMAS
 NAT, CIU, IND = 0, 1, 2
 NEUTRA = -2                 # tema_c de una semilla heredada sin especie hasta su primera nota
 MEZCLA_COLS = ['construido', 'naturaleza', 'ciudad', 'industria']
-MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (30.0, 70.0, 30.0, 0.0), (50.0, 50.0, 40.0, 10.0),
-              (75.0, 30.0, 45.0, 25.0), (100.0, 30.0, 40.0, 30.0))     # v122: nunca menos de 30 de naturaleza
+# motor v128: hasta el 25 % todo es naturaleza; desde ahi nacen la ciudad y la industria y, con
+# el mundo construido entero, quedan 40 % naturaleza, 35 % ciudad y 25 % industria. Entre dos
+# filas lo que se construye se reparte a ritmo constante (cuota_en): del 25 al 100 %, de cada
+# 15 celdas nuevas 3 son naturaleza, 7 ciudad y 5 industria.
+MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (25.0, 100.0, 0.0, 0.0), (100.0, 40.0, 35.0, 25.0))
 ORDEN_FAMILIAS = ['ciclo', 'fijo']
 MEZCLA_HIST = 512           # fundaciones recientes que se recuerdan (las autopruebas las miran)
 LINEAS = {NAT: ('vegetacion', 'relieve'), CIU: ('informal', 'planificada'), IND: ('mina', 'energia')}
@@ -6234,6 +6258,7 @@ def _mezcla_al_dia(W):
     if not isinstance(M, dict):
         M = W['mezcla'] = {}
     M.setdefault('tramo', 0)
+    M.setdefault('pico', None)          # motor v128: el construido mas alto (%) de este mundo
     M.setdefault('fundaciones', [0, 0, 0])
     M.setdefault('espera', [0, 0, 0])
     M.setdefault('hist', [])
@@ -6294,24 +6319,47 @@ def construido_real(W, cfg):
     return max(0.0, min(1.0, n / max(1e-9, N * max(0.05, float(cfg.get('tope_construido', 0.6))))))
 
 
+def cuota_en(filas, pct):
+    """Motor v128: la cuota [n, c, i] (0-1) con construido pct. Cada fila es la mezcla
+    de lo construido en su umbral; entre dos filas, lo que se construye se reparte a
+    ritmo constante (se interpolan las celdas de cada especie, no los porcentajes: del
+    25 % 100/0/0 al 100 % 40/35/25, a 62,5 % hay 52/28/20)."""
+    k = tramo_de(filas, pct)
+    a = filas[k]
+    if k + 1 >= len(filas) or pct <= a[0] + 1e-9:
+        return [x / 100.0 for x in a[1:4]]
+    b = filas[k + 1]
+    u = (pct - a[0]) / max(1e-9, b[0] - a[0])
+    celdas = [(1.0 - u) * a[0] * qa + u * b[0] * qb for qa, qb in zip(a[1:4], b[1:4])]
+    s = sum(celdas)
+    return [x / s for x in celdas] if s > 1e-12 else [x / 100.0 for x in b[1:4]]
+
+
 def mezcla_estado(W, cfg, avanzar=True):
-    """dict(construido %, tramo, cuota [n, c, i] 0-1, filas, avisos, siguiente umbral).
-    El tramo solo avanza (avanzar: lo guarda en el mundo); Simconstruido lo fuerza."""
+    """dict(construido %, pico %, tramo, cuota [n, c, i] 0-1, cuota de la precarga,
+    filas, avisos, siguiente umbral). La cuota es la del pico: el construido mas alto
+    que haya alcanzado este mundo (solo avanza; avanzar: lo guarda; el entierro lo
+    devuelve a 0). Simconstruido lo fuerza (sin memoria)."""
     M = _mezcla_al_dia(W)
     filas, avisos = mezcla_tabla(cfg)
     sim = float(cfg.get('sim_construido', -1.0))
     if sim >= 0.0:
-        pct = min(100.0, sim)
-        k = tramo_de(filas, pct)
+        pct = pico = min(100.0, sim)
     else:
         pct = 100.0 * construido_real(W, cfg)
-        k = max(min(int(M['tramo']), len(filas) - 1), tramo_de(filas, pct))
-        if avanzar:
-            M['tramo'] = k
-    cuota = reservar_naturaleza([x / 100.0 for x in filas[k][1:4]], cfg)
+        pico = max(float(M.get('pico') or 0.0), pct)     # un mundo de antes del motor v128: el real
+    k = tramo_de(filas, pico)
+    if avanzar and sim < 0.0:
+        M['pico'], M['tramo'] = pico, k
+    cuota = reservar_naturaleza(cuota_en(filas, pico), cfg)
+    pre = None                          # precarga: la cuota a Precarga puntos por delante
+    if sim < 0.0 and pico < 100.0:
+        pre = reservar_naturaleza(cuota_en(filas, min(100.0, pico + float(cfg.get('precarga', 5.0)))), cfg)
+        if all(abs(x - y) < 1e-9 for x, y in zip(pre, cuota)):
+            pre = None
     sig = filas[k + 1][0] if k + 1 < len(filas) else None
-    return dict(construido=pct, tramo=k, umbral=filas[k][0], cuota=cuota, filas=filas, avisos=avisos,
-                siguiente=sig, sim=sim >= 0.0)
+    return dict(construido=pct, pico=pico, tramo=k, umbral=filas[k][0], cuota=cuota, cuota_pre=pre, filas=filas,
+                avisos=avisos, siguiente=sig, sim=sim >= 0.0)
 
 
 def reservar_naturaleza(cuota, cfg):
@@ -6412,13 +6460,21 @@ def especie_nueva(W, cfg, i, est=None, lote=None):
         return deficit(t) > 1e-9 and hay_familia_lista(W, cfg, t, linea)
 
     def abierta(t):
-        return puede(t) and (cnt[t] == 0 or 100.0 * deficit(t) > float(cfg.get('valvula', 10.0)))
+        if not puede(t):
+            return False
+        if cnt[t] == 0 or 100.0 * deficit(t) > float(cfg.get('valvula', 10.0)):
+            return True
+        # motor v128: el techo de la naturaleza. Pasada su cuota en mas de Techonaturaleza
+        # puntos, la especie mas lejos de la suya puede fundar otra mancha
+        return -100.0 * deficit(NAT) > float(cfg.get('techo_naturaleza', 3.0)) and \
+            deficit(t) >= max(deficit(CIU), deficit(IND)) - 1e-12
     # 1. contagio (y la industria, que se funda en el borde de la ciudad, compite con ella)
     cands = [t for t in (CIU, IND) if _toca(W, i, t) and puede(t)]
     if IND not in cands and abierta(IND) and _toca(W, i, CIU):
         mejor_rel = not lote or _toca_relieve(W, i) or not any(_toca_relieve(W, j) for j in lote
                                                                  if _toca(W, j, CIU))
-        if mejor_rel and (not cands or deficit(IND) > deficit(CIU) + 1e-9):
+        # motor v128: la primera industria nace en el borde de la ciudad en cuanto puede
+        if mejor_rel and (not cands or cnt[IND] == 0 or deficit(IND) > deficit(CIU) + 1e-9):
             return IND, 'fundacion'
     if cands:
         t = max(cands, key=lambda t: (deficit(t) + 1e-12 * (t == CIU), t == CIU))
@@ -6539,7 +6595,7 @@ def mezcla_enterrar(W, cfg):
         else:
             W['tema_c'][i] = -1
         W['fam'][i] = ''
-    M.update(tramo=0, fundaciones=[0, 0, 0], espera=[0, 0, 0], disp=None, ciclo=None, n=None, agua=None)
+    M.update(tramo=0, pico=0.0, fundaciones=[0, 0, 0], espera=[0, 0, 0], disp=None, ciclo=None, n=None, agua=None)
     if mezcla_on(cfg):
         for i in range(N):
             if W['tema_c'][i] == NEUTRA:
@@ -6893,10 +6949,8 @@ def carga_pedida(W, cfg, est=None):
     tc = W.get('tema_c') or ()
     for t in set(x for x in tc if x >= 0):
         especies.add(t)
-    if est['siguiente'] is not None and not est['sim'] and \
-            est['construido'] >= est['siguiente'] - float(cfg.get('precarga', 5.0)):
-        k = est['tramo'] + 1           # precarga: las familias que entraran al cruzar el umbral
-        q = [x / 100.0 for x in est['filas'][k][1:4]]
+    if est['cuota_pre'] is not None:   # precarga: las familias que entraran en Precarga puntos
+        q = est['cuota_pre']
         for t in (NAT, CIU, IND):
             if q[t] <= 0:
                 continue
@@ -6946,8 +7000,7 @@ def carga_tick(W, cfg, est=None):
     en este fotograma. La primera vez (motor recien cargado), lo pedido entero."""
     est = est or mezcla_estado(W, cfg, avanzar=False)
     C = _CARGA
-    pre = est['siguiente'] is not None and not est['sim'] and \
-        est['construido'] >= est['siguiente'] - float(cfg.get('precarga', 5.0))
+    pre = tuple(est['cuota_pre']) if est['cuota_pre'] is not None else None
     fams, temas, sin = set(), set(), set()
     for i in range(N):                  # lo que cambia lo pedido: las familias y especies con celdas
         f_, t_ = W['fam'][i], W['tema_c'][i]
@@ -7170,7 +7223,7 @@ def manchas(W):
 
 
 def legend_mezcla(W, cfg):
-    """MEZCLA construido 52% (tramo 50) cuota N/C/I 50/40/10 globo 61/30/9 manchas C1 I1
+    """MEZCLA construido 52% (tramo 25) cuota N/C/I 58/24/17 globo 61/24/15 manchas C1 I1
     familias 9+4/7/2 cola 3"""
     r = mezcla_resumen(W, cfg)
 
@@ -9796,7 +9849,8 @@ PRUEBA_NOTAS2 = (36, 43, 41, 39, 46)
 def _mezcla_cfg(cfg, **kw):
     """La configuracion de las autopruebas de la mezcla: Tema = auto, los valores de
     fabrica de la pagina Fase11 v22 y el nivel 13 (rios y carreteras)."""
-    c = dict(cfg, nivel=13, tema=0, tema_auto=1, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0, paciencia=8,
+    c = dict(cfg, nivel=13, tema=0, tema_auto=1, tope_construido=0.6, reserva_naturaleza=0.3, valvula=10.0,
+             techo_naturaleza=3.0, paciencia=8,
              orden_familias=0, precarga=5.0, carga_por_fotograma=4, sim_construido=-1.0, mezcla_filas=None,
              refresco_piel=0.25, turnos=1, avance=0)
     c.pop('tema_pendiente', None)
@@ -9912,19 +9966,22 @@ def _autoprueba_mezcla(cfg, res):
                 'disponibles y ninguna geometria de la ciudad ni de la industria cargada' % len(nat),
                 est['construido'] == 0.0 and est['cuota'] == [1.0, 0.0, 0.0] and len(disp_nat) == len(nat)
                 and not ajenas, 'disponibles %d, ajenas %s' % (len(disp_nat), ajenas[:3])))
-    # 2. tabla y tramo
+    # 2. tabla y tramo (motor v128: 0-25 % todo naturaleza; 100 % 40/35/25; entre filas, ritmo constante)
     malas = []
-    for pct, fila in zip((0, 30, 50, 75, 100), MEZCLA_DEF):
+    puntos = [(f[0], f[1:]) for f in MEZCLA_DEF] + [(12.5, (100.0, 0.0, 0.0)), (24.9, (100.0, 0.0, 0.0)),
+                                                     (62.5, (52.0, 28.0, 20.0))]
+    for pct, fila in puntos:
         q = mezcla_estado(W, dict(c, sim_construido=float(pct)))['cuota']
-        if any(abs(100.0 * a - b) > 1e-6 for a, b in zip(q, fila[1:])):
-            malas.append('%d%%' % pct)
+        if any(abs(100.0 * a - b) > 1e-6 for a, b in zip(q, fila)):
+            malas.append('%s%%: %s' % (_num(pct), '/'.join('%.1f' % (100.0 * x) for x in q)))
     filas = [list(f) for f in MEZCLA_DEF]
-    filas[2] = [50.0, 50.0, 30.0, 10.0]             # suma 90
-    e90 = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas), sim_construido=50.0))
-    norm = abs(sum(e90['cuota']) - 1.0) < 1e-9 and abs(e90['cuota'][0] - 50.0 / 90.0) < 1e-9 and e90['avisos']
+    filas[-1] = [100.0, 40.0, 30.0, 20.0]           # suma 90
+    e90 = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas), sim_construido=100.0))
+    norm = abs(sum(e90['cuota']) - 1.0) < 1e-9 and abs(e90['cuota'][0] - 40.0 / 90.0) < 1e-9 and e90['avisos']
     Wt = _mezcla_mundo(c)
-    Wt['mezcla']['tramo'] = 3
-    no_baja = mezcla_estado(Wt, c)['tramo'] == 3
+    Wt['mezcla']['pico'] = 62.5                     # el mundo llego al 62,5 % y se ha vaciado
+    et = mezcla_estado(Wt, c)
+    no_baja = et['pico'] == 62.5 and et['construido'] == 0.0 and abs(et['cuota'][CIU] - 0.28) < 1e-9
     filas_r = [list(f) for f in MEZCLA_DEF]
     filas_r[-1] = [100.0, 10.0, 50.0, 40.0]         # v122: una fila con menos naturaleza que la reserva
     q_r = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas_r), sim_construido=100.0))['cuota']
@@ -9935,8 +9992,9 @@ def _autoprueba_mezcla(cfg, res):
                 all(abs(a - b) < 1e-9 for a, b in zip(q_r, (0.3, 0.7 * 5 / 9, 0.7 * 4 / 9)))
                 and all(abs(a - b) < 1e-9 for a, b in zip(q_0, (0.1, 0.5, 0.4))),
                 '%s, %s' % (['%.3f' % x for x in q_r], ['%.3f' % x for x in q_0])))
-    res.append(('tabla y tramo: Simconstruido 0, 30, 50, 75 y 100 dan las cuotas de mezcla_especies; una fila '
-                'que no suma 100 se normaliza con aviso; bajar construido no baja el tramo',
+    res.append(('tabla y tramo: hasta el 25 % todo naturaleza (Simconstruido 0, 12,5, 24,9 y 25: 100/0/0), '
+                'al 100 % 40/35/25 y entre filas a ritmo constante (62,5 %: 52/28/20); una fila que no suma 100 '
+                'se normaliza con aviso; bajar construido no baja la cuota (la del pico)',
                 not malas and norm and no_baja,
                 'mal %s; aviso %s; tramo %s' % (malas, e90['avisos'], no_baja)))
     # 3. la sesion: notas por todo el globo hasta pasar todos los umbrales
@@ -10153,9 +10211,16 @@ def _autoprueba_mezcla(cfg, res):
     _autoprueba_fijo(cfg, res)
 
 
+# motor v128: la tabla de las pruebas de las reglas (la de antes, con la ciudad sola al 30 %)
+FILAS_REGLAS = ((0.0, 100.0, 0.0, 0.0), (30.0, 70.0, 30.0, 0.0), (50.0, 50.0, 40.0, 10.0), (100.0, 50.0, 40.0, 10.0))
+
+
 def _autoprueba_reglas(c, res):
     """Valvula, paciencia, fundacion sin agua, techo y la industria en el borde de la ciudad,
-    con mundos hechos a mano (el agua, puesta a mano)."""
+    con mundos hechos a mano (el agua, puesta a mano). Motor v128: con una tabla propia y el
+    construido simulado (la de fabrica abre la ciudad y la industria a la vez, en el 25 %):
+    al 30 %, 70/30/0 (la ciudad sola); al 50 %, 50/40/10."""
+    c = dict(c, mezcla_filas=FILAS_REGLAS, sim_construido=30.0)
     def mundo(nat_celdas, ciu_celdas, agua):
         W = _mezcla_mundo(c)
         for i in nat_celdas:
@@ -10188,7 +10253,6 @@ def _autoprueba_reglas(c, res):
                                                                              for j in NEIGH[i])]
     carga_reiniciar()
     W = mundo(nat0, [], [rio])
-    W['mezcla']['tramo'] = 1
     _vaciar_cola(W, c)
     # paciencia: sin celdas junto al agua, las Paciencia primeras son naturaleza y la siguiente funda
     pac = int(c['paciencia'])
@@ -10201,7 +10265,6 @@ def _autoprueba_reglas(c, res):
     # fundacion junto al agua
     carga_reiniciar()
     W = mundo(nat0, [], [rio])
-    W['mezcla']['tramo'] = 1
     _vaciar_cola(W, c)
     t_lejos = fundar(W, lejos[0])
     t_rio = fundar(W, cerca_rio[0]) if cerca_rio else (None, None)
@@ -10210,7 +10273,6 @@ def _autoprueba_reglas(c, res):
     # sin agua: la formacion natural mas ocupada
     carga_reiniciar()
     W = mundo(nat0, [], [])
-    W['mezcla']['tramo'] = 1
     for i in nat0[:3]:
         W['occ'][i] = 6
     _vaciar_cola(W, c)
@@ -10227,7 +10289,6 @@ def _autoprueba_reglas(c, res):
     ciu0 = [rio] + cerca_rio[:1]
     cerca2 = [j for j in NEIGH[rio2] if j in libres and j not in ciu0 and not any(x in ciu0 for x in NEIGH[j])]
     W = mundo(nat0, ciu0, [rio2])
-    W['mezcla']['tramo'] = 1
     _vaciar_cola(W, c)
     cnt = celdas_de(W)
     d_alto = 100.0 * (0.30 - cnt[CIU] / float(sum(cnt) + 1))
@@ -10236,7 +10297,6 @@ def _autoprueba_reglas(c, res):
     otras = [x for x in norte if x not in ciu0 and x != rio2 and x not in cerca2
              and not any(j in cerca2 for j in NEIGH[x])]
     W2 = mundo(nat0, ciu0 + otras[:5], [rio2])
-    W2['mezcla']['tramo'] = 1
     cnt2 = celdas_de(W2)
     d_bajo = 100.0 * (0.30 - cnt2[CIU] / float(sum(cnt2) + 1))
     bajo = fundar(W2, cerca2[1]) if len(cerca2) > 1 else (fundar(W2, cerca2[0]) if cerca2 else None)
@@ -10246,7 +10306,6 @@ def _autoprueba_reglas(c, res):
                 and bajo is not None and bajo[0] == NAT, 'alto %s, bajo %s' % (alto, bajo)))
     # techo: con la ciudad en su cuota, una celda que la toca es naturaleza
     W3 = mundo(nat0[:6], ciu0 + [x for x in norte if x not in ciu0][:6], [])
-    W3['mezcla']['tramo'] = 1
     cnt3 = celdas_de(W3)
     toca = [i for i in range(N) if W3['occ'][i] <= 0 and any(W3['tema_c'][j] == CIU for j in NEIGH[i])]
     q = fundar(W3, toca[0]) if toca else None
@@ -10256,7 +10315,7 @@ def _autoprueba_reglas(c, res):
     # la industria nace en el borde de la ciudad (tramo 50)
     carga_reiniciar()
     W4 = mundo(nat0 + sur[n30:n30 + 6], ciu0 + [x for x in norte if x not in ciu0][:10], [])
-    W4['mezcla']['tramo'] = 2
+    c = dict(c, sim_construido=50.0)              # mundo() y fundar() la leen al llamarlas
     _vaciar_cola(W4, c)
     borde = [i for i in range(N) if W4['occ'][i] <= 0 and any(W4['tema_c'][j] == CIU for j in NEIGH[i])]
     lejos4 = [i for i in range(N) if W4['occ'][i] <= 0 and not any(W4['occ'][j] > 0 for j in NEIGH[i])]
@@ -10323,7 +10382,14 @@ def autoprueba_mezcla_fase(cfg, fase):
         cs = [i for i in range(N) if W['occ'][i] > 0 and esp[i] == CIU and W['par'][i] < 0]
         ns = [i for i in range(N) if W['occ'][i] > 0 and esp[i] == NAT and W['par'][i] < 0]
         if fase == 12:
-            ci, ni = cs[0], ns[0]
+            # motor v128: una celda de la ciudad a la que las notas del gate ligado (Plantasligado - 1,
+            # cada una suma 1 a su carga) hagan subir de ocupacion; si ninguna lo esta, la primera,
+            # con la carga a punto (antes, cs[0] tal cual: dependia de su carga en el mundo de prueba)
+            extra = max(1, int(c['plantas_ligado'])) - 1
+            ci = next((i for i in cs if W['carga'][i] + extra >= cost(c, W['occ'][i])), cs[0])
+            if W['carga'][ci] + extra < cost(c, W['occ'][ci]):
+                W['carga'][ci] = cost(c, W['occ'][ci]) - extra
+            ni = ns[0]
             occ0, nocc0 = W['occ'][ci], W['occ'][ni]
             gate_vigor(W, c, GEO, [ci, t - 2.0, 0.0, occ0], t, 120.0)
             gate_vigor(W, c, GEO, [ni, t - 2.0, 0.0, nocc0], t, 120.0)
@@ -12985,7 +13051,7 @@ def rios(W, cfg, cl=None, ter=None):
         esp = especies_lista(Wr, cr)
         otra = set(i for i in range(N) if Wr['occ'][i] > 0 and esp[i] != NAT)
     for f in fuentes:
-        if f in en_rio:                 # la cumbre ya esta en otro rio
+        if f in en_rio or f in otra:    # la cumbre ya esta en otro rio (motor v128: o es ciudad o industria)
             continue
         camino = [f]
         while len(camino) <= tope:
@@ -20493,6 +20559,7 @@ def cfg():
                  tope_construido=max(0.05, min(1.0, _p('Topeconstruido', c['tope_construido']))),
                  reserva_naturaleza=max(0.0, min(1.0, _p('Reservanaturaleza', c['reserva_naturaleza']))),
                  valvula=max(0.0, _p('Valvula', c['valvula'])),
+                 techo_naturaleza=max(0.0, _p('Techonaturaleza', c['techo_naturaleza'])),
                  paciencia=max(0, int(_p('Paciencia', c['paciencia']))),
                  orden_familias=_menu('Ordenfamilias', ORDEN_FAMILIAS, 0),
                  precarga=max(0.0, _p('Precarga', c['precarga'])),
