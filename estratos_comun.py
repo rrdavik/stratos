@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v97'
+VERSION_COMUN = 'comun v98'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -5146,6 +5146,8 @@ def catalogo_al_dia(base, m):
     """La tabla 'catalogo' con las filas por defecto del motor, salvo que se
     haya editado a mano (entonces se conserva y se avisa de lo que no existe).
     Devuelve el numero de filas o None si se conserva la editada."""
+    if hasattr(m, 'tablas_releer'):     # comun v98: el motor relee la tabla en este mismo fotograma
+        m.tablas_releer()
     filas_def = [list(m.CATALOGO_COLS)] + [[str(x) for x in f] for f in m.CATALOGO_FILAS]
     cat = get_or_make(base, 'tableDAT', 'catalogo', -440, -480)
     actual = [[cell.val for cell in cat.row(r)] for r in range(cat.numRows)]
@@ -5154,6 +5156,8 @@ def catalogo_al_dia(base, m):
         for f in filas_def:
             cat.appendRow(f)
         cat.store('defecto', filas_def)
+        if hasattr(m, 'tablas_releer'):
+            m.tablas_releer()
         return len(filas_def) - 1
     if actual == filas_def:
         cat.store('defecto', filas_def)

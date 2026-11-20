@@ -581,6 +581,8 @@ def mezcla_al_dia_td(base, m):
         for f in filas_def:
             t.appendRow(f)
         t.store('defecto', filas_def)
+        if hasattr(m, 'tablas_releer'):  # v26 (motor v134): el motor la relee ya, no a los 30 fotogramas
+            m.tablas_releer()
         return True
     if actual == filas_def:
         t.store('defecto', filas_def)

@@ -318,6 +318,11 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v134 (comun v98, fase 11 v26): TABLAS_RELEER. Al relanzar la fase
+#                 11 sobre un proyecto de antes, el motor seguia con el catalogo y la tabla
+#                 de la mezcla viejos todo ese fotograma (los relee cada 30): la leyenda
+#                 daba las cuotas de antes y bocetos_al_dia dejaba mod_arq_sotano en SEQ2
+#                 cuando ya era de los dos (FALLO en el diagnostico de los bocetos).
 #   2. ADAPTADOR  Lo que habla con TouchDesigner: lee parametros, recibe
 #                 MIDI, alimenta los Script CHOP de instancias, la leyenda.
 #
@@ -329,7 +334,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v133'
+MOTOR_VERSION = 'motor v134'
 
 import math
 import time as _time
@@ -20848,6 +20853,19 @@ def _catalogo():
             cat = catalogo_de(filas) or CATALOGO
     _CACHE['cat'], _CACHE['cat_frame'], _CACHE['cat_filas'] = cat, absTime.frame, filas
     return cat
+
+
+def tablas_releer():
+    """Motor v134: que el motor relea ya las tablas de FASE1 ('catalogo' y
+    'mezcla_especies') y olvide lo que dependia de ellas (de que secuenciador sale cada
+    modelo). Las relee cada 30 fotogramas, pero una fase corre entera en un fotograma:
+    si algo pidio cfg() antes de que la fase reescribiera la tabla, toda la fase (y los
+    bocetos de print_report) veian la tabla vieja. Lo llaman las fases al reescribirlas."""
+    for k in list(_CACHE):
+        if k in ('cat', 'cat_frame', 'cat_filas', 'mez', 'mez_frame') or \
+                (isinstance(k, tuple) and k and k[0] == 'seqs'):
+            del _CACHE[k]
+    _GEOS_CACHE.clear()
 
 
 def _mezcla_filas_td():
