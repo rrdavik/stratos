@@ -99,9 +99,16 @@
 #               dos que no cerraba el cerco de cuatro le daban de comer). Construir y
 #               Aparece se comprueban por lo nuevo (coronas y brotes del capitulo). El
 #               Oceano de FASE1 se respeta (se apagaba: el mundo vacio era todo mar).
+#   v17         EL PISOTON, CON TRES CABEZAS SEPARADAS (sitio_pison): con tres casillas o
+#               mas mirando a la celda del monstruo, uno en cada una; con dos, dos en la
+#               primera (en su lado lejos de la otra, a 0,42 m entre si) y el tercero en
+#               el lado lejos de la segunda; con una, un triangulo de 0,38 m de lado.
+#               Antes, dos en la misma casilla a 0,37 m y el tercero a 0,38, junto a
+#               Separacioncabezas (0,35, fase 24): en TouchDesigner dos cabezas se
+#               fundian en una, el pisoton contaba dos y no le bajaba acum.
 # =============================================================================
 
-SALA_VERSION = 'sala v16'
+SALA_VERSION = 'sala v17'
 
 import math
 
@@ -1601,6 +1608,9 @@ def legend(frame=None):
 #   ('casilla', sitio, j, dx, dz)   la casilla j de un sitio del guion (una fila)
 #   ('vecina_mon', j)               (v16) la vecina j del monstruo que no cierra el cerco
 #                                   de cuatro (vecinas_cerco del motor)
+#   ('pison', i)                    (v17) el sitio del visitante i (0-2) del pisoton en la
+#                                   celda del monstruo, con las tres cabezas separadas
+#                                   (sitio_pison)
 #   ('suelo', columna, fila)        un punto del suelo en casillas de la demo web
 #                                   (11 x 9; 0, 0 junto a la pantalla, a la izquierda)
 #   'fuera'                         sale por la puerta
@@ -1735,9 +1745,10 @@ CAPITULOS = [
     dict(nombre='Pisoton', sub='Tres personas sobre la celda del monstruo: deja de comer y encoge.',
          dur=16.0, pars=dict(Armapison=True, Tfila=60.0),
          coreo=_sitios([('suelo', 5, 6.2), ('suelo', 7, 6.2), ('suelo', 6, 7.0), ('suelo', 1, 6)])
-         + [[t_, 0, ('monstruo', 0, 0, -0.13, -0.13)] for t_ in (0.2, 6.0)]
-         + [[t_, 1, ('monstruo', 0, 0, 0.13, 0.13)] for t_ in (0.2, 6.0)]
-         + [[t_, 2, ('monstruo', 0, 0, 0.0, 0.0, 1)] for t_ in (0.2, 6.0)],
+         # v17: los tres, con las cabezas bien separadas (sitio_pison). Antes, dos en la misma
+         # casilla a 0,37 m y el tercero en la de al lado a 0,38: junto a Separacioncabezas
+         # (0,35) y en TouchDesigner dos cabezas se fundian en una: el pisoton no llegaba a tres
+         + [[t_, i, ('pison', i)] for t_ in (0.2, 6.0) for i in range(3)],
          rotulos=[(0.0, 'El monstruo grande devora una corona.'),
                   (2.0, 'Tres visitantes se le echan encima.'),
                   (4.0, 'Con tres en su celda no come y encoge a cada paso.'),
@@ -1940,6 +1951,40 @@ def punto_de_celda(m, W, c1, celda, libres=None, j=0):
     return de_suelo(c1, u * c1['ancho_sala'], v * c1['fondo_sala'])
 
 
+# v17: el pisoton (tres visitantes en casillas que miran a la celda del monstruo). Con dos
+# casillas, dos comparten la primera en diagonal, PISON_APARTE del centro en cada eje (0,42 m
+# entre las cabezas y 0,1 m al borde: la camara ve la cabeza unos 0,1 m desplazada), y el
+# tercero va al lado lejos de la segunda; con una, un triangulo de radio PISON_RADIO (0,38 m
+# de lado). Separacioncabezas (fase 24) es 0,35.
+PISON_APARTE = 0.15
+PISON_RADIO = 0.22
+
+
+def sitio_pison(m, W, c1, celda, i):
+    """(x, z) de la sala del visitante i (0, 1 o 2) del pisoton sobre la celda: en casillas
+    que la miran (todas, ocupadas o no: las ocupan ellos mismos), con las tres cabezas a
+    mas de Separacioncabezas. None si ninguna casilla la mira."""
+    ks = m.casillas_de_celda(W, c1, celda)
+    if not ks:
+        return None
+    pts = [de_suelo(c1, *m.casilla_xy(c1, k)) for k in ks[:3]]
+    i = int(i) % 3
+    if len(pts) >= 3:
+        return pts[i]
+    if len(pts) == 2:
+        (ax, az), (bx, bz) = pts
+        dx, dz = bx - ax, bz - az
+        n = math.hypot(dx, dz) or 1.0
+        ux, uz = dx / n, dz / n
+        if i == 2:
+            return bx + PISON_APARTE * ux, bz + PISON_APARTE * uz
+        s_ = 1.0 if i == 0 else -1.0    # en diagonal: uno lejos de la otra casilla, otro hacia ella
+        return (ax + PISON_APARTE * (-s_ * ux - s_ * uz), az + PISON_APARTE * (-s_ * uz + s_ * ux))
+    ax, az = pts[0]
+    a = math.radians(90.0 + 120.0 * i)
+    return ax + PISON_RADIO * math.cos(a), az + PISON_RADIO * math.sin(a)
+
+
 def destino_a_punto(c, F, d, refs, evitar=()):
     """El destino de la coreografia en (x, z) de la sala, o 'fuera', o None si no se
     puede (sin FASE1, sin monstruo...)."""
@@ -1971,6 +2016,10 @@ def destino_a_punto(c, F, d, refs, evitar=()):
             return None
         dx, dz, j = list(d[3:6]) + [0.0, 0.0, 0][len(d[3:6]):]
         p = punto_de_celda(m, W, c1, m.celda_desplazada(mc, d[1], d[2]), _GZ.get('libres'), j)
+    elif kind == 'pison':               # v17: los tres del pisoton, con las cabezas separadas
+        J = W.get('juego') or {}
+        mc = (J.get('mon') or {}).get('celda')
+        p = sitio_pison(m, W, c1, mc, int(d[1])) if mc is not None else None
     elif kind == 'vecina_mon':          # v16: las vecinas que no cierra el cerco de cuatro
         J = W.get('juego') or {}
         mc = (J.get('mon') or {}).get('celda')
