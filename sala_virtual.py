@@ -111,6 +111,10 @@ DEMO GENOZILLA (v24, Demo = genozilla)
   Construir, las vecinas del brote, la celda del monstruo del Cerco) y, si
   hacen falta conchas para cavar y no las hay, entierra copias de la superficie
   por debajo de ella. El Cerco, con seis visitantes.
+  v28 (sala v17): en el Pisoton, los dos visitantes que comparten casilla en la
+  celda del monstruo, a 0,54 m (antes a 0,37 m, junto a Separacioncabezas 0,35:
+  en TouchDesigner sus cabezas se fundian en una, el pisoton contaba dos y no le
+  bajaba acum: «acum 12 -> 12»).
 
 COMO USARLO
 -----------
@@ -126,7 +130,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v27  (el publico de todas las demos, marcado en FASE1; GENoZilla sobre el mundo de FASE1)'
+VERSION = 'sala_virtual v28  (el Pisoton de la demo con las tres cabezas bien separadas: sala v17)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 

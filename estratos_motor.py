@@ -318,6 +318,12 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v135 (sala v17): EL PISOTON DE LA DEMO, CON TRES CABEZAS. El
+#                 capitulo 8 de GENoZilla busca para el monstruo, cerca de (6, 4), una celda
+#                 que miren tres casillas o mas (DEMO_PISON): la sala pone un visitante en
+#                 cada una (sitio_pison). Antes, dos compartian casilla a 0,37 m, junto a
+#                 Separacioncabezas (0,35): en TouchDesigner sus cabezas se fundian en una
+#                 y el pisoton no llegaba a tres (acum 12 -> 12).
 #                 Motor v134 (comun v98, fase 11 v26): TABLAS_RELEER. Al relanzar la fase
 #                 11 sobre un proyecto de antes, el motor seguia con el catalogo y la tabla
 #                 de la mezcla viejos todo ese fotograma (los relee cada 30): la leyenda
@@ -334,7 +340,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v134'
+MOTOR_VERSION = 'motor v135'
 
 import math
 import time as _time
@@ -20160,6 +20166,28 @@ def _vecinas_a_la_vista(W, cfg, c, n, libres=None):
     return [v for _, v in sorted(out)[:n]]
 
 
+# motor v135: hasta cuantas casillas de (6, 4) se busca la celda del monstruo del Pisoton
+DEMO_PISON = 3
+
+
+def celda_pison(W, cfg, k0):
+    """Motor v135: la celda que miran tres casillas o mas mas cercana a la casilla k0 (a
+    DEMO_PISON casillas o menos), o None."""
+    cols, filas = rejilla_sala(cfg)
+    de = [celda_de_casilla(W, cfg, k) for k in range(cols * filas)]
+    cuenta = {}
+    for c_ in de:
+        cuenta[c_] = cuenta.get(c_, 0) + 1
+    mejor = None
+    for k, c_ in enumerate(de):
+        if c_ is None or cuenta[c_] < 3:
+            continue
+        d = math.hypot(k % cols - k0 % cols, k // cols - k0 // cols)
+        if d <= DEMO_PISON + 1e-9 and (mejor is None or (d, k) < mejor[:2]):
+            mejor = (d, k, c_)
+    return mejor[2] if mejor else None
+
+
 def demo_refs(W, cfg, cap, libres=None):
     """Los sitios con nombre de un capitulo (solo lee): celdas y casillas que usan su
     coreografia de la sala y su guion. libres: las casillas a las que llega el publico."""
@@ -20210,7 +20238,10 @@ def demo_refs(W, cfg, cap, libres=None):
         r['muros'] += vecinas_cerco(r['monstruo'])
         r['despejar'] = [r['monstruo']]
     elif cap == 8:
-        r['monstruo'] = cel(6.0, 4.0)
+        # motor v135: una celda que miren tres casillas o mas (el pisoton pone un visitante en
+        # cada una, con las cabezas separadas), la mas cercana a (6, 4); si no hay ninguna a
+        # DEMO_PISON casillas o menos, la de (6, 4)
+        r['monstruo'] = celda_pison(W, cfg, demo_casilla(cfg, 6.0, 4.0)) or cel(6.0, 4.0)
         r['siembra'] = [(r['monstruo'], 16), (cel(3.0, 6.5), 4)]
     elif cap == 9:
         r['monstruo'] = cel(6.0, 4.5)
