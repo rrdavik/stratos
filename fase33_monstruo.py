@@ -72,7 +72,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v6  (GENoZilla mas lento y a saltos de media celda: Pasomonstruo 32, Pasogrande 16)'
+VERSION = 'fase33 v7  (autoprueba del salto: a una milesima y con el detalle de cada parte)'
 banner(VERSION)
 
 base = require_base(33)
@@ -356,14 +356,17 @@ def _prueba(t, m, copy):
     S.semis(W, c, int(c['paso_monstruo']) // 2)
     t0, T = S.now, float(c['tiempo_salto'])
     pa, ph = m._pos_destino(W, c, [a, None, 0.0])[0], m._pos_destino(W, c, [a, nx, 0.5])[0]
-    cerca = lambda p, q: m._len(m._add(p, q, -1.0)) < 1e-6      # noqa: E731
+    # v7: a una milesima (antes 1e-6: en TouchDesigner el suelo de la celda varia en las ultimas
+    # cifras entre una llamada y otra; la celda mide unas 4 unidades)
+    cerca = lambda p, q: m._len(m._add(p, q, -1.0)) < 1e-3      # noqa: E731
     p0, pm, p1 = (m.pos_monstruo(W, c, mo, t0 + x * T)[0] for x in (0.0, 0.5, 1.0))
     b0, bm, b1 = (m.bote_monstruo(W, c, mo, t0 + x * T) for x in (0.0, 0.5, 1.0))
     t.check('v6: cada salto dura Tiemposalto (0,15) s: sale de donde estaba, a mitad de salto va a mitad de camino '
             'con el bote en lo alto (Botesalto 0,15 x su alto) y aterriza a los Tiemposalto s, sin bote',
             abs(T - 0.15) < 1e-9 and cerca(p0, pa) and not cerca(pm, pa) and not cerca(pm, ph) and cerca(p1, ph)
             and b0 == 0.0 and abs(bm - 0.15) < 1e-9 and b1 == 0.0 and mo['celda'] == a,
-            'bote %.3f %.3f %.3f' % (b0, bm, b1))
+            'T %.3f; sale %s, a mitad %s, aterriza %s; bote %.3f %.3f %.3f; celda %s (%s)'
+            % (T, cerca(p0, pa), not cerca(pm, pa) and not cerca(pm, ph), cerca(p1, ph), b0, bm, b1, mo['celda'], a))
     fz = m.filas_trumpzilla(W, dict(c, nivel=38), mo, t0 + 0.5 * T) if hasattr(m, 'filas_trumpzilla') else []
     t.check('v6: el sprite (fase 38) salta igual: el bote lo sube Botesalto x su alto y la sombra se queda en el '
             'suelo', len(fz) == 2 and abs(m._dot(m._add(fz[1][:3], pm, -1.0), m.normal_i(a)) -
