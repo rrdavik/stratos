@@ -72,7 +72,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v8  (autoprueba del salto: Tiemposalto y el bote comparados en precision simple, como los guarda TouchDesigner)'
+VERSION = 'fase33 v9  (autoprueba del salto: el bote al salir y al aterrizar, a una millonesima)'
 banner(VERSION)
 
 base = require_base(33)
@@ -356,6 +356,8 @@ def _prueba(t, m, copy):
     S.semis(W, c, int(c['paso_monstruo']) // 2)
     t0, T = S.now, float(c['tiempo_salto'])
     pa, ph = m._pos_destino(W, c, [a, None, 0.0])[0], m._pos_destino(W, c, [a, nx, 0.5])[0]
+    # v9: el bote al salir y al aterrizar, tambien a una millonesima (no == 0: el salto puede empezar
+    # unas milmillonesimas antes de t0, el reloj de la prueba se acumula semicorchea a semicorchea).
     # v7: las posiciones a una milesima (la celda mide unas 4 unidades); v8: Tiemposalto y el bote a
     # una millonesima: TouchDesigner guarda los parametros en precision simple (0,15 es
     # 0,150000006) y con 1e-9 la prueba fallaba con todo bien
@@ -365,8 +367,8 @@ def _prueba(t, m, copy):
     t.check('v6: cada salto dura Tiemposalto (0,15) s: sale de donde estaba, a mitad de salto va a mitad de camino '
             'con el bote en lo alto (Botesalto 0,15 x su alto) y aterriza a los Tiemposalto s, sin bote',
             abs(T - 0.15) < 1e-6 and cerca(p0, pa) and not cerca(pm, pa) and not cerca(pm, ph) and cerca(p1, ph)
-            and b0 == 0.0 and abs(bm - 0.15) < 1e-6 and b1 == 0.0 and mo['celda'] == a,
-            'T %.3f; sale %s, a mitad %s, aterriza %s; bote %.3f %.3f %.3f; celda %s (%s)'
+            and abs(b0) < 1e-6 and abs(bm - 0.15) < 1e-6 and abs(b1) < 1e-6 and mo['celda'] == a,
+            'T %.9f; sale %s, a mitad %s, aterriza %s; bote %.2e %.9f %.2e; celda %s (%s)'
             % (T, cerca(p0, pa), not cerca(pm, pa) and not cerca(pm, ph), cerca(p1, ph), b0, bm, b1, mo['celda'], a))
     fz = m.filas_trumpzilla(W, dict(c, nivel=38), mo, t0 + 0.5 * T) if hasattr(m, 'filas_trumpzilla') else []
     t.check('v6: el sprite (fase 38) salta igual: el bote lo sube Botesalto x su alto y la sombra se queda en el '
