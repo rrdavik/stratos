@@ -10,12 +10,12 @@ Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
 camino del MIDI real, fotograma a fotograma; desde la fase 21, onsets del
 microfono: palmadas de la sala virtual, que la sesion oye por su microfono
 virtual) y evalua todas las expresiones.
-Desde la fase 35, una partida del juego «El devorador» (fases 32 a 37): dos
+Desde la fase 35, una partida del juego «El devorador» (fases 32 a 37, sin Godzilla): dos
 rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
 mal donde toca.
-Con la sala virtual (sala_virtual v26), la demo GENoZilla de principio a fin
+Con la sala virtual (sala_virtual v27), la demo GENoZilla de principio a fin
 (Demo = genozilla, fotograma a fotograma): los 13 capitulos, la columna
 Comprobar de cada uno y, al acabar, FASE1 como estaba (el mundo, las armas,
 Fuente y Modojuego).
@@ -130,6 +130,10 @@ def partida(sim, fps=30.0, ronda=60.0):
     base.par.Modojuego = True
     tfila = base.par.Tfila.eval()
     base.par.Tfila = 1.0                # las filas cavan al segundo: el monstruo sigue en su celda
+    godz = getattr(base.par, 'Godzilla', None)      # la partida prueba a Trumpzilla solo, como las
+    godz0 = godz.eval() if godz is not None else None   # autopruebas de las fases 32 a 39 (comun v91)
+    if godz is not None:
+        godz.val = False
     paso = 60.0 / 120.0 / 4
     fpp = fps * paso
     notas = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76]
@@ -248,6 +252,8 @@ def partida(sim, fps=30.0, ronda=60.0):
     hechos['estado'] = J['estado']
     base.par.Modojuego = False
     base.par.Tfila = tfila
+    if godz is not None:
+        godz.val = godz0
     poner([])
     for _ in range(int((base.par.Noche.eval() + 1.0) * fps)):     # que acabe la noche del ultimo entierro
         sim.fotograma(1.0 / fps)
@@ -338,6 +344,12 @@ def main():
     if os.path.exists(os.path.join(REPO, SALA)) and not hasta:
         bien, _ = correr(sim, SALA, verbose)
         todo = todo and bien
+        # sala_virtual v27: la sala alimenta a FASE1 con su publico (Alimentar; lo prueba su
+        # autoprueba). La sesion y la partida son de FASE1, con su propia gente: sin el
+        sala = sim.op('/project1/SALA')
+        if sala is not None and getattr(sala.par, 'Alimentar', None) is not None:
+            sala.par.Alimentar = False
+            sala.op('sala_motor').module.alimentar_tick()      # sin avanzar el reloj: la sesion, la de siempre
     with contextlib.redirect_stdout(io.StringIO()):
         malas = sesion(sim)
     m = sim.op('/project1/FASE1/motor').module
