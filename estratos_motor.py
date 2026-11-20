@@ -263,6 +263,11 @@
 #                 siguiente (una ladera escalonada, unos 35 grados). Colores de tierra
 #                 (COL_BANCO, antes mas rojizos). TouchDesigner lo dibuja con normales
 #                 planas (MODELOS_FACETADOS: un Facet SOP en su COMP de modelos).
+#                 Motor v131 (comun v98, fase 11 v26): TABLAS_RELEER. Al relanzar la fase
+#                 11 sobre un proyecto de antes, el motor seguia con el catalogo y la tabla
+#                 de la mezcla viejos todo ese fotograma (los relee cada 30): la leyenda
+#                 daba las cuotas de antes y bocetos_al_dia dejaba mod_arq_sotano en SEQ2
+#                 cuando ya era de los dos (FALLO en el diagnostico de los bocetos).
 #                 Motor v130 (fase 16 v6): LOS RESTOS DE LOS CORTES, DISTINGUIBLES. Lo que
 #                 ensenan los cortes de la ciudad y la industria eran losas grises y pardas
 #                 parecidas (cimientos, sotanos, galeria, vagoneta, pozo). Ahora la ciudad
@@ -304,7 +309,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v130'
+MOTOR_VERSION = 'motor v131'
 
 import math
 import time as _time
@@ -20673,6 +20678,19 @@ def _catalogo():
             cat = catalogo_de(filas) or CATALOGO
     _CACHE['cat'], _CACHE['cat_frame'], _CACHE['cat_filas'] = cat, absTime.frame, filas
     return cat
+
+
+def tablas_releer():
+    """Motor v131: que el motor relea ya las tablas de FASE1 ('catalogo' y
+    'mezcla_especies') y olvide lo que dependia de ellas (de que secuenciador sale cada
+    modelo). Las relee cada 30 fotogramas, pero una fase corre entera en un fotograma:
+    si algo pidio cfg() antes de que la fase reescribiera la tabla, toda la fase (y los
+    bocetos de print_report) veian la tabla vieja. Lo llaman las fases al reescribirlas."""
+    for k in list(_CACHE):
+        if k in ('cat', 'cat_frame', 'cat_filas', 'mez', 'mez_frame') or \
+                (isinstance(k, tuple) and k and k[0] == 'seqs'):
+            del _CACHE[k]
+    _GEOS_CACHE.clear()
 
 
 def _mezcla_filas_td():
