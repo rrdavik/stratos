@@ -95,7 +95,8 @@ CIUDAD LEGIBLE: EDIFICIOS POR ETAPA Y CONSTRUCCIONES MUTANTES (v10)
 
 EL DETALLE SE LEE Y EL AGUA SE DESBORDA (v19, motor v114)
 ---------------------------------------------------------
-  ESCALA     (Radionucleo 8) con el nucleo en 12 las especies se veian a la mitad de
+  ESCALA     (v20, motor v138: Radionucleo 10, Alturaplanta 0,12; los edificios, hasta 1,7 x el
+             limite: sobre la vegetacion y bajo las montanas) antes, Radionucleo 8: con el nucleo en 12 las especies se veian a la mitad de
              tamano desde el globo y su detalle no se leia; con 6 (el de siempre) las
              islas no tenian sitio. 8 es el termino medio. Menor: especies mas grandes
              en pantalla; mayor: mas sitio por celda. Tras cambiarlo, relanzar la fase.
@@ -508,7 +509,8 @@ add_par(base, page, 'float', 'Volcanes', 'Volcanes: parte de los conos de reliev
 add_par(base, page, 'toggle', 'Detalle', 'Detalle alto: hojas de verdad desde el globo (tarjeta grafica)', True)
 add_par(base, page, 'float', 'Tierra', 'Las conchas, como capas de tierra (0: losetas de color)', 0.75, 0.0, 1.0)
 # v18 (motor v101): el tamano del planeta frente a las especies, y el agua que se desborda
-add_par(base, page, 'float', 'Radionucleo', 'Radio del nucleo (menor: las especies se ven mas grandes)', 8.0, 4.0, 16.0)
+add_par(base, page, 'float', 'Radionucleo', 'Radio del nucleo (menor: las especies se ven mas grandes)', 10.0, 4.0, 16.0)
+renew_default(base, 'Radionucleo', 8.0, 10.0)     # v20 (motor v138): el globo, algo mas grande
 add_par(base, page, 'float', 'Inundacion', 'Lo que sube el agua de una hondonada (por segundo; 0: no se desborda)',
         0.08, 0.0, 2.0)
 # v10: la ciudad legible
@@ -520,7 +522,8 @@ add_par(base, page, 'int', 'Variantesciudad', 'Variantes por diseno (biblioteca 
 add_par(base, page, 'menu', 'Fijartipo', 'Fijar el diseno (para probar)', 'auto', menu=m.FIJAR_TIPOS,
         menu_labels=['Auto (el mapa logistico)', 'Diseno 1', 'Diseno 2', 'Diseno 3'])
 add_par(base, page, 'float', 'Oblicuidad', 'Oblicuidad de los anadidos informales (grados)', 6.0, 0.0, 30.0)
-add_par(base, page, 'float', 'Alturaplanta', 'Alto de una planta (x el limite)', 0.08, 0.01, 0.5)
+add_par(base, page, 'float', 'Alturaplanta', 'Alto de una planta (x el limite)', 0.12, 0.01, 0.5)
+renew_default(base, 'Alturaplanta', 0.08, 0.12)   # v20 (motor v138): edificios mas altos que la vegetacion
 add_par(base, page, 'float', 'Anchovano', 'Ancho de un vano (x el limite)', 0.05, 0.005, 0.5)
 add_par(base, page, 'float', 'Retranqueo', 'Retranqueo de las torres', 0.15, 0.0, 0.4)
 add_par(base, page, 'float', 'Torsionmax', 'Giro maximo de la torsionada (grados)', 90.0, 0.0, 360.0)
