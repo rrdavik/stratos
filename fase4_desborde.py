@@ -70,6 +70,7 @@ add_fase4_pars(base, page)
 renew_default(base, 'Umbralram', 4, 5)
 # los de la fase 3, por si no se ha relanzado
 renew_default(base, 'Alturafactor', 3.0, 3.75)
+renew_default(base, 'Alturafactor', 3.75, 4.25)   # motor v138: especies algo mas altas
 renew_default(base, 'Semillafrac', 0.25, 0.20)
 if not has_par(base, 'Costemax'):
     add_par(base, get_page(base, 'Fase3'), 'int', 'Costemax', 'Notas por trigger en el limite',

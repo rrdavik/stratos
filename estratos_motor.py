@@ -325,6 +325,7 @@
 #                 alto es el suyo; de ahi se comprime sin llegar al tope, ya no un corte seco).
 #                 Orden de alturas: vegetacion (~1 x el limite) < edificios (hasta 1,7) <
 #                 montanas y cordilleras (1 + Alturamonte = 2).
+#                 Alturafactor 3,75 -> 4,25 (limite 1,875 -> 2,125): las especies, un 13 % mas altas.
 #                 Motor v137: LOS MONSTRUOS, A LA LUZ. Trumpzilla y Godzilla se quedan en la
 #                 cara visible todo lo posible: entre las presas (o el mal) alcanzables
 #                 prefieren las de la cara visible, y pisar la cara oculta cuesta
@@ -494,7 +495,7 @@ DEFAULT_CFG = dict(
     nivel=3,
     core_radius=10.0,           # motor v138 (Radionucleo): 6 hasta la v98, 12 en la v99 y la v100, 8 de la v114 a la v137
     # fase 3
-    shell_thick=0.5, height_factor=3.75, seed_frac=0.20, grow_frac=0.20,
+    shell_thick=0.5, height_factor=4.25, seed_frac=0.20, grow_frac=0.20,
     gate_mode=1, gate_max=1.25, vel_umbral=64, steps_per_beat=4, cost_max=5,
     # fase 4
     th_branch=5, th_fusion=7, th_crown=9, th_cumbre=11, cumbre_tramos=4,
