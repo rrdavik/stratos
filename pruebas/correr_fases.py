@@ -15,11 +15,12 @@ rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
 mal donde toca.
-Con la sala virtual (sala_virtual v30), la demo GENoZilla de principio a fin
+Con la sala virtual (sala_virtual v31), la demo GENoZilla de principio a fin
 (Demo = genozilla, fotograma a fotograma): los 13 capitulos, la columna
 Comprobar de cada uno y, al acabar, FASE1 como estaba (el mundo, las armas,
 Fuente y Modojuego). Y las demos de secciones y casos (paseo, probabilidad,
-huella y llena), igual: la comprobacion de cada caso y FASE1 como estaba.
+huella y llena), igual: la comprobacion de cada caso, FASE1 como estaba y (sala v19)
+el giro de FASE1 intacto mientras duran (Barsperturn y la camara en su sitio).
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
 Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
@@ -319,11 +320,16 @@ def demos_sala(sim, fps=30.0):
                                               if getattr(base.par, k, None) is not None), str(sala.par.Vista.eval()))
         sala.par.Demo = demo
         tope = int((sum(c['dur'] for c in sm.casos(demo)) + len(sm.casos(demo)) * sm.TITULO + 10.0) * fps)
+        bpt0, giro = base.par.Barsperturn.eval(), set()
         for _ in range(tope):
             sim.fotograma(1.0 / fps)
+            giro.add((base.par.Barsperturn.eval(), m._CACHE.get('foco_dir') not in (None, m.CAM_DIR)))
             if sm._GZ.get('acabada'):
                 break
         res = list(sm._GZ.get('resultados') or [])
+        # sala v19: las demos de seccion no tocan el giro de FASE1 ni, sin Siguecamara, su camara
+        res.append((len(res), giro == {(bpt0, False)}, 'el giro de FASE1 intacto: Barsperturn %s, camara en su sitio%s'
+                    % (bpt0, '' if giro == {(bpt0, False)} else ' (FALLO: %s)' % sorted(giro))))
         sala.par.Demo = 'vacia'
         sim.fotograma(1.0 / fps)
         despues = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars
@@ -436,7 +442,7 @@ def main():
         with contextlib.redirect_stdout(io.StringIO()):
             r_demos = demos_sala(sim)
         for demo, (res, igual, antes, despues) in r_demos.items():
-            n = len(sala.op('sala_motor').module.casos(demo))
+            n = len(sala.op('sala_motor').module.casos(demo)) + 1      # sala v19: y el giro intacto
             bien = len(res) == n and all(r[1] for r in res) and igual
             todo = todo and bien
             print('%-6s demo %s (sala virtual): %d/%d casos comprobados, FASE1 %s al salir'
