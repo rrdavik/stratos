@@ -318,6 +318,12 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v136: LAS GEOMETRIAS SIN INSTANCIAS NO SE DIBUJAN. Cada geometria
+#                 mod_* dibujaba su fila de relleno aunque el modelo no estuviera en el
+#                 mundo: cientos de dibujados y de preparaciones en el render (15-20 ms
+#                 por fotograma en el Performance Monitor). Al recocer el Script CHOP de
+#                 un modelo, geo_dibujar apaga o enciende la bandera render de su
+#                 geometria segun tenga filas; solo escribe cuando cambia.
 #                 Motor v135 (sala v17): EL PISOTON DE LA DEMO, CON TRES CABEZAS. El
 #                 capitulo 8 de GENoZilla busca para el monstruo, cerca de (6, 4), una celda
 #                 que miren tres casillas o mas (DEMO_PISON): la sala pone un visitante en
@@ -340,7 +346,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v135'
+MOTOR_VERSION = 'motor v136'
 
 import math
 import time as _time
@@ -21656,6 +21662,25 @@ def diag_texto():
     return out
 
 
+def geo_dibujar(nombre, encendida):
+    """Motor v136: la geometria de un modelo sin instancias no se dibuja. Con cientos de
+    geometrias mod_*, cada una era un dibujado (cambio de material, buffers de instancias)
+    y su preparacion en el render, aunque el Script CHOP solo diera la fila de relleno
+    (unos 15-20 ms por fotograma en el Performance Monitor). Solo toca la bandera cuando
+    cambia, y no hace nada si la geometria no existe."""
+    estado = _CACHE.setdefault('geo_on', {})
+    if estado.get(nombre) == encendida:
+        return
+    g = parent().op(nombre)
+    if g is None:
+        return
+    try:
+        g.render = encendida
+        estado[nombre] = encendida
+    except Exception:
+        pass
+
+
 def _op_chop(name):
     """El Script CHOP de instancias name, guardado (motor v102: con Variantes alto hay
     cientos y buscarlos en cada fotograma costaba)."""
@@ -21750,6 +21775,8 @@ def frame_tick():
             if o is None:
                 continue
             hechas[name] = filas
+            if name.startswith('i_mod_'):
+                geo_dibujar(name[2:], bool(filas))
         else:
             o = _op_chop(name)
             if o is None:
