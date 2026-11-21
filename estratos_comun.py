@@ -593,10 +593,12 @@ def _num(x, default=None):
 
 
 def route_bytes(b):
-    m = op('motor').module
     if not b:
         return None
     st = b[0]
+    if st >= 0xF0 and st not in (0xF0, 0xFA, 0xFC):
+        return None                                # reloj y demas, sin tocar el motor (24 por negra)
+    m = op('motor').module
     if st == 0xF0:
         return m.midi_sysex(b)
     if st == 0xFA:
