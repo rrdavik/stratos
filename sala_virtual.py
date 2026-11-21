@@ -115,6 +115,10 @@ DEMO GENOZILLA (v24, Demo = genozilla)
   celda del monstruo, a 0,54 m (antes a 0,37 m, junto a Separacioncabezas 0,35:
   en TouchDesigner sus cabezas se fundian en una, el pisoton contaba dos y no le
   bajaba acum: «acum 12 -> 12»).
+  v29: si no hay /project1/SALA pero si otra sala montada en /project1 con otro
+  nombre (SALA1 al copiar y pegar, salap...), se usa esa, renombrada a SALA, en
+  vez de crear otra. Si hay varias, la primera que se llame SALA-algo; las demas
+  quedan paradas, como las copias (v17).
 
 COMO USARLO
 -----------
@@ -130,7 +134,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v28  (el Pisoton de la demo con las tres cabezas bien separadas: sala v17)'
+VERSION = 'sala_virtual v29  (no crea otra sala si ya hay una con otro nombre: la usa, renombrada a SALA)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -139,10 +143,34 @@ nivel = current_level(fase1) if fase1 is not None else 0
 if fase1 is None:
     raise RuntimeError('No encuentro %s. Monta antes Estratos (fase12_base.py y las fases).' % COMP_PATH)
 
+def salas_montadas(raiz):
+    """v29: los COMP de raiz con un sala_motor dentro: salas montadas con este script (o
+    copias), se llamen como se llamen (SALA1 al copiar y pegar, salap...)."""
+    out = []
+    for o_ in raiz.children:
+        try:
+            if o_.isCOMP and o_.op('sala_motor') is not None:
+                out.append(o_)
+        except Exception:
+            pass
+    # primero las que se llaman SALA-algo, luego las que tienen su tabla de equipos
+    out.sort(key=lambda o_: (not o_.name.upper().startswith('SALA'), o_.op('equipos') is None, o_.name))
+    return out
+
+
 sala = op(SALA_PATH)
 if sala is None:
-    sala = mk(op('/project1'), 'baseCOMP', 'SALA', 400, 0)
-    ok('SALA: componente nuevo en /project1, al lado de FASE1')
+    # v29: si ya hay una sala con otro nombre, se usa esa (renombrada a SALA: el motor y RECARGAR
+    # TODO la buscan en /project1/SALA); antes se creaba otra y quedaban dos
+    ya = salas_montadas(op('/project1'))
+    if ya:
+        viejo = ya[0].name
+        ya[0].name = 'SALA'
+        sala = op(SALA_PATH) or ya[0]
+        ok('SALA: ya existia como %s; se usa esa, renombrada a SALA (no se crea otra)' % viejo)
+    else:
+        sala = mk(op('/project1'), 'baseCOMP', 'SALA', 400, 0)
+        ok('SALA: componente nuevo en /project1, al lado de FASE1')
 else:
     ok('SALA: ya existia; se conserva la tabla de equipos')
 

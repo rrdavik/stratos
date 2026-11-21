@@ -17,7 +17,8 @@ QUE HACE
   - Lanza fase3 ... fase40 en orden, las que haya en la carpeta (las que no
     existan todavia se saltan en silencio).
   - Relanza /project1/SALA con sala_virtual.py solo si ya estaba montada
-    (poner SALA = True para montarla tambien si no lo estaba).
+    (poner SALA = True para montarla tambien si no lo estaba). Tambien si esta
+    montada con otro nombre (SALA1, salap...): sala_virtual.py la renombra a SALA.
   - Para en la primera fase que falle (excepcion o linea FALLO / AUTOPRUEBA
     FALLIDA): las siguientes dependen de ella.
   - No lanza ajuste_vista.py (pisa lo ajustado a mano) ni nada que no sea
@@ -105,12 +106,24 @@ def _lanza(archivo, src):
     return True, version, ''
 
 
+def _hay_sala():
+    """Una sala montada en /project1 con otro nombre (un COMP con sala_motor dentro):
+    sala_virtual.py la usa, renombrada a SALA."""
+    for o_ in op('/project1').children:
+        try:
+            if o_.isCOMP and o_.op('sala_motor') is not None:
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def _recargar():
     plan = []
     if op('/project1/FASE1') is None:
         plan.append('fase12_base.py')
     plan += FASES_ORDEN
-    if SALA or op('/project1/SALA') is not None:
+    if SALA or op('/project1/SALA') is not None or _hay_sala():
         plan.append('sala_virtual.py')
 
     resumen = []
