@@ -589,7 +589,7 @@ El mundo deja de tener una sola especie. Con `Tema = auto`, el nuevo valor de f�
 | 25 % | 100 | 0 | 0 |
 | 100 % | 40 | 35 | 25 |
 
-Hasta el 25 % todo es naturaleza; desde ahí nacen la ciudad y la industria y, del 25 al 100 %, de cada 15 celdas nuevas 3 son naturaleza, 7 ciudad y 5 industria (al 50 %: 60/23/17; al 62,5 %: 52/28/20; al 75 %: 47/31/22). La tabla de antes (fase 11 v22–v24) era 0 % 100/0/0, 30 % 70/30/0, 50 % 50/40/10, 75 % 30/45/25 y 100 % 30/40/30; al relanzar la fase 11, una tabla que no se ha tocado a mano pasa a la nueva.
+Hasta el 25 % todo es naturaleza; desde ahí nacen la ciudad y la industria y, del 25 al 100 %, de cada 15 celdas nuevas 1 es naturaleza, 8 ciudad y 6 industria (al 50 %: 53/27/20; al 62,5 %: 44/32/24; al 75 %: 38/36/27). La tabla de antes (fase 11 v22–v24) era 0 % 100/0/0, 30 % 70/30/0, 50 % 50/40/10, 75 % 30/45/25 y 100 % 30/40/30; al relanzar la fase 11, una tabla que no se ha tocado a mano pasa a la nueva.
 
 **Techo de la naturaleza (fase 11 v25, motor v128).** `Techonaturaleza` (3): si las notas caen lejos de la ciudad, la `Valvula` (10 puntos de déficit) no dejaba abrir otra mancha y, con el mundo lleno, la naturaleza se quedaba cerca del 50 %. Ahora, cuando la naturaleza pasa de su cuota en más de 3 puntos, la especie más lejos de la suya puede fundar otra mancha (con sus reglas: la ciudad junto al agua, la industria tocando la ciudad, o por `Paciencia`). En cuatro sesiones simuladas con el mundo lleno: 42/36/22, 39/36/25, 41/35/24 y 39/36/25 (antes 52/30/19, 43/36/21, 51/30/19 y 44/34/22), con una o dos manchas más.
 
@@ -611,7 +611,7 @@ Hasta el 25 % todo es naturaleza; desde ahí nacen la ciudad y la industria y, d
 
 **Leyenda.** `MEZCLA construido 52% (tramo 25) cuota N/C/I 58/24/17 globo 61/24/15 manchas C1 I1 familias 9+4/7/2 cola 3` (`9+4`: 9 disponibles y 4 en uso fuera de la cuota).
 
-**Prueba sin BeatStep.** `Tema = auto` y `Simconstruido` en 0, 25, 62,5 y 100: la leyenda da 100/0/0, 100/0/0, 52/28/20 y 40/35/25. Con `Simconstruido` −1 y `Sembrarzona` en zonas distintas: todo empieza en naturaleza; pasado el 25 %, la primera celda nueva junto a un río funda la ciudad, y la primera que toca la ciudad, la industria.
+**Prueba sin BeatStep.** `Tema = auto` y `Simconstruido` en 0, 25, 62,5 y 100: la leyenda da 100/0/0, 100/0/0, 44/32/24 y 30/40/30. Con `Simconstruido` −1 y `Sembrarzona` en zonas distintas: todo empieza en naturaleza; pasado el 25 %, la primera celda nueva junto a un río funda la ciudad, y la primera que toca la ciudad, la industria.
 
 *Medidas* (simulación, Python): la lógica de la mezcla y la cola, 0,05 ms por fotograma de media (pico 0,7 ms al fundar). Escena `mezcla` de `perfil_piel.py`: 3,8 ms frente a 3,5 de la naturaleza sola (+9 %). Con las tres especies a la vez (27/27/20 celdas) frente al mismo mundo de una sola especie: ≈ 1,96 ms frente a 1,55 de la ciudad (+25 %); lo causan el tejido (tres redes en vez de una, +0,18 ms) y el refresco de las vistas (≈ 0,15 ms). Sesión de 20 minutos con los patterns de la escena: el último mundo, en el tramo del 50 %, reparte 77/23/0 frente a la cuota 50/40/10. **En TouchDesigner, por comprobar:** los fps con la cola cargando y el suelo de los muelles de la mezcla.
 

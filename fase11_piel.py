@@ -353,9 +353,9 @@ LA MEZCLA DE ESPECIES (v22, motor v121)
                 construido  N    C    I
                   0 %      100   0    0
                  25 %      100   0    0     (aqui empiezan la ciudad y la industria)
-                100 %       40  35   25
-              Del 25 al 100 %, de cada 15 celdas nuevas 3 son naturaleza, 7 ciudad
-              y 5 industria (al 62,5 %, 52/28/20).
+                100 %       30  40   30
+              Del 25 al 100 %, de cada 15 celdas nuevas 1 es naturaleza, 8 ciudad
+              y 6 industria (al 62,5 %, 44/32/24).
   RESERVA     Reservanaturaleza (0,3): un 30 % de lo construido es siempre
               naturaleza. Si una fila (tambien una editada a mano) da menos, la
               ciudad y la industria se reparten el 70 % en su proporcion.
@@ -395,7 +395,7 @@ LA MEZCLA DE ESPECIES (v22, motor v121)
 PROBAR SIN BEATSTEP
 -------------------
   Mezcla: Tema = auto y Simconstruido en 0, 25, 62,5 y 100 (la leyenda da
-  100/0/0, 100/0/0, 52/28/20 y 40/35/25). Con Simconstruido -1 y Sembrarzona en
+  100/0/0, 100/0/0, 44/32/24 y 30/40/30). Con Simconstruido -1 y Sembrarzona en
   zonas distintas: todo empieza en naturaleza; pasado el 25 %, la primera celda
   nueva junto a un rio funda la ciudad y solo las que la tocan salen de ciudad;
   la primera celda nueva que toca la ciudad funda la industria.
@@ -594,7 +594,7 @@ def mezcla_al_dia_td(base, m):
 
 
 if mezcla_al_dia_td(base, m):
-    ok('mezcla_especies: la tabla de la mezcla (v25: 0 % y 25 % 100/0/0, 100 % 40/35/25; '
+    ok('mezcla_especies: la tabla de la mezcla (v25: 0 % y 25 % 100/0/0, 100 % 30/40/30; '
        'entre filas, a ritmo constante)')
 else:
     info('mezcla_especies editada a mano: se conserva. Para volver a la de fabrica, borrala y relanza')
@@ -2393,15 +2393,15 @@ def _prueba_mezcla(t, m):
     try:
         base.par.Tema = 'auto'
         defecto = filas[1:] == [[('%g' % x) for x in f] for f in m.MEZCLA_DEF]
-        # v25: las filas de fabrica y un punto entre filas (62,5 %: 52/28/20, a ritmo constante)
-        puntos = [(f[0], f[1:]) for f in m.MEZCLA_DEF] + [(62.5, (52.0, 28.0, 20.0))]
+        # v25: las filas de fabrica y un punto entre filas (62,5 %: 44/32/24, a ritmo constante)
+        puntos = [(f[0], f[1:]) for f in m.MEZCLA_DEF] + [(62.5, (44.0, 32.0, 24.0))]
         for pct, fila in puntos:
             base.par.Simconstruido = pct
             ley = m.legend()
             if 'MEZCLA' not in ley or (defecto and 'cuota N/C/I %d/%d/%d' % tuple(int(x) for x in fila) not in ley):
                 malas.append('%g%%' % pct)
-        t.check('leyenda MEZCLA: Tema auto y Simconstruido en 0, 25, 62,5 y 100 dan 100/0/0, 100/0/0, 52/28/20 '
-                'y 40/35/25', not malas, 'mal %s' % malas)
+        t.check('leyenda MEZCLA: Tema auto y Simconstruido en 0, 25, 62,5 y 100 dan 100/0/0, 100/0/0, 44/32/24 '
+                'y 30/40/30', not malas, 'mal %s' % malas)
         base.par.Simconstruido = -1
         c = m.cfg()
         m.carga_tick(W, c)

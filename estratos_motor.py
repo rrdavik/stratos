@@ -280,11 +280,11 @@
 #                 Motor v128 (fase 11 v25): LA MEZCLA, REESCRITA. La tabla de fabrica:
 #                 hasta el 25 % de construido todo es naturaleza; desde ahi nacen la
 #                 ciudad y la industria y, con el mundo construido entero, quedan
-#                 40/35/25. La cuota ya no va a saltos por tramos: cada fila es la
+#                 40/35/25 (v139: 30/40/30). La cuota ya no va a saltos por tramos: cada fila es la
 #                 mezcla de lo construido en su umbral y entre dos filas se interpolan
 #                 las celdas de cada especie (cuota_en: lo que se construye se reparte a
 #                 ritmo constante; del 25 al 100 %, 3 de cada 15 celdas nuevas son
-#                 naturaleza, 7 ciudad y 5 industria) sobre el pico de construido del
+#                 naturaleza, 7 ciudad y 5 industria; v139: 1, 8 y 6) sobre el pico de construido del
 #                 mundo (W['mezcla']['pico']). La precarga mira la cuota a Precarga
 #                 puntos por delante. TECHONATURALEZA (3): si las notas caen lejos de
 #                 la ciudad, la naturaleza ya no se pasa de su cuota mas de 3 puntos
@@ -318,6 +318,9 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v139: la mitad de los bosques (por celda) crece a un 60 % (BOSQUE_BAJO);
+#                 rascacielos y termicas, un 25 % mas altos (GRANDES, techo_edificio con k); la
+#                 mezcla final de un mundo evolucionado, 30/40/30 naturaleza/ciudad/industria.
 #                 Motor v138: LAS PROPORCIONES DEL GLOBO. El nucleo, de 8 a 10 (Radionucleo):
 #                 mas diametro frente al relieve. Los edificios (ciudad, industria y brotes
 #                 del mal) suben: Alturaplanta 0,08 -> 0,12, y su tope pasa de 2,1 a 1,7 x
@@ -363,7 +366,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v138'
+MOTOR_VERSION = 'motor v139'
 
 import math
 import time as _time
@@ -4796,15 +4799,21 @@ H_TOPE = 1.7                 # ningun edificio pasa de 1,7 x el limite (motor v1
 H_RODILLA = 0.6              # motor v138: hasta el 60 % del tope, el alto es el suyo; de ahi, se comprime sin llegar al tope
 
 
-def techo_edificio(H, cfg):
+# motor v139: los rascacielos y las termicas, algo mas grandes que el resto (alto x1,25; su tope, un 9 % mas)
+GRANDES_K = 1.25
+GRANDES = ('deco', 'tubos', 'torsion', 'prisma', 'termica', 'termicagas', 'termicacarbon', 'central', 'ciclocombinado')
+
+
+def techo_edificio(H, cfg, k=1.0):
     """Alto de un edificio (ciudad, industria, mal) con el tope suave de H_TOPE x el limite:
     el suyo hasta la rodilla y, por encima, una curva que se acerca al tope sin llegar (antes
     un corte seco: las torres altas salian todas igual de altas y a la altura del monte)."""
-    tope = H_TOPE * limit(cfg)
-    k = H_RODILLA * tope
-    if H <= k:
+    H = H * k
+    tope = H_TOPE * limit(cfg) * (1.0 + 0.35 * (k - 1.0))
+    r = H_RODILLA * tope
+    if H <= r:
         return H
-    return k + (tope - k) * (1.0 - math.exp(-(H - k) / (tope - k)))
+    return r + (tope - r) * (1.0 - math.exp(-(H - r) / (tope - r)))
 HUECO_FACHADA = 0.95
 FUENTES = ('humo', 'penacho', 'llama', 'baliza')     # industria: de donde sale el humo (particulas)
 MOVILES = ('polea', 'balancin', 'rotopala')          # industria: las partes que se mueven al tempo
@@ -6435,10 +6444,10 @@ NAT, CIU, IND = 0, 1, 2
 NEUTRA = -2                 # tema_c de una semilla heredada sin especie hasta su primera nota
 MEZCLA_COLS = ['construido', 'naturaleza', 'ciudad', 'industria']
 # motor v128: hasta el 25 % todo es naturaleza; desde ahi nacen la ciudad y la industria y, con
-# el mundo construido entero, quedan 40 % naturaleza, 35 % ciudad y 25 % industria. Entre dos
+# el mundo construido entero, quedan 30 % naturaleza, 40 % ciudad y 30 % industria (v139; antes 40/35/25). Entre dos
 # filas lo que se construye se reparte a ritmo constante (cuota_en): del 25 al 100 %, de cada
-# 15 celdas nuevas 3 son naturaleza, 7 ciudad y 5 industria.
-MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (25.0, 100.0, 0.0, 0.0), (100.0, 40.0, 35.0, 25.0))
+# 15 celdas nuevas 1 es naturaleza, 8 ciudad y 6 industria.
+MEZCLA_DEF = ((0.0, 100.0, 0.0, 0.0), (25.0, 100.0, 0.0, 0.0), (100.0, 30.0, 40.0, 30.0))     # motor v139: antes 40/35/25
 ORDEN_FAMILIAS = ['ciclo', 'fijo']
 MEZCLA_HIST = 512           # fundaciones recientes que se recuerdan (las autopruebas las miran)
 LINEAS = {NAT: ('vegetacion', 'relieve'), CIU: ('informal', 'planificada'), IND: ('mina', 'energia')}
@@ -6593,7 +6602,7 @@ def cuota_en(filas, pct):
     """Motor v128: la cuota [n, c, i] (0-1) con construido pct. Cada fila es la mezcla
     de lo construido en su umbral; entre dos filas, lo que se construye se reparte a
     ritmo constante (se interpolan las celdas de cada especie, no los porcentajes: del
-    25 % 100/0/0 al 100 % 40/35/25, a 62,5 % hay 52/28/20)."""
+    25 % 100/0/0 al 100 % 30/40/30, a 62,5 % hay 44/32/24)."""
     k = tramo_de(filas, pct)
     a = filas[k]
     if k + 1 >= len(filas) or pct <= a[0] + 1e-9:
@@ -9225,11 +9234,12 @@ def _info_ciudad(W, cfg, i, cl=None):
     ex = edificio(cfg, d, v)
     hp = alto_planta(cfg)
     pl = plantas_de(cfg, W, i)
+    kg = GRANDES_K if d in GRANDES else 1.0
     if ex['modo'] == 'corte':
-        H = techo_edificio(ex['alto'] * hp, cfg)
+        H = techo_edificio(ex['alto'] * hp, cfg, kg)
         vis = max(1.0 / ex['alto'], min(1.0, pl / ex['alto']))
     else:
-        H = techo_edificio(pl * hp, cfg)
+        H = techo_edificio(pl * hp, cfg, kg)
         vis = 1.0
     giro = float((90 if own == ARQ else 30) * g4)
     leng = W['leng'][i] if W['leng'][i] >= 0 else lenguaje_celda(cfg, i, W)
@@ -10239,10 +10249,10 @@ def _autoprueba_mezcla(cfg, res):
                 'disponibles y ninguna geometria de la ciudad ni de la industria cargada' % len(nat),
                 est['construido'] == 0.0 and est['cuota'] == [1.0, 0.0, 0.0] and len(disp_nat) == len(nat)
                 and not ajenas, 'disponibles %d, ajenas %s' % (len(disp_nat), ajenas[:3])))
-    # 2. tabla y tramo (motor v128: 0-25 % todo naturaleza; 100 % 40/35/25; entre filas, ritmo constante)
+    # 2. tabla y tramo (motor v128: 0-25 % todo naturaleza; 100 % 30/40/30; entre filas, ritmo constante)
     malas = []
     puntos = [(f[0], f[1:]) for f in MEZCLA_DEF] + [(12.5, (100.0, 0.0, 0.0)), (24.9, (100.0, 0.0, 0.0)),
-                                                     (62.5, (52.0, 28.0, 20.0))]
+                                                     (62.5, (44.0, 32.0, 24.0))]
     for pct, fila in puntos:
         q = mezcla_estado(W, dict(c, sim_construido=float(pct)))['cuota']
         if any(abs(100.0 * a - b) > 1e-6 for a, b in zip(q, fila)):
@@ -10254,7 +10264,7 @@ def _autoprueba_mezcla(cfg, res):
     Wt = _mezcla_mundo(c)
     Wt['mezcla']['pico'] = 62.5                     # el mundo llego al 62,5 % y se ha vaciado
     et = mezcla_estado(Wt, c)
-    no_baja = et['pico'] == 62.5 and et['construido'] == 0.0 and abs(et['cuota'][CIU] - 0.28) < 1e-9
+    no_baja = et['pico'] == 62.5 and et['construido'] == 0.0 and abs(et['cuota'][CIU] - 0.32) < 1e-9
     filas_r = [list(f) for f in MEZCLA_DEF]
     filas_r[-1] = [100.0, 10.0, 50.0, 40.0]         # v122: una fila con menos naturaleza que la reserva
     q_r = mezcla_estado(W, dict(c, mezcla_filas=tuple(tuple(f) for f in filas_r), sim_construido=100.0))['cuota']
@@ -10266,7 +10276,7 @@ def _autoprueba_mezcla(cfg, res):
                 and all(abs(a - b) < 1e-9 for a, b in zip(q_0, (0.1, 0.5, 0.4))),
                 '%s, %s' % (['%.3f' % x for x in q_r], ['%.3f' % x for x in q_0])))
     res.append(('tabla y tramo: hasta el 25 % todo naturaleza (Simconstruido 0, 12,5, 24,9 y 25: 100/0/0), '
-                'al 100 % 40/35/25 y entre filas a ritmo constante (62,5 %: 52/28/20); una fila que no suma 100 '
+                'al 100 % 30/40/30 y entre filas a ritmo constante (62,5 %: 44/32/24); una fila que no suma 100 '
                 'se normaliza con aviso; bajar construido no baja la cuota (la del pico)',
                 not malas and norm and no_baja,
                 'mal %s; aviso %s; tramo %s' % (malas, e90['avisos'], no_baja)))
@@ -11131,6 +11141,8 @@ DOSEL_MIN = 4                # celdas de un cluster para el dosel continuo
 CAPITAL_K = 1.08             # la cumbre de la capital, algo mas alta
 TERRENO_W, TERRENO_H = 512, 256
 HUNDIDO = 0.06               # sin relieve, la malla se hunde bajo las losetas
+BOSQUE_BAJO = 0.5            # motor v139: fraccion de los bosques (por celda) que son bajos
+BOSQUE_BAJO_K = 0.6          # y su alto, x lo normal
 CANOPIA_K = 0.95             # la copa, de la altura de la formacion
 COL_BASALTO_PIE = (0.20, 0.21, 0.24)
 COL_TRONCO = (0.17, 0.12, 0.08)    # madera oscura (tronco y ramas, siempre mates)
@@ -13038,7 +13050,7 @@ def piel_natural(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde, emit
         if k_ >= 0 and 'puentes' in cf:             # el bosque llena la celda con la etapa 'puentes'
             kp = avance_etapa(W, i, 'et_f', cf.index('puentes') + 1, now, paso)
         ej = ejemplar(cfg, arbol_mo, 0, deriv_full)
-        h = vh * esc0
+        h = vh * esc0 * (BOSQUE_BAJO_K if _hash01(i, 53) < BOSQUE_BAJO else 1.0)   # motor v139: la mitad de los bosques, mas bajos
         # el disco se mide con la altura de la ocupacion, no con la visible: el latido
         # y el stop-motion no mueven los arboles de sitio
         # motor v97: los arboles estrechos (cipres, cardon, abedul) no se apinan: COPA_MIN
