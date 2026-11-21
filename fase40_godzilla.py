@@ -179,7 +179,8 @@ def _prueba(t, m, copy):
             and 'anim == 7' in base.op('sprite_vertex').text and 'i_godzilla' in m.chop_names(m.cfg()),
             '%s' % (med,))
 
-    a = 40 if m.N > 50 else m.N // 2
+    vis_ = m.cara_visible(m.cfg())      # motor v137: en la cara visible (en la oculta, el monstruo busca la luz)
+    a = vis_[len(vis_) // 2] if vis_ else m.N // 2
     W, c = S.nuevo(4)
     dist, _ = m.dijkstra_mon(W, c, a)
     lejos = min(x for x in dist if abs(dist[x] - 2.0) < 1e-9)

@@ -207,7 +207,8 @@ def _prueba(t, m, copy):
     # 1. el objetivo
     W, c = S.nuevo(4)
     J = W['juego']
-    a = 40 if m.N > 50 else m.N // 2
+    vis_ = m.cara_visible(m.cfg())      # motor v137: en la cara visible (en la oculta, el monstruo busca la luz)
+    a = vis_[len(vis_) // 2] if vis_ else m.N // 2
     b = _a_distancia(m, W, c, a, 1)
     d = _a_distancia(m, W, c, a, 2)
     co = _a_distancia(m, W, c, a, 3)
@@ -486,6 +487,36 @@ def _prueba(t, m, copy):
             in leg, leg.strip())
     t.check('el mal, en la familia 9 del shader de la piel', 'mal' in FAMILIAS_PIEL
             and FAMILIAS_PIEL.index('mal') == 9 and 'bool malo = fam > 8.5' in PIEL_PIXEL)
+
+    # 10. motor v137: a la luz. En la cara oculta camina en el sentido del giro hacia una pulsacion
+    # de la cara visible; en la visible prefiere la presa visible a una oculta mas jugosa
+    W, c = S.nuevo(4)
+    vis = set(m.cara_visible(c))
+    osc = [i for i in range(m.N) if i not in vis]
+    if osc and vis:
+        o0 = osc[len(osc) // 2]
+        pul = max(vis, key=lambda i: (W['occ'][i] <= 0, i))
+        _poner(m, W, osc[0], 9)
+        W['terr'][pul] = W.get('bar_n', 0)
+        mo = m.aparecer(W, c, S.now, o0)
+        dm, pv = m.dijkstra_mon(W, c, o0)
+        t.check('en la cara oculta va a una celda visible con pulsacion (no a la presa oculta de 9), por un '
+                'camino que llega a la luz', mo['sombra'] and mo['objetivo'] in vis
+                and mo['objetivo'] != osc[0] and mo['camino'][-1] == mo['objetivo'],
+                'objetivo %s sombra %s' % (mo['objetivo'], mo.get('sombra')))
+        pasos_ = 0
+        while mo['celda'] not in vis and mo['camino'] and pasos_ < m.N:
+            m.entrar_celda(W, c, mo, mo['camino'][0], S.now)
+            pasos_ += 1
+        t.check('al pisar la cara visible recalcula el objetivo de siempre (ya no esta en la sombra)',
+                mo['celda'] in vis and not mo['sombra'], 'celda %s' % mo['celda'])
+        W, c = S.nuevo(4)
+        v1, v2 = sorted(vis)[:2]
+        _poner(m, W, v1, 2)
+        _poner(m, W, osc[0], 9)
+        mo = m.aparecer(W, c, S.now, v2)
+        t.check('en la cara visible prefiere la presa visible aunque haya otra oculta con mas ocupacion',
+                mo['objetivo'] == v1 and not mo['sombra'], 'objetivo %s' % mo['objetivo'])
 
 
 run_test(base, prueba)

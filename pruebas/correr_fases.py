@@ -194,7 +194,8 @@ def partida(sim, fps=30.0, ronda=60.0):
             base.par.Simmonstruo.pulse()
             fase[0] = 'tres' if fase[0] == 'espera' else 'fin'
             t_fase[0] = now
-        elif fase[0] in ('tres', 'cuatro') and libre and now - t_fase[0] > 1.0:
+        elif fase[0] in ('tres', 'cuatro') and libre and now - t_fase[0] > 1.0 \
+                and (mo.get('comidos', 0) >= 3 or fase[0] == 'cuatro'):    # v137: antes ha dejado algun brote
             n = 3 if fase[0] == 'tres' else 4
             ks = fila_en(c, W, mo['celda'], n)
             if ks:
