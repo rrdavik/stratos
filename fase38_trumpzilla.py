@@ -193,7 +193,8 @@ def _prueba(t, m, copy):
 
     # 2. la logica no cambia: la misma partida que tras la fase 37
     W, c = S.nuevo(4)
-    a = 40 if m.N > 50 else m.N // 2
+    vis_ = m.cara_visible(m.cfg())      # motor v137: en la cara visible (en la oculta, el monstruo busca la luz)
+    a = vis_[len(vis_) // 2] if vis_ else m.N // 2
     dist, _ = m.dijkstra_mon(W, c, a)
     lejos = min(x for x in dist if abs(dist[x] - 2.0) < 1e-9)
     junto = m.NEIGH[a][0]

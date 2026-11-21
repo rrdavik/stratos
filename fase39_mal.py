@@ -205,7 +205,8 @@ def _prueba(t, m, copy, time):
     base.par.Tamanoemblema = 0.35
     base.par.Montierra = True
     S = SalaJuego(base, m, absTime.seconds + 5100.0)
-    a = 40 if m.N > 50 else m.N // 2
+    vis_ = m.cara_visible(m.cfg())      # motor v137: en la cara visible (en la oculta, el monstruo busca la luz)
+    a = vis_[len(vis_) // 2] if vis_ else m.N // 2
     vec = list(m.NEIGH[a])
 
     # 1. el atlas, los operadores, la biblioteca y el render

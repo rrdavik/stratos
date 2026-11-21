@@ -318,6 +318,15 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v137: LOS MONSTRUOS, A LA LUZ. Trumpzilla y Godzilla se quedan en la
+#                 cara visible todo lo posible: entre las presas (o el mal) alcanzables
+#                 prefieren las de la cara visible, y pisar la cara oculta cuesta
+#                 MON_SOMBRA. En cuanto se quedan en la oscuridad, caminan en el sentido
+#                 del giro (un paso contra el giro cuesta MON_CONTRA veces mas) hacia una
+#                 celda de la cara visible donde haya sonado un secuenciador (terr: hasta
+#                 MON_PULSO compases atras; la mas cercana, y a igualdad la mas reciente);
+#                 sin pulsos, hacia la celda visible mas cercana. Al pisar la luz, recalculan
+#                 el objetivo de siempre. Cfg 'mon_luz' (1 de fabrica; sin parametro) lo apaga.
 #                 Motor v136: LAS GEOMETRIAS SIN INSTANCIAS NO SE DIBUJAN. Cada geometria
 #                 mod_* dibujaba su fila de relleno aunque el modelo no estuviera en el
 #                 mundo: cientos de dibujados y de preparaciones en el render (15-20 ms
@@ -346,7 +355,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v136'
+MOTOR_VERSION = 'motor v137'
 
 import math
 import time as _time
@@ -17870,10 +17879,26 @@ def mar_mon(W, cfg):
     return v
 
 
-def dijkstra_mon(W, cfg, src, muro=(), tierra=True):
+MON_SOMBRA = 2.0                # motor v137: coste de pisar una celda de la cara oculta
+MON_CONTRA = 3.0                # motor v137: un paso contra el giro, en la cara oculta, cuesta tanto mas
+MON_PULSO = 1                   # motor v137: compases de antiguedad de una pulsacion que aun atrae
+
+
+def luz_mon_on(cfg):
+    """Motor v137: los monstruos buscan la cara visible (cfg 'mon_luz', 1 de fabrica)."""
+    return cfg['nivel'] >= 33 and bool(cfg.get('mon_luz', 1))
+
+
+def _dlon(a, b):
+    return (b - a + 180.0) % 360.0 - 180.0
+
+
+def dijkstra_mon(W, cfg, src, muro=(), tierra=True, vis=None):
     """(coste, previa) de cada celda alcanzable desde src por vecinas6: entrar en
     una zanja cuesta Costezanja; no entra en el agua ni en el muro. Motor v118: con
-    Montierra, tampoco en el mar (solo anda por tierra; motor v131, los dos monstruos)."""
+    Montierra, tampoco en el mar (solo anda por tierra; motor v131, los dos monstruos).
+    Motor v137: con vis (las celdas de la cara visible), pisar la cara oculta cuesta
+    MON_SOMBRA y, desde ella, un paso contra el giro cuesta MON_CONTRA veces mas."""
     import heapq
     J = W['juego']
     zj, agua = J['zanjas'], J['agua']
@@ -17881,6 +17906,8 @@ def dijkstra_mon(W, cfg, src, muro=(), tierra=True):
     if mar:
         muro = set(muro) | mar
     cz = max(1.0, float(cfg['coste_zanja']))
+    sg = J.get('giro', 1.0)
+    lons = [lonlat_celda(i)[1] for i in range(N)] if vis is not None else None
     dist, prev = {src: 0.0}, {}
     heap = [(0.0, src)]
     while heap:
@@ -17890,7 +17917,13 @@ def dijkstra_mon(W, cfg, src, muro=(), tierra=True):
         for v in NEIGH[u]:
             if v in muro or agua.get(v, 0) > 0:
                 continue
-            nd = d + (cz if v in zj else 1.0)
+            paso = cz if v in zj else 1.0
+            if vis is not None:
+                if v not in vis:
+                    paso += MON_SOMBRA - 1.0
+                if u not in vis and sg * _dlon(lons[u], lons[v]) > 1e-6:
+                    paso *= MON_CONTRA
+            nd = d + paso
             if nd < dist.get(v, 1e18) - 1e-12:
                 dist[v] = nd
                 prev[v] = u
@@ -17898,24 +17931,59 @@ def dijkstra_mon(W, cfg, src, muro=(), tierra=True):
     return dist, prev
 
 
-def objetivo(W, cfg, m, muro=(), comer=None, tierra=True):
+def celdas_pulso(W, vis):
+    """Motor v137: las celdas de la cara visible donde ha sonado un secuenciador hace
+    MON_PULSO compases o menos (W['terr']: el ultimo compas en que la toco)."""
+    bar = W.get('bar_n', 0)
+    terr = W.get('terr') or {}
+    return [c for c in vis if c in terr and bar - terr[c] <= MON_PULSO]
+
+
+def _hacia_la_luz(W, vis, dist):
+    """Motor v137: la celda visible a la que va quien esta en la cara oculta: una con
+    pulsacion (la mas cercana; a igualdad, la mas reciente) o, sin pulsos, la mas cercana."""
+    terr = W.get('terr') or {}
+    pul = [c for c in celdas_pulso(W, vis) if c in dist]
+    cand = pul or [c for c in vis if c in dist]
+    if not cand:
+        return None
+    return min(cand, key=lambda c: (dist[c], -terr.get(c, -1), _hash01(c)))
+
+
+def objetivo(W, cfg, m, muro=(), comer=None, tierra=True, luz=True):
     """(celda objetivo, camino) con mayor occ / (1 + coste); desempate _hash01.
     Motor v123: comer (comestible; Godzilla, comestible_bien). tierra: solo por tierra
-    (Montierra; motor v131, Godzilla tambien)."""
+    (Montierra; motor v131, Godzilla tambien). Motor v137 (luz): prefiere las presas de
+    la cara visible y, si esta en la oscura, va a una pulsacion de la visible."""
     if m['celda'] is None:
         return None, []
     comer = comestible if comer is None else comer
-    dist, prev = dijkstra_mon(W, cfg, m['celda'], muro, tierra)
-    cand = [c for c in dist if comer(W, cfg, m, c)]
-    if not cand:
-        return None, []
-    t = max(cand, key=lambda c: (W['occ'][c] / (1.0 + dist[c]), _hash01(c)))
+    vis = frozenset(cara_visible(cfg)) if luz and luz_mon_on(cfg) else None
+    sombra = vis is not None and m['celda'] not in vis
+    if luz:
+        m['sombra'] = sombra
+    dist, prev = dijkstra_mon(W, cfg, m['celda'], muro, tierra, vis)
+    t = _hacia_la_luz(W, vis, dist) if sombra else None
+    if t is None:
+        cand = [c for c in dist if comer(W, cfg, m, c)]
+        if vis is not None:
+            cand = [c for c in cand if c in vis] or cand
+        if not cand:
+            return None, []
+        t = max(cand, key=lambda c: (W['occ'][c] / (1.0 + dist[c]), _hash01(c)))
     camino = []
     x = t
     while x != m['celda']:
         camino.append(x)
         x = prev[x]
     return t, camino[::-1]
+
+
+def sale_de_sombra(W, cfg, m, recalcular, now):
+    """Motor v137: quien caminaba por la cara oculta y pisa la visible recalcula ya
+    su objetivo de siempre."""
+    if m.get('sombra') and casilla_de_celda(cfg, m['celda']) is not None:
+        recalcular(W, cfg, m, now)
 
 
 def recalcular_objetivo(W, cfg, m, now=None):
@@ -18056,6 +18124,7 @@ def entrar_celda(W, cfg, m, nxt, now):
         caer(W, cfg, m, now)
     elif m['objetivo'] == nxt:
         m['estado'] = 'devora'
+    sale_de_sombra(W, cfg, m, recalcular_objetivo, now)     # motor v137
     W['dirty'] = True
 
 
@@ -18089,7 +18158,8 @@ def monstruo_paso(W, cfg, now):
         m['estado'] = 'busca'
     m['recalc'] += 1
     t = m['objetivo']
-    if m['recalc'] >= max(1, int(cfg['recalculo'])) or t is None or not comestible(W, cfg, m, t):
+    if m['recalc'] >= max(1, int(cfg['recalculo'])) or t is None or \
+            (not comestible(W, cfg, m, t) and not m.get('sombra')):  # v137: en la oscuridad, su objetivo es una pulsacion
         recalcular_objetivo(W, cfg, m, now)
     if m['objetivo'] is None or m['celda'] != m['objetivo']:
         return
@@ -19807,6 +19877,7 @@ def mover_godzilla(W, cfg, now):
         g['retira'] = None
     if g['objetivo'] == nxt:
         g['estado'] = 'devora'
+    sale_de_sombra(W, cfg, g, lambda W_, c_, g_, n_: recalcular_bien(W_, c_, g_, n_), now)     # motor v137
     W['dirty'] = True
 
 
@@ -19826,7 +19897,8 @@ def godzilla_paso(W, cfg, now):
         g['estado'] = 'busca'
     g['recalc'] += 1
     t = g['objetivo']
-    if g['recalc'] >= max(1, int(cfg['recalculo'])) or t is None or not comestible_bien(W, cfg, g, t):
+    if g['recalc'] >= max(1, int(cfg['recalculo'])) or t is None or \
+            (not comestible_bien(W, cfg, g, t) and not g.get('sombra')):  # v137
         recalcular_bien(W, cfg, g, now)
     if g['objetivo'] is None or g['celda'] != g['objetivo']:
         return
@@ -20594,7 +20666,7 @@ def _demo_cebo(W, cfg, m, torre):
     if torre is None or m.get('celda') is None or m['estado'] not in ('busca', 'devora') \
             or m.get('objetivo') == torre or W['occ'][torre] <= 0:
         return []
-    t, camino = objetivo(W, cfg, m, comer=lambda W_, c_, m_, x: x == torre)
+    t, camino = objetivo(W, cfg, m, comer=lambda W_, c_, m_, x: x == torre, luz=False)
     if t is None:
         return []
     m['objetivo'], m['camino'] = t, camino
