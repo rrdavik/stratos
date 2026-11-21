@@ -1,11 +1,11 @@
 # Estratos · Montaje
-## Fase 41: Hemisferio, el juego solo en la cara visible
+## Fase 41: Hemisferio, la reja fija en la cara visible
 
-*Continúa `MONTAJE_FASE40.md`. Requerimiento de origen: `REQUERIMIENTO_FASE_41_HEMISFERIO.md`. Los monstruos se perdían a veces en la cara oculta del planeta y la partida perdía foco. Con **Hemisferio** las celdas solo existen en la cara visible.*
+*Continúa `MONTAJE_FASE40.md`. Requerimiento de origen: `REQUERIMIENTO_FASE_41_HEMISFERIO.md` (la versión v1 de esta fase dejaba el planeta quieto; la v2, que es la buena, lo deja girar como siempre). Los monstruos se perdían a veces en la cara oculta y la partida perdía foco.*
 
 | Fase | Script | Qué hace | Motor | Comun |
 |---|---|---|---|---|
-| 41 | `fase41_hemisferio.py` | Retícula solo en la cara visible, planeta quieto, monstruos que buscan las pulsaciones | v137 | v99 |
+| 41 | `fase41_hemisferio.py` | Superficie de doble densidad bajo una reja fija de notas; los monstruos paran en la cara oculta y buscan las pulsaciones | v137 | v98 |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase41_hemisferio.py').read())
@@ -15,33 +15,39 @@ Con `Hemisferio` apagado (de fábrica) todo es idéntico a la fase 40 (la retíc
 
 ---
 
-## Qué hace
+## La idea
 
-**Retícula.** Con `Hemisferio`, `N` no cambia (una celda por nota del rango), pero `set_grid(lo, hi, mode, hemi)` reparte las celdas por la franja de longitud `±Anchoangular/2` (180° de fábrica): el anillo de 12 notas pasa de 30° a 15° por celda, el anillo **no se cierra por detrás** (la primera y la última celda no son vecinas), los polos quedan arriba y abajo del disco, `SIZE_EW` mide la mitad y toda celda tiene casilla (`cara_visible` = todo el globo). `Anchoangular` se limita a 30–180°. Cambiar `Hemisferio` o `Anchoangular` es como cambiar el rango de notas: el mundo empieza vacío (`grid_key()` pasa a `[lo, hi, ancho]`).
+Dos capas. La **superficie** gira con el planeta, como siempre, y con `Hemisferio` tiene el doble de celdas. La **reja de vista** no gira, como la cámara y la sala: es donde caen las notas del rango. La superficie pasa por debajo y va encajando en la reja.
 
-**El planeta no gira (D1).** `lon_central` devuelve 0, `giro_factor` 0 y `giro_fijo()` da `HEMI_RY = -90`. `ritmo.rotation()` lo consulta (comun v99, `patch_ritmo_hemi`, que `install_core` aplica en todas las fases); sin Hemisferio, `giro_fijo()` es `None` y gira como siempre.
+- **Superficie.** `ring_layout(lo, hi, doble)`: 24 celdas por anillo completo (15°), con los anillos pares e impares desplazados media celda (vecindad hexagonal); unas `2N - 2` celdas (168 con do1–do8). El polo sur es la celda 0 y el polo norte la última: **las celdas ya no son las notas**.
+- **Reja de vista** (`vista_notas`). Cada nota del rango tiene su posición fija en la cara visible: la clase de nota es la columna (12 por anillo, 15° cada una), la octava el anillo, y los polos arriba y abajo.
+- **Nota → celda** (`note_cell(nota, cfg)`). La nota va a su sitio de la reja y de ahí a la celda de la superficie que hay debajo de su centro en ese instante (`Loncentral` sigue al giro: la misma maquinaria de `celda_de_casilla` para las personas). Cada 15° de giro la superficie encaja otra vez con la reja; entre medias, la nota cae en la celda cuyo centro está más cerca. `note_off` usa la celda guardada en `pend`, así que suelta la misma que prendió.
+- **`cell_note(x)`.** Con Hemisferio devuelve la nota virtual `CELDA_BASE + x` (1000 + x); `note_cell` la lleva directa a la celda x. Así siguen funcionando las llamadas internas (pruebas, demos) que tocan «la celda x».
+- **Monstruos.** Circulan por la superficie como siempre y aparecen en la cara visible por el borde de entrada del giro. Si la rotación los lleva a la cara oculta, `en_oscuridad` los para (entra en `parado`): ni andan, ni devoran, ni luchan; la lucha en curso también se detiene. Cuando la superficie los devuelve a la cara visible, siguen. Los polos se cuentan como visibles.
+- **Pulsaciones.** `objetivo` puntúa `occ × (1 + Pesopulso × calor) / (1 + coste)` (los dos monstruos, con su regla de qué se come). `calor_pulso` mira `W['t_gate']` de la celda y sus vecinas: 1 si sonó ahora, 0 pasadas `Ventanapulso` pasos de juego (`Ventanapulso × Pasojuego × W['paso']` s). Sin pulsaciones dentro de la ventana, o con `Pesopulso` 0, la regla de siempre.
 
-**El cerco.** Trumpzilla y Godzilla solo pisan celdas de la retícula, que ya son todas la cara visible: ningún camino, objetivo, aparición ni retirada sale de ella. Sin giro no hay borde de entrada (D2): `signo_borde` hace que Trumpzilla aparezca en el borde lateral derecho (el #2 en el izquierdo, alternando con `n`) y Godzilla en el borde contrario al de Trumpzilla.
-
-**Pulsaciones (D3).** `objetivo` puntúa `occ × (1 + Pesopulso × calor) / (1 + coste)` (los dos monstruos, con su regla de qué se come). `calor_pulso` mira `W['t_gate']` de la celda y sus vecinas: 1 si sonó ahora, 0 pasadas `Ventanapulso` pasos de juego (`Ventanapulso × Pasojuego × W['paso']` s). Sin pulsaciones dentro de la ventana, o con `Pesopulso` 0, la regla de siempre.
+Cambiar `Hemisferio` es como cambiar el rango de notas: otra retícula, el mundo empieza vacío (`grid_key()` pasa a `[lo, hi, 'hemi']`).
 
 ## Decisiones tomadas
 
-- **D1** giro apagado y `Loncentral` 0 (sin balanceo). **D2** borde lateral alternando; Godzilla en el contrario. **D3** `t_gate` de la celda y las vecinas, frescura lineal. **D4** clases de nota de izquierda a derecha, 15° por celda; los anillos incompletos reparten por igual a lo ancho. **D5** la franja usa `Anchoangular` (30–180°). **D6** sin migración: cambiar `Hemisferio` vacía el mundo.
-- No se ha creado el parámetro `Giroenhemisferio` del requerimiento (quedaba como «no soportado en esta fase»).
-- La reserva de `celda_aparicion` («si no hay vacía en la cara visible, usa cualquiera») se deja: con Hemisferio equivale a la cara visible.
-- Las cachés de geometría del motor llevan `GRID['hemi']` en su clave (en `terreno` va al final para no mover los índices de la tupla).
+- Las celdas de superficie miden lo mismo que las de la reja (15°) y encajan cada 15° de giro.
+- Entre dos encajes, la nota cae en la celda de superficie más cercana al centro de su celda de reja.
+- Los monstruos van atados a la superficie (no a la reja) y se paran, no desaparecen, en la cara oculta.
+- La franja de la reja usa `Anchoangular` (180° de fábrica) y `Espejo`, como las casillas de la sala.
+- Con Hemisferio hay unas 2N celdas y cada una cuesta lo mismo que antes: la ciudad, el terreno y los cachés trabajan con el doble.
+- Las cachés de geometría llevan `GRID['hemi']` en la clave (en `terreno` va al final para no mover los índices de la tupla).
+- Sin parámetro `Giroenhemisferio`: el planeta siempre gira como siempre.
 
 ## Parámetros (página Fase41)
 
 | Parámetro | De fábrica | Qué es |
 |---|---|---|
-| `Hemisferio` | apagado | Retícula solo en la cara visible |
+| `Hemisferio` | apagado | Superficie de doble densidad y reja fija de notas |
 | `Pesopulso` | 1,0 | Peso de las pulsaciones en el objetivo (0 = regla de hoy) |
 | `Ventanapulso` | 8 | Pasos de juego que tarda una pulsación en dejar de contar |
 
-Leyenda: `HEMISFERIO  celdas 85   cara visible 85/85   objetivo con pulso (calor 0.75)`.
+Leyenda: `HEMISFERIO  celdas 168   cara visible 85/168   objetivo con pulso (calor 0.75)   en la cara oculta: Trumpzilla`.
 
 ## Autoprueba
 
-`fase41_hemisferio.py` comprueba: la retícula (N, casillas, 15°, extremos no vecinos, simétrica y conexa, y la esfera idéntica sin Hemisferio), las 128 notas en plegar y limitar y las casillas, el planeta quieto, 400 pasos con los dos monstruos sin salir del hemisferio, el objetivo con y sin pulsaciones (Trumpzilla y Godzilla), la aparición por los bordes y la leyenda. Corre en `pruebas/correr_fases.py`, y las fases 3 a 40 siguen igual.
+`fase41_hemisferio.py` comprueba: la superficie (doble de celdas, 24 por anillo a 15°, simétrica y conexa, y la esfera idéntica sin Hemisferio), la reja que no gira (12 notas en 12 celdas distintas, a la vista y en el mismo orden con cualquier `Loncentral`), el encaje a los 15°, una nota MIDI que construye en otra celda tras girar 60°, los monstruos parados en la cara oculta y en marcha al volver, que no luchan a oscuras, la aparición en la cara visible, el objetivo con y sin pulsaciones (Trumpzilla y Godzilla) y la leyenda. Corre en `pruebas/correr_fases.py`, y las fases 3 a 40 siguen igual.

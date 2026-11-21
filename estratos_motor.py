@@ -318,14 +318,15 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
-#                 Motor v137 (comun v99, fase 41): HEMISFERIO. Con Hemisferio las mismas N
-#                 celdas del rango de notas se reparten solo por la cara visible (set_grid con
-#                 hemi = Anchoangular: el anillo de 12 pasa de 30 a 15 grados por celda, no
-#                 se cierra por detras y la cara oculta no tiene celdas). El planeta no gira
-#                 (giro_fijo, giro_factor 0, lon_central 0): Trumpzilla y Godzilla nunca
-#                 salen de la cara visible, aparecen por un borde lateral y buscan donde
-#                 suenan los secuenciadores (calor_pulso en objetivo: Pesopulso, Ventanapulso).
-#                 Sin Hemisferio, todo como en el motor v136.
+#                 Motor v137 (fase 41): HEMISFERIO. Con Hemisferio la superficie del planeta
+#                 tiene el doble de celdas (24 por anillo completo, 15 grados) y gira como
+#                 siempre; las notas ya no son celdas: caen en una reja de vista que no gira
+#                 (vista_notas, cubre solo la cara visible) y de ella en la celda de la
+#                 superficie que esta debajo en ese instante (note_cell, con Loncentral). Los
+#                 monstruos circulan por la superficie como siempre pero, si acaban en la cara
+#                 oculta, se quedan parados (en_oscuridad) hasta que reaparecen en la visible,
+#                 y buscan donde suenan los secuenciadores (calor_pulso en objetivo: Pesopulso,
+#                 Ventanapulso). Sin Hemisferio, todo como en el motor v136.
 #                 Motor v136: LAS GEOMETRIAS SIN INSTANCIAS NO SE DIBUJAN. Cada geometria
 #                 mod_* dibujaba su fila de relleno aunque el modelo no estuviera en el
 #                 mundo: cientos de dibujados y de preparaciones en el render (15-20 ms
@@ -626,14 +627,15 @@ DEFAULT_CFG = dict(
 # Vecinas: las dos del anillo, las del anillo contiguo cuyo arco se solapa
 # y, en los anillos extremos, el polo. El polo: todo su anillo.
 
-def ring_layout(lo, hi, hemi=0.0):
+def ring_layout(lo, hi, doble=0):
     """Reticula en anillos. lo = polo sur, hi = polo norte (notas MIDI).
-    Motor v137 (fase 41): con hemi > 0 (grados de ancho, Anchoangular) los anillos no
-    dan la vuelta: las celdas se reparten en la franja de longitud +-hemi/2 y la cara
-    oculta no tiene celdas.
     Entre medias, un anillo por octava: la clase de nota es el meridiano.
     Los anillos incompletos (el primero y el ultimo, si el rango no empieza
     o acaba en do) reparten sus celdas por igual alrededor.
+    Motor v137 (fase 41, Hemisferio): con doble, cada anillo tiene el doble de celdas (24 en
+    un anillo completo, 15 grados cada una; los anillos pares y los impares desplazados media
+    celda) y los indices ya no son las notas: el polo sur es la celda 0, luego los anillos y
+    el polo norte es la ultima. Las notas van a la reja de vista (vista_notas).
     Devuelve (normales, anillo de cada celda, celdas de cada anillo,
     alto de banda en grados, radio del casquete polar en grados)."""
     K = hi - lo
@@ -649,6 +651,22 @@ def ring_layout(lo, hi, hemi=0.0):
     R = max(1, len(rings))
     band = 180.0 / (R + 0.5)
     cap = band * 0.25
+    if doble:
+        normals = [(0.0, -1.0, 0.0)]
+        ring_of, nuevos = [-1], []
+        for j, cells in enumerate(rings):
+            phi = math.radians(-90.0 + cap + band * (j + 0.5))
+            me = 2 * len(cells)
+            ids = []
+            for q in range(me):
+                th = 2.0 * math.pi * (q + 0.5 * (j % 2)) / me
+                normals.append((math.cos(phi) * math.cos(th), math.sin(phi), math.cos(phi) * math.sin(th)))
+                ring_of.append(j)
+                ids.append(len(normals) - 1)
+            nuevos.append(ids)
+        normals.append((0.0, 1.0, 0.0))
+        ring_of.append(-1)
+        return normals, ring_of, nuevos, band, cap
     normals = [None] * (K + 1)
     normals[0] = (0.0, -1.0, 0.0)
     normals[K] = (0.0, 1.0, 0.0)
@@ -656,10 +674,7 @@ def ring_layout(lo, hi, hemi=0.0):
         phi = math.radians(-90.0 + cap + band * (j + 0.5))
         m = len(cells)
         for q, k in enumerate(cells):
-            if hemi > 0:                # fase 41: de un borde de la cara visible al otro
-                f = ((lo + k) % 12 + 0.5) / 12.0 if m == 12 else (q + 0.5) / m
-                th = math.radians(hemi) * (f - 0.5)
-            elif m == 12:
+            if m == 12:
                 th = 2.0 * math.pi * ((lo + k) % 12) / 12.0
             else:
                 th = 2.0 * math.pi * (q + 0.5) / m
@@ -668,7 +683,32 @@ def ring_layout(lo, hi, hemi=0.0):
     return normals, ring_of, rings, band, cap
 
 
-GRID = dict(lo=None, hi=None, mode=0, hemi=0.0)      # hemi: 0 = esfera entera; > 0 = ancho de la cara visible (fase 41)
+def vista_notas(lo, hi):
+    """Motor v137 (fase 41): donde cae cada nota del rango en la reja de vista, la que no gira:
+    [(latitud en grados, posicion u de 0 a 1 a lo ancho de la cara visible)] por nota (indice
+    nota - lo); los polos, None. La clase de nota es la columna (12 por anillo completo)."""
+    K = hi - lo
+    first = (lo + 1) // 12
+    rings = []
+    for k in range(1, K):
+        j = (lo + k) // 12 - first
+        while len(rings) <= j:
+            rings.append([])
+        rings[j].append(k)
+    band = 180.0 / (max(1, len(rings)) + 0.5)
+    cap = band * 0.25
+    out = [None] * (K + 1)
+    for j, cells in enumerate(rings):
+        lat = -90.0 + cap + band * (j + 0.5)
+        m = len(cells)
+        for q, k in enumerate(cells):
+            out[k] = (lat, ((lo + k) % 12 + 0.5) / 12.0 if m == 12 else (q + 0.5) / m)
+    return out
+
+
+GRID = dict(lo=None, hi=None, mode=0, hemi=0)      # hemi: 1 = Hemisferio (fase 41): superficie de doble densidad y reja fija de notas
+VISTA = []                                         # por nota: (latitud, u) en la reja de vista; solo con Hemisferio
+CELDA_BASE = 1000                                  # cell_note(i) con Hemisferio: la nota virtual de la celda i
 NORMALS = []
 SIZE_EW = []          # ancho este-oeste de cada celda (rad, esfera unidad)
 SIZE_NS = []          # alto norte-sur (rad)
@@ -680,32 +720,28 @@ POLE_N = 0
 NOTA_MIN, NOTA_MAX = 24, 108        # do1 y do8: limites de los polos
 
 
-def _arc_overlap(a, wa, b, wb, abierto=False):
-    if abierto:                         # fase 41: la franja no da la vuelta
-        return abs(a - b) < wa + wb - 1e-6
+def _arc_overlap(a, wa, b, wb):
     d = abs((a - b + math.pi) % (2 * math.pi) - math.pi)
     return d < wa + wb - 1e-6
 
 
-HEMI_ANCHO_MIN, HEMI_ANCHO_MAX = 30.0, 180.0
-
-
-def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0, hemi=0.0):
+def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0, hemi=0):
     """Rehace la reticula para el rango de notas [lo, hi]. Devuelve True si
-    ha cambiado la geometria (el mundo hay que vaciarlo). Motor v137 (fase 41): hemi > 0
-    reparte las mismas N celdas solo por la cara visible (ancho en grados, de 30 a 180)."""
-    global N, NORMALS, SIZE_EW, SIZE_NS, NEIGH, POLE_S, POLE_N, RING_OF, RINGS
+    ha cambiado la geometria (el mundo hay que vaciarlo). Motor v137 (fase 41): con hemi la
+    superficie tiene el doble de celdas (ring_layout doble) y las notas van a la reja de vista."""
+    global N, NORMALS, SIZE_EW, SIZE_NS, NEIGH, POLE_S, POLE_N, RING_OF, RINGS, VISTA
     lo = max(NOTA_MIN, min(NOTA_MAX - 2, int(lo)))
     hi = max(lo + 2, min(NOTA_MAX, int(hi)))
     GRID['mode'] = int(mode)
-    hemi = max(HEMI_ANCHO_MIN, min(HEMI_ANCHO_MAX, float(hemi))) if hemi else 0.0
-    if GRID['lo'] == lo and GRID['hi'] == hi and GRID.get('hemi', 0.0) == hemi:
+    hemi = 1 if hemi else 0
+    if GRID['lo'] == lo and GRID['hi'] == hi and GRID.get('hemi', 0) == hemi:
         return False
     GRID['lo'], GRID['hi'], GRID['hemi'] = lo, hi, hemi
     K = hi - lo
-    N = K + 1
-    POLE_S, POLE_N = 0, K
     NORMALS, RING_OF, RINGS, band, cap = ring_layout(lo, hi, hemi)
+    N = len(NORMALS)                    # K + 1, o el doble (menos 2) con Hemisferio
+    POLE_S, POLE_N = 0, N - 1
+    VISTA = vista_notas(lo, hi) if hemi else []
     nb = [[] for _ in range(N)]
 
     def link(a, b):
@@ -722,11 +758,11 @@ def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0, hemi=0.0):
     for j, cells in enumerate(RINGS):
         m = len(cells)
         for q, k in enumerate(cells):
-            if m > 1 and (not hemi or q + 1 < m):       # fase 41: el anillo no se cierra por detras
+            if m > 1:
                 link(k, cells[(q + 1) % m])
         if j + 1 < len(RINGS):
             nxt = RINGS[j + 1]
-            if m == 12 and len(nxt) == 12:
+            if m == 12 and len(nxt) == 12 and not hemi:
                 # dos anillos completos: hexagonal desplazada, como las bandas
                 # (los pares miran a (c-1, c), los impares a (c, c+1))
                 pc_a = dict(((lo + k) % 12, k) for k in cells)
@@ -734,16 +770,11 @@ def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0, hemi=0.0):
                 for b in nxt:
                     c = (lo + b) % 12
                     for o in offs:
-                        if not hemi or 0 <= c + o < 12:
-                            link(b, pc_a[(c + o) % 12])
+                        link(b, pc_a[(c + o) % 12])
             else:
                 for a in cells:
                     for b in nxt:
-                        if hemi:
-                            wa, wb = math.radians(hemi) / (2.0 * m), math.radians(hemi) / (2.0 * len(nxt))
-                            if _arc_overlap(theta(a), wa, theta(b), wb, True):
-                                link(a, b)
-                        elif _arc_overlap(theta(a), math.pi / m, theta(b), math.pi / len(nxt)):
+                        if _arc_overlap(theta(a), math.pi / m, theta(b), math.pi / len(nxt)):
                             link(a, b)
     for k in RINGS[0]:
         link(POLE_S, k)
@@ -759,20 +790,20 @@ def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0, hemi=0.0):
             continue
         m = len(RINGS[RING_OF[k]])
         phi = math.asin(max(-1.0, min(1.0, NORMALS[k][1])))
-        SIZE_EW.append((math.radians(hemi) if hemi else 2.0 * math.pi) * math.cos(phi) / m)
+        SIZE_EW.append(2.0 * math.pi * math.cos(phi) / m)
         SIZE_NS.append(math.radians(band))
     return True
 
 
 def grid_key():
     """La clave de la reticula en el mundo guardado: [lo, hi] (la esfera de siempre) o, con
-    Hemisferio (fase 41), [lo, hi, ancho de la cara visible]."""
+    Hemisferio (fase 41), [lo, hi, 'hemi']."""
     k = [GRID['lo'], GRID['hi']]
-    return k + [GRID['hemi']] if GRID.get('hemi') else k
+    return k + ['hemi'] if GRID.get('hemi') else k
 
 
 def hemisferio():
-    """Motor v137 (fase 41): True si la reticula solo cubre la cara visible."""
+    """Motor v137 (fase 41): True con Hemisferio (superficie de doble densidad, notas en la reja de vista)."""
     return bool(GRID.get('hemi'))
 
 
@@ -801,16 +832,40 @@ def fold_note(note, mode=None):
     return lo if int(note) < lo else hi
 
 
-def note_cell(note):
+def note_cell(note, c=None):
+    """La celda de una nota. Con Hemisferio (fase 41, motor v137) la nota cae en una celda de la
+    reja de vista, la que no gira, y de ella en la celda de la superficie que esta debajo del
+    centro en este instante (Loncentral sigue al giro); c = cfg. Los polos, siempre sus celdas.
+    Una nota virtual de celda_note (>= CELDA_BASE) es esa celda."""
+    if GRID.get('hemi'):
+        if int(note) >= CELDA_BASE:
+            return max(0, min(N - 1, int(note) - CELDA_BASE))
+        n = fold_note(note)
+        if n is None:
+            return None
+        v = VISTA[n - GRID['lo']]
+        if v is None:
+            return POLE_S if n == GRID['lo'] else POLE_N
+        c = cfg_foto() if c is None else c
+        rango = c['lat_norte'] - c['lat_sur']
+        uv = (v[1], (c['lat_norte'] - v[0]) / rango if rango else 0.5)
+        lat, lon = lonlat_de_uv(c, uv[0], uv[1])
+        return celda_de_lonlat(lat, lon)
     n = fold_note(note)
     return None if n is None else n - GRID['lo']
 
 
 def cell_note(i):
+    """La nota de la celda i. Con Hemisferio, la nota virtual CELDA_BASE + i (las celdas ya no
+    son notas: note_cell la devuelve a la celda i sin pasar por la reja)."""
+    if GRID.get('hemi'):
+        return CELDA_BASE + int(i)
     return GRID['lo'] + int(i)
 
 
 def note_name(note):
+    if int(note) >= CELDA_BASE:
+        return 'celda %d' % (int(note) - CELDA_BASE)
     return '%s%d' % (NOTE_NAMES[int(note) % 12], int(note) // 12 - 1)
 
 
@@ -1421,7 +1476,7 @@ def _gate_altura(W, cfg, p, now, tempo):
 def note_on(W, cfg, s, note, vel, now, tempo=120.0):
     W['hits'][s] = W['hits'].get(s, 0) + 1
     W['hit_t'][s] = now
-    i = note_cell(note)
+    i = note_cell(note, cfg)
     W['clock']['last_note_t'] = now
     if cfg['nivel'] >= 17 and s in (GEO, ARQ):     # fase 17: lo que suena, para la biblioteca
         oir(W, s, note)
@@ -17807,24 +17862,6 @@ def construida_visible(W, cfg, vis=None):
     return sum(1 for i in vis if W['occ'][i] > 0 and W['sp'][i] != MAL) / float(len(vis))
 
 
-def _celda_otro(m):
-    """La celda del otro monstruo si esta en juego (para aparecer lejos de el), o None."""
-    return m['celda'] if m and m.get('celda') is not None and m.get('estado') not in ('espera', 'muere') else None
-
-
-def signo_borde(W, cfg, n, otra=None):
-    """El sentido del borde por el que aparece un monstruo. Con la esfera, el del giro (J['giro']).
-    Con Hemisferio (fase 41, D2) no hay giro: el borde lateral del lado contrario a la celda
-    del otro monstruo, o, si no hay otro, alternando izquierda y derecha con n."""
-    J = W['juego']
-    if not hemisferio():
-        return J.get('giro', 1.0)
-    if otra is not None:
-        d = (lonlat_celda(otra)[1] - float(cfg.get('lon_central', 0.0)) + 180.0) % 360.0 - 180.0
-        return -1.0 if d > 1e-6 else 1.0
-    return 1.0 if n % 2 else -1.0
-
-
 def celda_aparicion(W, cfg, vis=None):
     """La celda vacia de la cara visible mas cercana al borde por el que entran
     las celdas con el giro (desempate _hash01). None si no hay ninguna vacia."""
@@ -17839,8 +17876,7 @@ def celda_aparicion(W, cfg, vis=None):
     if not libre:
         return None
     lon0 = float(cfg.get('lon_central', 0.0))
-    otra = _celda_otro(J.get('bien'))
-    sg = signo_borde(W, cfg, J['mon']['n'] + 1, otra)
+    sg = J.get('giro', 1.0)
 
     def borde(i):
         d = (lonlat_celda(i)[1] - lon0 + 180.0) % 360.0 - 180.0
@@ -18074,10 +18110,20 @@ def brote_mal(W, cfg, i, now):
     W['dirty'] = True
 
 
+def en_oscuridad(cfg, m):
+    """Fase 41 (Hemisferio): el monstruo esta en una celda de la cara oculta del planeta (la
+    superficie gira y lo lleva alli): no se mueve, ni devora, ni lucha hasta que la rotacion
+    lo devuelve a la cara visible. Los polos siempre se ven. Sin Hemisferio, nunca."""
+    if not hemisferio() or m is None or m.get('celda') is None:
+        return False
+    c = m['celda']
+    return not is_pole(c) and casilla_de_celda(cfg, c) is None
+
+
 def parado(W, cfg, m, now):
-    """Fase 37: petrificado o aturdido (ni se mueve ni devora)."""
+    """Fase 37: petrificado o aturdido (ni se mueve ni devora). Fase 41: o en la cara oculta."""
     return (m.get('piedra') is not None and now < m['piedra']) or \
-        (m.get('aturdido') is not None and now < m['aturdido'])
+        (m.get('aturdido') is not None and now < m['aturdido']) or en_oscuridad(cfg, m)
 
 
 def factor_ruido(W, cfg):
@@ -19778,8 +19824,8 @@ def celda_aparicion_bien(W, cfg, vis=None):
     if not libre:
         return None
     lon0 = float(cfg.get('lon_central', 0.0))
+    sg = J.get('giro', 1.0)
     n = bien_estado(W, cfg)['n']
-    sg = signo_borde(W, cfg, n, _celda_otro(J.get('mon')))
 
     def borde(i):
         d = (lonlat_celda(i)[1] - lon0 + 180.0) % 360.0 - 180.0
@@ -19880,7 +19926,7 @@ def mover_godzilla(W, cfg, now):
     g = J.get('bien')
     if g is None or g['estado'] not in ('aparece', 'busca', 'devora') or g['celda'] is None:
         return
-    if not g['camino']:
+    if not g['camino'] or en_oscuridad(cfg, g):     # fase 41: en la cara oculta, quieto
         g['mov'] = 0.0
         return
     nxt = g['camino'][0]
@@ -19912,7 +19958,7 @@ def godzilla_paso(W, cfg, now):
     g = J.get('bien')
     if g is None or g['estado'] in ('espera', 'se_va', 'lucha') or g['celda'] is None:
         return
-    if retirandose(g):
+    if retirandose(g) or en_oscuridad(cfg, g):      # fase 41: en la cara oculta, ni busca ni devora
         return
     if g['estado'] == 'aparece':
         g['estado'] = 'busca'
@@ -19955,7 +20001,7 @@ def encuentro(W, cfg, now):
         return False
     if m['estado'] not in ('aparece', 'busca', 'devora') or g['estado'] not in ('aparece', 'busca', 'devora'):
         return False
-    if m['celda'] is None or g['celda'] is None or parado(W, cfg, m, now):
+    if m['celda'] is None or g['celda'] is None or parado(W, cfg, m, now) or en_oscuridad(cfg, g):
         return False
     if m['celda'] != g['celda'] and g['celda'] not in NEIGH[m['celda']]:
         return False
@@ -19990,6 +20036,8 @@ def lucha_paso(W, cfg, now):
     m, g = J['mon'], J.get('bien')
     if g is None or m['estado'] != 'lucha' or g['estado'] != 'lucha' or not godzilla_on(W, cfg):
         terminar_lucha(W, cfg, now)
+    elif en_oscuridad(cfg, m) or en_oscuridad(cfg, g):
+        L['paso0'] += 1                 # fase 41: la lucha se para mientras la superficie los lleva a la cara oculta
     elif J['paso'] - L['paso0'] >= int(cfg.get('pasos_lucha', 8)):
         terminar_lucha(W, cfg, now)
 
@@ -20160,7 +20208,10 @@ def _legend_hemisferio(W, c):
     else:
         top = max(calor(x) for x in range(N))
         obj = 'objetivo con pulso (calor %.2f)' % top
-    return '  HEMISFERIO  celdas %d   cara visible %d/%d   %s' % (N, vis, N, obj)
+    J = W.get('juego') or {}
+    oscuros = [nm for nm, x in (('Trumpzilla', J.get('mon')), ('Godzilla', J.get('bien'))) if en_oscuridad(c, x)]
+    return '  HEMISFERIO  celdas %d   cara visible %d/%d   %s%s' % (
+        N, vis, N, obj, ('   en la cara oculta: ' + ', '.join(oscuros)) if oscuros else '')
 
 
 def _legend_lucha(W, c):
@@ -21473,8 +21524,7 @@ def sync_grid():
     lo = _p('Notapolosur', POLO_SUR_DEF)
     hi = _p('Notapolonorte', POLO_NORTE_DEF)
     mode = _menu('Fuerarango', FUERA_MODES, 0)
-    hemi = max(HEMI_ANCHO_MIN, min(HEMI_ANCHO_MAX, _p('Anchoangular', 180.0))) if _p('Hemisferio', False) else 0.0
-    return set_grid(lo, hi, mode, hemi)
+    return set_grid(lo, hi, mode, int(bool(_p('Hemisferio', False))))
 
 
 def world():
@@ -21546,20 +21596,9 @@ def floor_radius(i, frame=None):
     return suelo(world(), cfg_foto(), i)
 
 
-HEMI_RY = -90.0     # el giro del planeta con Hemisferio: Loncentral = 90 + ry = 0
-
-
-def giro_fijo(frame=None):
-    """Fase 41: el giro fijo del planeta con Hemisferio (grados), o None si gira como siempre.
-    'ritmo' (patch_ritmo_hemi, comun v99) lo consulta en rotation()."""
-    return HEMI_RY if hemisferio() else None
-
-
 def giro_factor(frame=None):
-    """Multiplica el giro del planeta (lo lee 'ritmo'). 1 con Giromin 1. 0 con Hemisferio."""
+    """Multiplica el giro del planeta (lo lee 'ritmo'). 1 con Giromin 1."""
     try:
-        if hemisferio():
-            return 0.0
         return float(world().get('giro_factor', 1.0))
     except Exception:
         return 1.0
@@ -22421,8 +22460,6 @@ def lon_central(frame=None):
         ry = float(_ritmo().rotation(frame))
     except Exception:
         ry = 0.0
-    if hemisferio():                    # fase 41: la cara visible no gira: su centro es la longitud 0
-        return 0.0
     return (90.0 + ry + 180.0) % 360.0 - 180.0
 
 

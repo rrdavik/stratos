@@ -1,43 +1,37 @@
 """
 =============================================================================
-ESTRATOS - FASE 41: HEMISFERIO, EL JUEGO SOLO EN LA CARA VISIBLE
+ESTRATOS - FASE 41: HEMISFERIO, LA REJA FIJA EN LA CARA VISIBLE
 =============================================================================
-Requiere la fase 40 (motor v137, comun v99). Con Hemisferio, las mismas N celdas del rango de
-notas se reparten solo por la cara que mira a la sala y la cara oculta no tiene celdas: los
-monstruos no pueden perderse detras del planeta. Sin Hemisferio (de fabrica), todo igual que
-en la fase 40.
+Requiere la fase 40 (motor v137). Con Hemisferio, las notas, las personas y los monstruos
+juegan sobre una reja de celdas que no gira, como la camara y la sala, y la superficie del
+planeta, que gira como siempre, pasa por debajo y va encajando en ella. Los monstruos ya no
+se pierden: si la rotacion los lleva a la cara oculta se quedan parados hasta que vuelven a
+la visible. Sin Hemisferio (de fabrica), todo igual que en la fase 40.
 
 QUE HACE
 --------
-  RETICULA     Con Hemisferio, N no cambia (una celda por nota del rango), pero las celdas
-               van de un borde de la cara visible al otro (Anchoangular, 180 de fabrica): el
-               anillo de 12 notas pasa de 30 a 15 grados por celda, no se cierra por detras
-               (la primera y la ultima no son vecinas) y los polos quedan arriba y abajo del
-               disco. Toda celda tiene casilla: cara_visible es todo el globo. Cambiar
-               Hemisferio (o Anchoangular) es como cambiar el rango de notas: el mundo
-               empieza vacio.
-  PLANETA      No gira: Loncentral = 0, el giro vivo se para (giro_factor 0) y ritmo.rotation
-               devuelve un angulo fijo (comun v99, patch_ritmo_hemi). Las celdas quedan
-               ancladas a la vista.
-  CERCO        Trumpzilla y Godzilla solo existen en celdas del hemisferio: ningun camino,
-               objetivo, aparicion ni retirada sale de la cara visible. Sin giro no hay
-               borde de entrada: Trumpzilla aparece en el borde lateral (izquierda y derecha
-               alternando con n) y Godzilla en el borde contrario al de Trumpzilla.
+  SUPERFICIE   Con Hemisferio, el doble de celdas (24 por anillo completo, 15 grados cada una;
+               unas 2N - 2 en total, con N las notas del rango). Los anillos pares y los
+               impares van desplazados media celda. Gira como siempre (giro vivo).
+  REJA         Una nota del rango cae en una celda de la reja de vista, que no gira y cubre
+               solo la cara visible (Anchoangular alrededor de Loncentral): la clase de nota
+               es la columna (12 por anillo), la octava el anillo y los polos, arriba y abajo.
+               De ahi, en la celda de la superficie que esta debajo del centro de esa celda
+               en ese instante (Loncentral sigue al giro). Cada 15 grados de giro, la
+               superficie encaja otra vez con la reja. Las personas ya iban asi.
+  MONSTRUOS    Circulan por la superficie como siempre y aparecen por el borde de entrada
+               del giro. Si la rotacion los lleva a la cara oculta, se quedan parados (ni
+               andan, ni devoran, ni luchan) hasta que reaparecen en la visible.
   PULSACIONES  El objetivo de los dos pasa a occ x (1 + Pesopulso x calor) / (1 + coste). El
                calor es 1 si sono un secuenciador en la celda o en una vecina en este paso y
-               baja a 0 en Ventanapulso pasos de juego (t_gate). Trumpzilla busca el
-               publico donde se construye, Godzilla el mal donde crece. Sin pulsaciones
-               recientes (o con Pesopulso 0), la regla de siempre: occ / (1 + coste).
+               baja a 0 en Ventanapulso pasos de juego (t_gate). Sin pulsaciones recientes
+               (o con Pesopulso 0), la regla de siempre: occ / (1 + coste).
+  CAMBIO       Cambiar Hemisferio vacia el mundo (otra reticula), como cambiar el rango.
 
 PARAMETROS (pagina Fase41)
 --------------------------
   Hemisferio (apagado), Pesopulso 1,0, Ventanapulso 8.
-  Leyenda:  HEMISFERIO  celdas 85   cara visible 85/85   objetivo con pulso (calor 0.75)
-
-PROBAR
-------
-  Hemisferio encendido: el planeta se para y las celdas cubren solo la cara visible.
-  Modojuego, Simmonstruo y Simmal: los monstruos van a la celda donde suena un SEQ.
+  Leyenda:  HEMISFERIO  celdas 168   cara visible 85/168   objetivo con pulso (calor 0.75)
 
 COMO USARLO
 -----------
@@ -48,7 +42,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase41 v1  (Hemisferio: la reticula solo en la cara visible, el planeta quieto, los monstruos van a las pulsaciones)'
+VERSION = 'fase41 v2  (Hemisferio: reja fija en la cara visible sobre la superficie que gira; los monstruos paran en la cara oculta y van a las pulsaciones)'
 banner(VERSION)
 
 base = require_base(41)
@@ -68,14 +62,14 @@ ok('pagina Fase41: Hemisferio (apagado), Pesopulso 1, Ventanapulso 8')
 
 set_render(base)
 
-leeme(base, 41, """FASE 41 - HEMISFERIO, EL JUEGO SOLO EN LA CARA VISIBLE
-  Con Hemisferio las N celdas del rango de notas se reparten solo por la cara que
-  mira a la sala (Anchoangular, 180): el anillo de 12 pasa de 30 a 15 grados por celda,
-  no se cierra por detras y la cara oculta no tiene celdas. El planeta no gira
-  (Loncentral 0). Los monstruos no salen de la cara visible: Trumpzilla aparece por un
-  borde lateral (alternando), Godzilla por el contrario, y los dos buscan donde suenan
-  los secuenciadores: occ x (1 + Pesopulso x calor) / (1 + coste), el calor baja a 0 en
-  Ventanapulso pasos (8). Cambiar Hemisferio vacia el mundo, como cambiar el rango.
+leeme(base, 41, """FASE 41 - HEMISFERIO, LA REJA FIJA EN LA CARA VISIBLE
+  Con Hemisferio la superficie del planeta tiene el doble de celdas (24 por anillo, 15
+  grados) y gira como siempre. Las notas caen en una reja de vista que no gira y cubre solo
+  la cara visible; de ella, en la celda de la superficie que esta debajo en ese instante
+  (cada 15 grados de giro encajan). Los monstruos andan por la superficie como siempre y, si
+  acaban en la cara oculta, se quedan parados hasta que reaparecen en la visible; los dos
+  buscan donde suenan los secuenciadores: occ x (1 + Pesopulso x calor) / (1 + coste), el calor
+  baja a 0 en Ventanapulso pasos (8). Cambiar Hemisferio vacia el mundo.
   Sin Hemisferio, todo igual que en la fase 40.""")
 
 print_report()
@@ -141,97 +135,152 @@ def _prueba(t, m, copy):
                   ('Tregua', 16), ('Pesopulso', 1.0), ('Ventanapulso', 8)):
         setattr(base.par, nm, v)
     S = SalaJuego(base, m, absTime.seconds + 7100.0, godzilla=True)
+    lon = lambda i: m.lonlat_celda(i)[1]
+    dlon = lambda a, b: (a - b + 180.0) % 360.0 - 180.0
 
-    # 1. la reticula: sin Hemisferio la esfera de siempre; con el, las mismas N celdas en la cara visible
+    # 1. la superficie: sin Hemisferio la esfera de siempre; con el, el doble de celdas (15 grados)
     base.par.Hemisferio = False
     m.sync_grid()
-    N0, lejos_cfg = m.N, m.cfg()
-    esfera = (copy.deepcopy(m.NORMALS), copy.deepcopy(m.NEIGH), list(m.SIZE_EW), list(m.SIZE_NS), m.grid_key())
-    ocultas0 = [i for i in range(m.N) if m.casilla_de_celda(lejos_cfg, i) is None]
+    N0 = m.N
+    esfera = (copy.deepcopy(m.NORMALS), copy.deepcopy(m.NEIGH), list(m.SIZE_EW), list(m.SIZE_NS), m.grid_key(),
+              copy.deepcopy(m.RINGS))
     base.par.Hemisferio = True
     m.sync_grid()
     c = m.cfg()
-    lons = [m.lonlat_celda(i)[1] for i in range(m.N)]
-    anillo = [k for k in m.RINGS if len(k) == 12][0]
-    pasos = sorted(m.lonlat_celda(k)[1] for k in anillo)
+    notas = m.GRID['hi'] - m.GRID['lo'] + 1
+    anillos = [len(r) for r in m.RINGS]
+    completo = [r for r in m.RINGS if len(r) == 24][0]
+    paso = sorted(lon(k) for k in completo)
     sim = all(i in m.NEIGH[j] for i in range(m.N) for j in m.NEIGH[i])
-    ext = min(anillo, key=lambda k: m.lonlat_celda(k)[1]), max(anillo, key=lambda k: m.lonlat_celda(k)[1])
-    t.check('Hemisferio: N no cambia (%d), todas las celdas con casilla y a menos de 90 grados del centro, el anillo '
-            'de 12 a 15 grados por celda, sus extremos no son vecinas, la vecindad es simetrica y conexa' % N0,
-            m.N == N0 and m.hemisferio() and m.cara_visible(c) == list(range(m.N))
-            and all(abs(x) < 90.0 for x in lons) and abs(pasos[1] - pasos[0] - 15.0) < 1e-6
-            and ext[1] not in m.NEIGH[ext[0]] and sim and _conexo(m) and ocultas0 != []
-            and c['hemisferio'] == 1 and m.grid_key()[:2] == esfera[4] and len(m.grid_key()) == 3,
-            'N %d, longitudes %.1f a %.1f, paso %.1f, esfera con %d celdas ocultas' % (
-                m.N, min(lons), max(lons), pasos[1] - pasos[0], len(ocultas0)))
+    seen, pila = {0}, [0]
+    while pila:
+        u = pila.pop()
+        for v in m.NEIGH[u]:
+            if v not in seen:
+                seen.add(v)
+                pila.append(v)
+    t.check('Hemisferio: la superficie tiene el doble de celdas (%d en vez de %d; %d notas), 24 por anillo completo '
+            'a 15 grados, polos en los extremos, vecindad simetrica y conexa; la grid_key lo dice' % (m.N, N0, notas),
+            m.hemisferio() and m.N == 2 + 2 * sum(len(r) for r in esfera[5]) and m.POLE_N == m.N - 1
+            and anillos.count(24) == 6 and abs(paso[1] - paso[0] - 15.0) < 1e-6 and sim and len(seen) == m.N
+            and len(m.NEIGH[m.POLE_S]) == len(m.RINGS[0]) and m.grid_key() == [m.GRID['lo'], m.GRID['hi'], 'hemi']
+            and len(m.VISTA) == notas, 'N %d, anillos %s' % (m.N, anillos))
     base.par.Hemisferio = False
     m.sync_grid()
-    t.check('sin Hemisferio la reticula es la esfera de antes: mismas normales, vecinas y tamanos',
-            not m.hemisferio() and m.NORMALS == esfera[0] and m.NEIGH == esfera[1] and m.SIZE_EW == esfera[2]
-            and m.SIZE_NS == esfera[3] and m.grid_key() == esfera[4], 'N %d' % m.N)
+    t.check('sin Hemisferio la reticula es la esfera de antes: mismas normales, vecinas y tamanos; cell_note y note_cell '
+            'son la identidad con el rango', not m.hemisferio() and m.NORMALS == esfera[0] and m.NEIGH == esfera[1]
+            and m.SIZE_EW == esfera[2] and m.SIZE_NS == esfera[3] and m.grid_key() == esfera[4] and m.N == N0
+            and m.note_cell(m.cell_note(7)) == 7, 'N %d' % m.N)
     base.par.Hemisferio = True
     m.sync_grid()
 
-    # 2. las notas y las casillas: todo cae en la cara visible
-    c = m.cfg()
-    fuera = []
-    for modo in ('plegar', 'limitar'):
-        base.par.Fuerarango = modo
-        m.sync_grid()
-        for nota in range(0, 128):
-            i = m.note_cell(nota)
-            if i is None or not (0 <= i < m.N) or m.casilla_de_celda(c, i) is None:
-                fuera.append((modo, nota))
-    base.par.Fuerarango = 'plegar'
-    m.sync_grid()
-    cols, filas_c = m.rejilla_sala(c)
-    W, c = S.nuevo(4)
-    celdas_k = [m.celda_de_casilla(W, c, k) for k in range(cols * filas_c)]
-    t.check('las 128 notas MIDI (plegar y limitar) y las %d casillas de la sala caen en celdas del hemisferio, y '
-            'cada celda tiene su casilla' % (cols * filas_c),
-            not fuera and all(0 <= x < m.N for x in celdas_k)
-            and all(m.casilla_de_celda(c, x) is not None for x in range(m.N)),
-            '%d notas fuera' % len(fuera))
+    # 2. la reja fija: la nota cae siempre en la misma posicion de la vista, la superficie cambia debajo
+    c0 = dict(m.cfg(), lon_central=0.0)
+    cols, filas_c = m.rejilla_sala(c0)
+    ring = [k for k in range(m.GRID['lo'] + 1, m.GRID['hi']) if (k // 12) == (60 // 12)]        # un anillo completo
+    ring = sorted(ring, key=lambda k: k % 12)
+    nota_u = {}
+    fija = True
+    for L in (0.0, 15.0, 37.0, 90.0, -120.0, 179.0):
+        cL = dict(c0, lon_central=L)
+        celdas = [m.note_cell(n, cL) for n in ring]
+        cas = [m.casilla_de_celda(cL, x) for x in celdas]
+        us = [(x % cols) for x in cas if x is not None]
+        # la columna de la sala de cada nota: creciente con la clase de nota, igual para cualquier giro
+        nota_u[L] = us
+        fija = fija and None not in cas and us == sorted(us) and len(set(celdas)) == 12
+    columnas = sorted(set(tuple(v) for v in nota_u.values()))
+    ok_desfase = all(abs(dlon(lon(m.note_cell(n, dict(c0, lon_central=L))) - L, 0.0)) <= 90.0 for n in ring
+                     for L in (0.0, 37.0, -120.0))
+    t.check('la reja no gira: con Loncentral 0, 15, 37, 90, -120 y 179 las 12 notas de un anillo caen en 12 celdas '
+            'distintas, todas a la vista y en el mismo orden de izquierda a derecha, en las mismas columnas de la sala '
+            '(salvo el redondeo de media celda)',
+            fija and ok_desfase and all(max(abs(a - b) for a, b in zip(v, columnas[0])) <= cols * 0.1
+                                        for v in columnas), 'columnas %s' % columnas[:2])
+    cA, cB = dict(c0, lon_central=0.0), dict(c0, lon_central=15.0)
+    a_ = m.note_cell(64, cA)
+    b_ = m.note_cell(64, cB)
+    t.check('al girar 15 grados, la superficie encaja otra vez: la nota 64 cae en la celda contigua del mismo anillo, '
+            'una celda mas tarde (la %d, la %d)' % (a_, b_),
+            a_ != b_ and b_ in m.NEIGH[a_] and m.RING_OF[a_] == m.RING_OF[b_]
+            and abs(dlon(lon(b_), lon(a_)) - 15.0) < 1e-6, '%d %d %.1f' % (a_, b_, dlon(lon(b_), lon(a_))))
 
-    # 3. el planeta quieto: Loncentral 0, giro fijo, giro vivo parado y el ritmo lo consulta
-    rt = base.op('ritmo')
-    texto = rt.text if rt is not None else ''
-    t.check('el planeta no gira con Hemisferio: Loncentral 0, giro_fijo %.0f, giro_factor 0; sin el, gira (giro_fijo '
-            'None); ritmo.rotation consulta al motor' % m.HEMI_RY,
-            m.lon_central(0) == 0.0 and m.giro_fijo() == m.HEMI_RY and m.giro_factor() == 0.0
-            and 'giro_fijo(' in texto, 'ritmo %s' % ('con el gancho' if 'giro_fijo(' in texto else 'sin el'))
+    # 3. el mundo: una nota MIDI construye en la celda de superficie que hay debajo; cell_note vuelve a la celda
+    W, c = S.nuevo(0, juego=False)
+    c = dict(m.cfg(), lon_central=0.0)
+    r1 = m.note_on(W, c, m.GEO, 64, 100, S.now)
+    i1 = r1['celda']
+    m.note_off(W, c, m.GEO, 64, S.now + 0.05, 120.0)
+    c2 = dict(c, lon_central=60.0)
+    r2 = m.note_on(W, c2, m.GEO, 64, 100, S.now + 1.0)
+    i2 = r2['celda']
+    m.note_off(W, c2, m.GEO, 64, S.now + 1.05, 120.0)
+    fuera = [n for n in range(128) if m.note_cell(n, c2) is None or not (0 <= m.note_cell(n, c2) < m.N)
+             or (not m.is_pole(m.note_cell(n, c2)) and m.casilla_de_celda(c2, m.note_cell(n, c2)) is None)]
+    t.check('una nota MIDI (la 64) construye en una celda; tras girar 60 grados, la misma nota construye en otra: la '
+            'superficie de debajo; las 128 notas caen a la vista; cell_note(x) lleva a la celda x (%d, %d)' % (i1, i2),
+            i1 == m.note_cell(64, c) and i2 == m.note_cell(64, c2) and i1 != i2 and W['occ'][i1] > 0 and W['occ'][i2] > 0
+            and not fuera and all(m.note_cell(m.cell_note(x)) == x for x in range(m.N)),
+            'notas fuera %s' % fuera[:4])
 
-    # 4. el cerco: ninguno sale del hemisferio y los dos se mueven (400 pasos, sala vacia)
+    # 4. los monstruos: circulan por la superficie; en la cara oculta se quedan parados hasta que reaparecen
     base.par.Godzillasala = 'siempre'
     W, c = S.nuevo(4)
-    vis = set(m.cara_visible(c))
-    for k, x in enumerate(sorted(vis)[::4]):
-        _poner(m, W, x, 2 + k % 4)
-    _mal(m, W, c, sorted(vis)[7], 3, S.now)
-    _mal(m, W, c, sorted(vis)[-9], 2, S.now)
-    m.aparecer(W, c, S.now, sorted(vis)[len(vis) // 2])
-    visitas, mal_visto = {'mon': set(), 'bien': set()}, []
-    for _ in range(400):
-        S.pasos(W, c, 1)
-        J = W['juego']
-        for nm in ('mon', 'bien'):
-            g = J.get(nm)
-            if g is None or g.get('celda') is None:
-                continue
-            visitas[nm].add(g['celda'])
-            for x in [g['celda'], g.get('objetivo'), g.get('de'), g.get('retira')] + list(g.get('camino') or []):
-                if x is not None and x not in vis:
-                    mal_visto.append((nm, x))
-    t.check('400 pasos con Trumpzilla y Godzilla: ni su celda, ni su objetivo, ni su camino, ni su retirada salen '
-            'de las celdas del hemisferio, y los dos andan (celdas visitadas %d y %d)'
-            % (len(visitas['mon']), len(visitas['bien'])),
-            not mal_visto and len(visitas['mon']) > 1 and len(visitas['bien']) > 1,
-            '%s' % mal_visto[:4])
+    c['lon_central'] = 0.0
+    vis0 = [x for x in range(m.N) if m.casilla_de_celda(c, x) is not None]
+    a = min(vis0, key=lambda x: (abs(lon(x)) + abs(m.lonlat_celda(x)[0]), x))
+    dist, _ = m.dijkstra_mon(W, c, a)
+    presa = min(x for x in dist if abs(dist[x] - 3.0) < 1e-9)
+    _poner(m, W, presa, 6)
+    mo = m.aparecer(W, c, S.now, a)
+    c['lon_central'] = lon(a) + 180.0       # la superficie gira: su celda queda en la cara oculta
+    oculto = m.en_oscuridad(c, mo)
+    n0 = (mo['celda'], W['occ'][presa], mo['acum'])
+    S.pasos(W, c, 40)
+    quieto = (mo['celda'], W['occ'][presa], mo['acum']) == n0 and mo['mov'] == 0.0
+    c['lon_central'] = lon(a)               # reaparece en la cara visible
+    visible = not m.en_oscuridad(c, mo)
+    S.pasos(W, c, 40)
+    anda = mo['celda'] != a or W['occ'][presa] < 6
+    t.check('Trumpzilla en la cara oculta (Loncentral a 180 grados de su celda) se queda parado 40 pasos sin andar '
+            'ni devorar; al volver a la cara visible, anda y devora',
+            oculto and quieto and visible and anda, 'oculto %s quieto %s visible %s anda %s (celda %d -> %d, occ %d)'
+            % (oculto, quieto, visible, anda, a, mo['celda'], W['occ'][presa]))
+    W, c = S.nuevo(4)
+    c['lon_central'] = 0.0
+    _mal(m, W, c, presa, 3, S.now)
+    g = m.aparecer_godzilla(W, c, S.now, a)
+    c['lon_central'] = lon(a) + 180.0
+    n0 = (g['celda'], W['occ'][presa], g['acum'])
+    S.pasos(W, c, 40)
+    quieto = (g['celda'], W['occ'][presa], g['acum']) == n0 and m.en_oscuridad(c, g)
+    c['lon_central'] = lon(a)
+    S.pasos(W, c, 40)
+    t.check('Godzilla igual: parado en la cara oculta; al volver a la visible, anda y devora el mal',
+            quieto and (g['celda'] != a or W['occ'][presa] < 3 or W['sp'][presa] != m.MAL),
+            'quieto %s, celda %d -> %d' % (quieto, a, g['celda']))
+    W, c = S.nuevo(4)
+    c['lon_central'] = 0.0
+    junto = m.NEIGH[a][0]
+    mo = m.aparecer(W, c, S.now, a)
+    g = m.aparecer_godzilla(W, c, S.now, junto)
+    c['lon_central'] = lon(a) + 180.0
+    sin = not m.encuentro(W, c, S.now) and W['juego'].get('lucha') is None
+    c['lon_central'] = lon(a)
+    con = m.encuentro(W, c, S.now)
+    t.check('en celdas contiguas pero en la cara oculta no luchan; a la vista, si', sin and con, '%s %s' % (sin, con))
     base.par.Godzillasala = 'vacia'
 
-    # 5. las pulsaciones: van a donde suena un secuenciador
+    # 5. aparecen en la cara visible, por el borde de entrada del giro
     W, c = S.nuevo(4)
-    a = min(range(m.N), key=lambda i: (abs(m.lonlat_celda(i)[1]) + abs(m.lonlat_celda(i)[0]), i))
+    c['lon_central'] = 0.0
+    c1 = m.celda_aparicion(W, c)
+    t.check('Trumpzilla aparece en una celda de la cara visible (la %d, longitud %.1f)' % (c1, lon(c1)),
+            c1 is not None and m.casilla_de_celda(c, c1) is not None, '%s' % c1)
+
+    # 6. las pulsaciones: van a donde suena un secuenciador
+    W, c = S.nuevo(4)
+    a = min(range(m.N), key=lambda i: (abs(lon(i)) + abs(m.lonlat_celda(i)[0]), i))
     dist, _ = m.dijkstra_mon(W, c, a)
     dos = sorted(x for x in dist if abs(dist[x] - 2.0) < 1e-9)
     lejanas = []                            # cuatro celdas a 2 pasos que no se tocan ni comparten vecinas
@@ -273,36 +322,20 @@ def _prueba(t, m, copy):
             callado[1] == ym and cero[1] == ym and viejo[1] == ym and pulso[1] == xm and de_vecina[1] == xm,
             'callado %s, pulso %s, Pesopulso 0 %s, viejo %s, vecina %s' % (callado, pulso, cero, viejo, de_vecina))
 
-    # 6. la aparicion: por un borde lateral, alternando, y Godzilla por el contrario
+    # 7. la leyenda
     W, c = S.nuevo(4)
-    c = dict(m.cfg(), t_vacia=0.0)
-    lon = lambda i: m.lonlat_celda(i)[1]
-    c1 = m.celda_aparicion(W, c)
-    mo = m.aparecer(W, c, S.now, c1)
-    c2 = m.celda_aparicion_bien(W, c)
-    mo2 = m.aparecer(W, c, S.now, m.celda_aparicion(W, c))           # el #2, sin Godzilla: el otro borde
-    t.check('Trumpzilla #1 aparece en el borde derecho del hemisferio (longitud %.1f), Godzilla en el contrario (%.1f)'
-            ' y Trumpzilla #2 en el izquierdo (%.1f)' % (lon(c1), lon(c2) if c2 is not None else 0.0, lon(mo2['celda'])),
-            lon(c1) > 60.0 and c2 is not None and lon(c2) < -60.0 and lon(mo2['celda']) < -60.0,
-            '%.1f %s %.1f' % (lon(c1), c2, lon(mo2['celda'])))
-
-    # 7. la lucha: en bordes opuestos no se tocan; la leyenda
-    W, c = S.nuevo(4)
-    c = dict(m.cfg(), t_vacia=0.0)
-    izq = min(range(m.N), key=lambda i: (lon(i), i))
-    der = max(range(m.N), key=lambda i: (lon(i), i))
-    m.aparecer(W, c, S.now, izq)
-    m.aparecer_godzilla(W, c, S.now, der)
-    sin_lucha = not m.encuentro(W, c, S.now)
+    c['lon_central'] = 0.0
+    a = [x for x in vis0 if not m.is_pole(x)][0]
+    m.aparecer(W, c, S.now, a)
+    c['lon_central'] = lon(a) + 180.0
     leg = m._legend_hemisferio(W, c)
     base.par.Hemisferio = False
     m.sync_grid()
     leg_off = m._legend_hemisferio(W, m.cfg())
     base.par.Hemisferio = True
     m.sync_grid()
-    t.check('dos monstruos en los bordes laterales opuestos no son contiguos y no luchan; la leyenda dice HEMISFERIO '
-            'celdas %d, cara visible %d/%d y, apagado, HEMISFERIO apagado' % (m.N, m.N, m.N),
-            sin_lucha and leg.strip().startswith('HEMISFERIO  celdas %d   cara visible %d/%d' % (m.N, m.N, m.N))
+    t.check('la leyenda dice HEMISFERIO, las celdas, cuantas se ven y quien esta en la cara oculta; apagado, '
+            'HEMISFERIO apagado', leg.strip().startswith('HEMISFERIO  celdas %d' % m.N) and 'en la cara oculta: Trumpzilla' in leg
             and 'apagado' in leg_off, '%s | %s' % (leg.strip(), leg_off.strip()))
 
 

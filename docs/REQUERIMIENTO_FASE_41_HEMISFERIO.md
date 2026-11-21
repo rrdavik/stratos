@@ -1,6 +1,6 @@
 # Requerimiento · Fase 41 — Hemisferio: el juego solo en la cara visible
 
-> **Implementado** en `fase41_hemisferio.py` (`fase41 v1`, `motor v137`, `comun v99`). Lo decidido está en `MONTAJE_FASE41.md`. Este documento queda como referencia de lo que se pidió (el parámetro `Giroenhemisferio` no se creó).
+> **Implementado** en `fase41_hemisferio.py` (`fase41 v2`, `motor v137`). **Ojo: la v1 de este requerimiento (planeta quieto, retícula solo en la cara visible, monstruos que nunca salen de ella) se descartó.** Lo que vale es el diseño de `MONTAJE_FASE41.md`: el planeta gira como siempre, las notas caen en una reja fija de la cara visible, la superficie tiene el doble de celdas y los monstruos se paran en la cara oculta. Este documento queda como referencia histórica.
 
 *Para una sesión de Claude Code en la nube sobre el repositorio `rrdavik/stratos`. Es autosuficiente: lee esto entero y después `MONTAJE_FASE40.md` y `ENCARGO_JUEGO_DEVORADOR.md` (fases 32 a 40). Parte de `motor v136` / `fase40 v3`.*
 

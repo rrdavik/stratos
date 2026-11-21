@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v99'
+VERSION_COMUN = 'comun v98'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -2563,7 +2563,6 @@ def install_core(base, carpeta, fase):
     reparar_color_instancias(base)
     apply_wobble(base)
     patch_ritmo(base)
-    patch_ritmo_hemi(base)             # comun v99 (fase 41)
     piel_al_dia(base, motor.module)
     nucleo_al_dia(base)
     destello_al_dia(base)
@@ -3966,38 +3965,6 @@ def patch_ritmo(base):
     t = t.replace('def rotation(frame=None):', RITMO_GIRO_FN, 1)
     r.text = t
     ok('ritmo: el giro se multiplica por el giro vivo del motor')
-    return True
-
-
-RITMO_HEMI_FN = """def rotation(frame=None):
-    # Hemisferio (fase 41): el planeta no gira, la cara visible mira a la sala.
-    try:
-        f = op('motor').module.giro_fijo(frame)
-    except Exception:
-        f = None
-    if f is not None:
-        return f
-    return rotation_libre(frame)
-
-
-def rotation_libre(frame=None):"""
-
-
-def patch_ritmo_hemi(base):
-    """comun v99 (fase 41): 'ritmo' consulta al motor (giro_fijo) en rotation(): con
-    Hemisferio devuelve el angulo fijo que pone Loncentral en 0; sin el, gira como siempre.
-    Solo cambia el texto: el angulo acumulado (storage) se conserva."""
-    r = base.op('ritmo')
-    if r is None:
-        return False
-    t = r.text
-    if 'giro_fijo(' in t:
-        return True
-    if 'def rotation(frame=None):' not in t:
-        info('ritmo: no reconozco su texto; Hemisferio no fijara el giro')
-        return False
-    r.text = t.replace('def rotation(frame=None):', RITMO_HEMI_FN, 1)
-    ok('ritmo: rotation() consulta el giro fijo del motor (Hemisferio)')
     return True
 
 
