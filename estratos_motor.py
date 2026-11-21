@@ -318,6 +318,13 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v140 (sala v18): LA CAMARA SIGUE A LAS CELDAS. En las demos de la
+#                 sala, la sala dice cada fotograma a que celdas mirar (foco_camara: donde se
+#                 para la gente, la fila, el monstruo...) y la camara de globo gira alrededor
+#                 del planeta hacia ellas, a la MISMA distancia (no cambia de altura ni de
+#                 encuadre), suavizada (FOCO_SUAVE) y como mucho FOCO_MAX grados lejos de la
+#                 direccion de siempre. Sin noticias de la sala en FOCO_VIVE s, vuelve sola.
+#                 El mapeo de la sala (Loncentral) sigue al giro, no a la camara.
 #                 Motor v139: la mitad de los bosques (por celda) crece a un 60 % (BOSQUE_BAJO);
 #                 rascacielos y termicas, un 25 % mas altos (GRANDES, techo_edificio con k); la
 #                 mezcla final de un mundo evolucionado, 30/40/30 naturaleza/ciudad/industria.
@@ -366,7 +373,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v139'
+MOTOR_VERSION = 'motor v140'
 
 import math
 import time as _time
@@ -23968,6 +23975,63 @@ def _rasante(W, c, dt, activo):
                 celdas=(ca, cb))
 
 
+# --- motor v140: la camara sigue a las celdas (las demos de la sala) -------------------
+FOCO_MAX = 55.0                 # grados: lo mas que se aparta de la direccion de siempre (CAM_DIR)
+FOCO_SUAVE = 1.6                # s: la constante de tiempo con la que llega (y vuelve)
+FOCO_VIVE = 1.0                 # s sin noticias de la sala: la camara vuelve a CAM_DIR
+
+
+def foco_camara(celdas, t=None):
+    """Motor v140: las celdas a las que mira la camara de globo (la sala las da cada
+    fotograma en sus demos). None o [] la sueltan. Devuelve si hay foco."""
+    cs = []
+    for c in (celdas or ()):
+        try:
+            if c is not None and 0 <= int(c) < N:
+                cs.append(int(c))
+        except Exception:
+            pass
+    _CACHE['foco'] = (cs, absTime.seconds if t is None else float(t)) if cs else None
+    return bool(cs)
+
+
+def foco_objetivo(now=None, giro=None):
+    """La direccion (en el mundo, unitaria) hacia la que quiere mirar la camara: el
+    centro de las celdas del foco con el giro del planeta, como mucho FOCO_MAX grados
+    lejos de CAM_DIR; CAM_DIR sin foco o si caduco."""
+    now = absTime.seconds if now is None else now
+    f = _CACHE.get('foco')
+    if not f or not f[0] or now - f[1] > FOCO_VIVE:
+        return CAM_DIR
+    v = [0.0, 0.0, 0.0]
+    for c in f[0]:
+        n = NORMALS[c]
+        v = [v[0] + n[0], v[1] + n[1], v[2] + n[2]]
+    if v[0] * v[0] + v[1] * v[1] + v[2] * v[2] < 1e-9:
+        return CAM_DIR
+    ang, tilt, wob = _giro_planeta() if giro is None else giro
+    d = _norm(world_dir(_norm(tuple(v)), ang, tilt, wob))
+    a = math.degrees(math.acos(max(-1.0, min(1.0, _dot(d, CAM_DIR)))))
+    if a > FOCO_MAX:
+        d = _slerp_dir(CAM_DIR, d, FOCO_MAX / a)
+    return d
+
+
+def _dir_foco(dt, now):
+    """La direccion de la camara de globo en este fotograma: persigue a foco_objetivo
+    con FOCO_SUAVE (la distancia no cambia: solo gira alrededor del planeta)."""
+    obj = foco_objetivo(now)
+    cur = _CACHE.get('foco_dir')
+    if cur is None:
+        cur = CAM_DIR
+    k = 1.0 - math.exp(-max(0.0, dt) / max(1e-3, FOCO_SUAVE))
+    cur = _slerp_dir(cur, obj, k) if k > 0.0 else _norm(cur)
+    if obj == CAM_DIR and _dot(cur, CAM_DIR) > 1.0 - 1e-8:      # de vuelta: exactamente en su sitio
+        cur = CAM_DIR
+    _CACHE['foco_dir'] = cur
+    return cur
+
+
 def camera_state():
     if _CACHE.get('cam_frame') == absTime.frame:
         return _CACHE['cam']
@@ -23995,6 +24059,7 @@ def camera_state():
         salto = d_min - d
         d, v = d_min, max(0.0, v)
     _CACHE.update(cam_d=d, cam_v=v, cam_R=R)
+    cdir = _dir_foco(dt, t)             # motor v140: hacia las celdas de la demo (CAM_DIR sin ellas)
     # modo: peso de la camara de superficie (0 globo, 1 superficie)
     sup = c['nivel'] >= 10 and str(_p('Modocamara', 'globo')) == 'superficie'
     wq = _CACHE.get('cam_w')
@@ -24003,7 +24068,7 @@ def camera_state():
     wq = max(0.0, min(1.0, wq + (1.0 if sup else -1.0) * dt / CAM_TRANS))
     _CACHE['cam_w'] = wq
     s = wq * wq * (3 - 2 * wq)
-    g_pos = _mul(CAM_DIR, d)
+    g_pos = _mul(cdir, d)
     if s > 0.0:
         h = _p('Camaltura', 4.0)
         vel = _p('Camvel', 0.6)
@@ -24015,7 +24080,7 @@ def camera_state():
         s_pos = sph(az, el, R + h)
         s_tgt = sph(az + math.radians(25.0), el - math.radians(6.0), R)
         rad = (R + h) * s + d * (1 - s)
-        pos = _mul(_slerp_dir(CAM_DIR, s_pos, s), rad)
+        pos = _mul(_slerp_dir(cdir, s_pos, s), rad)
         tgt = _mul(s_tgt, s)
     else:
         pos, tgt = g_pos, (0.0, 0.0, 0.0)
@@ -24066,7 +24131,7 @@ def cam(key, k=0, frame=None):
 
 def cam_reset():
     """La proxima lectura de la camara salta al encuadre (sin transicion)."""
-    for k in ('cam_d', 'cam_v', 'cam_R', 'cam_frame', 'ras_g', 'ras_gv'):
+    for k in ('cam_d', 'cam_v', 'cam_R', 'cam_frame', 'ras_g', 'ras_gv', 'foco', 'foco_dir'):   # v140: y el foco
         _CACHE.pop(k, None)
 
 
