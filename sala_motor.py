@@ -122,9 +122,20 @@
 #               fila, el monstruo), sin cambiar de altura (motor v140, foco_camara;
 #               Siguecamara la apaga). Fuera las demos grupo y goteo (el grupo va dentro del
 #               paseo) y el parametro Llegada; Personas es la gente de la sala llena.
+#   v19         LAS DEMOS DE SECCION YA NO TOCAN EL GIRO DE FASE1. Hasta la v18, cada caso
+#               de paseo, probabilidad, huella y llena ponia Barsperturn 450 (el giro casi
+#               parado: el giro vivo no se notaba) y la camara de globo perseguia a las
+#               celdas de la gente: al ir de unas a otras, el planeta parecia girar a un
+#               lado y al otro. Ahora el Barsperturn de la demo es solo de GENoZilla (como
+#               en la v17) y Siguecamara viene apagado (sala_virtual v31 lo apaga una vez).
+#               Y la Demo por defecto es la vacia: la v18 hizo del paseo una demo que toma
+#               FASE1 (Fuente simulada, sin Modojuego, notas de la gente quieta y, al
+#               salir, el mundo de antes); la huella entierra 7 conchas de una vez para
+#               que la fila cave y vuelve al mundo de entrada en cada caso. Ninguna debe
+#               jugar sola: se eligen a mano.
 # =============================================================================
 
-SALA_VERSION = 'sala v18'
+SALA_VERSION = 'sala v19'
 
 import math
 
@@ -673,7 +684,7 @@ def cfg():
                 modo_luz=_menu('Modoluz', MODOS_LUZ, 1), hz_prueba=_p('Hzprueba', 2.5),
                 luz_casa=max(0.0, _p('Luzcasa', 0.06)), vista=_menu('Vista', VISTAS, 0),
                 bruma=max(0.0, min(1.0, _p('Bruma', 0.5))), demo=_menu('Demo', DEMOS, 0),
-                sigue_camara=bool(_p('Siguecamara', True)),
+                sigue_camara=bool(_p('Siguecamara', False)),     # v19: apagado por defecto
                 luz_esfera=max(0.0, _p('Luzesfera', 0.0)), giro_esfera=_p('Girosfera', 0.0),
                 inclina_esfera=_p('Inclinasfera', 0.0),
                 monigotes=bool(_p('Monigotes', True)), arco_quietud=bool(_p('Arcoquietud', False)),
@@ -1682,7 +1693,7 @@ CAPITULOS = [
                   (3.5, '{gana}'),
                   (9.0, 'El mundo se entierra: la concha guarda el mapa de la partida.')]),
 ]
-GIRO_DEMO = 450.0           # Barsperturn del resto de capitulos: el giro, despacio (0,4 grados por segundo)
+GIRO_DEMO = 450.0           # Barsperturn del resto de capitulos de GENoZilla: el giro, despacio (0,4 grados por segundo)
 CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
 
 
@@ -1694,8 +1705,9 @@ CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
 # seccion, el caso y de que va), un rotulo abajo que explica lo que pasa y una
 # cabecera arriba a la derecha (cabecera_texto) con la seccion, el caso y, donde
 # cuenta, lo que mide FASE1 en vivo. Las personas las mueve la coreografia del caso.
-# La camara de FASE1 sigue a las celdas donde pasan las cosas (foco del caso; motor
-# v140, foco_camara), sin cambiar de altura. Al entrar se guarda FASE1 (escena,
+# Con Siguecamara (v19: apagado por defecto), la camara de FASE1 sigue a las celdas donde
+# pasan las cosas (foco del caso; motor v140, foco_camara), sin cambiar de altura. Las de
+# seccion no tocan el giro de FASE1 (v19; GENoZilla lo pone despacio). Al entrar se guarda FASE1 (escena,
 # mundo, parametros, tabla) y al salir se devuelve, como en GENoZilla.
 #   1 paseo         la gente entra, pasea y sale, a veces en grupo; algo de la obra
 #                   la detiene y, quieta, construye
@@ -2361,7 +2373,8 @@ def _cap_pars(F, k, c):
         quiere['Umbralaparicion'] = 1.0     # el monstruo aparece cuando lo dice el guion
     else:
         quiere = dict(SECCIONES[demo]['pars'])
-    quiere['Barsperturn'] = GIRO_DEMO
+    if demo == 'genozilla':             # v19: el giro despacio, solo en GENoZilla (como en la v17); las
+        quiere['Barsperturn'] = GIRO_DEMO   # demos de seccion dejan el giro de FASE1 (y su giro vivo)
     # v16: el Oceano de FASE1 se respeta (hasta la v15 se apagaba: con el, el mundo vacio de cada
     # capitulo era todo mar y el monstruo solo anda por tierra; sobre el mundo de FASE1 no hace falta)
     quiere.update(cp['pars'])
@@ -2835,7 +2848,7 @@ def foco_tick(c, F, t, ev):
     """La camara de FASE1 mira a las celdas del caso (Siguecamara); sin el, a su sitio."""
     if F is None or not hasattr(F.m, 'foco_camara'):
         return None
-    cs = foco_celdas(c, F, t, ev) if c.get('sigue_camara', True) else []
+    cs = foco_celdas(c, F, t, ev) if c.get('sigue_camara', False) else []
     try:
         F.m.foco_camara(cs)
     except Exception:

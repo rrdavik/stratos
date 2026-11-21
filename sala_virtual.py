@@ -155,6 +155,16 @@ LAS DEMOS (v30, sala v18, motor v140)
   siguiente; Buclecap vuelve al primero al acabar. Fuera las demos grupo y goteo y
   el parametro Llegada; Personas es ahora la gente de la sala llena.
 
+  v31 (sala v19): LAS DEMOS NO TOCAN EL GIRO DE FASE1. Con la v30 la Demo por
+  defecto (paseo) tomaba FASE1 en cuanto la sala estaba activa: cada caso ponia
+  Barsperturn 450 (el planeta casi parado y el giro vivo sin notarse) y la camara
+  de globo perseguia a la gente de celda en celda (el planeta parecia girar a un
+  lado y al otro). La huella, ademas, entierra 7 conchas de golpe para que la fila
+  cave y vuelve al mundo de entrada en cada caso. Ahora: el Barsperturn de la demo,
+  solo en GENoZilla (como antes); Siguecamara apagado por defecto; y la Demo por
+  defecto es la vacia (las demas se eligen a mano). Al relanzar, una vez: si Demo
+  estaba en paseo pasa a vacia y Siguecamara se apaga.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -169,7 +179,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v30  (las demos por secciones y casos; la camara de FASE1 sigue a las celdas)'
+VERSION = 'sala_virtual v31  (las demos no tocan el giro de FASE1; Demo vacia y Siguecamara apagado por defecto)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -285,10 +295,10 @@ try:
     sala.par.Personas.label = 'Sala llena: personas'
 except Exception:
     pass
-add_par(sala, page, 'menu', 'Demo', 'Demo de la sala', 'paseo', menu=sm.DEMOS,
-        menu_labels=sm.DEMOS_ETIQUETAS)
+add_par(sala, page, 'menu', 'Demo', 'Demo de la sala', 'vacia', menu=sm.DEMOS,
+        menu_labels=sm.DEMOS_ETIQUETAS)      # v31: vacia por defecto (las demos toman FASE1)
 add_par(sala, page, 'toggle', 'Siguecamara', 'Demos: la camara de FASE1 sigue a las celdas donde pasan las cosas',
-        True)    # v30
+        False)    # v30; v31 apagado por defecto
 add_par(sala, page, 'toggle', 'Alimentar', 'FASE1 ve a este publico (Fuente = simulada) y lo marca', True)    # v27
 
 
@@ -310,6 +320,22 @@ def menu_al_dia(nombre, nombres, etiquetas):
 
 if menu_al_dia('Demo', sm.DEMOS, sm.DEMOS_ETIQUETAS):
     ok('Demo: las demos nuevas por secciones y casos (paseo, probabilidad, huella, llena, genozilla, vacia)')
+try:                    # v31: una vez por proyecto, FASE1 vuelve a girar y a cerrar sus ciclos sola
+    if not sala.fetch('demos_v31', False, search=False):
+        sala.store('demos_v31', True)
+        for nm_, dflt_ in (('Demo', 'vacia'), ('Siguecamara', False)):
+            try:
+                getattr(sala.par, nm_).default = dflt_
+            except Exception:
+                pass
+        if str(sala.par.Demo.eval()) == 'paseo':
+            sala.par.Demo = 'vacia'
+            ok('Demo paseo -> vacia: las demos toman FASE1 (su giro, su mundo y sus conchas); eligelas a mano')
+        if bool(sala.par.Siguecamara.eval()):
+            sala.par.Siguecamara = False
+            ok('Siguecamara -> apagado: la camara de FASE1 en su sitio, el planeta gira siempre hacia el mismo lado')
+except Exception as e:
+    info('Demo / Siguecamara: no pude ponerlos en vacia y apagado (%s); ponlos a mano' % e)
 # v24: la demo GENoZilla
 add_par(sala, page, 'menu', 'Capitulo', 'GENoZilla: capitulo inicial', sm.CAP_NOMBRES[0], menu=sm.CAP_NOMBRES,
         menu_labels=sm.CAP_ETIQUETAS)
@@ -1875,6 +1901,9 @@ def prueba_demos(t, m):
 
 def _prueba_demos(t, m, copy, motor_):
     F = sm.Fase1(fase1)
+    t.check('v31: Demo vacia y Siguecamara apagado por defecto (las demos toman FASE1: se eligen a mano)',
+            sala.par.Demo.default == 'vacia' and not sala.par.Siguecamara.default,
+            'Demo %s, Siguecamara %s' % (sala.par.Demo.default, sala.par.Siguecamara.default))
     nombres = sorted(set(sm.PARS_CAPITULO) | set(sm.PARS_SECCION))
     sala.par.Personas = 14
     for demo in ('paseo', 'probabilidad', 'huella', 'llena'):
@@ -1963,7 +1992,8 @@ run_test(fase1, prueba)
 print('  Ahora: mira salida_sala (todo en una imagen; Vista = entrada, visitante, orbita,')
 print('  cenital o juego). Modoluz = prueba recorre la luz en un minuto; Bruma, los haces en el aire.')
 print('  Demo: 1 paseo, 2 probabilidad (estrato humano), 3 huella, 4 llena, 5 genozilla: cada una con')
-print('  sus casos y su titulo (Vista = juego); la camara de FASE1 sigue a las celdas (Siguecamara).')
+print('  sus casos y su titulo (Vista = juego); con Siguecamara la camara de FASE1 sigue a las celdas.')
+print('  Demo = vacia (por defecto): FASE1 gira y cierra sus ciclos sola; las demas demos la toman.')
 print('  Palmada: la oye FASE1. Personas y Ruidopublico para mas o menos publico.')
 print('  ' + sm.legend())
 print('=' * 66)
