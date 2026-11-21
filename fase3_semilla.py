@@ -100,10 +100,11 @@ motor = install_core(base, CARPETA, 3)
 
 page = get_page(base, 'Fase3')
 add_par(base, page, 'float', 'Shellthick', 'Grosor de concha', 0.5, 0.05, 2.0)
-add_par(base, page, 'float', 'Alturafactor', 'Limite de altura (x grosor)', 3.75, 1.0, 8.0)
+add_par(base, page, 'float', 'Alturafactor', 'Limite de altura (x grosor)', 4.25, 1.0, 8.0)
 add_par(base, page, 'float', 'Semillafrac', 'Altura de la semilla (x limite)', 0.20, 0.05, 1.0)
 add_par(base, page, 'int', 'Costemax', 'Notas por trigger en el limite', 5, 1, 12, clamp=True)
 renew_default(base, 'Alturafactor', 3.0, 3.75)
+renew_default(base, 'Alturafactor', 3.75, 4.25)   # motor v138: especies algo mas altas
 renew_default(base, 'Semillafrac', 0.25, 0.20)
 add_par(base, page, 'float', 'Gatemax', GATEMAX_LABEL, 1.25, 1.0, 2.0)
 add_par(base, page, 'int', 'Umbralvel', 'Velocidad: pulido a partir de', 64, 1, 127, clamp=True)

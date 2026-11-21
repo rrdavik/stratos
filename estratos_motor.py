@@ -318,6 +318,14 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v138: LAS PROPORCIONES DEL GLOBO. El nucleo, de 8 a 10 (Radionucleo):
+#                 mas diametro frente al relieve. Los edificios (ciudad, industria y brotes
+#                 del mal) suben: Alturaplanta 0,08 -> 0,12, y su tope pasa de 2,1 a 1,7 x
+#                 el limite (H_TOPE) con una rodilla suave (techo_edificio: hasta el 60 % el
+#                 alto es el suyo; de ahi se comprime sin llegar al tope, ya no un corte seco).
+#                 Orden de alturas: vegetacion (~1 x el limite) < edificios (hasta 1,7) <
+#                 montanas y cordilleras (1 + Alturamonte = 2).
+#                 Alturafactor 3,75 -> 4,25 (limite 1,875 -> 2,125): las especies, un 13 % mas altas.
 #                 Motor v137: LOS MONSTRUOS, A LA LUZ. Trumpzilla y Godzilla se quedan en la
 #                 cara visible todo lo posible: entre las presas (o el mal) alcanzables
 #                 prefieren las de la cara visible, y pisar la cara oculta cuesta
@@ -355,7 +363,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v137'
+MOTOR_VERSION = 'motor v138'
 
 import math
 import time as _time
@@ -485,9 +493,9 @@ def pads_corte(cfg):
 COL_RED_DEF = (0.60, 0.36, 0.92)           # el violeta electrico de la red (OKLCH 0,62 0,21 300; reservado)
 DEFAULT_CFG = dict(
     nivel=3,
-    core_radius=8.0,            # motor v101 (Radionucleo): 6 hasta la v98, 12 en la v99 y la v100
+    core_radius=10.0,           # motor v138 (Radionucleo): 6 hasta la v98, 12 en la v99 y la v100, 8 de la v114 a la v137
     # fase 3
-    shell_thick=0.5, height_factor=3.75, seed_frac=0.20, grow_frac=0.20,
+    shell_thick=0.5, height_factor=4.25, seed_frac=0.20, grow_frac=0.20,
     gate_mode=1, gate_max=1.25, vel_umbral=64, steps_per_beat=4, cost_max=5,
     # fase 4
     th_branch=5, th_fusion=7, th_crown=9, th_cumbre=11, cumbre_tramos=4,
@@ -542,7 +550,7 @@ DEFAULT_CFG = dict(
     terrazas_por_nota=1, max_terrazas=8, paso_terraza=0.12, muro_terraza=0.25, riego=1,
     color_cultivo=(0.66, 0.80, 0.22), altura_meseta=0.15, max_niveles=3, marco=1, setos=1,
     # fase 11 v10 (motor v67): la ciudad legible
-    lenguaje=0, variantes_ciudad=3, fijar_tipo=0, oblicuidad=6.0, alto_planta=0.08, ancho_vano=0.05,
+    lenguaje=0, variantes_ciudad=3, fijar_tipo=0, oblicuidad=6.0, alto_planta=0.12, ancho_vano=0.05,
     retranqueo=0.15, torsion_max=90.0, parasitos_por_nota=4, max_parasitos=24, modulo_marco=0.25,
     max_marco=3, capsulas=0.4, mutacion=0.5, mutacion_fuente=0, obra=1, desfase_fachada=2, gruas=1,
     max_gruas=6, tinte_ventanas=1, pasos_tinte=4, lod_ciudad=60.0,
@@ -4783,7 +4791,20 @@ COL_REMATE = dict(deposito=(0.10, 0.10, 0.11), antena=(0.36, 0.36, 0.38), maquin
                   rotopala=(0.85, 0.66, 0.18), unagua=(0.4, 0.4, 0.4), dosaguas=(0.4, 0.4, 0.4))
 COL_BALIZA = (1.0, 0.18, 0.08)           # la baliza de la grua (particula)
 REMATES_LOD = ('varillas', 'escalera', 'cable', 'toldo', 'bidon', 'chimenea', 'pretil', 'balcon')
-H_TOPE = 2.1                 # ningun edificio pasa de 2,1 x el limite (la camara lo encuadra)
+H_TOPE = 1.7                 # ningun edificio pasa de 1,7 x el limite (motor v138: antes 2,1, igual que el monte);
+                             # sobre la vegetacion (~1 x) y bajo las montanas (1 + Alturamonte = 2 x)
+H_RODILLA = 0.6              # motor v138: hasta el 60 % del tope, el alto es el suyo; de ahi, se comprime sin llegar al tope
+
+
+def techo_edificio(H, cfg):
+    """Alto de un edificio (ciudad, industria, mal) con el tope suave de H_TOPE x el limite:
+    el suyo hasta la rodilla y, por encima, una curva que se acerca al tope sin llegar (antes
+    un corte seco: las torres altas salian todas igual de altas y a la altura del monte)."""
+    tope = H_TOPE * limit(cfg)
+    k = H_RODILLA * tope
+    if H <= k:
+        return H
+    return k + (tope - k) * (1.0 - math.exp(-(H - k) / (tope - k)))
 HUECO_FACHADA = 0.95
 FUENTES = ('humo', 'penacho', 'llama', 'baliza')     # industria: de donde sale el humo (particulas)
 MOVILES = ('polea', 'balancin', 'rotopala')          # industria: las partes que se mueven al tempo
@@ -9050,7 +9071,7 @@ def plantas_de(cfg, W, i, occ=None):
 
 
 def alto_planta(cfg):
-    return max(0.005, float(cfg.get('alto_planta', 0.08))) * limit(cfg)
+    return max(0.005, float(cfg.get('alto_planta', 0.12))) * limit(cfg)
 
 
 def lod_ciudad(W, cfg, i):
@@ -9204,12 +9225,11 @@ def _info_ciudad(W, cfg, i, cl=None):
     ex = edificio(cfg, d, v)
     hp = alto_planta(cfg)
     pl = plantas_de(cfg, W, i)
-    tope = H_TOPE * limit(cfg)
     if ex['modo'] == 'corte':
-        H = min(tope, ex['alto'] * hp)
+        H = techo_edificio(ex['alto'] * hp, cfg)
         vis = max(1.0 / ex['alto'], min(1.0, pl / ex['alto']))
     else:
-        H = min(tope, pl * hp)
+        H = techo_edificio(pl * hp, cfg)
         vis = 1.0
     giro = float((90 if own == ARQ else 30) * g4)
     leng = W['leng'][i] if W['leng'][i] >= 0 else lenguaje_celda(cfg, i, W)
@@ -19167,7 +19187,7 @@ def info_mal(W, cfg, i, E=None):
     ex = edificio(cfg, d, v)
     hp = alto_planta(cfg)
     k = max(0, o - occ_inicio(cfg, 'planificada', e)) if e > 1 else 0
-    H = min(H_TOPE * limit(cfg), ex['alto'] * hp * (1.0 + 0.08 * k) * float(cfg.get('alto_mal', 1.0)))
+    H = techo_edificio(ex['alto'] * hp * (1.0 + 0.08 * k) * float(cfg.get('alto_mal', 1.0)), cfg)
     hp = hp * float(cfg.get('alto_mal', 1.0))          # Altomal: los remates, a la misma escala
     cima = 1.0
     for r in ex['rem']:
@@ -21966,7 +21986,7 @@ def uniformes_piel(W, c, now):
     # fase 11 v10: la fachada de la ciudad en el shader: alto de planta y ancho de vano
     # (en el mundo) y los colores de los secuenciadores (el tinte de las ventanas)
     lim_ = limit(c)
-    u['uCiudad'] = (c.get('alto_planta', 0.08) * lim_, c.get('ancho_vano', 0.05) * lim_,
+    u['uCiudad'] = (c.get('alto_planta', 0.12) * lim_, c.get('ancho_vano', 0.05) * lim_,
                     1.0 if c['nivel'] >= 11 and tema_de(c) in CONSTRUIDOS else 0.0, 0.0)
     u['uSeq1'] = tuple(seq_color(c, 1)) + (0.0,)
     u['uSeq2'] = tuple(seq_color(c, 2)) + (0.0,)
