@@ -457,6 +457,11 @@ def main():
     # relanzar sobre el proyecto avanzado: el mundo no se pierde
     antes = (m.occupied(W), list(W['occ']))
     print('relanzando las fases sobre el proyecto en el nivel %d' % m.cfg()['nivel'])
+    # sala_virtual v31: con_titulo con el cableado de antes de la v30 (con_rotulo_demo en la
+    # entrada 2, donde va con_cabecera): al relanzar, la sala lo vuelve a enchufar bien
+    sala = sim.op('/project1/SALA')
+    if sala is not None and sala.op('con_titulo') is not None and sala.op('con_rotulo_demo') is not None:
+        sala.op('con_titulo').inputConnectors[1].connect(sala.op('con_rotulo_demo'))
     for f in FASES[1:] + [SALA]:
         if not os.path.exists(os.path.join(REPO, f)):
             continue

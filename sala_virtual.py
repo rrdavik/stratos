@@ -163,7 +163,10 @@ LAS DEMOS (v30, sala v18, motor v140)
   cave y vuelve al mundo de entrada en cada caso. Ahora: el Barsperturn de la demo,
   solo en GENoZilla (como antes); Siguecamara apagado por defecto; y la Demo por
   defecto es la vacia (las demas se eligen a mano). Al relanzar, una vez: si Demo
-  estaba en paseo pasa a vacia y Siguecamara se apaga.
+  estaba en paseo pasa a vacia y Siguecamara se apaga. Y los Over TOP del titulo,
+  el rotulo y la cabecera se enchufan desenchufando antes lo que hubiera (enchufa):
+  en un proyecto de antes de la v30, con_titulo seguia con con_rotulo_demo en su
+  segunda entrada y no con con_cabecera; la autoprueba dice que hay en cada una.
 
 COMO USARLO
 -----------
@@ -179,7 +182,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v31  (las demos no tocan el giro de FASE1; Demo vacia y Siguecamara apagado por defecto)'
+VERSION = 'sala_virtual v31  (las demos no tocan el giro de FASE1; Demo vacia y Siguecamara apagado por defecto; con_titulo bien enchufado)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -954,13 +957,39 @@ setp_any(rot, ['positiony', 'texty'], -16)
 setexpr(rot, 'text', MONITOR_TXT)
 
 
+def enchufa(dst, src, i):
+    """v31: connect, pero si en la entrada i quedaba otro (un Over TOP de una version
+    anterior: con_titulo tenia con_rotulo_demo donde la v30 pone con_cabecera), lo
+    desenchufa antes. Devuelve si en la entrada i queda src."""
+    try:
+        c = dst.inputConnectors[i]
+        if [x.owner for x in c.connections] != [src]:
+            c.disconnect()
+            c.connect(src)
+        return [x.owner for x in c.connections] == [src]
+    except Exception:
+        return connect(dst, src, i)
+
+
+def entrada(o, i):
+    """v31: el nombre del operador en la entrada i de o ('-' si no hay nada)."""
+    try:
+        cs = o.inputConnectors[i].connections
+        return cs[0].owner.name if cs else '-'
+    except Exception:
+        try:
+            return o.inputs[i].name
+        except Exception:
+            return '-'
+
+
 def encima(nombre, arriba, abajo, horiz, vert, x, y, margen=16):
     """Over TOP: 'arriba' a su tamano, en la esquina (horiz, vert) de 'abajo',
     a 'margen' px del borde (v24: centrado, horiz o vert 'center'). Devuelve si pudo
     colocarlo."""
     o = get_or_make(sala, 'overTOP', nombre, x, y)
-    connect(o, arriba, 0)
-    connect(o, abajo, 1)
+    enchufa(o, arriba, 0)
+    enchufa(o, abajo, 1)
     bien = [setmenu(o, ['size', 'outputresolution'], ['input2', 'in2'], None),
             setmenu(o, ['prefit'], ['nativeres', 'native'], None),
             setmenu(o, ['justifyh'], [horiz], None),
@@ -1938,13 +1967,16 @@ def _prueba_demos(t, m, copy, motor_):
     finally:
         sm._GZ.clear()
         sm._GZ.update(g)
+    # v31: las entradas de con_titulo y de con_cabecera, por nombre (lo que haya en cada una)
+    cadena = [entrada(sala.op('con_titulo'), 0), entrada(sala.op('con_titulo'), 1),
+              entrada(sala.op('con_cabecera'), 0), entrada(sala.op('con_cabecera'), 1)]
     t.check('v30: cada caso con su titulo (la seccion y el caso) y la cabecera arriba a la derecha con la seccion, '
             'el caso y la probabilidad medida',
             ante == 'STRATOS · 2 · ESTRATO HUMANO · CASO 2 / 3' and nom == 'Una persona quieta'
             and ante1 == 'STRATOS · 1 · PASEO' and cab.startswith('2 · ESTRATO HUMANO') and 'P 0,43' in cab
             and 'prenden 4/10' in cab and sala.op('cabecera_demo') is not None
-            and sala.op('con_titulo').inputs and sala.op('con_titulo').inputs[1] == sala.op('con_cabecera'),
-            '%s | %s | %s' % (ante, ante1, cab.replace(chr(10), ' / ')))
+            and cadena == ['titulo_fundido', 'con_cabecera', 'cabecera_fundido', 'con_rotulo_demo'],
+            '%s | %s | %s | con_titulo <- %s' % (ante, ante1, cab.replace(chr(10), ' / '), ' / '.join(cadena)))
     # v30 (motor v140): la camara sigue a las celdas, a la misma distancia (con un reloj a mano)
     m._CACHE.pop('foco_dir', None)
     giro_p = m._giro_planeta()

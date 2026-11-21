@@ -392,6 +392,15 @@ class Connector(object):
     def connect(self, src):
         self.owner._inputs[self.index] = src
 
+    @property
+    def connections(self):
+        """Como TouchDesigner: los conectores de salida enchufados a esta entrada."""
+        src = self.owner._inputs.get(self.index)
+        return [OutConnector(src)] if src is not None else []
+
+    def disconnect(self):
+        self.owner._inputs.pop(self.index, None)
+
 
 class OutConnector(object):
     """Salida de un operador: connect(op) usa la primera entrada libre."""
