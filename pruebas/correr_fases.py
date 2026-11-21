@@ -15,10 +15,11 @@ rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
 mal donde toca.
-Con la sala virtual (sala_virtual v29), la demo GENoZilla de principio a fin
+Con la sala virtual (sala_virtual v30), la demo GENoZilla de principio a fin
 (Demo = genozilla, fotograma a fotograma): los 13 capitulos, la columna
 Comprobar de cada uno y, al acabar, FASE1 como estaba (el mundo, las armas,
-Fuente y Modojuego).
+Fuente y Modojuego). Y las demos de secciones y casos (paseo, probabilidad,
+huella y llena), igual: la comprobacion de cada caso y FASE1 como estaba.
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
 Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
@@ -300,6 +301,40 @@ def genozilla(sim, fps=30.0, fps_mic=60.0):
     return res, antes == despues, antes, despues
 
 
+def demos_sala(sim, fps=30.0):
+    """sala_virtual v30: cada demo de secciones y casos (paseo, probabilidad, huella, llena)
+    de principio a fin, fotograma a fotograma. Devuelve {demo: (resultados, FASE1 como estaba)}."""
+    sala = sim.op('/project1/SALA')
+    base = sim.op('/project1/FASE1')
+    sm = sala.op('sala_motor').module
+    m = base.op('motor').module
+    pars = sorted(set(sm.PARS_CAPITULO) | set(sm.PARS_SECCION))
+    out = {}
+    demo0 = str(sala.par.Demo.eval())
+    sala.par.Buclecap = False
+    for demo in ('paseo', 'probabilidad', 'huella', 'llena'):
+        sala.par.Demo = 'vacia'
+        sim.fotograma(1.0 / fps)
+        antes = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars
+                                              if getattr(base.par, k, None) is not None), str(sala.par.Vista.eval()))
+        sala.par.Demo = demo
+        tope = int((sum(c['dur'] for c in sm.casos(demo)) + len(sm.casos(demo)) * sm.TITULO + 10.0) * fps)
+        for _ in range(tope):
+            sim.fotograma(1.0 / fps)
+            if sm._GZ.get('acabada'):
+                break
+        res = list(sm._GZ.get('resultados') or [])
+        sala.par.Demo = 'vacia'
+        sim.fotograma(1.0 / fps)
+        despues = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars
+                                                if getattr(base.par, k, None) is not None), str(sala.par.Vista.eval()))
+        out[demo] = (res, antes == despues, antes, despues)
+    sala.par.Demo = demo0
+    sala.par.Buclecap = True
+    sim.fotograma(1.0 / fps)
+    return out
+
+
 def duplicados():
     """Funciones de nivel de modulo definidas dos veces en el motor o en comun. Python se
     queda con la ultima sin avisar: al fusionar dos ramas, una funcion nueva con el nombre
@@ -351,6 +386,10 @@ def main():
         if sala is not None and getattr(sala.par, 'Alimentar', None) is not None:
             sala.par.Alimentar = False
             sala.op('sala_motor').module.alimentar_tick()      # sin avanzar el reloj: la sesion, la de siempre
+        # sala_virtual v30: todas las demos (menos la vacia) toman FASE1 mientras duran; la sesion
+        # y la partida son de FASE1 sola: la sala, vacia
+        if sala is not None and 'vacia' in list(getattr(sala.par.Demo, 'menuNames', ['vacia'])):
+            sala.par.Demo = 'vacia'
     with contextlib.redirect_stdout(io.StringIO()):
         malas = sesion(sim)
     m = sim.op('/project1/FASE1/motor').module
@@ -392,6 +431,22 @@ def main():
         if not igual:
             print('         antes   %s' % (antes[1:],))
             print('         despues %s' % (despues[1:],))
+        W = m.world()
+    if sala is not None and sala.op('sala_motor') is not None and hasattr(sala.op('sala_motor').module, 'SECCIONES'):
+        with contextlib.redirect_stdout(io.StringIO()):
+            r_demos = demos_sala(sim)
+        for demo, (res, igual, antes, despues) in r_demos.items():
+            n = len(sala.op('sala_motor').module.casos(demo))
+            bien = len(res) == n and all(r[1] for r in res) and igual
+            todo = todo and bien
+            print('%-6s demo %s (sala virtual): %d/%d casos comprobados, FASE1 %s al salir'
+                  % ('OK' if bien else 'FALLO', demo, sum(1 for r in res if r[1]), len(res),
+                     'como estaba' if igual else 'CAMBIADA'))
+            for k, b, que in res:
+                print('         caso %d: %s%s' % (k + 1, '' if b else 'FALLO  ', que))
+            if not igual:
+                print('         antes   %s' % (antes[1:],))
+                print('         despues %s' % (despues[1:],))
         W = m.world()
     # relanzar sobre el proyecto avanzado: el mundo no se pierde
     antes = (m.occupied(W), list(W['occ']))

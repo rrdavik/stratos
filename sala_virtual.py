@@ -27,16 +27,18 @@ QUE MONTA
                de bano (dos junto a la esfera, sin apuntarle) y el
                estroboscopio en el suelo junto a la esfera. Recolocar la
                rehace con las medidas de ahora.
-  PERSONAS     Personas (6), sin azar, segun la Demo (v5):
-                 paseo  entran por la puerta cada Llegada s (8), pasean, se
-                        paran dentro del suelo del publico y se van
-                 grupo  entran juntos en fila, hacen corro ante la esfera,
-                        se quedan casi un minuto y salen juntos
-                 llena  la sala se llena deprisa y se quedan casi quietos
-                 goteo  de uno en uno: van a la esfera, miran y se van
-                 vacia  nadie
-                 genozilla  (v24) el publico juega a GENoZilla capitulo a
-                        capitulo (ver DEMO GENOZILLA)
+  PERSONAS     sin azar, segun la Demo (v30: cada demo es una seccion con sus
+               casos; ver LAS DEMOS):
+                 paseo         1 Paseo: entran y salen, a veces en grupo;
+                               algo de la obra los detiene
+                 probabilidad  2 Estrato humano: la probabilidad minima, la de
+                               una persona quieta y la de un grupo
+                 huella        3 La huella inevitable: quietos construyen; la
+                               fila cava tantas conchas como personas
+                 llena         4 Sala llena: Personas (18) entrando y saliendo
+                 genozilla     5 (v24) el publico juega a GENoZilla capitulo a
+                               capitulo (ver DEMO GENOZILLA)
+                 vacia         nadie
                v24: cada persona es un MONIGOTE de hombre (i par) o de mujer
                (i impar), como los letreros de los aseos (Monigotes; apagado,
                el tronco de su altura de la v5), de color Colormonigote, con
@@ -120,6 +122,39 @@ DEMO GENOZILLA (v24, Demo = genozilla)
   vez de crear otra. Si hay varias, la primera que se llame SALA-algo; las demas
   quedan paradas, como las copias (v17).
 
+LAS DEMOS (v30, sala v18, motor v140)
+-------------------------------------
+  Cada demo es una SECCION (su numero y su titulo) hecha de CASOS, y la juega el
+  director de GENoZilla: al empezar cada caso, su titulo (titulo_demo, 2,8 s:
+  STRATOS · 2 · ESTRATO HUMANO · CASO 2 / 3, el nombre del caso y de que va); abajo,
+  el rotulo que explica lo que pasa; arriba a la derecha, la cabecera
+  (cabecera_demo: la seccion y el caso y, donde cuenta, lo que mide FASE1 en vivo).
+  Al entrar se guarda FASE1 y al salir se devuelve; en las demos nuevas, sin
+  Modojuego (el monstruo se comeria lo que construye el publico).
+    1 Paseo (80 s)  sueltos que entran y salen; una se interesa por la obra (se
+                    queda quieta ante la esfera y su celda construye); un grupo de
+                    cuatro entra, se para junto ante la obra y sale junto
+    2 Estrato humano  Activo, Cuanto 0,2. Una lluvia de notas cae en una celda
+                    testigo y en una vacia; la cabecera dice su probabilidad y
+                    cuantas prenden. Casos: Probabilidad minima (sala vacia y dos
+                    que cruzan andando: Cuanto), Una persona quieta (sube con su
+                    densidad), Un grupo (cinco juntos: casi 1; la celda se corona y
+                    desborda)
+    3 La huella inevitable  Quietos, construyen (cuatro quietos: inclusion al
+                    llegar y al pararse, y sus celdas suenan y construyen encima);
+                    La fila cava (Tfila 5: tres en fila abren una escision de 3
+                    conchas; se suman dos y baja a 5)
+    4 Sala llena (90 s)  Personas entran deprisa, se mueven, se van y vuelven;
+                    la presencia en todas partes, inclusiones y, si una fila
+                    aguanta Tfila, escisiones
+    5 GENoZilla     como estaba
+  LA CAMARA DE FASE1 SIGUE A LAS CELDAS donde pasan las cosas (la gente quieta, la
+  testigo, la fila, el monstruo): la camara de globo gira alrededor del planeta a la
+  misma distancia (sin cambiar de altura), suave y como mucho 55 grados del frente
+  (motor v140, foco_camara). Siguecamara la apaga. Siguientecap salta al caso
+  siguiente; Buclecap vuelve al primero al acabar. Fuera las demos grupo y goteo y
+  el parametro Llegada; Personas es ahora la gente de la sala llena.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -134,7 +169,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v29  (no crea otra sala si ya hay una con otro nombre: la usa, renombrada a SALA)'
+VERSION = 'sala_virtual v30  (las demos por secciones y casos; la camara de FASE1 sigue a las celdas)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -244,9 +279,16 @@ for viejo in ('Zonaancho', 'Zonafondo'):           # v8: sin zona; la camara ve 
     except Exception as e:
         info('%s: no pude quitarlo (%s); ya no se usa' % (viejo, e))
 add_par(sala, page, 'pulse', 'Recolocar', 'Recolocar los equipos con estas medidas (rehace la tabla)')
-add_par(sala, page, 'int', 'Personas', 'Personas', 6, 0, 30, clamp=True)
-add_par(sala, page, 'menu', 'Demo', 'Demo de visita del publico', 'paseo', menu=sm.DEMOS,
+add_par(sala, page, 'int', 'Personas', 'Sala llena: personas', 18, sm.LLENA_MIN, sm.LLENA_MAX, clamp=True)
+renew_default(sala, 'Personas', 6, 18)              # v30: es la gente de la sala llena
+try:
+    sala.par.Personas.label = 'Sala llena: personas'
+except Exception:
+    pass
+add_par(sala, page, 'menu', 'Demo', 'Demo de la sala', 'paseo', menu=sm.DEMOS,
         menu_labels=sm.DEMOS_ETIQUETAS)
+add_par(sala, page, 'toggle', 'Siguecamara', 'Demos: la camara de FASE1 sigue a las celdas donde pasan las cosas',
+        True)    # v30
 add_par(sala, page, 'toggle', 'Alimentar', 'FASE1 ve a este publico (Fuente = simulada) y lo marca', True)    # v27
 
 
@@ -267,19 +309,32 @@ def menu_al_dia(nombre, nombres, etiquetas):
 
 
 if menu_al_dia('Demo', sm.DEMOS, sm.DEMOS_ETIQUETAS):
-    ok('Demo: con genozilla (el publico juega a GENoZilla capitulo a capitulo)')
+    ok('Demo: las demos nuevas por secciones y casos (paseo, probabilidad, huella, llena, genozilla, vacia)')
 # v24: la demo GENoZilla
 add_par(sala, page, 'menu', 'Capitulo', 'GENoZilla: capitulo inicial', sm.CAP_NOMBRES[0], menu=sm.CAP_NOMBRES,
         menu_labels=sm.CAP_ETIQUETAS)
 menu_al_dia('Capitulo', sm.CAP_NOMBRES, sm.CAP_ETIQUETAS)
-add_par(sala, page, 'pulse', 'Siguientecap', 'GENoZilla: saltar al capitulo siguiente')
-add_par(sala, page, 'toggle', 'Buclecap', 'GENoZilla: al acabar el ultimo, volver al primero', True)
+add_par(sala, page, 'pulse', 'Siguientecap', 'Demo: saltar al caso siguiente')
+add_par(sala, page, 'toggle', 'Buclecap', 'Demo: al acabar el ultimo caso, volver al primero', True)
+for nm_, lb_ in (('Siguientecap', 'Demo: saltar al caso siguiente'),
+                 ('Buclecap', 'Demo: al acabar el ultimo caso, volver al primero')):
+    try:
+        getattr(sala.par, nm_).label = lb_
+    except Exception:
+        pass
 add_par(sala, page, 'toggle', 'Guion', 'GENoZilla: el guion prepara FASE1 en cada capitulo', True)
 # v24: monigotes
 add_par(sala, page, 'toggle', 'Monigotes', 'Publico de monigotes (apagado: troncos)', True)
 add_par(sala, page, 'rgb', 'Colormonigote', 'Color de los monigotes', sm.COL_MONIGOTE)
 add_par(sala, page, 'toggle', 'Arcoquietud', 'Arco de quietud a los pies (cuenta Tfila)', False)
-add_par(sala, page, 'float', 'Llegada', 'Paseo: segundos entre dos llegadas', 8.0, 0.0, 120.0, clamp=True)
+for viejo in ('Llegada',):          # v30: el paseo lo lleva su coreografia
+    try:
+        p_ = getattr(sala.par, viejo, None)
+        if p_ is not None:
+            p_.destroy()
+            ok('%s: quitado (el paseo lo lleva su coreografia)' % viejo)
+    except Exception as e:
+        info('%s: no pude quitarlo (%s); ya no se usa' % (viejo, e))
 add_par(sala, page, 'float', 'Ruidopublico', 'Palmadas y toses por segundo y persona', 0.05, 0.0, 2.0, clamp=True)
 add_par(sala, page, 'float', 'Reaccion', 'Con el estrobo, el publico hace x veces mas ruido', 3.0, 0.0, 10.0, clamp=True)
 add_par(sala, page, 'float', 'Volumendrone', 'Volumen del drone (altavoces y sub)', 0.5, 0.0, 2.0, clamp=True)
@@ -999,14 +1054,23 @@ rot_fundido = get_or_make(sala, 'levelTOP', 'rotulo_fundido', 1320, 1200)
 connect(rot_fundido, rot_demo, 0)
 rotulo_ok = setexpr(rot_fundido, 'opacity', TXT % 'rotulo_alfa')
 colocados.append(encima('con_rotulo_demo', rot_fundido, ultimo, 'center', 'bottom', 1540, 440, margen=16))
-colocados.append(encima('con_titulo', fundido, sala.op('con_rotulo_demo'), 'center', 'center', 1540, 520, margen=0))
+# v30: la cabecera de la demo, arriba a la derecha: la seccion, el caso y lo que mide FASE1
+cab_demo, _ = texto_top('cabecera_demo', 1100, 1300, 640, 60, TXT % 'cabecera_texto', 16,
+                        sm.AMBAR, f_rotulo, fondo=(0.02, 0.027, 0.04, 0.72))
+cab_fundido = get_or_make(sala, 'levelTOP', 'cabecera_fundido', 1320, 1300)
+connect(cab_fundido, cab_demo, 0)
+cabecera_ok = setexpr(cab_fundido, 'opacity', TXT % 'cabecera_alfa')
+colocados.append(encima('con_cabecera', cab_fundido, sala.op('con_rotulo_demo'), 'right', 'top', 1540, 480,
+                        margen=12))
+colocados.append(encima('con_titulo', fundido, sala.op('con_cabecera'), 'center', 'center', 1540, 520, margen=0))
 ultimo = sala.op('con_titulo')
-if titulo_ok and rotulo_ok:
-    ok('titulo_demo y rotulo_demo: el titulo de cada capitulo de GENoZilla (2,8 s sobre un velo, con fundido; '
-       '%s) y el rotulo abajo (%s), encima del monitor y en salida_sala' % (f_titulo, f_rotulo))
+if titulo_ok and rotulo_ok and cabecera_ok:
+    ok('titulo_demo, rotulo_demo y cabecera_demo: el titulo de cada caso de las demos (2,8 s sobre un velo, con '
+       'fundido; %s), el rotulo abajo (%s) y la seccion y el caso arriba a la derecha, encima del monitor y en '
+       'salida_sala' % (f_titulo, f_rotulo))
 else:
-    info('titulo_demo / rotulo_demo: no pude enlazar su opacidad (Level TOP: Opacity); revisa titulo_fundido y '
-         'rotulo_fundido')
+    info('titulo_demo / rotulo_demo / cabecera_demo: no pude enlazar su opacidad (Level TOP: Opacity); revisa '
+         'titulo_fundido, rotulo_fundido y cabecera_fundido')
 if all(juego_ok):
     ok('Vista = juego: la sala desde la entrada (720 x 720) y la imagen de FASE1 en grande (560 x 720), lado a lado')
 monitor = get_or_make(sala, 'nullTOP', 'monitor_sala', 1540, 360)
@@ -1217,36 +1281,39 @@ def _prueba(t, m):
     t.check('una luz por foco y por estrobo', all(sala.op('luz_' + e['nombre']) is not None
                                                  for e in por['foco'] + por['estrobo']))
 
-    # 2. las personas
-    sala.par.Personas = 8
+    # 2. las personas (v30: las mueve la coreografia de cada demo; sin FASE1, sm.ensayo)
     c = sm.cfg()
     ev = sm.evitar_de(eq)
-    sm._PLANES.clear()
-    dentro, lejos, quietos, mueven = True, True, 0, 0
-    for k in range(400):
-        tt = 60.0 + 1.5 * k
-        for i, x, z, h, andando in sm.personas(c, tt, ev):
-            dentro = dentro and abs(x) <= hx - 0.3 and abs(z) <= hz
-            lejos = lejos and all(math.hypot(x - p[0], z - p[2]) > 0.9 for p in ev)
-            mueven += 1 if andando else 0
-            quietos += 0 if andando else 1
-    n1 = sm.personas(c, 90.0, ev)
-    sm._PLANES.clear()
-    n2 = sm.personas(c, 90.0, ev)
-    t.check('las personas entran, pasean y se paran dentro de la sala, lejos de la esfera y del estrobo',
-            dentro and lejos and quietos > 0 and mueven > 0 and 0 < len(n1) <= 8,
-            '%d dentro a los 90 s' % len(n1))
-    t.check('sin azar: la misma sala da la misma historia', n1 == n2)
+    T0 = sm.TITULO                      # la coreografia empieza al acabar el titulo
+
+    def recorrido(cc):
+        out = dict(dentro=True, lejos=True, quietos=0, mueven=0, n45=sm.personas(cc, T0 + 45.0, ev),
+                   paradas=[s_[2] for i_ in range(sm.n_personas(cc)) for s_ in sm.plan(cc, i_, 80.0, ev)
+                            if s_[4] and not s_[5]],
+                   p3=sm.posicion(cc, 3, T0 + 5.0, ev), entradas=[])
+        for k in range(160):
+            for i_, x, z, h, andando in sm.personas(cc, 0.5 * k, ev):
+                out['dentro'] = out['dentro'] and abs(x) <= hx - 0.3 and abs(z) <= hz
+                out['lejos'] = out['lejos'] and all(math.hypot(x - p[0], z - p[2]) > 0.9 for p in ev)
+                out['mueven'] += 1 if andando else 0
+                out['quietos'] += 0 if andando else 1
+        for i_ in range(sm.n_personas(cc)):
+            tr = sm.plan(cc, i_, 80.0, ev)
+            out['entradas'] += [s_ for k, s_ in enumerate(tr) if k > 0 and s_[4] and not tr[k - 1][4]]
+        return out
+    r1 = sm.ensayo(c, 'paseo', 80.0, recorrido)
+    r2 = sm.ensayo(c, 'paseo', 80.0, recorrido)
+    t.check('v30: paseo: las personas entran, pasean y se paran dentro de la sala, lejos de la esfera y del estrobo',
+            r1['dentro'] and r1['lejos'] and r1['quietos'] > 0 and r1['mueven'] > 0 and 0 < len(r1['n45']) <= 8,
+            '%d dentro a los 45 s' % len(r1['n45']))
+    t.check('sin azar: la misma sala da la misma historia', r1['n45'] == r2['n45'])
     zx, zz = sm.zona(c)
-    paradas = [q for i in range(8) for s in sm.plan(c, i, 600.0, ev) if s[4] and not s[5]
-               for q in (s[2],)]
     t.check('el publico se para en el suelo de la sala, lejos de las paredes (v8: en toda la sala)',
-            paradas and all(abs(x) <= zx + 1e-9 and abs(z) <= zz + 1e-9 for x, z in paradas),
-            '%d paradas' % len(paradas))
-    p0 = sm.posicion(c, 0, 0.0, ev)
-    entradas = [s for k, s in enumerate(sm.plan(c, 3, 300.0, ev)) if s[4] and not sm.plan(c, 3, 300.0, ev)[k - 1][4]]
+            r1['paradas'] and all(abs(x) <= zx + 1e-9 and abs(z) <= zz + 1e-9 for x, z in r1['paradas']),
+            '%d paradas' % len(r1['paradas']))
     t.check('nadie esta dentro antes de llegar; se entra por la puerta',
-            p0 is None and entradas and all(s[2] == (0.0, hz) for s in entradas), '%d entradas' % len(entradas))
+            r1['p3'] is None and r1['entradas'] and all(s_[2] == (0.0, hz) for s_ in r1['entradas']),
+            '%d entradas' % len(r1['entradas']))
 
     # 3. lo que oye el microfono
     import numpy as np
@@ -1390,52 +1457,55 @@ def _prueba(t, m):
             and math.tan(fv / 2) / sm.CENITAL_ASPECTO * cam['y'] >= hz + abs(cam['z']) - 1e-6,
             '%.0f grados en horizontal desde %.1f m' % (sm.fov_cenital(c), cam['y']))
     sala.par.Vista = 'visitante'
-    sala.par.Personas = 4
     sala.par.Monigotes = False
     c = sm.cfg()
-    ps = sm.personas(c, 120.0, ev)
-    cue = sm._filas_personas(c, eq, 120.0)
+
+    def troncos(cc):
+        ps_ = sm.personas(cc, T0 + 45.0, ev)
+        return ps_, sm._filas_personas(cc, eq, T0 + 45.0)
+    ps, cue = sm.ensayo(c, 'paseo', T0 + 45.0, troncos)
+    sm._PIEZAS['clave'] = None
     t.check('v5: sin Monigotes, el publico es un tronco por persona, de toda su altura (sin cabeza)',
             len(cue) == len(ps) > 0 and sala.op('cabezas') is None
             and all(abs(q[7] - p[3]) < 1e-9 for q, p in zip(cue, ps)))
     sala.par.Monigotes = True
-    # v5: las demos de visita
-    sala.par.Personas = 8
-    for demo in sm.DEMOS:
-        if demo == 'genozilla':         # v24: la mueve su coreografia (se prueba aparte, abajo)
-            continue
-        sala.par.Demo = demo
-        c = sm.cfg()
-        sm._PLANES.clear()
-        dentro, lejos, maximo = True, True, 0
-        for k in range(240):
-            ps = sm.personas(c, 1.0 + 2.5 * k, ev)
-            maximo = max(maximo, len(ps))
-            for i, x, z, h, andando in ps:
+    # v30: las demos de la sala (las que no necesitan FASE1 para poner a su gente)
+    t.check('v30: Demo: paseo, probabilidad, huella, llena, genozilla y vacia; cada una con su seccion',
+            sm.DEMOS == ['paseo', 'probabilidad', 'huella', 'llena', 'genozilla', 'vacia']
+            and all(d_ in sm.SECCIONES for d_ in sm.DEMOS[:-1]) and 'vacia' not in sm.SECCIONES
+            and [len(sm.casos(d_)) for d_ in sm.DEMOS[:-1]] == [1, 3, 2, 1, 13])
+    sala.par.Personas = 18
+    c = sm.cfg()
+
+    def visita(cc):
+        dentro, lejos, maximo, juntos = True, True, 0, 0
+        for k in range(int(cc['_hasta'] / 0.5)):
+            ps_ = sm.personas(cc, 0.5 * k, ev)
+            maximo = max(maximo, len(ps_))
+            ids = set(q[0] for q in ps_)
+            juntos = max(juntos, len(ids & {4, 5, 6, 7}))
+            for i_, x, z, h, andando in ps_:
                 dentro = dentro and abs(x) <= hx - 0.3 and abs(z) <= hz
                 lejos = lejos and all(math.hypot(x - p[0], z - p[2]) > 0.9 for p in ev)
+        return dentro, lejos, maximo, juntos, len(sm.personas(cc, cc['_hasta'] - 0.5, ev))
+    for demo, hasta in (('paseo', 82.0), ('huella', 26.0), ('llena', 92.0), ('vacia', 30.0)):
+        c_ = dict(c, _hasta=hasta)
         if demo == 'vacia':
+            sala.par.Demo = 'vacia'
+            c_ = dict(sm.cfg(), _hasta=hasta)
+            maximo = max(len(sm.personas(c_, 1.0 + 2.5 * k, ev)) for k in range(20))
             t.check('demo vacia: nadie en la sala', maximo == 0)
             continue
+        dentro, lejos, maximo, juntos, al_final = sm.ensayo(c_, demo, hasta, visita)
         t.check('demo %s: el publico dentro de la sala y lejos de la esfera y del estrobo' % demo,
                 dentro and lejos and maximo > 0, 'hasta %d a la vez' % maximo)
-    sala.par.Demo = 'grupo'
-    c = sm.cfg()
-    sm._PLANES.clear()
-    ps = sm.personas(c, 40.0, ev)
-    t.check('demo grupo: a los 40 s estan todos en corro ante la esfera',
-            len(ps) == 8 and all(abs(math.hypot(x - esf['x'], z - esf['z']) - sm.CORRO) < 1.2
-                                 for _, x, z, _, _ in ps), '%d en la sala' % len(ps))
-    sala.par.Demo = 'goteo'
-    c = sm.cfg()
-    sm._PLANES.clear()
-    t.check('demo goteo: de uno en uno', max(len(sm.personas(c, 1.0 + 2.0 * k, ev)) for k in range(300)) <= 2)
-    sala.par.Demo = 'llena'
-    c = sm.cfg()
-    sm._PLANES.clear()
-    t.check('demo llena: a los 40 s estan todos', len(sm.personas(c, 40.0, ev)) == 8)
+        if demo == 'paseo':
+            t.check('v30: paseo: un grupo de cuatro entra junto, y al acabar la sala se ha vaciado',
+                    juntos == 4 and al_final == 0, 'grupo %d, al final %d' % (juntos, al_final))
+        elif demo == 'llena':
+            t.check('v30: llena: Personas (18) en la sala a la vez casi todos, y al acabar se vacia',
+                    maximo >= 15 and al_final == 0, 'hasta %d a la vez, al final %d' % (maximo, al_final))
     sala.par.Demo = 'paseo'
-    sala.par.Personas = 4
     c = sm.cfg()
     sala.par.Modoluz = 'prueba'
     sala.par.Bruma = 0.5
@@ -1526,6 +1596,7 @@ def _prueba(t, m):
     prueba_monigotes(t, m, eq)
     prueba_alimentar(t, m)
     prueba_genozilla(t, m)
+    prueba_demos(t, m)
 
 
 def prueba_alimentar(t, m):
@@ -1548,13 +1619,17 @@ def prueba_alimentar(t, m):
         for nm in ('Marcapublico', 'Marcajugador'):
             F.poner(nm, True)
         sala.par.Demo = 'llena'
-        sala.par.Personas = 8
+        sala.par.Personas = 10
         sala.par.Activa = True
         sala.par.Alimentar = True
         c = sm.cfg()
         ev = sm.evitar_de(sm.equipos())
-        dentro = sm.personas(c, 40.0, ev)
-        si = sm.alimentar_tick(c, F, 40.0)
+
+        def alimenta(cc):               # v30: la gente de la sala llena (sm.ensayo), sin el director
+            sm._GZ['activo'] = False
+            d_ = sm.personas(cc, 40.0, ev)
+            return d_, sm.alimentar_tick(cc, F, 40.0)
+        dentro, si = sm.ensayo(c, 'llena', 40.0, alimenta)
         filas = sm._tabla_de(tb)[1:]
         t.check('v27: Alimentar: en la demo llena, FASE1 pasa a Fuente = simulada y la tabla sala_personas '
                 'lleva a cada persona de la sala',
@@ -1588,17 +1663,19 @@ def prueba_alimentar(t, m):
 
 
 def prueba_monigotes(t, m, eq):
-    """v24: los monigotes, vistos por la camara cenital como los troncos."""
-    import numpy as np
+    """v24: los monigotes, vistos por la camara cenital como los troncos (v30: con la gente
+    del paseo, sm.ensayo)."""
     sala.par.Demo = 'paseo'
-    sala.par.Personas = 8
     sala.par.Monigotes = True
-    c = sm.cfg()
+    sm.ensayo(sm.cfg(), 'paseo', 82.0, lambda cc: _prueba_monigotes(t, m, eq, cc))
+
+
+def _prueba_monigotes(t, m, eq, c):
+    import numpy as np
     ev = sm.evitar_de(eq)
-    sm._PLANES.clear()
     quietos, peor_h, fuera, sexo = 0, 0.0, 0, True
     for k in range(30):
-        tt = 60.0 + 7.0 * k
+        tt = 8.0 + 2.4 * k
         for i in range(8):
             e = sm.estado_persona(c, i, tt, ev)
             if e is None or e['andando']:
@@ -1622,7 +1699,7 @@ def prueba_monigotes(t, m, eq):
     x0, z0 = sm.de_suelo(c1, 0.0, 0.0)
     bien, cuentas = True, []
     for k in range(20):
-        tt = 60.0 + 11.0 * k
+        tt = 6.0 + 3.6 * k
         dentro, lejos = [], 0
         for i, x, z, h, _ in sm.personas(c, tt, ev):
             xf, yf = sm.a_suelo(c1, x, z)
@@ -1654,7 +1731,7 @@ def prueba_monigotes(t, m, eq):
             % ' '.join('%d/%d/%d' % q for q in cuentas[:8]))
     andando, parados = [], []
     for k in range(200):
-        tt = 60.0 + 0.5 * k
+        tt = 3.0 + 0.35 * k
         for i in range(8):
             e = sm.estado_persona(c, i, tt, ev)
             if e is None:
@@ -1674,7 +1751,7 @@ def prueba_monigotes(t, m, eq):
             bb is not None and all(abs(v - w) < 0.02 for v, w in zip(bb, (-0.5, 0.5) * 3)),
             'medidas %s' % (None if bb is None else ['%.3f' % v for v in bb]))
     sm._PIEZAS['clave'] = None
-    con = sm.piezas_personas(dict(c, arco_quietud=True), eq, 120.0, t_arco=4.0)
+    con = sm.piezas_personas(dict(c, arco_quietud=True), eq, sm.TITULO + 48.0, t_arco=4.0)
     sm._PIEZAS['clave'] = None
     t.check('v24: los monigotes y el arco, instanciados (personas, personas_bolas, personas_conos, arcos) y en la '
             'camara cenital (sin el arco)',
@@ -1683,7 +1760,7 @@ def prueba_monigotes(t, m, eq):
             and all(n_ in str(sala.op('render_cenital').par.geometry.val).split()
                     for n_ in ('personas', 'personas_bolas', 'personas_conos'))
             and 'arcos' not in str(sala.op('render_cenital').par.geometry.val).split() and con['arcos'],
-            '%d piezas de arco a los 120 s' % len(con['arcos']))
+            '%d piezas de arco a los 50 s del paseo' % len(con['arcos']))
 
 
 def prueba_genozilla(t, m):
@@ -1755,7 +1832,7 @@ def _prueba_genozilla(t, m, copy, caps, motor_):
             '' if despues == antes else 'antes %s, despues %s' % (antes, despues))
     g = dict(sm._GZ)
     try:
-        sm._GZ.update(activo=True, cap=5, t_titulo=100.0, t0=100.0 + sm.TITULO)
+        sm._GZ.update(activo=True, cap=5, demo='genozilla', t_titulo=100.0, t0=100.0 + sm.TITULO)
         alfas = [sm.alfa_titulo(100.0 + u) for u in (0.1, 1.0, 2.6, 3.0)]
         rot = sm.rotulo_texto(100.0 + sm.TITULO + 3.5, F)
         ante = sm.titulo_texto('ante')
@@ -1776,6 +1853,100 @@ def _prueba_genozilla(t, m, copy, caps, motor_):
             and sala.op('monitor_sala').inputs and sala.op('monitor_sala').inputs[0] == sala.op('con_titulo'))
 
 
+def prueba_demos(t, m):
+    """v30: las demos de secciones y casos en tiempo simulado, con FASE1 de verdad: cada
+    caso hace lo que cuenta su rotulo; al salir, FASE1 como estaba. Y la camara que sigue
+    a las celdas sin cambiar de altura."""
+    import copy
+    motor_ = fase1.op('motor')
+    Worig = copy.deepcopy(motor_.fetch('W', None))
+    compuesto = False
+    try:
+        compuesto = componer_mundo(m)
+        _prueba_demos(t, m, copy, motor_)
+    finally:
+        if compuesto:
+            motor_.store('W', Worig)
+            for k_ in ('inst', 'tiles', 'frame'):
+                m._CACHE[k_] = None
+        m.foco_camara(None)
+        m._CACHE.pop('foco_dir', None)
+
+
+def _prueba_demos(t, m, copy, motor_):
+    F = sm.Fase1(fase1)
+    nombres = sorted(set(sm.PARS_CAPITULO) | set(sm.PARS_SECCION))
+    sala.par.Personas = 14
+    for demo in ('paseo', 'probabilidad', 'huella', 'llena'):
+        W0 = copy.deepcopy(motor_.fetch('W', None))
+        antes = dict((nm, F.par(nm)) for nm in nombres if F.par(nm) is not None)
+        vista0 = str(sala.par.Vista.eval())
+        sala.par.Demo = demo
+        res = sm.simular_demo(sm.cfg(), F, demo=demo)
+        cs = sm.casos(demo)
+        for k, bien, que in res:
+            t.check('v30: demo %s, caso %d %s' % (demo, k + 1, cs[k]['nombre']), bien, que)
+        W1 = motor_.fetch('W', None)
+        despues = dict((nm, F.par(nm)) for nm in antes)
+        t.check('v30: demo %s: se juegan sus %d casos y al salir FASE1 queda como estaba (el mundo, los parametros '
+                'y la Vista de la sala)' % (demo, len(cs)),
+                len(res) == len(cs) and W1 == W0 and despues == antes and str(sala.par.Vista.eval()) == vista0
+                and sm._guardado() is None,
+                '' if despues == antes else 'antes %s, despues %s' % (
+                    dict((k_, v) for k_, v in antes.items() if despues.get(k_) != v),
+                    dict((k_, v) for k_, v in despues.items() if antes.get(k_) != v)))
+    # el titulo y la cabecera de cada seccion y caso
+    g = dict(sm._GZ)
+    try:
+        sm._GZ.update(activo=True, cap=1, demo='probabilidad', t_titulo=100.0, t0=100.0 + sm.TITULO,
+                      reg=dict(p_ahora=0.43, p_control=0.2, llueve=dict(testigo=[10, 4], control=[10, 2])),
+                      cabecera=None)
+        ante = sm.titulo_texto('ante')
+        nom = sm.titulo_texto('nombre')
+        cab = sm.cabecera_lineas(F)
+        sm._GZ.update(cap=0, demo='paseo')
+        ante1 = sm.titulo_texto('ante')
+    finally:
+        sm._GZ.clear()
+        sm._GZ.update(g)
+    t.check('v30: cada caso con su titulo (la seccion y el caso) y la cabecera arriba a la derecha con la seccion, '
+            'el caso y la probabilidad medida',
+            ante == 'STRATOS · 2 · ESTRATO HUMANO · CASO 2 / 3' and nom == 'Una persona quieta'
+            and ante1 == 'STRATOS · 1 · PASEO' and cab.startswith('2 · ESTRATO HUMANO') and 'P 0,43' in cab
+            and 'prenden 4/10' in cab and sala.op('cabecera_demo') is not None
+            and sala.op('con_titulo').inputs and sala.op('con_titulo').inputs[1] == sala.op('con_cabecera'),
+            '%s | %s | %s' % (ante, ante1, cab.replace(chr(10), ' / ')))
+    # v30 (motor v140): la camara sigue a las celdas, a la misma distancia (con un reloj a mano)
+    m._CACHE.pop('foco_dir', None)
+    giro_p = m._giro_planeta()
+    dots = [(m._dot(m._norm(m.world_dir(m.NORMALS[i], *giro_p)), m.CAM_DIR), i) for i in range(m.N)]
+    lejos = min((d_, i) for d_, i in dots if d_ > 0.35)[1]      # a unos 65 grados del frente
+    now, dt = 5000.0, 1.0 / 30.0
+    for k in range(240):
+        m.foco_camara([lejos], t=now)
+        now += dt
+        cur = m._dir_foco(dt, now)
+    obj = m.foco_objetivo(now)
+    ang = math.degrees(math.acos(max(-1.0, min(1.0, m._dot(cur, obj)))))
+    giro = math.degrees(math.acos(max(-1.0, min(1.0, m._dot(cur, m.CAM_DIR)))))
+    m._CACHE.pop('cam_frame', None)
+    st = m.camera_state()
+    dist = math.sqrt(sum(v * v for v in st['pos']))
+    t.check('v30 (motor v140): con foco, la camara de globo gira hacia la celda (a menos de 3 grados en 8 s; como '
+            'mucho %g grados del frente) a la misma distancia del planeta' % m.FOCO_MAX,
+            ang < 3.0 and 5.0 < giro <= m.FOCO_MAX + 0.5
+            and (st['w'] > 0.0 or st['wr'] > 0.0 or abs(dist - st['d']) < 1e-6),
+            'a %.1f grados del objetivo, %.1f del frente, distancia %.3f (d %.3f)' % (ang, giro, dist, st['d']))
+    m.foco_camara(None)
+    for k in range(400):
+        now += dt
+        cur = m._dir_foco(dt, now)
+    giro = math.degrees(math.acos(max(-1.0, min(1.0, m._dot(cur, m.CAM_DIR)))))
+    t.check('v30 (motor v140): sin foco, la camara vuelve a su sitio', giro < 1.0, '%.2f grados' % giro)
+    m._CACHE.pop('foco_dir', None)
+    m._CACHE.pop('cam_frame', None)
+
+
 COMPRUEBA = ['marca de jugador en la celda de cada persona', 'ocupacion en las celdas con gente y una corona',
              'un brote del mal y el monstruo en forma grande', 'el brote crece y desborda a sus vecinas',
              'rescatado: geologia o arquitectura con su ocupacion', 'cae (acum 0) y la zanja queda fijada',
@@ -1791,7 +1962,8 @@ def distancia_xz(a, b):
 run_test(fase1, prueba)
 print('  Ahora: mira salida_sala (todo en una imagen; Vista = entrada, visitante, orbita,')
 print('  cenital o juego). Modoluz = prueba recorre la luz en un minuto; Bruma, los haces en el aire.')
-print('  Demo = genozilla: el publico juega a GENoZilla capitulo a capitulo (Vista = juego).')
+print('  Demo: 1 paseo, 2 probabilidad (estrato humano), 3 huella, 4 llena, 5 genozilla: cada una con')
+print('  sus casos y su titulo (Vista = juego); la camara de FASE1 sigue a las celdas (Siguecamara).')
 print('  Palmada: la oye FASE1. Personas y Ruidopublico para mas o menos publico.')
 print('  ' + sm.legend())
 print('=' * 66)
