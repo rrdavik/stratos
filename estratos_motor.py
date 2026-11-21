@@ -318,6 +318,14 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v137 (comun v99, fase 41): HEMISFERIO. Con Hemisferio las mismas N
+#                 celdas del rango de notas se reparten solo por la cara visible (set_grid con
+#                 hemi = Anchoangular: el anillo de 12 pasa de 30 a 15 grados por celda, no
+#                 se cierra por detras y la cara oculta no tiene celdas). El planeta no gira
+#                 (giro_fijo, giro_factor 0, lon_central 0): Trumpzilla y Godzilla nunca
+#                 salen de la cara visible, aparecen por un borde lateral y buscan donde
+#                 suenan los secuenciadores (calor_pulso en objetivo: Pesopulso, Ventanapulso).
+#                 Sin Hemisferio, todo como en el motor v136.
 #                 Motor v136: LAS GEOMETRIAS SIN INSTANCIAS NO SE DIBUJAN. Cada geometria
 #                 mod_* dibujaba su fila de relleno aunque el modelo no estuviera en el
 #                 mundo: cientos de dibujados y de preparaciones en el render (15-20 ms
@@ -346,7 +354,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v136'
+MOTOR_VERSION = 'motor v137'
 
 import math
 import time as _time
@@ -600,6 +608,8 @@ DEFAULT_CFG = dict(
     # fase 40: Godzilla, el monstruo de la creacion
     godzilla=1, godzilla_sala=0, t_vacia=15.0, mal_godzilla=1, pasos_lucha=8, tregua=16, alto_godzilla=0.8,
     emocion_godzilla='auto',
+    # fase 41: Hemisferio (el juego solo en la cara visible)
+    hemisferio=0, peso_pulso=1.0, ventana_pulso=8,
 )
 
 
@@ -616,8 +626,11 @@ DEFAULT_CFG = dict(
 # Vecinas: las dos del anillo, las del anillo contiguo cuyo arco se solapa
 # y, en los anillos extremos, el polo. El polo: todo su anillo.
 
-def ring_layout(lo, hi):
+def ring_layout(lo, hi, hemi=0.0):
     """Reticula en anillos. lo = polo sur, hi = polo norte (notas MIDI).
+    Motor v137 (fase 41): con hemi > 0 (grados de ancho, Anchoangular) los anillos no
+    dan la vuelta: las celdas se reparten en la franja de longitud +-hemi/2 y la cara
+    oculta no tiene celdas.
     Entre medias, un anillo por octava: la clase de nota es el meridiano.
     Los anillos incompletos (el primero y el ultimo, si el rango no empieza
     o acaba en do) reparten sus celdas por igual alrededor.
@@ -643,7 +656,10 @@ def ring_layout(lo, hi):
         phi = math.radians(-90.0 + cap + band * (j + 0.5))
         m = len(cells)
         for q, k in enumerate(cells):
-            if m == 12:
+            if hemi > 0:                # fase 41: de un borde de la cara visible al otro
+                f = ((lo + k) % 12 + 0.5) / 12.0 if m == 12 else (q + 0.5) / m
+                th = math.radians(hemi) * (f - 0.5)
+            elif m == 12:
                 th = 2.0 * math.pi * ((lo + k) % 12) / 12.0
             else:
                 th = 2.0 * math.pi * (q + 0.5) / m
@@ -652,7 +668,7 @@ def ring_layout(lo, hi):
     return normals, ring_of, rings, band, cap
 
 
-GRID = dict(lo=None, hi=None, mode=0)
+GRID = dict(lo=None, hi=None, mode=0, hemi=0.0)      # hemi: 0 = esfera entera; > 0 = ancho de la cara visible (fase 41)
 NORMALS = []
 SIZE_EW = []          # ancho este-oeste de cada celda (rad, esfera unidad)
 SIZE_NS = []          # alto norte-sur (rad)
@@ -664,25 +680,32 @@ POLE_N = 0
 NOTA_MIN, NOTA_MAX = 24, 108        # do1 y do8: limites de los polos
 
 
-def _arc_overlap(a, wa, b, wb):
+def _arc_overlap(a, wa, b, wb, abierto=False):
+    if abierto:                         # fase 41: la franja no da la vuelta
+        return abs(a - b) < wa + wb - 1e-6
     d = abs((a - b + math.pi) % (2 * math.pi) - math.pi)
     return d < wa + wb - 1e-6
 
 
-def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0):
+HEMI_ANCHO_MIN, HEMI_ANCHO_MAX = 30.0, 180.0
+
+
+def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0, hemi=0.0):
     """Rehace la reticula para el rango de notas [lo, hi]. Devuelve True si
-    ha cambiado la geometria (el mundo hay que vaciarlo)."""
+    ha cambiado la geometria (el mundo hay que vaciarlo). Motor v137 (fase 41): hemi > 0
+    reparte las mismas N celdas solo por la cara visible (ancho en grados, de 30 a 180)."""
     global N, NORMALS, SIZE_EW, SIZE_NS, NEIGH, POLE_S, POLE_N, RING_OF, RINGS
     lo = max(NOTA_MIN, min(NOTA_MAX - 2, int(lo)))
     hi = max(lo + 2, min(NOTA_MAX, int(hi)))
     GRID['mode'] = int(mode)
-    if GRID['lo'] == lo and GRID['hi'] == hi:
+    hemi = max(HEMI_ANCHO_MIN, min(HEMI_ANCHO_MAX, float(hemi))) if hemi else 0.0
+    if GRID['lo'] == lo and GRID['hi'] == hi and GRID.get('hemi', 0.0) == hemi:
         return False
-    GRID['lo'], GRID['hi'] = lo, hi
+    GRID['lo'], GRID['hi'], GRID['hemi'] = lo, hi, hemi
     K = hi - lo
     N = K + 1
     POLE_S, POLE_N = 0, K
-    NORMALS, RING_OF, RINGS, band, cap = ring_layout(lo, hi)
+    NORMALS, RING_OF, RINGS, band, cap = ring_layout(lo, hi, hemi)
     nb = [[] for _ in range(N)]
 
     def link(a, b):
@@ -699,7 +722,7 @@ def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0):
     for j, cells in enumerate(RINGS):
         m = len(cells)
         for q, k in enumerate(cells):
-            if m > 1:
+            if m > 1 and (not hemi or q + 1 < m):       # fase 41: el anillo no se cierra por detras
                 link(k, cells[(q + 1) % m])
         if j + 1 < len(RINGS):
             nxt = RINGS[j + 1]
@@ -711,11 +734,16 @@ def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0):
                 for b in nxt:
                     c = (lo + b) % 12
                     for o in offs:
-                        link(b, pc_a[(c + o) % 12])
+                        if not hemi or 0 <= c + o < 12:
+                            link(b, pc_a[(c + o) % 12])
             else:
                 for a in cells:
                     for b in nxt:
-                        if _arc_overlap(theta(a), math.pi / m, theta(b), math.pi / len(nxt)):
+                        if hemi:
+                            wa, wb = math.radians(hemi) / (2.0 * m), math.radians(hemi) / (2.0 * len(nxt))
+                            if _arc_overlap(theta(a), wa, theta(b), wb, True):
+                                link(a, b)
+                        elif _arc_overlap(theta(a), math.pi / m, theta(b), math.pi / len(nxt)):
                             link(a, b)
     for k in RINGS[0]:
         link(POLE_S, k)
@@ -731,9 +759,21 @@ def set_grid(lo=POLO_SUR_DEF, hi=POLO_NORTE_DEF, mode=0):
             continue
         m = len(RINGS[RING_OF[k]])
         phi = math.asin(max(-1.0, min(1.0, NORMALS[k][1])))
-        SIZE_EW.append(2.0 * math.pi * math.cos(phi) / m)
+        SIZE_EW.append((math.radians(hemi) if hemi else 2.0 * math.pi) * math.cos(phi) / m)
         SIZE_NS.append(math.radians(band))
     return True
+
+
+def grid_key():
+    """La clave de la reticula en el mundo guardado: [lo, hi] (la esfera de siempre) o, con
+    Hemisferio (fase 41), [lo, hi, ancho de la cara visible]."""
+    k = [GRID['lo'], GRID['hi']]
+    return k + [GRID['hemi']] if GRID.get('hemi') else k
+
+
+def hemisferio():
+    """Motor v137 (fase 41): True si la reticula solo cubre la cara visible."""
+    return bool(GRID.get('hemi'))
 
 
 def is_pole(i):
@@ -7582,7 +7622,7 @@ def clusters(W, cfg):
     """Formaciones fundidas (se guarda el ultimo calculo: mismo mundo, mismo
     resultado; no lo modifiques)."""
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), cfg['umbral_vecindad'],
-             cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'],
+             cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'], GRID['hemi'],
              tuple(W['sp']) if cfg['nivel'] >= 39 and mal_propio(W, cfg) else None,
              tuple(especies_lista(W, cfg)) if 'tema_c' in W and cfg['nivel'] >= 11 else None)
     if _CLUSTERS.get('clave') != clave:
@@ -8042,7 +8082,7 @@ def _marco(i, giro=0.0, incl=0.0, rumbo=0.0):
     """(X, Y, Z, (rx, ry, rz)) de una pieza en la celda i (ver _ejes). Se
     guardan: el giro va en multiplos de 30 y la inclinacion, a los saltos del
     stop-motion, asi que se repiten."""
-    clave = (GRID['lo'], GRID['hi'], i, giro, incl, rumbo)
+    clave = (GRID['lo'], GRID['hi'], GRID['hemi'], i, giro, incl, rumbo)
     v = _MARCOS.get(clave)
     if v is None:
         if len(_MARCOS) > 50000:
@@ -8054,7 +8094,7 @@ def _marco(i, giro=0.0, incl=0.0, rumbo=0.0):
 
 def _marco_puente(i, j):
     """Marco del puente de la celda i hacia su vecina j: Z hacia j, Y la normal."""
-    clave = (GRID['lo'], GRID['hi'], i, 'puente', j)
+    clave = (GRID['lo'], GRID['hi'], GRID['hemi'], i, 'puente', j)
     v = _MARCOS.get(clave)
     if v is None:
         n = normal_i(i)
@@ -8082,7 +8122,7 @@ def _huecos_dosel(i, mascara, bases):
             r = (_len(a) + _len(b) + _len(c)) / 3.0
             nc = _norm(g)
             pc = _mul(nc, r)
-            clave = (GRID['lo'], GRID['hi'], 'hueco', tri)
+            clave = (GRID['lo'], GRID['hi'], GRID['hemi'], 'hueco', tri)
             ej = _MARCOS.get(clave)
             if ej is None:
                 d = _hacia(nc, pc, a)
@@ -8507,7 +8547,7 @@ def _firma_piel(W, cfg):
     fotograma: el mundo (Resetmundo), el fin de ciclo (Forzarciclo), el tema, la
     reticula, la biblioteca y cualquier parametro de la pagina Fase11."""
     f11 = tuple((k, cfg.get(k)) for k in PIEL_CFG)
-    return (id(W), W.get('gen'), len(W.get('shells', ())), GRID['lo'], GRID['hi'], cfg['nivel'], cfg.get('tema'),
+    return (id(W), W.get('gen'), len(W.get('shells', ())), GRID['lo'], GRID['hi'], GRID['hemi'], cfg['nivel'], cfg.get('tema'),
             cfg.get('tema_auto'),
             id(cfg.get('catalogo')), _clave_biblio(cfg), f11, bool(cfg.get('turnos', 1)))
 
@@ -9168,7 +9208,7 @@ def info_ciudad(W, cfg, i, cl=None, clave_cfg=None):
     mut = W['mut'][i] if W['mut'][i] >= 0 else mutacion_actual(W, cfg)
     clave = (i, W['occ'][i], W['own'][i], W['par'][i] >= 0, W['vel'][i], W['leng'][i], mut >= 0.25, capital,
              round(W['vig'][i], 2),
-             clave_cfg or (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi']))
+             clave_cfg or (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi'], GRID['hemi']))
     v = _INFO_CIU.get(clave)
     if v is None:
         if len(_INFO_CIU) > 4000:
@@ -10968,7 +11008,7 @@ def _ciudad_ctx(W, cfg, now, cl, tf, bases, paso):
     bq = beat_stop(W, cfg) if tiempo else 0.0
     respaldo = doce and cfg.get('respaldo', 0)
     info = {}
-    ck = (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi'])
+    ck = (tuple(cfg.get(k) for k in _CFG_CIU), id(cfg.get('catalogo')), GRID['lo'], GRID['hi'], GRID['hemi'])
     malp = cfg['nivel'] >= 39 and mal_propio(W, cfg)      # fase 39: el mal se dibuja aparte
     tema = tema_de(cfg)
     for i in range(N):
@@ -11238,7 +11278,7 @@ def _ruido_crestas(np, D, octavas=4, f0=6.0):
 def _rejilla(np):
     """Direcciones de cada texel del mapa (fila 0 = polo sur, columna 0 = -180),
     la celda mas cercana de cada uno y el ruido de crestas. Una por reticula."""
-    clave = (GRID['lo'], GRID['hi'])
+    clave = (GRID['lo'], GRID['hi'], GRID['hemi'])
     g = _TERRENO.get('rejilla')
     if g is not None and g[0] == clave:
         return g[1]
@@ -11341,14 +11381,14 @@ def _rasgos_tema(W, cfg, cl=None):
     if cfg['nivel'] < 11 or (tema_de(cfg) != 'naturaleza' and not cfg.get('oceano')):
         return [], dict(cordilleras=0, montes=0, ejes=[], volcanes=[], islas=0, archipielagos=0)
     if tema_de(cfg) != 'naturaleza':     # motor v120: la ciudad y la industria, sobre sus muelles
-        clave = ('muelles', tuple(W['occ']), tuple(bool(o) for o in W['own']), GRID['lo'], GRID['hi'])
+        clave = ('muelles', tuple(W['occ']), tuple(bool(o) for o in W['own']), GRID['lo'], GRID['hi'], GRID['hemi'])
         v = _TERRENO.get('rasgos')
         if v is not None and v[0] == clave:
             return v[1]
         v = _muelles(W)
         _TERRENO['rasgos'] = (clave, v)
         return v
-    clave = ('nat', tuple(W['occ']), tuple(W['own']), tuple(W['par']), GRID['lo'], GRID['hi'],
+    clave = ('nat', tuple(W['occ']), tuple(W['own']), tuple(W['par']), GRID['lo'], GRID['hi'], GRID['hemi'],
              cfg.get('oceano', 0), cfg.get('volcanes', 0.0), cfg['caos'],
              tuple(W['vel']) if cfg.get('volcanes', 0.0) > 0 else None, cfg['umbral_vecindad'], cfg['peso_vecina'], cfg['min_cluster'], cfg['th_fusion'], cfg['th_branch'],
              cfg['sat_size'], cfg['umbral_monte'], cfg['altura_monte'], limit(cfg), cfg['seed_frac'],
@@ -11603,7 +11643,7 @@ def _forma(clave, hacer):
 def _isla(np, rej, c, H, k, islotes):
     """El parche de la isla de la celda c: meseta de alto H con playa; la costa la
     ondula el ruido y, con 'islotes', hay islotes en el anillo de alrededor."""
-    filas, cols, f = _forma(('isla', GRID['lo'], GRID['hi'], c, k, islotes), lambda: _isla_forma(np, rej, c, k, islotes))
+    filas, cols, f = _forma(('isla', GRID['lo'], GRID['hi'], GRID['hemi'], c, k, islotes), lambda: _isla_forma(np, rej, c, k, islotes))
     return filas, cols, H * f, float(H)
 
 
@@ -11630,7 +11670,7 @@ def _muelle(np, rej, c, H, k):
     """Motor v120: el parche del muelle de la celda c (ciudad e industria): una meseta de
     alto H con la planta casi cuadrada de la celda (una superelipse) y el borde a pico,
     como un malecon; la costa apenas ondula."""
-    filas, cols, f = _forma(('muelle', GRID['lo'], GRID['hi'], c, k), lambda: _muelle_forma(np, rej, c, k))
+    filas, cols, f = _forma(('muelle', GRID['lo'], GRID['hi'], GRID['hemi'], c, k), lambda: _muelle_forma(np, rej, c, k))
     return filas, cols, H * f, float(H)
 
 
@@ -11651,7 +11691,7 @@ def _muelle_forma(np, rej, c, k):
 
 def _istmo(np, rej, a, b, H):
     """El parche del istmo que une las islas de a y b."""
-    filas, cols, f = _forma(('istmo', GRID['lo'], GRID['hi'], a, b), lambda: _istmo_forma(np, rej, a, b))
+    filas, cols, f = _forma(('istmo', GRID['lo'], GRID['hi'], GRID['hemi'], a, b), lambda: _istmo_forma(np, rej, a, b))
     return filas, cols, H * f, float(H)
 
 
@@ -11726,7 +11766,7 @@ def _pintar_forma(np, rej, n, e, t, hx, hz, perfil):
 def _cresta(np, rej, a, b, ha, hb, silla):
     """El parche de la cresta de a a b: el alto baja del de cada cumbre al
     collado (silla x la media) y la anchura es la de media celda."""
-    filas, cols, u, sf, perfil = _forma(('cresta', GRID['lo'], GRID['hi'], a, b, silla),
+    filas, cols, u, sf, perfil = _forma(('cresta', GRID['lo'], GRID['hi'], GRID['hemi'], a, b, silla),
                                         lambda: _cresta_forma(np, rej, a, b, silla))
     H = (ha + (hb - ha) * u) * sf
     return filas, cols, H * perfil, H
@@ -11869,7 +11909,7 @@ def _capas(np, rej, rasgos):
     ellas. Deja en _TERRENO['capas_cajas'] las cajas tocadas ([(r0, r1,
     columnas)], 'todo' o []) y en _TERRENO['capas_cambian'] los rasgos que han
     cambiado. No se pueden modificar las matrices que devuelve."""
-    clave = (GRID['lo'], GRID['hi'], TERRENO_W, TERRENO_H)
+    clave = (GRID['lo'], GRID['hi'], GRID['hemi'], TERRENO_W, TERRENO_H)
     cp = _TERRENO.get('capas')
     nuevos = set(rasgos)
     todo = False
@@ -11968,7 +12008,7 @@ def terreno(W, cfg, cl=None):
     rasgos, res = rasgos_terreno(W, cfg, cl)
     S = suelos_fotograma(W, cfg)
     hib = _hibridos_clave(W, cfg, cl)
-    clave = (GRID['lo'], GRID['hi'], tuple(rasgos), S, round(alto_hipso(cfg), 4), hib)
+    clave = (GRID['lo'], GRID['hi'], tuple(rasgos), S, round(alto_hipso(cfg), 4), hib, GRID['hemi'])
     t = _TERRENO.get('t')
     if t is not None and _TERRENO.get('clave') == clave:
         _TERRENO['sello_t'] = sello
@@ -12775,7 +12815,7 @@ _POISSON = {}
 def _candidatos(i, cw, cl, k, semilla):
     """Puntos de prueba (x, z) de la celda i, en orden fijo, solo los que caen en
     ella (su celda mas cercana) y dentro de su elipse (k: la parte de la celda)."""
-    clave = ('cand', GRID['lo'], GRID['hi'], i, round(cw, 5), round(cl, 5), round(k, 2), semilla)
+    clave = ('cand', GRID['lo'], GRID['hi'], GRID['hemi'], i, round(cw, 5), round(cl, 5), round(k, 2), semilla)
     v = _POISSON.get(clave)
     if v is not None:
         return v
@@ -12803,7 +12843,7 @@ def _poisson(i, cw, cl, r, k=1.0, semilla=0):
     solo los que caen en la celda (la mas cercana): los bosques de celdas
     vecinas encajan sin pisarse. k: la parte de la celda (las etapas del dosel).
     Disco de Poisson por eliminacion sobre candidatos fijos, con una rejilla."""
-    clave = (GRID['lo'], GRID['hi'], i, round(cw, 5), round(cl, 5), round(r, 4), round(k, 2), semilla)
+    clave = (GRID['lo'], GRID['hi'], GRID['hemi'], i, round(cw, 5), round(cl, 5), round(r, 4), round(k, 2), semilla)
     v = _POISSON.get(clave)
     if v is not None:
         return v
@@ -13146,7 +13186,7 @@ def piel_natural_cache(W, cfg, ctx, i, vh, rug, ancho, kb, fl, sat, pulido, arde
              tuple(W['occ'][j] for j in NEIGH[i]) if cfg.get('oceano') else None,   # v97: la isla vecina crece
              tuple(ctx['cauces'].get(i, ())), ctx['rio_cerca'](i), ctx['cerca'](i),
              derivacion(W, cfg, i, now, paso), notas_colonas(W, i), ctx['bases'][i],
-             tuple(cfg.get(x) for x in NAT_CFG), _clave_biblio(cfg), GRID['lo'], GRID['hi'])
+             tuple(cfg.get(x) for x in NAT_CFG), _clave_biblio(cfg), GRID['lo'], GRID['hi'], GRID['hemi'])
     memo = _NAT_CACHE.setdefault(i, {})
     v = memo.get(clave)
     res = ctx['res']
@@ -13636,7 +13676,7 @@ def tejido(W, cfg):
     alturas = tuple(round(s_ + e_, 3) for s_, e_ in zip(suelos_fotograma(W, cfg), ter['centro'])) if ter else ()
     clave = (tuple(W['occ']), tuple(W['own']), tuple(W['par']), tema, cfg['rios'], cfg['carreteras'],
              cfg['min_via'], cfg['max_rio'], cfg['umbral_vecindad'], cfg['peso_vecina'],
-             cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'], trazas,
+             cfg['min_cluster'], cfg['th_fusion'], GRID['lo'], GRID['hi'], GRID['hemi'], trazas,
              cfg.get('peso_traza', 0.0), alturas, cfg.get('pendiente_min', 0.05), cfg.get('vias'), cfg.get('red'),
              cfg.get('min_red'), cfg.get('recursos'), tuple(len(x) for x in W.get('cols', [])))
     if _TEJIDO.get('clave') == clave:
@@ -13834,7 +13874,7 @@ def _clave_tej_ind(W, cfg, t):
     nodos = set(x for e in (t.get('fc') or {}).get('vias', []) for x in e) | \
         set(x for e in (t.get('red') or {}).get('tramos', []) for x in e)
     clave = (_TEJIDO.get('version'), tuple(round(base_radius(W, cfg, x), 4) for x in sorted(nodos)),
-             cfg.get('ancho_via'), cfg.get('respaldo', 0), limit(cfg), GRID['lo'], GRID['hi'],
+             cfg.get('ancho_via'), cfg.get('respaldo', 0), limit(cfg), GRID['lo'], GRID['hi'], GRID['hemi'],
              cfg.get('recursos'))
     _TEJ_IND['clave'] = (sello, clave)
     return clave
@@ -14758,7 +14798,7 @@ def _marco_pared(c, j):
     da a la celda c: el desplazamiento, del eje de j a la cara (a radio 1,
     se escala con el radio); el marco, Y la normal de j, Z hacia fuera de la
     pared y X a lo largo. Tambien el ancho de la cara (a radio 1)."""
-    clave = (GRID['lo'], GRID['hi'], c, 'pared', j)
+    clave = (GRID['lo'], GRID['hi'], GRID['hemi'], c, 'pared', j)
     v = _MARCOS.get(clave)
     if v is None:
         nj = normal_i(j)
@@ -14797,7 +14837,7 @@ def _firma_arq(W, cfg):
     (su suelo y lo que ensena cada corte), las conchas, las uniones (galerias), las
     escisiones (fase 29: no son cortes), las cicatrices y la configuracion que leen
     modelos_de y cimiento_de."""
-    return (id(W), GRID['lo'], GRID['hi'], cfg['nivel'], tema_de(cfg), cfg.get('detalle_expuesto'),
+    return (id(W), GRID['lo'], GRID['hi'], GRID['hemi'], cfg['nivel'], tema_de(cfg), cfg.get('detalle_expuesto'),
             cfg.get('respaldo', 0), cfg['core_radius'], cfg.get('shell_thick'), id(cfg.get('catalogo')),
             len(W['shells']), tuple(tuple(map(tuple, col)) for col in W['cols']),
             tuple((u['tipo'], tuple(u['celdas'])) for u in W['uniones']),
@@ -17767,6 +17807,24 @@ def construida_visible(W, cfg, vis=None):
     return sum(1 for i in vis if W['occ'][i] > 0 and W['sp'][i] != MAL) / float(len(vis))
 
 
+def _celda_otro(m):
+    """La celda del otro monstruo si esta en juego (para aparecer lejos de el), o None."""
+    return m['celda'] if m and m.get('celda') is not None and m.get('estado') not in ('espera', 'muere') else None
+
+
+def signo_borde(W, cfg, n, otra=None):
+    """El sentido del borde por el que aparece un monstruo. Con la esfera, el del giro (J['giro']).
+    Con Hemisferio (fase 41, D2) no hay giro: el borde lateral del lado contrario a la celda
+    del otro monstruo, o, si no hay otro, alternando izquierda y derecha con n."""
+    J = W['juego']
+    if not hemisferio():
+        return J.get('giro', 1.0)
+    if otra is not None:
+        d = (lonlat_celda(otra)[1] - float(cfg.get('lon_central', 0.0)) + 180.0) % 360.0 - 180.0
+        return -1.0 if d > 1e-6 else 1.0
+    return 1.0 if n % 2 else -1.0
+
+
 def celda_aparicion(W, cfg, vis=None):
     """La celda vacia de la cara visible mas cercana al borde por el que entran
     las celdas con el giro (desempate _hash01). None si no hay ninguna vacia."""
@@ -17781,7 +17839,8 @@ def celda_aparicion(W, cfg, vis=None):
     if not libre:
         return None
     lon0 = float(cfg.get('lon_central', 0.0))
-    sg = J.get('giro', 1.0)
+    otra = _celda_otro(J.get('bien'))
+    sg = signo_borde(W, cfg, J['mon']['n'] + 1, otra)
 
     def borde(i):
         d = (lonlat_celda(i)[1] - lon0 + 180.0) % 360.0 - 180.0
@@ -17898,6 +17957,34 @@ def dijkstra_mon(W, cfg, src, muro=(), tierra=True):
     return dist, prev
 
 
+def calor_pulso(W, cfg):
+    """Fase 41 (motor v137): calor(c) en [0, 1] = lo reciente que sono un secuenciador en la
+    celda c o en sus vecinas: 1 si es de ahora, 0 pasadas Ventanapulso pasos de juego
+    (Pasojuego semicorcheas de W['paso'] s). None si no hay Hemisferio, si Pesopulso es 0 o
+    si no ha sonado nada dentro de la ventana: entonces vale la regla de siempre."""
+    if not hemisferio() or cfg['nivel'] < 41 or float(cfg.get('peso_pulso', 0.0)) <= 0.0:
+        return None
+    now = W.get('t') or 0.0
+    win = max(1e-6, float(cfg.get('ventana_pulso', 8)) * max(1, int(cfg['paso_juego'])) * (W.get('paso') or 0.125))
+    tg = W['t_gate']
+    fresco = {}
+    for i in range(N):
+        f = 1.0 - (now - tg[i]) / win
+        if f > 0.0:
+            fresco[i] = min(1.0, f)
+    if not fresco:
+        return None
+
+    def calor(c):
+        v = fresco.get(c, 0.0)
+        for x in NEIGH[c]:
+            f = fresco.get(x, 0.0)
+            if f > v:
+                v = f
+        return v
+    return calor
+
+
 def objetivo(W, cfg, m, muro=(), comer=None, tierra=True):
     """(celda objetivo, camino) con mayor occ / (1 + coste); desempate _hash01.
     Motor v123: comer (comestible; Godzilla, comestible_bien). tierra: solo por tierra
@@ -17909,7 +17996,12 @@ def objetivo(W, cfg, m, muro=(), comer=None, tierra=True):
     cand = [c for c in dist if comer(W, cfg, m, c)]
     if not cand:
         return None, []
-    t = max(cand, key=lambda c: (W['occ'][c] / (1.0 + dist[c]), _hash01(c)))
+    calor = calor_pulso(W, cfg)         # fase 41: donde suenan los secuenciadores (vacio sin Hemisferio)
+    if calor:
+        pw = float(cfg.get('peso_pulso', 1.0))
+        t = max(cand, key=lambda c: (W['occ'][c] * (1.0 + pw * calor(c)) / (1.0 + dist[c]), _hash01(c)))
+    else:
+        t = max(cand, key=lambda c: (W['occ'][c] / (1.0 + dist[c]), _hash01(c)))
     camino = []
     x = t
     while x != m['celda']:
@@ -19686,8 +19778,8 @@ def celda_aparicion_bien(W, cfg, vis=None):
     if not libre:
         return None
     lon0 = float(cfg.get('lon_central', 0.0))
-    sg = J.get('giro', 1.0)
     n = bien_estado(W, cfg)['n']
+    sg = signo_borde(W, cfg, n, _celda_otro(J.get('mon')))
 
     def borde(i):
         d = (lonlat_celda(i)[1] - lon0 + 180.0) % 360.0 - 180.0
@@ -20057,6 +20149,20 @@ def _legend_godzilla(W, c):
         emocion_godzilla(W, c, g, now)[0], sala)
 
 
+def _legend_hemisferio(W, c):
+    """HEMISFERIO (fase 41): las celdas, cuantas miran a la sala y el calor de las pulsaciones."""
+    if not hemisferio():
+        return '  HEMISFERIO apagado (Hemisferio)'
+    vis = len(cara_visible(c))
+    calor = calor_pulso(W, c)
+    if calor is None:
+        obj = 'objetivo sin pulso' if float(c.get('peso_pulso', 0.0)) > 0 else 'objetivo sin pulso (Pesopulso 0)'
+    else:
+        top = max(calor(x) for x in range(N))
+        obj = 'objetivo con pulso (calor %.2f)' % top
+    return '  HEMISFERIO  celdas %d   cara visible %d/%d   %s' % (N, vis, N, obj)
+
+
 def _legend_lucha(W, c):
     """LUCHA (fase 40): los manotazos o la tregua."""
     J = W.get('juego')
@@ -20345,7 +20451,7 @@ def _demo_vaciar(W, cfg, now, conchas=0):
     enterradas debajo (para que las filas tengan que cavar). Sin la noche de esos entierros."""
     sync_grid()
     nuevo = new_world()
-    nuevo['grid'] = [GRID['lo'], GRID['hi']]
+    nuevo['grid'] = grid_key()
     W.clear()
     W.update(nuevo)
     ensure(W)
@@ -20371,7 +20477,7 @@ def _demo_mundo(W, cfg, now, base, conchas=0):
     (_demo_conchas). Si base no vale (otra reticula), de cero (_demo_vaciar)."""
     import copy
     sync_grid()
-    key = [GRID['lo'], GRID['hi']]
+    key = grid_key()
     if not isinstance(base, dict) or len(base.get('occ') or ()) != N or base.get('grid', key) != key:
         return _demo_vaciar(W, cfg, now, conchas)
     nuevo = copy.deepcopy(base)
@@ -21295,6 +21401,10 @@ def cfg():
                  tregua=max(0, int(_p('Tregua', c['tregua']))),
                  alto_godzilla=max(0.2, min(4.0, _p('Altogodzilla', c['alto_godzilla']))),
                  emocion_godzilla=fg if fg in EMOCIONES_MON else 'auto')
+    if c['nivel'] >= 41:                # fase 41: Hemisferio
+        c.update(hemisferio=int(hemisferio()),
+                 peso_pulso=max(0.0, _p('Pesopulso', c['peso_pulso'])),
+                 ventana_pulso=max(1, int(_p('Ventanapulso', c['ventana_pulso']))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -21363,13 +21473,14 @@ def sync_grid():
     lo = _p('Notapolosur', POLO_SUR_DEF)
     hi = _p('Notapolonorte', POLO_NORTE_DEF)
     mode = _menu('Fuerarango', FUERA_MODES, 0)
-    return set_grid(lo, hi, mode)
+    hemi = max(HEMI_ANCHO_MIN, min(HEMI_ANCHO_MAX, _p('Anchoangular', 180.0))) if _p('Hemisferio', False) else 0.0
+    return set_grid(lo, hi, mode, hemi)
 
 
 def world():
     sync_grid()
     W = me.fetch('W', None)
-    key = [GRID['lo'], GRID['hi']]
+    key = grid_key()
     if W is None or W.get('grid') != key or len(W.get('occ', [])) != N:
         if W is not None:
             print('ESTRATOS  rango %s-%s: reticula de %d celdas, el mundo empieza vacio'
@@ -21385,7 +21496,7 @@ def world():
 def reset_world():
     sync_grid()
     W = new_world()
-    W['grid'] = [GRID['lo'], GRID['hi']]
+    W['grid'] = grid_key()
     me.store('W', W)
     _CACHE['inst'] = None
     _CACHE['tiles'] = None
@@ -21435,9 +21546,20 @@ def floor_radius(i, frame=None):
     return suelo(world(), cfg_foto(), i)
 
 
+HEMI_RY = -90.0     # el giro del planeta con Hemisferio: Loncentral = 90 + ry = 0
+
+
+def giro_fijo(frame=None):
+    """Fase 41: el giro fijo del planeta con Hemisferio (grados), o None si gira como siempre.
+    'ritmo' (patch_ritmo_hemi, comun v99) lo consulta en rotation()."""
+    return HEMI_RY if hemisferio() else None
+
+
 def giro_factor(frame=None):
-    """Multiplica el giro del planeta (lo lee 'ritmo'). 1 con Giromin 1."""
+    """Multiplica el giro del planeta (lo lee 'ritmo'). 1 con Giromin 1. 0 con Hemisferio."""
     try:
+        if hemisferio():
+            return 0.0
         return float(world().get('giro_factor', 1.0))
     except Exception:
         return 1.0
@@ -22299,6 +22421,8 @@ def lon_central(frame=None):
         ry = float(_ritmo().rotation(frame))
     except Exception:
         ry = 0.0
+    if hemisferio():                    # fase 41: la cara visible no gira: su centro es la longitud 0
+        return 0.0
     return (90.0 + ry + 180.0) % 360.0 - 180.0
 
 
@@ -24295,6 +24419,8 @@ def _legend():
     if lvl >= 40:                       # fase 40: Godzilla y la lucha
         lines.append(_legend_godzilla(W, c))
         lines.append(_legend_lucha(W, c))
+        if lvl >= 41:
+            lines.append(_legend_hemisferio(W, c))
     return '\n'.join(lines)
 
 

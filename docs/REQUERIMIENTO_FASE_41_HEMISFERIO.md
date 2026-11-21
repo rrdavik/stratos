@@ -1,5 +1,7 @@
 # Requerimiento · Fase 41 — Hemisferio: el juego solo en la cara visible
 
+> **Implementado** en `fase41_hemisferio.py` (`fase41 v1`, `motor v137`, `comun v99`). Lo decidido está en `MONTAJE_FASE41.md`. Este documento queda como referencia de lo que se pidió (el parámetro `Giroenhemisferio` no se creó).
+
 *Para una sesión de Claude Code en la nube sobre el repositorio `rrdavik/stratos`. Es autosuficiente: lee esto entero y después `MONTAJE_FASE40.md` y `ENCARGO_JUEGO_DEVORADOR.md` (fases 32 a 40). Parte de `motor v136` / `fase40 v3`.*
 
 ---
