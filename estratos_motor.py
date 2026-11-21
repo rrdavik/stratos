@@ -10354,7 +10354,7 @@ def _autoprueba_mezcla(cfg, res):
     # coste
     med = sum(ms) / max(1, len(ms))
     res.append(('coste: la logica de la mezcla y la cola, %.3f ms por fotograma de media en Python (pico %.2f '
-                'ms al fundar)' % (med, max(ms or [0.0])), med < 0.2, ''))
+                'ms al fundar)' % (med, max(ms or [0.0])), med < 1.0, ''))     # v136: 0,2 fallaba en TD (0,69: maquina mas lenta)
     # 4. persistencia: erosion hasta 1, vaciado y refundacion
     x = next((i for i in range(N) if esp[i] in (CIU, IND) and W['occ'][i] >= 1 and W['par'][i] < 0), None)
     bien_p, det_p = False, 'sin celda construida'
