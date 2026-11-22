@@ -6,497 +6,287 @@ No lo carga TouchDesigner: se corre fuera, con Pillow:
 
     python3 sprites/hacer_atlas_nefanyamuto.py   # nefanyamuto_diseno.png y nefanyamuto_caras.png
 
-La cabeza (v2, tres cuartos y sombreado pintado, como Trumpzilla) esta en
-sprites/nefanyamuto_cabeza.py; las orejas de soplillo hacen de alas (pose 'vuelo').
-
-NefanyaMuto: la cabeza caricaturizada (calva con canas peinadas hacia atras,
-cejas pesadas, ojeras, la nariz grande, papada) sobre un cuerpo de MUTO de 8 bits:
-el torso con chaqueta, camisa y corbata, las mangas que acaban en garfios de
-quitina, cuatro patas largas de insecto con las rodillas altas, el caparazon
-anguloso y el saco naranja que brilla bajo la tripa.
+NefanyaMuto, en el estilo de Trumpzilla (figura arcade de tres cuartos, rechoncha,
+pintada con volumen, textura y contorno de tinta): la cabeza caricaturizada
+(sprites/nefanyamuto_cabeza.py) sobre un cuerpo de MUTO con traje. La chaqueta y
+la corbata arriba; las mangas acaban en garfios de quitina; debajo, patas de
+insecto con espolones; detras, el abdomen anguloso con el saco naranja que
+brilla y las patas de atras con las rodillas muy altas, y las crestas de quitina
+que rompen la espalda de la chaqueta. Las orejas de soplillo hacen de alas
+(pose 'vuelo').
 
 Mismo formato de celda que Trumpzilla y Godzilla (192 x 256, mirando a la
-izquierda, los pies abajo); se dibuja a S veces el tamano, se reduce, se pasa a
-una paleta corta (el aire de 8 bits) y lleva el recorte duro del shader.
+izquierda, los pies abajo). Se pinta a 8 pixeles por pixel, se reduce, se pasa a
+una paleta adaptada y se le pone el contorno de un pixel.
 =============================================================================
 """
 
 import math
 import os
+import random
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, AQUI)
+import nefanyamuto_cabeza as CAB          # noqa: E402
+from nefanyamuto_cabeza import TINTA, bez  # noqa: E402
+
 CELDA_W, CELDA_H = 192, 256
-S = 4
+K = 8                                     # pixeles de trabajo por pixel de la celda
+ESCALA_CABEZA = 0.64                      # pixeles de la celda por unidad de cabeza
+CABEZA = (84, 46)                         # donde cae el origen de la cabeza (entre los ojos)
 
-TINTA = (22, 18, 24, 255)
-# la cara
-PIEL = (234, 184, 156, 255)
-PIEL_LUZ = (248, 212, 186, 255)
-PIEL_OSC = (204, 142, 118, 255)
-PIEL_SOMBRA = (164, 104, 90, 255)
-MEJILLA = (226, 160, 138, 255)
-LABIO = (176, 96, 92, 255)
-CANA = (206, 208, 214, 255)
-CANA_LUZ = (240, 241, 245, 255)
-CANA_OSC = (140, 142, 152, 255)
-CEJA = (78, 74, 80, 255)
-OJO_BLANCO = (244, 240, 232, 255)
-PUPILA = (40, 46, 56, 255)
-OJO_ROJO = (255, 70, 40, 255)
-# el traje
-TRAJE = (34, 40, 72, 255)
-TRAJE_LUZ = (58, 68, 112, 255)
-TRAJE_OSC = (20, 24, 46, 255)
-CAMISA = (240, 242, 246, 255)
-CAMISA_OSC = (190, 196, 210, 255)
-CORBATA = (40, 96, 210, 255)
-CORBATA_OSC = (24, 60, 150, 255)
-CORBATA_ROJA = (210, 30, 40, 255)
-CORBATA_ROJA_OSC = (140, 16, 26, 255)
-# el MUTO
-QUITINA = (84, 76, 72, 255)
-QUITINA_LUZ = (128, 116, 106, 255)
-QUITINA_OSC = (52, 46, 46, 255)
-QUITINA_FONDO = (40, 36, 38, 255)
-SACO = (240, 116, 28, 255)
-SACO_LUZ = (255, 204, 84, 255)
-SACO_OSC = (150, 46, 18, 255)
-SACO_HALO = (255, 236, 150, 255)
+TRAJE = (40, 46, 78)
+TRAJE_LUZ = (80, 92, 140)
+TRAJE_OSC = (22, 24, 46)
+TRAJE_HONDO = (10, 10, 24)
+CAMISA = (236, 238, 242)
+CAMISA_OSC = (170, 178, 196)
+CORBATA_AZUL = ((44, 100, 220), (110, 160, 255), (22, 56, 150))
+CORBATA_ROJA = ((206, 30, 40), (250, 96, 90), (130, 12, 22))
+BOTON = (24, 26, 40)
+QUITINA = (98, 86, 78)
+QUITINA_LUZ = (156, 140, 122)
+QUITINA_OSC = (58, 50, 48)
+QUITINA_HONDA = (28, 24, 26)
+SACO = (244, 124, 30)
+SACO_LUZ = (255, 214, 96)
+SACO_OSC = (150, 48, 16)
+SACO_HALO = (255, 170, 60)
 
 
-class Lienzo(object):
-    """Dibuja en coordenadas de la celda (192 x 256) sobre un lienzo S veces mayor."""
-
-    def __init__(self):
-        self.im = Image.new('RGBA', (CELDA_W * S, CELDA_H * S), (0, 0, 0, 0))
-        self.d = ImageDraw.Draw(self.im)
-
-    def P(self, pts):
-        return [(x * S, y * S) for x, y in pts]
-
-    def poli(self, pts, fill, borde=1.4):
-        pts = self.P(pts)
-        if borde > 0:
-            self.d.polygon(pts, fill=fill, outline=TINTA, width=max(1, int(borde * S)))
-        else:
-            self.d.polygon(pts, fill=fill)
-
-    def elipse(self, cx, cy, rx, ry, fill, borde=1.4):
-        caja = [(cx - rx) * S, (cy - ry) * S, (cx + rx) * S, (cy + ry) * S]
-        if borde > 0:
-            self.d.ellipse(caja, fill=fill, outline=TINTA, width=max(1, int(borde * S)))
-        else:
-            self.d.ellipse(caja, fill=fill)
-
-    def linea(self, pts, col=TINTA, ancho=1.4):
-        self.d.line(self.P(pts), fill=col, width=max(1, int(ancho * S)), joint='curve')
-
-    def arco(self, cx, cy, rx, ry, a0, a1, col=TINTA, ancho=1.6):
-        pts = [(cx + rx * math.cos(math.radians(a)), cy + ry * math.sin(math.radians(a)))
-               for a in _rango(a0, a1, 16)]
-        self.linea(pts, col, ancho)
-
-    def final(self, pixel=1):
-        """Reduce a la celda (pixel > 1: a la celda / pixel y vuelta, pixeles gordos),
-        recorte duro y la paleta corta."""
-        w, h = CELDA_W // pixel, CELDA_H // pixel
-        im = self.im.resize((w, h), Image.LANCZOS)
-        px = im.load()
-        for y in range(h):
-            for x in range(w):
-                r, g, b, a = px[x, y]
-                if a < 128:
-                    px[x, y] = (0, 0, 0, 0)
-                else:
-                    k = 255.0 / a
-                    px[x, y] = (min(255, int(r * k)), min(255, int(g * k)), min(255, int(b * k)), 255)
-        im = paletizar(im)
-        if pixel > 1:
-            im = im.resize((CELDA_W, CELDA_H), Image.NEAREST)
-        return im
+def lienzo():
+    return CAB.Lienzo(k=K, ancho=CELDA_W, alto=CELDA_H, ox=0, oy=0)
 
 
-PALETA = [v for k, v in sorted(globals().items()) if isinstance(v, tuple) and len(v) == 4 and k.isupper()]
+def tramo(a, b, g0, g1):
+    """Un trapecio de a (medio grosor g0) a b (g1)."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = math.hypot(dx, dy) or 1.0
+    px, py = -dy / n, dx / n
+    return [(a[0] + px * g0, a[1] + py * g0), (b[0] + px * g1, b[1] + py * g1),
+            (b[0] - px * g1, b[1] - py * g1), (a[0] - px * g0, a[1] - py * g0)]
 
 
-def paletizar(im):
-    """Cada pixel opaco al color mas cercano de la paleta (sin tramado): el aire de 8 bits."""
-    pal = [c[:3] for c in PALETA]
-    cache = {}
-    px = im.load()
-    for y in range(im.size[1]):
-        for x in range(im.size[0]):
-            r, g, b, a = px[x, y]
-            if a == 0:
-                continue
-            c = cache.get((r, g, b))
-            if c is None:
-                c = min(pal, key=lambda p: (p[0] - r) ** 2 * 3 + (p[1] - g) ** 2 * 4 + (p[2] - b) ** 2 * 2)
-                cache[(r, g, b)] = c
-            px[x, y] = c + (255,)
-    return im
+def textura(L, m, caja, n, semilla, osc, luz):
+    """Grumos de la quitina: manchas pequenas oscuras y claras dentro de la mascara."""
+    rnd = random.Random(semilla)
+    x0, y0, x1, y1 = caja
+    mo, ml = L.m_vacia(), L.m_vacia()
+    for _ in range(n):
+        x, y = rnd.uniform(x0, x1), rnd.uniform(y0, y1)
+        r = rnd.uniform(0.5, 1.3)
+        L.m_elipse(x, y, r * 1.4, r, mo if rnd.random() < 0.6 else ml)
+    L.pintar(mo, osc, 0.15, m, 0.6)
+    L.pintar(ml, luz, 0.15, m, 0.45)
 
 
-def _rango(a0, a1, n):
-    return [a0 + (a1 - a0) * k / float(n) for k in range(n + 1)]
-
-
-def _bez(p0, p1, p2, n=10):
-    out = []
-    for k in range(n + 1):
-        t = k / float(n)
-        out.append(((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
-                    (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]))
-    return out
-
-
-def _mov(pts, dx, dy):
-    return [(x + dx, y + dy) for x, y in pts]
+def _caja(pts, margen=2):
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    return (min(xs) - margen, min(ys) - margen, max(xs) + margen, max(ys) + margen)
 
 
 # --- el MUTO ------------------------------------------------------------------------
 
-def segmento(L, a, b, g0, g1, col, borde=1.3):
-    """Un tramo de pata de insecto: un trapecio de a (grosor g0) a b (g1)."""
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    n = math.hypot(dx, dy) or 1.0
-    px, py = -dy / n, dx / n
-    L.poli([(a[0] + px * g0, a[1] + py * g0), (b[0] + px * g1, b[1] + py * g1),
-            (b[0] - px * g1, b[1] - py * g1), (a[0] - px * g0, a[1] - py * g0)], col, borde)
-
-
-def pata(L, cadera, rodilla, tobillo, pie, osc=False):
-    """Pata de MUTO: el muslo sube desde el cuerpo a una rodilla alta y angulosa, la
-    tibia larga baja hasta el tobillo y acaba en una cuchilla que se curva en garfio."""
-    col = QUITINA_OSC if osc else QUITINA
+def pata(L, cadera, rodilla, tobillo, pie, osc=False, semilla=1):
+    """Pata de MUTO: muslo grueso, rodilla con espolon, tibia larga y la cuchilla del
+    pie que acaba en garfio."""
+    base = QUITINA_OSC if osc else QUITINA
     luz = QUITINA if osc else QUITINA_LUZ
-    segmento(L, cadera, rodilla, 7.0, 5.2, col)
-    segmento(L, rodilla, tobillo, 5.2, 3.8, col)
-    # la cuchilla: del tobillo al pie, con la punta doblada hacia dentro (hacia el cuerpo)
-    dx, dy = pie[0] - tobillo[0], pie[1] - tobillo[1]
-    n = math.hypot(dx, dy) or 1.0
-    px = -1.0 if pie[0] > 96 else 1.0
-    gancho = (pie[0] + px * 6, pie[1] - 7)
-    L.poli([(tobillo[0] - 3.8, tobillo[1]), (tobillo[0] + 3.8, tobillo[1]), (pie[0] + 1.2, pie[1] - 6),
-            (pie[0], pie[1]), gancho, (pie[0] - 1.2, pie[1] - 7)], col, 1.2)
-    for p, r in ((rodilla, 6.0), (tobillo, 4.6)):
-        L.poli([(p[0] - r, p[1]), (p[0], p[1] - r * 1.1), (p[0] + r, p[1]), (p[0], p[1] + r)], col, 1.2)
-    # la espuela de la rodilla, hacia arriba
-    L.poli([(rodilla[0] - 3, rodilla[1] - 3), (rodilla[0] + 1, rodilla[1] - 15), (rodilla[0] + 4, rodilla[1] - 2)], col, 1.0)
-    L.linea([_lerp(cadera, rodilla, 0.12), _lerp(cadera, rodilla, 0.85)], luz, 1.4)
-    L.linea([_lerp(rodilla, tobillo, 0.1), _lerp(rodilla, tobillo, 0.85)], luz, 1.0)
+    sombra = QUITINA_HONDA if osc else QUITINA_OSC
+    dx = pie[0] - tobillo[0]
+    gancho = -1.0 if pie[0] > 96 else 1.0
+    piezas = [tramo(cadera, rodilla, 6.0, 4.4), tramo(rodilla, tobillo, 4.2, 2.8),
+              [(tobillo[0] - 2.8, tobillo[1]), (tobillo[0] + 2.8, tobillo[1]), (pie[0] + 1.2, pie[1] - 7), (pie[0], pie[1]),
+               (pie[0] + gancho * 6, pie[1] - 8), (pie[0] - 1.2, pie[1] - 9)]]
+    for pts in piezas:
+        m = L.forma(pts, base, luz, sombra, 1.8, 0.7, 1.2, a_luz=0.9)
+        textura(L, m, _caja(pts), 40, semilla, sombra, luz)
+        semilla += 7
+    for p, r in ((rodilla, 5.2), (tobillo, 3.6)):
+        nudo = [(p[0] - r, p[1]), (p[0] - r * 0.4, p[1] - r), (p[0] + r * 0.5, p[1] - r * 0.9), (p[0] + r, p[1]),
+                (p[0] + r * 0.3, p[1] + r), (p[0] - r * 0.5, p[1] + r * 0.8)]
+        L.forma(nudo, base, luz, sombra, 1.6, 0.6, 1.1)
+    esp = [(rodilla[0] - 2.5, rodilla[1] - 3), (rodilla[0] + 2 + dx * 0.05, rodilla[1] - 14), (rodilla[0] + 3, rodilla[1] - 2)]
+    L.forma(esp, base, luz, sombra, 1.5, 0.6, 1.1)
 
 
-def _lerp(a, b, t):
-    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+def abdomen(L, dy=0):
+    pts = [(128, 128), (150, 118), (174, 128), (189, 152), (190, 186), (182, 214), (172, 232), (164, 210),
+           (152, 188), (136, 170)]
+    pts = [(x, y + dy) for x, y in pts]
+    m = L.forma(pts, QUITINA, QUITINA_LUZ, QUITINA_OSC, 5, 2.0, 1.4, honda=QUITINA_HONDA)
+    textura(L, m, _caja(pts), 160, 11, QUITINA_OSC, QUITINA_LUZ)
+    # las placas: bandas que se solapan hacia la punta
+    for k, t in enumerate((0.16, 0.34, 0.52, 0.70, 0.86)):
+        a = (134 + t * 36, 160 + t * 40 + dy)        # borde de abajo
+        b = (150 + t * 40, 118 + t * 60 + dy)        # borde de arriba
+        if b[0] > 189:
+            b = (189, b[1])
+        arco = bez(a, ((a[0] + b[0]) / 2 + 8, (a[1] + b[1]) / 2 + 2), b, 8)
+        L.pintar(L.m_linea(arco, 2.6), QUITINA_HONDA, 0.6, m, 0.95)
+        L.pintar(L.m_linea([(x - 2, y + 0.8) for x, y in arco], 1.6), QUITINA_LUZ, 0.5, m, 0.85)
+    # crestas en sierra por arriba
+    for (x, y, h) in ((146, 120, 10), (162, 120, 14), (178, 132, 13), (188, 150, 11), (191, 172, 8)):
+        L.forma([(x - 5, y + 3 + dy), (x + 4, y - h + dy), (x + 6, y + 4 + dy)], QUITINA_OSC, QUITINA, QUITINA_HONDA, 1.5, 0.6, 1.1)
+    # el saco que brilla: ranura de panal por debajo
+    ranura = [(144, 176), (158, 172), (174, 182), (180, 202), (172, 214), (158, 198)]
+    ranura = [(x, y + dy) for x, y in ranura]
+    L.pintar(L.m_poli(ranura), SACO_HALO, 3.0, None, 0.45)
+    mr = L.forma(ranura, SACO_OSC, None, None, borde=1.2)
+    for k, (cx, cy) in enumerate(((152, 180), (160, 182), (168, 186), (174, 194), (162, 192), (168, 200),
+                                  (176, 204), (156, 188), (172, 210))):
+        cy += dy
+        hexa = [(cx - 3.6, cy), (cx - 1.8, cy - 3.2), (cx + 1.8, cy - 3.2), (cx + 3.6, cy), (cx + 1.8, cy + 3.2), (cx - 1.8, cy + 3.2)]
+        L.pintar(L.m_poli(hexa), SACO_LUZ if k % 3 == 0 else SACO, 0, mr)
+    L.pintar(L.m_elipse(164, 190 + dy, 9, 7), SACO_LUZ, 3.0, mr, 0.6)
 
 
-def caparazon(L, alas):
-    """El abdomen anguloso de placas, que cae hacia atras, con las crestas; y el
-    saco que brilla por debajo como un panal."""
-    if alas:
-        # alas plegadas hacia atras y arriba: membrana oscura con nervios y borde rojizo
-        for dx, col in ((10, QUITINA_FONDO), (0, QUITINA_OSC)):
-            ala = [(104, 108), (138 + dx, 40), (160 + dx, 22), (172 + dx, 48), (186, 98), (168, 132), (126, 128)]
-            L.poli(ala, col, 1.2)
-        for q in ((160, 22), (172, 48), (184, 96)):
-            L.linea([(116, 116), q], QUITINA_FONDO, 1.1)
-        L.linea([(160, 24), (172, 48), (185, 96)], SACO_OSC, 1.2)
-    abd = [(96, 114), (122, 100), (154, 102), (178, 118), (188, 142), (186, 166), (176, 196), (160, 178),
-           (134, 176), (110, 168)]
-    L.poli(abd, QUITINA)
-    # las placas: arcos que se solapan, de la cintura a la punta
-    for k, t in enumerate((0.18, 0.4, 0.62, 0.82)):
-        x = 110 + t * 76
-        L.linea(_bez((x - 8, 104 + t * 14), (x + 6, 140), (x - 6, 172 + t * 10), 8), QUITINA_OSC, 1.5)
-        L.linea(_bez((x - 5, 108 + t * 14), (x + 8, 140), (x - 3, 168 + t * 10), 8), QUITINA_LUZ, 0.9)
-    L.linea([(124, 103), (154, 105), (176, 121)], QUITINA_LUZ, 1.6)
-    # crestas de la espalda, en sierra
-    for (x, y, h) in ((112, 106, 10), (128, 100, 15), (146, 101, 17), (163, 109, 14), (178, 122, 11)):
-        L.poli([(x - 6, y + 3), (x + 4, y - h), (x + 6, y + 3)], QUITINA_OSC, 1.1)
-    # el saco: una ranura de panal naranja entre las placas de abajo
-    L.poli([(112, 166), (128, 160), (160, 162), (176, 172), (150, 186), (122, 184)], SACO_OSC, 1.4)
-    for k, (cx, cy) in enumerate(((124, 172), (132, 168), (140, 174), (148, 168), (156, 174), (164, 172),
-                                  (130, 178), (146, 179), (138, 166))):
-        L.poli([(cx - 3.6, cy), (cx - 1.8, cy - 3.2), (cx + 1.8, cy - 3.2), (cx + 3.6, cy), (cx + 1.8, cy + 3.2),
-                (cx - 1.8, cy + 3.2)], SACO_LUZ if k % 3 == 0 else SACO, 0.7)
+def crestas(L, dy=0):
+    """Pinchos de quitina que rompen la espalda de la chaqueta."""
+    for (x, y, ang, h) in ((128, 94, -70, 14), (136, 104, -50, 16), (140, 120, -32, 15)):
+        a = math.radians(ang)
+        ux, uy = math.cos(a), math.sin(a)
+        px, py = -uy, ux
+        y += dy
+        pts = [(x - px * 4.5, y - py * 4.5), (x + ux * h, y + uy * h), (x + px * 4.5, y + py * 4.5)]
+        L.forma(pts, QUITINA, QUITINA_LUZ, QUITINA_OSC, 2.0, 0.6, 1.2)
 
 
-def brazo(L, hombro, codo, mano, osc=False):
-    """La manga de la chaqueta, el puno blanco y la guadana de quitina que cuelga
-    con la punta en garfio (como las patas delanteras del MUTO)."""
-    col = TRAJE_OSC if osc else TRAJE
-    segmento(L, hombro, codo, 7.5, 6.5, col)
-    L.elipse(hombro[0], hombro[1], 7.5, 7.5, col)
-    segmento(L, codo, mano, 6.5, 5.5, col)
-    L.elipse(codo[0], codo[1], 6.4, 6.4, col)
-    if not osc:
-        L.linea([_lerp(hombro, codo, 0.1), _lerp(hombro, codo, 0.8)], TRAJE_LUZ, 1.6)
-        L.linea([_lerp(codo, mano, 0.2), _lerp(codo, mano, 0.8)], TRAJE_LUZ, 1.2)
-    dx, dy = mano[0] - codo[0], mano[1] - codo[1]
+# --- el traje -----------------------------------------------------------------------
+
+def manga(L, hombro, codo, muneca, osc=False, semilla=3):
+    """La manga de la chaqueta, el puno y la mano de MUTO: tres garfios largos."""
+    base, luz, sombra = (TRAJE_OSC, TRAJE, TRAJE_HONDO) if osc else (TRAJE, TRAJE_LUZ, TRAJE_OSC)
+    m = L.m_poli(tramo(hombro, codo, 8.0, 7.0))
+    m = L.m_poli(tramo(codo, muneca, 7.0, 6.2), m)
+    m = L.m_elipse(codo[0], codo[1], 7.0, 7.0, m)
+    m = L.m_elipse(hombro[0], hombro[1], 8.0, 8.0, m)
+    L.pintar(m, base)
+    L.volumen(m, luz, sombra, 2.5, 1.2, 0.8, 0.95, honda=TRAJE_HONDO if not osc else None)
+    L.pintar(L.m_linea([codo, ((codo[0] + muneca[0]) / 2 + 2, (codo[1] + muneca[1]) / 2)], 1.4), sombra, 0.4, m, 0.8)
+    dx, dy = muneca[0] - codo[0], muneca[1] - codo[1]
     n = math.hypot(dx, dy) or 1.0
     ux, uy = dx / n, dy / n
-    puno = (mano[0] + ux * 3, mano[1] + uy * 3)
-    segmento(L, mano, puno, 5.6, 5.6, CAMISA, 1.1)
-    # la guadana: un tramo grueso y la cuchilla larga que se dobla en garfio hacia atras
-    a = puno
-    b = (a[0] + ux * 10, a[1] + uy * 10)
-    segmento(L, a, b, 4.6, 3.6, QUITINA_OSC if osc else QUITINA, 1.2)
-    L.poli([(b[0] - 4.2, b[1]), (b[0] + 4.2, b[1]), (b[0] + 3, b[1] + 26), (b[0] + 12, b[1] + 30),
-            (b[0] + 14, b[1] + 26), (b[0] + 12, b[1] + 36), (b[0] - 1, b[1] + 33), (b[0] - 4, b[1] + 24)],
-           QUITINA_LUZ if not osc else QUITINA, 1.2)
-    L.linea([(b[0], b[1] + 2), (b[0] + 1, b[1] + 28)], QUITINA_OSC, 1.0)
+    puno = (muneca[0] + ux * 3, muneca[1] + uy * 3)
+    L.forma(tramo(muneca, puno, 6.4, 6.4), CAMISA, None, CAMISA_OSC, 2, 0.8, 1.1)
+    # la mano: un nudo de quitina y tres garfios que se curvan hacia dentro
+    qb, ql, qo = (QUITINA_OSC, QUITINA, QUITINA_HONDA) if osc else (QUITINA, QUITINA_LUZ, QUITINA_OSC)
+    nudo = (puno[0] + ux * 4, puno[1] + uy * 4)
+    L.forma([(nudo[0] - 6, nudo[1] - 3), (nudo[0] + 6, nudo[1] - 3), (nudo[0] + 5, nudo[1] + 4), (nudo[0] - 5, nudo[1] + 4)],
+            qb, ql, qo, 1.8, 0.6, 1.2)
+    lado = 1.0 if muneca[0] < 96 else -1.0
+    for k, (ox, largo) in enumerate(((-4.5, 19), (0, 24), (4.5, 19))):
+        a = (nudo[0] + ox, nudo[1] + 2)
+        b = (a[0] - lado * 1 + ox * 0.3, a[1] + largo * 0.7)
+        c = (a[0] + lado * 5 + ox * 0.3, a[1] + largo)
+        curva = bez(a, b, c, 8)
+        izq = [(x - 3.0 * (1 - i / 9.0), y) for i, (x, y) in enumerate(curva)]
+        der = [(x + 3.0 * (1 - i / 9.0), y) for i, (x, y) in enumerate(curva)]
+        L.forma(izq + der[::-1], ql, None, qo, 1.0, 0.4, 1.0)
 
 
-def torso(L, corbata):
-    """El torso del traje: la chaqueta, las solapas, la camisa y la corbata."""
-    chaqueta = [(30, 114), (52, 100), (92, 100), (110, 114), (112, 150), (96, 164), (54, 164), (34, 148)]
-    L.poli(chaqueta, TRAJE)
-    L.linea([(98, 104), (106, 152)], TRAJE_OSC, 1.6)
-    # la camisa en V y las solapas
-    L.poli([(48, 100), (80, 100), (66, 136)], CAMISA, 1.1)
-    L.poli([(44, 101), (62, 101), (64, 132), (50, 118), (54, 112)], TRAJE_LUZ, 1.1)
-    L.poli([(84, 101), (68, 101), (67, 132), (80, 118), (76, 112)], TRAJE_LUZ, 1.1)
+def chaqueta(L, corbata, dy=0):
+    def D(pts):
+        return [(x, y + dy) for x, y in pts]
+    cuerpo = D([(48, 96), (62, 88), (74, 84), (100, 84), (116, 88), (132, 96), (138, 116), (140, 148), (136, 166),
+                (112, 172), (84, 172), (62, 168), (50, 158), (46, 126)])
+    m = L.forma(cuerpo, TRAJE, TRAJE_LUZ, TRAJE_OSC, 4, 2.0, 1.5, honda=TRAJE_HONDO)
+    # pliegues y costuras
+    L.pintar(L.m_linea(D(bez((122, 100), (128, 130), (124, 166))), 2.0), TRAJE_OSC, 1.0, m, 0.9)
+    L.pintar(L.m_linea(D(bez((58, 112), (54, 136), (60, 162))), 1.6), TRAJE_OSC, 1.0, m, 0.7)
+    L.pintar(L.m_linea(D([(56, 150), (72, 154)]), 1.2), TRAJE_LUZ, 0.6, m, 0.5)
+    # la camisa en V
+    camisa = D([(72, 84), (100, 84), (88, 140)])
+    L.forma(camisa, CAMISA, None, CAMISA_OSC, 3, 1.2, 1.1)
     # la corbata
-    col, osc = corbata
-    L.poli([(61, 100), (69, 100), (68, 107), (62, 107)], col, 1.1)
-    L.poli([(62, 107), (68, 107), (71, 130), (65, 136), (59, 130)], col, 1.1)
-    L.linea([(66, 110), (67, 128)], osc, 1.0)
-    # botones
-    for y in (142, 152):
-        L.elipse(70, y, 1.8, 1.8, TRAJE_OSC, 0.8)
-
-
-# --- la cabeza ---------------------------------------------------------------------
-
-def cabeza(L, cara, c=(64, 58)):
-    """La caricatura, casi de frente, un poco girada hacia la izquierda."""
-    cx, cy = c
-
-    def T(pts):
-        return [(cx + x, cy + y) for x, y in pts]
-
-    # el cuello de la camisa (debajo de la papada)
-    L.poli(T([(-20, 38), (-2, 50), (16, 38), (18, 50), (-1, 54), (-22, 50)]), CAMISA, 1.2)
-    # orejas grandes
-    for sx in (-1, 1):
-        ox = 31 if sx > 0 else -33
-        L.elipse(cx + ox, cy + 2, 7.5, 12.5, PIEL)
-        L.arco(cx + ox, cy + 2, 4, 7.5, 200 if sx < 0 else -20, 340 if sx < 0 else 160, PIEL_SOMBRA, 1.2)
-    # la masa de pelo: gris, peinada hacia atras, mas abultada detras y arriba
-    pelo = T(_bez((-33, -2), (-38, -30), (-18, -42)) + _bez((-18, -42), (4, -50), (26, -42))
-             + _bez((26, -42), (38, -32), (33, -2)) + [(28, 4), (-28, 4)])
-    L.poli(pelo, CANA)
-    L.poli(T(_bez((20, -40), (36, -30), (32, 0)) + [(24, 2), (26, -26)]), CANA_OSC, 0)
-    # la cara: frente alta, mofletes, papada ancha que cae, barbilla cuadrada
-    cara_pts = T(_bez((-28, -16), (-32, 4), (-30, 20)) + _bez((-30, 20), (-31, 36), (-20, 44))
-                 + _bez((-20, 44), (-6, 52), (8, 50)) + _bez((8, 50), (24, 44), (27, 32))
-                 + _bez((27, 32), (30, 16), (27, -2)) + _bez((27, -2), (27, -12), (24, -18))
-                 # las entradas: la frente sube mucho por los lados y deja un pico en medio
-                 + [(22, -26), (16, -32), (10, -33), (4, -36), (-2, -34), (-8, -34), (-16, -32), (-22, -28), (-26, -22)])
-    L.poli(cara_pts, PIEL)
-    # el pelo de las sienes, corto y por encima de la oreja
-    L.poli(T([(-29, 4), (-32, -14), (-27, -22), (-25, -12), (-26, -2)]), CANA, 1.1)
-    L.poli(T([(26, 2), (29, -12), (24, -20), (22, -10), (23, -2)]), CANA, 1.1)
-    # mechas del peinado, hacia atras (a la derecha y arriba)
-    for a, b, q in (((-10, -36), (0, -44), (16, -44)), ((-20, -32), (-18, -40), (-4, -44)),
-                    ((2, -37), (14, -42), (26, -36)), ((-26, -24), (-28, -34), (-18, -40))):
-        L.linea(T(_bez(a, b, q, 6)), CANA_OSC, 1.1)
-    L.linea(T(_bez((-14, -40), (0, -47), (14, -46), 6)), CANA_LUZ, 1.8)
-    # la frente: brillo y arrugas
-    L.linea(T(_bez((-8, -28), (0, -31), (8, -28), 6)), PIEL_LUZ, 2.0)
-    arr = cara.get('arrugas', 1.0)
-    for k in range(3):
-        y = -24 + k * 4.5
-        w = 12 - k * 2
-        L.linea(T(_bez((-w - 2, y), (-1, y - 1.5 * arr), (w, y), 6)), PIEL_OSC, 1.0)
-    # la mitad derecha en sombra (la luz viene de la izquierda) y la sombra de los mofletes
-    L.poli(T(_bez((26, -6), (30, 16), (26, 32)) + _bez((26, 32), (22, 42), (10, 48)) + [(14, 40), (20, 24), (21, 2)]),
-           PIEL_OSC, 0)
-    L.linea(T(_bez((-28, 16), (-29, 34), (-18, 42), 6)), PIEL_OSC, 2.8)
-    L.linea(T(_bez((24, 16), (26, 32), (18, 42), 6)), PIEL_OSC, 2.4)
-    L.linea(T(_bez((-14, 46), (0, 49), (12, 45), 6)), PIEL_OSC, 1.4)       # pliegue de la barbilla
-    L.linea(T(_bez((-22, 34), (-20, 40), (-14, 42), 4)), PIEL_SOMBRA, 1.0)  # el pliegue de la papada
-    L.linea(T(_bez((20, 32), (18, 38), (12, 41), 4)), PIEL_SOMBRA, 1.0)
-    ojos(L, T, cara)
-    nariz(L, T, cara)
-    boca(L, T, cara)
-
-
-def ojos(L, T, cara):
-    tipo = cara.get('ojo', 'normal')
-    ceja = cara.get('ceja', 0.0)           # + enfado (baja por dentro), - triste (sube por dentro)
-    rojo = cara.get('ojo_rojo', False)
-    for sx, ex in ((-1, -13), (1, 11)):
-        ey = -6
-        # ojeras
-        L.arco(T([(ex, ey + 4)])[0][0], T([(ex, ey + 4)])[0][1], 6.5, 3.5, 20, 160, PIEL_SOMBRA, 1.3)
-        L.arco(T([(ex, ey + 6)])[0][0], T([(ex, ey + 6)])[0][1], 6.0, 3.5, 30, 150, PIEL_OSC, 1.0)
-        p = T([(ex, ey)])[0]
-        if tipo in ('normal', 'enfado', 'triste'):
-            # el ojo pequeno bajo el parpado pesado
-            L.elipse(p[0], p[1], 5.2, 3.2, OJO_BLANCO, 1.0)
-            L.elipse(p[0] - 1.0, p[1] + 0.4, 2.2, 2.6, OJO_ROJO if rojo else PUPILA, 0)
-            L.poli([(p[0] - 6, p[1] - 0.6), (p[0] - 3, p[1] - 3.6), (p[0] + 3, p[1] - 3.6), (p[0] + 6, p[1] - 0.6),
-                    (p[0] + 6, p[1] - 2.6), (p[0] - 6, p[1] - 2.6)], PIEL_OSC, 0)
-            L.linea([(p[0] - 6, p[1] - 0.8), (p[0] - 2, p[1] - 3.2), (p[0] + 3, p[1] - 3.2), (p[0] + 6, p[1] - 0.8)], TINTA, 1.2)
-        elif tipo == 'grande':
-            L.elipse(p[0], p[1] - 1, 6.5, 6.0, OJO_BLANCO, 1.2)
-            L.elipse(p[0] - 1.0, p[1] - 1, 1.8, 1.8, PUPILA, 0)
-        elif tipo == 'cerrado':
-            L.arco(p[0], p[1] - 1.5, 5.5, 3.5, 20, 160, TINTA, 1.8)
-        elif tipo == 'feliz':
-            L.arco(p[0], p[1] + 1.5, 5.5, 3.5, 200, 340, TINTA, 1.8)
-        # la ceja: gruesa, con la mitad de dentro mas baja si se enfada
-        dentro = 4 if sx < 0 else -4
-        fuera = -9 if sx < 0 else 9
-        yi = ey - 8 + ceja * 3.0
-        yo = ey - 10 - ceja * 1.0
-        L.poli(T([(ex + dentro, yi), (ex + fuera, yo), (ex + fuera, yo + 3.2), (ex + dentro, yi + 3.6)]), CEJA, 1.0)
-    if ceja > 0.5:
-        L.linea(T([(-2, -15), (-1, -9)]), PIEL_SOMBRA, 1.2)        # el entrecejo
-
-
-def nariz(L, T, cara):
-    # la nariz grande, carnosa, que cae un poco hacia la izquierda
-    L.poli(T([(-3, -10), (2, -10), (5, 6), (7, 12), (-1, 16), (-11, 13), (-9, 6)]), PIEL, 0)
-    L.linea(T([(2, -9), (5, 5)]), PIEL_OSC, 1.2)
-    L.elipse(*T([(-3, 11)])[0], 8.0, 6.0, PIEL, 0)
-    L.arco(*T([(-3, 11)])[0], 8.0, 6.0, -40, 220, TINTA, 1.3)
-    L.elipse(*T([(-5, 9)])[0], 2.6, 1.8, PIEL_LUZ, 0)
-    L.elipse(*T([(-7, 14)])[0], 1.8, 1.2, PIEL_SOMBRA, 0)
-    L.elipse(*T([(1, 14)])[0], 1.8, 1.2, PIEL_SOMBRA, 0)
-    # los surcos de la nariz a la boca, muy marcados
-    L.linea(T(_bez((-12, 12), (-17, 20), (-15, 28), 6)), PIEL_SOMBRA, 1.4)
-    L.linea(T(_bez((8, 12), (13, 20), (11, 28), 6)), PIEL_SOMBRA, 1.4)
-
-
-def boca(L, T, cara):
-    abre = cara.get('boca', 0.0)
-    sonr = cara.get('sonrisa', -0.6)          # de serie, las comisuras hacia abajo
-    y = 29
-    if abre > 0:
-        # grita: la boca ancha con las comisuras hacia abajo, los dientes de arriba
-        top = _bez((-12, y + 2 - sonr * 2), (-1, y - 3), (10, y + 2 - sonr * 2), 6)
-        bot = _bez((10, y + 2 - sonr * 2), (8, y + abre * 1.8), (-1, y + abre * 2.0), 3) + \
-              _bez((-1, y + abre * 2.0), (-10, y + abre * 1.8), (-12, y + 2 - sonr * 2), 3)
-        L.poli(T(top + bot), (90, 24, 30, 255), 1.4)
-        L.poli(T([(-8, y - 0.5), (6, y - 0.5), (6, y + 2.5), (-8, y + 2.5)]), OJO_BLANCO, 0)
-        L.poli(T([(-6, y + abre * 1.5), (4, y + abre * 1.5), (2, y + abre * 1.9 - 1), (-4, y + abre * 1.9 - 1)]),
-               (200, 90, 100, 255), 0)
-        L.poli(T([(-7, y + abre * 1.7 - 2.5), (5, y + abre * 1.7 - 2.5), (5, y + abre * 1.7), (-7, y + abre * 1.7)]),
-               CAMISA_OSC, 0)
-    else:
-        lab = _bez((-12, y + 1 - sonr * 3), (-1, y - 1 + sonr * 1.5), (10, y + 1 - sonr * 3), 6)
-        L.linea(T(lab), LABIO, 2.4)
-        L.linea(T(lab), TINTA, 1.0)
-        L.linea(T(_bez((-7, y + 4), (-1, y + 5), (5, y + 4), 4)), PIEL_OSC, 1.2)     # el labio de abajo
+    col, luz, osc = corbata
+    L.forma(D([(83, 86), (93, 86), (91, 95), (85, 95)]), col, luz, osc, 1.5, 0.6, 1.1)
+    L.forma(D([(85, 95), (91, 95), (95, 132), (89, 141), (83, 132)]), col, luz, osc, 2.5, 0.8, 1.1)
+    # las solapas
+    for pts in (D([(62, 86), (73, 84), (88, 138), (80, 136), (68, 112), (56, 104)]),
+                D([(112, 86), (100, 84), (88, 138), (96, 134), (108, 112), (120, 102)])):
+        L.forma(pts, TRAJE, TRAJE_LUZ, TRAJE_OSC, 2.5, 1.0, 1.2)
+    # bolsillos y botones
+    for a, b in (((106, 146), (126, 144)), ((58, 146), (72, 148)), ((108, 112), (122, 110))):
+        L.linea(D([a, b]), TRAJE_HONDO, 1.1)
+        L.linea(D([(a[0], a[1] + 1.2), (b[0], b[1] + 1.2)]), TRAJE_LUZ, 0.6)
+    for y in (148, 160):
+        L.elipse(89, y + dy, 2.0, 2.0, BOTON, 0.8)
 
 
 # --- el monstruo entero --------------------------------------------------------------
 
-PATAS = dict(
-    # cadera, rodilla (alta, por encima del cuerpo), tobillo, pie
-    del_cerca=((46, 148), (10, 108), (8, 196), (18, 250)),
-    del_lejos=((84, 150), (104, 94), (78, 190), (62, 248)),
-    tra_cerca=((160, 150), (182, 72), (184, 180), (168, 250)),
-    tra_lejos=((140, 146), (150, 70), (138, 184), (118, 248)),
+POSES = dict(
+    suelo=dict(
+        dy=0,
+        patas=dict(tra_lejos=((156, 132), (166, 96), (158, 196), (148, 248)),
+                   tra_cerca=((176, 140), (188, 102), (186, 192), (176, 250)),
+                   del_lejos=((110, 166), (128, 194), (112, 226), (122, 250)),
+                   del_cerca=((70, 166), (40, 192), (56, 226), (44, 250))),
+        mangas=(((132, 102), (146, 128), (142, 152)), ((50, 102), (38, 130), (42, 154)))),
+    vuelo=dict(
+        dy=-6,
+        patas=dict(tra_lejos=((150, 160), (162, 184), (152, 212), (162, 236)),
+                   tra_cerca=((164, 164), (184, 190), (174, 220), (186, 244)),
+                   del_lejos=((110, 164), (122, 192), (110, 220), (120, 244)),
+                   del_cerca=((70, 164), (54, 192), (64, 222), (54, 246))),
+        mangas=(((132, 102), (150, 120), (160, 134)), ((50, 102), (30, 116), (20, 130)))),
 )
 
 
-def dibujar(cara, alas=False, corbata=(CORBATA, CORBATA_OSC), pixel=1):
-    L = Lienzo()
-    pata(L, *PATAS['tra_lejos'], osc=True)
-    pata(L, *PATAS['del_lejos'], osc=True)
-    caparazon(L, alas)
-    pata(L, *PATAS['tra_cerca'])
-    torso(L, corbata)
-    pata(L, *PATAS['del_cerca'])
-    cabeza(L, cara)
-    brazo(L, (38, 116), (26, 140), (34, 160))
-    return L.final(pixel)
-
-
-# --- v2: la cabeza de tres cuartos (nefanyamuto_cabeza) sobre el cuerpo ---------------
-
-sys.path.insert(0, AQUI)
-import nefanyamuto_cabeza as CAB          # noqa: E402
-
-ESCALA_CABEZA = 0.7                       # pixeles por unidad de cabeza en la celda
-CENTRO_CABEZA = (64, 57)                  # donde cae el origen de la cabeza (entre los ojos)
-
-PATAS_VUELO = dict(
-    # colgando, las rodillas dobladas hacia atras
-    del_cerca=((46, 132), (30, 160), (40, 206), (30, 236)),
-    del_lejos=((84, 134), (74, 166), (84, 208), (74, 232)),
-    tra_cerca=((160, 134), (176, 168), (170, 210), (180, 236)),
-    tra_lejos=((140, 130), (150, 166), (140, 206), (150, 230)),
-)
-
-
-def cuerpo(pose='suelo', corbata=(CORBATA, CORBATA_OSC)):
-    L = Lienzo()
-    dy = -16 if pose == 'vuelo' else 0
-
-    class Sube(object):
-        """Pasa lo que se dibuja dy pixeles hacia arriba (el cuerpo en vuelo)."""
-        def __getattr__(self, k):
-            f = getattr(L, k)
-            if k == 'elipse':
-                return lambda cx, cy, *a, **kw: f(cx, cy + dy, *a, **kw)
-            if k in ('poli', 'linea'):
-                return lambda pts, *a, **kw: f(_mov(pts, 0, dy), *a, **kw)
-            return f
-    B = Sube()
-    patas = PATAS_VUELO if pose == 'vuelo' else PATAS
-    sube = (lambda q: _mov(q, 0, -dy)) if pose == 'vuelo' else (lambda q: q)
-    pata(B, *sube(patas['tra_lejos']), osc=True)
-    pata(B, *sube(patas['del_lejos']), osc=True)
-    caparazon(B, False)
-    pata(B, *sube(patas['tra_cerca']))
-    torso(B, corbata)
-    pata(B, *sube(patas['del_cerca']))
-    if pose == 'vuelo':
-        brazo(B, (38, 116), (20, 128), (12, 144))
-    else:
-        brazo(B, (38, 116), (26, 140), (34, 160))
-    return L.final(), dy
-
-
-def dibujar2(cara, pose='suelo', corbata=(CORBATA, CORBATA_OSC)):
-    im, dy = cuerpo(pose, corbata)
+def dibujar(cara, pose='suelo', corbata=CORBATA_AZUL):
+    P = POSES[pose]
+    dy = P['dy']
+    L = lienzo()
+    pt = P['patas']
+    (mh, mc, mm), (fh, fc, fm) = P['mangas']
+    sube = (lambda q: [(x, y + dy) for x, y in q])
+    pata(L, *sube(pt['tra_lejos']), osc=True, semilla=21)
+    manga(L, (mh[0], mh[1] + dy), (mc[0], mc[1] + dy), (mm[0], mm[1] + dy), osc=True)
+    abdomen(L, dy)
+    pata(L, *sube(pt['tra_cerca']), semilla=31)
+    pata(L, *sube(pt['del_lejos']), osc=True, semilla=41)
+    pata(L, *sube(pt['del_cerca']), semilla=51)
+    crestas(L, dy)
+    chaqueta(L, corbata, dy)
+    # la cabeza, pintada a la misma resolucion de trabajo
     c = dict(cara)
     if pose == 'vuelo':
-        c['ala'] = 1.0
-        c['orejas'] = 1.15
-    cab = CAB.retrato(c, ESCALA_CABEZA)
-    ox, oy = CAB.LIENZO[2] * ESCALA_CABEZA, CAB.LIENZO[3] * ESCALA_CABEZA
-    x = int(round(CENTRO_CABEZA[0] - ox))
-    y = int(round(CENTRO_CABEZA[1] + dy * 0.5 - oy))
-    im.alpha_composite(cab, (max(0, x), max(0, y)), (max(0, -x), max(0, -y)))
-    return im
+        c['ala'] = c.get('ala', 1.0)
+        c['orejas'] = c.get('orejas', 1.2)
+    kh = K * ESCALA_CABEZA
+    H = CAB.lienzo(c, kh)
+    x = int(round((CABEZA[0] - CAB.LIENZO[2] * ESCALA_CABEZA) * K))
+    y = int(round((CABEZA[1] + dy + (10 if pose == 'vuelo' else 0) - CAB.LIENZO[3] * ESCALA_CABEZA) * K))
+    L.im.alpha_composite(H.im, (max(0, x), max(0, y)), (max(0, -x), max(0, -y)))
+    manga(L, (fh[0], fh[1] + dy), (fc[0], fc[1] + dy), (fm[0], fm[1] + dy))
+    im = L.im.resize((CELDA_W, CELDA_H), Image.LANCZOS)
+    return CAB.pixelar(im, 64)
+
+
+def _fuente(t):
+    try:
+        return ImageFont.load_default(size=t)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 def lamina_diseno(salida):
-    """Las propuestas, lado a lado y a 3x (pixel a pixel) sobre gris."""
     C = CAB.CARAS
     props = [
-        ('serio', dibujar2(C['serio'])),
-        ('pillo', dibujar2(C['pillo'])),
-        ('enfado', dibujar2(C['enfado'], corbata=(CORBATA_ROJA, CORBATA_ROJA_OSC))),
-        ('vuela (orejas-alas)', dibujar2(C['furia'], 'vuelo', corbata=(CORBATA_ROJA, CORBATA_ROJA_OSC))),
+        ('serio', dibujar(C['serio'])),
+        ('pillo', dibujar(C['pillo'])),
+        ('enfado', dibujar(C['enfado'], corbata=CORBATA_ROJA)),
+        ('vuela (orejas-alas)', dibujar(C['furia'], 'vuelo', corbata=CORBATA_ROJA)),
     ]
     k = 3
     W, H = CELDA_W * k, CELDA_H * k
     lam = Image.new('RGBA', (W * len(props) + 16 * (len(props) + 1), H + 40), (60, 62, 68, 255))
     d = ImageDraw.Draw(lam)
-    try:
-        f = ImageFont.load_default(size=18)
-    except TypeError:
-        f = ImageFont.load_default()
+    f = _fuente(18)
     for i, (txt, im) in enumerate(props):
         x = 16 + i * (W + 16)
         lam.alpha_composite(im.resize((W, H), Image.NEAREST), (x, 34))
@@ -506,15 +296,12 @@ def lamina_diseno(salida):
 
 
 def lamina_caras(salida):
-    """El estudio de la cabeza: las caras a la escala del sprite (x4) y a 2x (x3)."""
+    """El estudio de la cabeza: a la escala del sprite (x4) y a 2x (x3)."""
     nombres = ['serio', 'pillo', 'enfado', 'calculador', 'furia', 'susto']
-    try:
-        f = ImageFont.load_default(size=16)
-    except TypeError:
-        f = ImageFont.load_default()
+    f = _fuente(16)
     w0, h0 = CAB.LIENZO[0], CAB.LIENZO[1]
     filas = []
-    for esc, zoom in ((ESCALA_CABEZA, 4), (1.4, 3)):
+    for esc, zoom in ((ESCALA_CABEZA, 4), (1.2, 3)):
         filas.append([(n, esc, CAB.retrato(CAB.CARAS[n], esc).resize((int(round(w0 * esc)) * zoom, int(round(h0 * esc)) * zoom),
                                                                      Image.NEAREST)) for n in nombres])
     W = max(sum(im.size[0] + 10 for _, _, im in fila) for fila in filas) + 10
@@ -535,4 +322,5 @@ def lamina_caras(salida):
 
 if __name__ == '__main__':
     lamina_diseno(os.path.join(AQUI, 'nefanyamuto_diseno.png'))
-    lamina_caras(os.path.join(AQUI, 'nefanyamuto_caras.png'))
+    if '--caras' in sys.argv:
+        lamina_caras(os.path.join(AQUI, 'nefanyamuto_caras.png'))

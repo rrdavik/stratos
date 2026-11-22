@@ -1,55 +1,49 @@
 """
 =============================================================================
-ESTRATOS - NEFANYAMUTO: LA CABEZA (estudio de caricatura)
+ESTRATOS - NEFANYAMUTO: LA CABEZA
 =============================================================================
-La cabeza en vista de tres cuartos mirando a la izquierda, como la de Trumpzilla,
-con sombreado pintado (capas difuminadas recortadas por la cara) y reducida a
-pixel art con una paleta adaptada. Se dibuja en "unidades" de cabeza (la cara
-mide unas 62 de ancho, el origen entre los ojos, y hacia abajo); retrato()
-devuelve la imagen a la escala final que se pida (pixeles por unidad).
+La cabeza en tres cuartos mirando a la izquierda, como la de Trumpzilla, pintada
+con capas difuminadas (recortadas por cada forma) y contorno de tinta. Se dibuja
+en "unidades" de cabeza: la cara mide unas 64 de ancho, el origen entre los ojos y
+la y hacia abajo. retrato() la da reducida a pixel art; lienzo() la da a la
+resolucion de trabajo para montarla sobre el cuerpo.
 
-Rasgos: canas peinadas hacia atras con entradas, cejas oscuras y pesadas, ojos
-pequenos de parpado caido que miran de reojo, bolsas, la nariz larga y carnosa
-con la punta partida en dos por una hendidura (como un capullo), surcos hondos,
-labios finos con las comisuras caidas, papada y orejas de soplillo enormes (que
-en el monstruo hacen de alas).
+La caricatura: cabeza ancha y cuadrada, canas cortas peinadas hacia atras con
+entradas, cejas gruesas muy bajas sobre ojos entornados que miran torcido (mala
+leche), la nariz ancha y carnosa con la punta partida por una hendidura (como un
+capullo), surcos hondos, la boca ancha de labios finos con las comisuras caidas,
+carrillos y orejas de soplillo enormes (en vuelo hacen de alas).
 =============================================================================
 """
 
-import math
-
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
-TINTA = (34, 20, 22)
-# piel
-PIEL = (222, 164, 134)
-PIEL_LUZ = (242, 198, 166)
-PIEL_BRILLO = (252, 224, 196)
-PIEL_OSC = (190, 124, 100)
-PIEL_SOMBRA = (148, 88, 76)
-PIEL_HONDA = (104, 58, 56)
-ROJEZ = (214, 112, 100)
-OREJA_DENTRO = (200, 112, 104)
-OJERA = (130, 84, 92)
-# pelo y cejas
-CANA = (196, 198, 204)
-CANA_LUZ = (236, 238, 242)
-CANA_OSC = (128, 130, 140)
-CANA_HONDA = (88, 90, 100)
-CEJA = (60, 56, 60)
-CEJA_LUZ = (120, 116, 120)
-# ojos y boca
-BLANCO_OJO = (226, 218, 204)
-IRIS = (78, 62, 50)
-PUPILA = (18, 14, 14)
-ROJO_OJO = (255, 60, 30)
-LABIO = (168, 92, 88)
-LABIO_OSC = (118, 58, 60)
-BOCA = (70, 20, 26)
-DIENTE = (236, 230, 214)
-LENGUA = (190, 84, 92)
-CAMISA = (238, 240, 244)
-CAMISA_OSC = (186, 192, 206)
+TINTA = (28, 16, 18)
+PIEL = (216, 150, 118)
+PIEL_LUZ = (240, 190, 152)
+PIEL_BRILLO = (252, 220, 190)
+PIEL_OSC = (182, 110, 86)
+PIEL_SOMBRA = (138, 76, 62)
+PIEL_HONDA = (88, 42, 40)
+ROJEZ = (206, 92, 80)
+OREJA_DENTRO = (176, 86, 76)
+CANA = (168, 170, 178)
+CANA_LUZ = (222, 224, 230)
+CANA_OSC = (112, 114, 124)
+CANA_HONDA = (68, 70, 80)
+CEJA = (46, 42, 46)
+CEJA_LUZ = (104, 100, 104)
+BLANCO_OJO = (214, 204, 188)
+IRIS = (70, 54, 42)
+PUPILA = (14, 10, 10)
+ROJO_OJO = (255, 50, 20)
+LABIO = (160, 84, 78)
+LABIO_OSC = (110, 52, 52)
+BOCA = (62, 16, 22)
+DIENTE = (232, 224, 204)
+LENGUA = (184, 76, 84)
+CAMISA = (236, 238, 242)
+CAMISA_OSC = (178, 184, 200)
 
 
 def bez(p0, p1, p2, n=10):
@@ -61,10 +55,11 @@ def bez(p0, p1, p2, n=10):
     return out
 
 
-class Retrato(object):
-    """Lienzo en unidades: x de -ox a ancho - ox, y de -oy a alto - oy; k pixeles por unidad."""
+class Lienzo(object):
+    """Lienzo pintado en unidades: x de -ox a ancho - ox, y de -oy a alto - oy; k pixeles
+    por unidad. Sirve para la cabeza y para el cuerpo."""
 
-    def __init__(self, k=8, ancho=140, alto=140, ox=70, oy=72):
+    def __init__(self, k=8, ancho=140, alto=140, ox=70, oy=70):
         self.k, self.ox, self.oy = k, ox, oy
         self.W, self.H = int(ancho * k), int(alto * k)
         self.ancho, self.alto = ancho, alto
@@ -74,7 +69,7 @@ class Retrato(object):
     def P(self, pts):
         return [((x + self.ox) * self.k, (y + self.oy) * self.k) for x, y in pts]
 
-    # --- mascaras --------------------------------------------------------------
+    # mascaras
     def m_vacia(self):
         return Image.new('L', (self.W, self.H), 0)
 
@@ -93,7 +88,10 @@ class Retrato(object):
         ImageDraw.Draw(m).line(self.P(pts), fill=v, width=max(1, int(ancho * self.k)), joint='curve')
         return m
 
-    # --- pintar ----------------------------------------------------------------
+    def mover(self, m, dx, dy):
+        return ImageChops.offset(m, int(dx * self.k), int(dy * self.k))
+
+    # pintar
     def pintar(self, m, col, blur=0.0, clip=None, alpha=1.0):
         if blur > 0:
             m = m.filter(ImageFilter.GaussianBlur(blur * self.k))
@@ -104,6 +102,27 @@ class Retrato(object):
         capa = Image.new('RGBA', (self.W, self.H), tuple(col[:3]) + (0,))
         capa.putalpha(m)
         self.im.alpha_composite(capa)
+
+    def volumen(self, m, luz, osc, d=3.0, blur=1.5, a_luz=0.8, a_osc=0.9, honda=None, dh=None):
+        """Sombra en el borde de abajo a la derecha y luz en el de arriba a la
+        izquierda (la luz viene de arriba a la izquierda)."""
+        sombra = ImageChops.subtract(m, self.mover(m, -d, -d))
+        self.pintar(sombra, osc, blur, m, a_osc)
+        if honda is not None:
+            dh = dh or d * 0.45
+            self.pintar(ImageChops.subtract(m, self.mover(m, -dh, -dh)), honda, blur * 0.6, m, a_osc)
+        if luz is not None:
+            brillo = ImageChops.subtract(m, self.mover(m, d * 0.7, d * 0.7))
+            self.pintar(brillo, luz, blur, m, a_luz)
+
+    def forma(self, pts, col, luz=None, osc=None, d=3.0, blur=1.5, borde=1.2, honda=None, a_luz=0.8, a_osc=0.9):
+        m = self.m_poli(pts)
+        self.pintar(m, col)
+        if osc is not None:
+            self.volumen(m, luz, osc, d, blur, a_luz, a_osc, honda)
+        if borde > 0:
+            self.linea(pts + pts[:1], TINTA, borde)
+        return m
 
     def poli(self, pts, col, borde=0.0, tinta=TINTA):
         self.d.polygon(self.P(pts), fill=tuple(col[:3]) + (255,))
@@ -121,344 +140,279 @@ class Retrato(object):
     def linea(self, pts, col=TINTA, ancho=1.0):
         self.d.line(self.P(pts), fill=tuple(col[:3]) + (255,), width=max(1, int(ancho * self.k)), joint='curve')
 
-    # --- final -----------------------------------------------------------------
     def final(self, escala, colores=40):
-        """Reduce a 'escala' pixeles por unidad, recorte duro y paleta adaptada."""
         w, h = max(1, int(round(self.ancho * escala))), max(1, int(round(self.alto * escala)))
-        im = self.im.resize((w, h), Image.LANCZOS)
-        return pixelar(im, colores)
+        return pixelar(self.im.resize((w, h), Image.LANCZOS), colores)
 
 
-def pixelar(im, colores=40):
-    a = im.split()[3].point(lambda v: 255 if v >= 128 else 0)
-    fondo = Image.new('RGBA', im.size, (200, 150, 130, 255))
+Retrato = Lienzo
+
+
+def pixelar(im, colores=48, contorno=True):
+    """Recorte duro, paleta adaptada sin tramado y (contorno) un pixel de tinta
+    alrededor de la silueta: el acabado arcade."""
+    a = im.split()[3].point(lambda v: 255 if v >= 110 else 0)
+    fondo = Image.new('RGBA', im.size, (150, 110, 100, 255))
     fondo.alpha_composite(im)
-    rgb = fondo.convert('RGB')
-    # des-premultiplica los bordes: lo opaco a medias se lleva a su color
-    q = rgb.quantize(colors=colores, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
-    out = q.convert('RGBA')
-    out.putalpha(a)
-    return out
+    q = fondo.convert('RGB').quantize(colors=colores, method=Image.Quantize.MEDIANCUT,
+                                      dither=Image.Dither.NONE).convert('RGBA')
+    q.putalpha(a)
+    if contorno:
+        borde = a.filter(ImageFilter.MaxFilter(3))
+        anillo = ImageChops.subtract(borde, a)
+        tinta = Image.new('RGBA', im.size, TINTA + (255,))
+        tinta.putalpha(anillo)
+        q.alpha_composite(tinta)
+    return q
 
 
 # --- las partes -------------------------------------------------------------------
 
-OREJA_D = [(31, -17), (40, -30), (56, -37), (69, -33), (76, -20), (75, -4), (68, 10), (58, 17), (52, 25),
-           (45, 30), (38, 28), (33, 21)]
+OREJA_D = [(31, -18), (40, -30), (55, -36), (68, -32), (75, -20), (75, -4), (69, 10), (59, 17), (53, 25),
+           (46, 30), (38, 28), (33, 21)]
 
 
 def oreja(R, lado, tam, ala=0.0):
-    """Oreja de soplillo, humana: la helice gruesa por fuera, la concha honda, el
-    antihelix y el lobulo. lado +1 la de cerca (derecha), -1 la de lejos (mas
-    estrecha por el escorzo). tam la agranda hacia fuera; ala (0..1) la abre hacia
-    arriba como un ala."""
+    """Oreja de soplillo: helice gruesa, concha honda, antihelix y lobulo. lado +1 la
+    de cerca (derecha), -1 la de lejos (mas estrecha por el escorzo). tam la agranda;
+    ala (0..1) la abre hacia arriba como un ala."""
     ax = 31.0
 
     def X(p):
         x, y = p
         d = (x - ax) * tam
-        y = y - ala * 0.5 * d * (1 - (y + 30) / 70.0)
+        y = y * (0.8 + 0.2 * tam) - ala * 0.6 * d * (1 - (y + 30) / 70.0)
         if lado > 0:
             return (ax + d, y)
-        return (-27 - d * 0.8, y + 1)
+        return (-28 - d * 0.78, y + 1)
     pts = [X(p) for p in OREJA_D]
     m = R.m_poli(pts)
-    R.poli(pts, PIEL)
-    # sombra donde nace y luz en la helice
+    R.pintar(m, PIEL)
+    R.volumen(m, PIEL_LUZ, PIEL_OSC, 3.0, 1.2)
     R.pintar(R.m_linea([pts[0], pts[-1]], 7), PIEL_SOMBRA, 2.0, m, 0.95)
-    R.pintar(R.m_linea(pts[1:8], 3.4), PIEL_LUZ, 0.8, m, 0.6)
-    R.pintar(R.m_elipse(*X((46, 22)), 4, 4), ROJEZ, 1.5, m, 0.4)                      # el lobulo
-    # la concha: hueco hondo en medio
-    concha = [X(p) for p in ((36, -12), (48, -24), (62, -25), (68, -10), (63, 6), (53, 12), (44, 14), (37, 8))]
-    R.pintar(R.m_poli(concha), OREJA_DENTRO, 0.8, m, 0.95)
-    R.pintar(R.m_poli([X(p) for p in ((38, -4), (46, -8), (52, 0), (48, 10), (40, 10))]), PIEL_HONDA, 2.0, m, 0.6)
-    # el borde interior de la helice y el antihelix (la Y)
-    R.linea([X(p) for p in ((40, -25), (56, -31), (68, -27), (72, -14), (70, 2), (62, 11))], PIEL_SOMBRA, 1.0)
-    R.linea([X(p) for p in ((56, 10), (62, -2), (60, -14), (52, -22))], PIEL_OSC, 1.6)
-    R.linea([X(p) for p in ((60, -14), (48, -17))], PIEL_OSC, 1.2)
-    R.elipse(*X((35, 4)), 2.2, 3.0, PIEL_OSC)            # el trago
-    R.linea(pts + pts[:1], TINTA, 1.3)
+    concha = [X(p) for p in ((36, -12), (47, -24), (61, -26), (68, -12), (64, 5), (54, 12), (44, 14), (37, 8))]
+    R.pintar(R.m_poli(concha), OREJA_DENTRO, 0.6, m, 0.95)
+    R.pintar(R.m_poli([X(p) for p in ((38, -6), (46, -10), (53, -1), (49, 10), (40, 10))]), PIEL_HONDA, 1.4, m, 0.85)
+    R.pintar(R.m_linea([X(p) for p in ((56, 10), (62, -2), (60, -14), (52, -22))], 3.0), PIEL_LUZ, 0.8, m, 0.8)
+    R.linea([X(p) for p in ((40, -25), (55, -31), (67, -27), (71, -14), (70, 2), (62, 11))], PIEL_SOMBRA, 1.0)
+    R.pintar(R.m_elipse(*X((46, 22)), 4, 4), ROJEZ, 1.5, m, 0.5)
+    R.elipse(*X((35, 4)), 2.2, 3.0, PIEL_OSC)
+    R.linea(pts + pts[:1], TINTA, 1.4)
 
 
-CARA = (bez((-23, -32), (-29, -18), (-28, -2)) + bez((-28, -2), (-30, 14), (-28, 26))
-        + bez((-28, 26), (-32, 42), (-22, 52)) + bez((-22, 52), (-6, 60), (10, 56))
-        + bez((10, 56), (31, 50), (31, 32)) + bez((31, 32), (35, 14), (33, -4))
-        + bez((33, -4), (32, -20), (27, -32))
-        + [(22, -38), (14, -41), (6, -42), (0, -47), (-6, -44), (-12, -42), (-18, -39)])
+# cabeza ancha y cuadrada, carrillos que cuelgan junto a la barbilla
+CARA = (bez((-24, -31), (-30, -16), (-30, 0)) + bez((-30, 0), (-32, 16), (-30, 28))
+        + bez((-30, 28), (-31, 42), (-19, 48)) + bez((-19, 48), (-4, 55), (12, 51))
+        + bez((12, 51), (31, 45), (33, 28)) + bez((33, 28), (37, 10), (35, -6))
+        + bez((35, -6), (34, -22), (28, -32))
+        + [(22, -36), (14, -38), (6, -39), (0, -42), (-6, -40), (-13, -38), (-19, -35)])
 
-PELO = (bez((-25, -26), (-34, -42), (-24, -52)) + [(-20, -56), (-14, -55), (-10, -60), (-2, -59), (2, -63),
-        (10, -62), (16, -64), (24, -60), (30, -56), (36, -48), (40, -38), (42, -24), (40, -8), (35, 2), (30, -6),
-        (28, -30), (-20, -34)])
+PELO = (bez((-26, -24), (-34, -42), (-24, -52)) + [(-20, -55), (-14, -54), (-10, -58), (-2, -57), (2, -60),
+        (10, -59), (16, -61), (24, -57), (30, -53), (36, -46), (40, -36), (42, -22), (40, -6), (36, 2), (31, -4),
+        (29, -28), (-21, -32)])
 
 
 def pelo(R):
     m = R.m_poli(PELO)
-    R.poli(PELO, CANA)
-    # volumen: oscuro detras y abajo, luz arriba a la izquierda
-    R.pintar(R.m_poli([(16, -70), (50, -50), (46, 6), (26, 0), (22, -40)]), CANA_OSC, 4, m, 0.95)
-    R.pintar(R.m_poli([(30, -50), (50, -40), (46, 6), (32, 0)]), CANA_HONDA, 3, m, 0.7)
-    R.pintar(R.m_elipse(-10, -54, 12, 5), CANA_LUZ, 2.5, m, 1.0)
-    # el tupe: la masa de delante peinada hacia arriba y atras
-    tupe = [(-22, -36), (-27, -46), (-20, -55), (-8, -60), (4, -60), (12, -54), (6, -48), (-6, -46), (-14, -42)]
-    R.pintar(R.m_poli(tupe), CANA_LUZ, 1.2, m, 0.9)
-    R.pintar(R.m_linea(bez((-20, -38), (-6, -46), (10, -50)), 2.4), CANA_OSC, 1.2, m, 0.9)
-    # mechas hacia atras, alternando oscuras y claras
-    for a, b, c, col, w in (((-16, -42), (-4, -56), (18, -58), CANA_OSC, 1.0), ((-4, -46), (12, -56), (30, -50), CANA_HONDA, 1.1),
-                            ((-24, -36), (-26, -48), (-10, -56), CANA_OSC, 0.9), ((6, -46), (24, -50), (38, -34), CANA_HONDA, 1.1),
-                            ((-14, -50), (0, -60), (16, -60), CANA_LUZ, 1.2), ((16, -44), (32, -44), (40, -20), CANA_HONDA, 1.1),
-                            ((0, -52), (18, -58), (34, -46), CANA_LUZ, 0.9), ((20, -36), (34, -34), (38, -12), CANA_OSC, 0.9)):
+    R.pintar(m, CANA)
+    R.pintar(R.m_poli([(14, -66), (50, -48), (46, 6), (26, 0), (20, -38)]), CANA_OSC, 4, m, 0.95)
+    R.pintar(R.m_poli([(30, -48), (50, -38), (46, 6), (32, 0)]), CANA_HONDA, 3, m, 0.8)
+    R.pintar(R.m_elipse(-10, -52, 12, 5), CANA_LUZ, 2.5, m, 1.0)
+    tupe = [(-22, -34), (-27, -44), (-20, -53), (-8, -57), (4, -57), (12, -51), (6, -45), (-6, -43), (-14, -39)]
+    R.pintar(R.m_poli(tupe), CANA_LUZ, 1.0, m, 0.85)
+    for a, b, c, col, w in (((-16, -40), (-4, -54), (18, -56), CANA_OSC, 1.0), ((-4, -44), (12, -54), (30, -48), CANA_HONDA, 1.1),
+                            ((-24, -34), (-26, -46), (-10, -54), CANA_OSC, 0.9), ((6, -44), (24, -48), (38, -32), CANA_HONDA, 1.1),
+                            ((-14, -48), (0, -58), (16, -58), CANA_LUZ, 1.2), ((16, -42), (32, -42), (40, -18), CANA_HONDA, 1.1),
+                            ((0, -50), (18, -56), (34, -44), CANA_LUZ, 0.9), ((20, -34), (34, -32), (38, -10), CANA_OSC, 0.9)):
         R.linea(bez(a, b, c, 8), col, w)
-    R.linea(PELO + PELO[:1], TINTA, 1.3)
-    # patillas cortas sobre las orejas
-    for pts in ([(-28, 0), (-31, -16), (-25, -26), (-23, -14), (-25, -4)], [(31, 0), (34, -14), (28, -28), (26, -14), (28, -2)]):
-        R.poli(pts, CANA, 0.9)
-        R.pintar(R.m_poli(pts), CANA_OSC, 1.2, R.m_poli(pts), 0.8)
+    R.linea(PELO + PELO[:1], TINTA, 1.4)
+    # patillas cortas, rapadas sobre las orejas
+    for pts in ([(-29, 2), (-32, -16), (-26, -27), (-24, -14), (-26, -2)], [(32, 2), (36, -14), (29, -28), (27, -14), (29, 0)]):
+        mm = R.m_poli(pts)
+        R.pintar(mm, CANA_OSC)
+        R.pintar(mm, CANA, 1.0, R.mover(mm, -1, -1), 0.7)
 
 
-def cara_base(R):
+def cara_base(R, cara):
     m = R.m_poli(CARA)
-    R.poli(CARA, PIEL)
-    # sombras grandes: el lado derecho, las sienes, bajo los pomulos, la papada
-    R.pintar(R.m_poli([(16, -40), (40, -30), (40, 50), (6, 54), (14, 30), (20, 0)]), PIEL_OSC, 5, m, 0.95)
-    R.pintar(R.m_poli([(24, -10), (40, -10), (40, 48), (14, 50)]), PIEL_SOMBRA, 4, m, 0.7)
-    R.pintar(R.m_elipse(-27, -18, 5, 10), PIEL_OSC, 3, m, 0.7)
-    R.pintar(R.m_elipse(-24, 14, 5, 9), PIEL_OSC, 3, m, 0.6)           # bajo el pomulo
-    R.pintar(R.m_elipse(18, 16, 5, 9), PIEL_SOMBRA, 3, m, 0.5)
-    # mofletes caidos y papada
-    R.pintar(R.m_linea(bez((-27, 24), (-26, 40), (-14, 46)), 5), PIEL_SOMBRA, 2.5, m, 0.8)
-    R.pintar(R.m_linea(bez((28, 22), (26, 40), (12, 48)), 6), PIEL_SOMBRA, 2.5, m, 0.9)
-    R.pintar(R.m_linea(bez((-14, 55), (-2, 60), (12, 55)), 3), PIEL_HONDA, 1.5, m, 0.8)
-    # los carrillos que cuelgan junto a la barbilla
-    R.linea(bez((-26, 36), (-23, 48), (-15, 50), 6), PIEL_HONDA, 0.9)
-    R.linea(bez((27, 36), (23, 48), (15, 52), 6), PIEL_HONDA, 0.9)
-    R.pintar(R.m_elipse(-4, 53, 7, 3), PIEL_LUZ, 1.5, m, 0.7)
+    R.pintar(m, PIEL)
+    # el lado derecho en sombra, las sienes, bajo los pomulos, carrillos y papada
+    R.pintar(R.m_poli([(16, -40), (40, -30), (40, 54), (6, 56), (14, 30), (20, 0)]), PIEL_OSC, 4, m, 0.95)
+    R.pintar(R.m_poli([(24, -10), (40, -10), (40, 50), (14, 52)]), PIEL_SOMBRA, 3.5, m, 0.75)
+    R.pintar(R.m_elipse(-28, -16, 5, 10), PIEL_OSC, 3, m, 0.8)
+    R.pintar(R.m_elipse(-25, 14, 5, 9), PIEL_OSC, 3, m, 0.7)
+    R.pintar(R.m_elipse(19, 16, 5, 9), PIEL_SOMBRA, 3, m, 0.6)
+    R.pintar(R.m_linea(bez((-29, 26), (-28, 42), (-16, 47)), 5), PIEL_SOMBRA, 2.2, m, 0.85)
+    R.pintar(R.m_linea(bez((30, 24), (28, 42), (12, 50)), 6), PIEL_SOMBRA, 2.2, m, 0.95)
+    R.pintar(R.m_linea(bez((-16, 52), (-2, 57), (14, 52)), 3), PIEL_HONDA, 1.3, m, 0.9)
+    R.linea(bez((-27, 34), (-24, 45), (-16, 47), 6), PIEL_HONDA, 1.0)
+    R.linea(bez((28, 34), (24, 46), (15, 50), 6), PIEL_HONDA, 1.0)
     # luces: frente, pomulo izquierdo, barbilla
-    R.pintar(R.m_elipse(-8, -30, 13, 6), PIEL_LUZ, 4, m, 0.9)
-    R.pintar(R.m_elipse(-12, -32, 6, 3), PIEL_BRILLO, 2, m, 0.8)
-    R.pintar(R.m_elipse(-20, 6, 5, 4), PIEL_LUZ, 3, m, 0.7)
-    
-    # rojez de la cara (nariz y mejillas)
-    R.pintar(R.m_elipse(-21, 14, 6, 5), ROJEZ, 4, m, 0.35)
-    R.pintar(R.m_elipse(14, 14, 6, 5), ROJEZ, 4, m, 0.3)
-    # arrugas de la frente
-    for k in range(3):
-        y = -26 - k * 4.5
-        R.linea(bez((-18 + k * 2, y + 1), (-2, y - 1.8), (16 - k * 2, y + 0.5), 8), PIEL_OSC, 0.9)
-        R.linea(bez((-17 + k * 2, y + 2), (-2, y - 0.6), (15 - k * 2, y + 1.5), 8), PIEL_LUZ, 0.6)
-    R.linea(CARA + CARA[:1], TINTA, 1.5)
+    R.pintar(R.m_elipse(-8, -28, 13, 5), PIEL_LUZ, 3.5, m, 0.9)
+    R.pintar(R.m_elipse(-12, -30, 6, 2.5), PIEL_BRILLO, 1.6, m, 0.8)
+    R.pintar(R.m_elipse(-21, 6, 5, 4), PIEL_LUZ, 2.5, m, 0.7)
+    R.pintar(R.m_elipse(-4, 49, 7, 3), PIEL_LUZ, 1.4, m, 0.7)
+    R.pintar(R.m_elipse(-22, 16, 6, 5), ROJEZ, 3.5, m, 0.35)
+    R.pintar(R.m_elipse(15, 16, 6, 5), ROJEZ, 3.5, m, 0.3)
+    # la frente fruncida: dos arrugas largas y las del entrecejo
+    for k in range(2):
+        y = -24 - k * 5
+        R.linea(bez((-16 + k * 2, y + 1), (-2, y - 1.8 - cara.get('ceno', 0.8)), (16 - k * 2, y + 0.5), 8), PIEL_SOMBRA, 0.9)
+        R.linea(bez((-15 + k * 2, y + 2), (-2, y - 0.6), (15 - k * 2, y + 1.5), 8), PIEL_LUZ, 0.6)
+    R.linea(CARA + CARA[:1], TINTA, 1.6)
     return m
 
 
-class _Baja(object):
-    """Desplaza en y lo que se dibuja (para bajar las cejas sin rehacer sus puntos)."""
-
-    def __init__(self, R, dy):
-        self.R, self.dy = R, dy
-
-    def _t(self, pts):
-        return [(x, y + self.dy) for x, y in pts]
-
-    def m_poli(self, pts, m=None, v=255):
-        return self.R.m_poli(self._t(pts), m, v)
-
-    def pintar(self, *a, **k):
-        self.R.pintar(*a, **k)
-
-    def poli(self, pts, *a, **k):
-        self.R.poli(self._t(pts), *a, **k)
-
-    def linea(self, pts, *a, **k):
-        self.R.linea(self._t(pts), *a, **k)
-
-
 def cejas(R, m, cara):
-    ceno = cara.get('ceno', 0.6)            # baja las puntas de dentro
-    R = _Baja(R, 1.8)
-    alza = cara.get('alza', 0.0)            # sube la de cerca (el pillo)
-    # la de cerca (derecha) y la de lejos (izquierda): gruesas, oscuras, poco arqueadas
-    for pts in ([(1, -13 + ceno * 2.5), (9, -17.5 - alza * 4), (19, -17 - alza * 3), (24, -13 - alza * 1.5),
-                 (19, -14 - alza * 2.5), (9, -14 - alza * 3.5), (2, -10 + ceno * 2.5)],
-                [(-6, -13 + ceno * 2.5), (-15, -17), (-23, -15), (-26, -11), (-22, -12.5), (-15, -14), (-7, -10 + ceno * 2.5)]):
-        R.pintar(R.m_poli([(x, y + 3) for x, y in pts]), PIEL_SOMBRA, 2.0, m, 0.8)    # la sombra bajo la ceja
-        R.poli(pts, CEJA, 0)
-        R.linea(pts[:4], CEJA_LUZ, 0.7)
+    """Gruesas, oscuras, muy bajas: casi tocan el ojo. ceno baja las puntas de
+    dentro; alza sube la de cerca (el pillo)."""
+    ceno = cara.get('ceno', 0.8)
+    alza = cara.get('alza', 0.0)
+    cerca = [(0, -9 + ceno * 2.6), (8, -13 - alza * 4), (18, -13.5 - alza * 3), (25, -9 - alza * 1.2),
+             (19, -9.6 - alza * 2.4), (9, -9.4 - alza * 3.2), (1, -5.6 + ceno * 2.6)]
+    lejos = [(-6, -9 + ceno * 2.6), (-14, -13), (-22, -12), (-27, -7.5), (-22, -8.8), (-14, -9.4), (-7, -5.6 + ceno * 2.6)]
+    for pts in (cerca, lejos):
+        R.pintar(R.m_poli([(x, y + 3.2) for x, y in pts]), PIEL_HONDA, 1.6, m, 0.85)
+        R.poli(pts, CEJA)
+        R.linea(pts[:4], CEJA_LUZ, 0.8)
+        R.linea(pts + pts[:1], TINTA, 0.6)
     if ceno > 0.4:
-        for x in (-3.5, -1.5):
-            R.linea([(x, -14), (x + 0.4, -7)], PIEL_SOMBRA, 0.9)
+        for x in (-4, -1.5):
+            R.linea([(x, -13), (x + 0.5, -5)], PIEL_HONDA, 1.0)
+        R.pintar(R.m_elipse(-2.5, -9, 3, 4), PIEL_SOMBRA, 1.2, m, 0.6)
 
 
 def ojo(R, m, cx, cy, w, cara, lejos=False):
-    """Un ojo pequeno de parpado caido, que mira de reojo."""
-    h = cara.get('abre', 1.0) * 3.3
+    """Entornado, de parpado gordo, mirando de reojo: la mala leche."""
+    h = cara.get('abre', 1.0) * 4.0
     tipo = cara.get('ojo', 'normal')
-    # la cuenca, honda
-    R.pintar(R.m_elipse(cx, cy - 1, w * 0.8, 5.5), PIEL_SOMBRA, 2.0, m, 0.9)
-    # las bolsas
-    R.pintar(R.m_linea(bez((cx - w * 0.5, cy + 3), (cx, cy + 7), (cx + w * 0.55, cy + 2.5)), 2.6), OJERA, 1.4, m, 0.9)
-    R.linea(bez((cx - w * 0.45, cy + 5.5), (cx + 1, cy + 9), (cx + w * 0.55, cy + 4.5), 6), PIEL_SOMBRA, 0.8)
-    R.linea(bez((cx - w * 0.3, cy + 3.2), (cx + 1, cy + 5.2), (cx + w * 0.5, cy + 2.5), 6), PIEL_OSC, 0.7)
+    R.pintar(R.m_elipse(cx, cy - 0.5, w * 0.8, 5.5), PIEL_HONDA, 2.0, m, 0.75)       # la cuenca
+    R.pintar(R.m_linea(bez((cx - w * 0.5, cy + 3), (cx, cy + 6.5), (cx + w * 0.55, cy + 2.5)), 2.4), PIEL_SOMBRA, 1.2, m, 0.9)
+    R.linea(bez((cx - w * 0.4, cy + 5), (cx + 1, cy + 8), (cx + w * 0.55, cy + 4), 6), PIEL_SOMBRA, 0.8)
     if cara.get('ojo_rojo'):
-        R.pintar(R.m_elipse(cx, cy, w * 0.7, 4.5), ROJO_OJO, 2.0, m, 0.5)
+        R.pintar(R.m_elipse(cx, cy, w * 0.75, 5), ROJO_OJO, 1.8, m, 0.6)
     if tipo == 'cerrado':
-        R.linea(bez((cx - w * 0.5, cy), (cx, cy + 1.6), (cx + w * 0.5, cy - 0.4), 6), TINTA, 1.1)
-        R.linea(bez((cx - w * 0.5, cy - 2.4), (cx, cy - 4), (cx + w * 0.55, cy - 2), 6), PIEL_SOMBRA, 0.9)
+        R.linea(bez((cx - w * 0.5, cy), (cx, cy + 1.4), (cx + w * 0.5, cy - 0.4), 6), TINTA, 1.4)
         return
-    big = 1.9 if tipo == 'grande' else 1.0
-    almendra = bez((cx - w * 0.5, cy), (cx, cy - h * 1.3 * big), (cx + w * 0.5, cy + 0.4), 8) + \
-        bez((cx + w * 0.5, cy + 0.4), (cx, cy + h * 1.1 * big), (cx - w * 0.5, cy), 8)
+    big = 2.0 if tipo == 'grande' else 1.0
+    almendra = bez((cx - w * 0.5, cy), (cx, cy - h * 1.2 * big), (cx + w * 0.5, cy + 0.5), 8) + \
+        bez((cx + w * 0.5, cy + 0.5), (cx, cy + h * 0.9 * big), (cx - w * 0.5, cy), 8)
     me = R.m_poli(almendra)
-    R.poli(almendra, BLANCO_OJO)
-    mira = cara.get('mira', -0.55)          # -1 de reojo a la izquierda, +1 a la derecha
-    ix = cx + mira * w * 0.28
-    rojo = cara.get('ojo_rojo', False)
-    R.pintar(R.m_elipse(ix, cy + 0.4, 3.0, 3.0), ROJO_OJO if rojo else IRIS, 0, me)
-    R.pintar(R.m_elipse(ix, cy + 0.4, 1.5, 1.5), PUPILA, 0, me)
-    R.pintar(R.m_elipse(ix - 0.9, cy - 0.8, 0.6, 0.6), (250, 250, 250), 0, me)
-    # el parpado de arriba: pesado, cae por fuera (la esquina de la derecha baja)
-    caida = cara.get('caida', 1.0)
-    parp = bez((cx - w * 0.6, cy - 0.4), (cx - w * 0.1, cy - h * 1.8 * big), (cx + w * 0.62, cy + 0.6 * caida), 8) + \
-        [(cx + w * 0.62, cy - 3.5), (cx - w * 0.6, cy - 4.5)]
+    R.pintar(me, BLANCO_OJO)
+    mira = cara.get('mira', -0.6)
+    ix = cx + mira * w * 0.26
+    R.pintar(R.m_elipse(ix, cy + 0.6, 3.4, 3.4), ROJO_OJO if cara.get('ojo_rojo') else IRIS, 0, me)
+    R.pintar(R.m_elipse(ix, cy + 0.6, 1.8, 1.8), PUPILA, 0, me)
+    R.pintar(R.m_elipse(ix - 1.0, cy - 0.6, 0.6, 0.6), (250, 250, 250), 0, me)
+    # sombra del parpado sobre el ojo
+    R.pintar(R.m_elipse(cx, cy - h, w * 0.6, h), PIEL_HONDA, 0.6, me, 0.5)
+    # el parpado de arriba: pesado, tapa la mitad del iris y cae por fuera
     if big < 1.5:
-        parp = bez((cx - w * 0.6, cy - 0.2), (cx - w * 0.05, cy - h * 1.05), (cx + w * 0.62, cy + 1.0 * caida), 8) + \
-            [(cx + w * 0.62, cy - 4.5), (cx - w * 0.6, cy - 5)]
-    R.poli(parp, PIEL_OSC)
-    R.pintar(R.m_poli(parp), PIEL_SOMBRA, 0.8, R.m_poli(parp), 0.5)
-    R.linea(parp[:9], TINTA, 1.6)
-    R.linea(bez((cx - w * 0.5, cy + 0.2), (cx, cy + h * 1.05 * big), (cx + w * 0.5, cy + 0.6), 6), PIEL_HONDA, 0.6)
-    # el pliegue sobre el parpado
-    R.linea(bez((cx - w * 0.45, cy - 3.6), (cx + 1, cy - 5.6), (cx + w * 0.6, cy - 2.6), 6), PIEL_SOMBRA, 0.8)
-    # patas de gallo
+        parp = bez((cx - w * 0.62, cy - 0.6), (cx - w * 0.05, cy - h * 1.15), (cx + w * 0.64, cy + 0.6), 8) + \
+            [(cx + w * 0.64, cy - 5.5), (cx - w * 0.62, cy - 6.0)]
+        R.poli(parp, PIEL_OSC)
+        R.pintar(R.m_poli(parp), PIEL_SOMBRA, 0.8, R.m_poli(parp), 0.6)
+        R.linea(parp[:9], TINTA, 1.7)
+    else:
+        R.linea(almendra[:9], TINTA, 1.3)
+    R.linea(bez((cx - w * 0.5, cy + 0.2), (cx, cy + h * 0.9 * big), (cx + w * 0.5, cy + 0.6), 6), PIEL_HONDA, 0.7)
     if not lejos:
         for k in (-1, 0, 1):
-            R.linea([(cx + w * 0.7, cy + k * 1.6), (cx + w * 0.7 + 4, cy + k * 2.6)], PIEL_OSC, 0.6)
-
-
-def nariz_(R, m, cara):
-    """Larga y carnosa, la punta en dos lobulos partidos por una hendidura."""
-    # el puente: sombra a la derecha, luz a la izquierda
-    R.pintar(R.m_poli([(-4, -10), (0, -10), (2, 10), (-1, 14)]), PIEL_OSC, 1.5, m, 0.9)
-    R.pintar(R.m_linea([(-7, -6), (-10, 10)], 2.0), PIEL_LUZ, 1.2, m, 0.9)
-    # el contorno de la izquierda (perfil de la nariz, sale un poco de la cara)
-    R.linea(bez((-6, -8), (-11, 6), (-15, 13), 6), PIEL_OSC, 0.8)
-    # las aletas
-    for ax, ay in ((-18.5, 21), (1.5, 21)):
-        R.elipse(ax, ay, 3.6, 3.2, PIEL)
-        R.pintar(R.m_elipse(ax + 0.6, ay + 0.6, 3.4, 3.0), PIEL_OSC, 1.0, R.m_elipse(ax, ay, 3.6, 3.2), 0.8)
-        R.linea(bez((ax - 3.2, ay + 2.2), (ax, ay - 4.2), (ax + 3.2, ay + 2.2), 6), PIEL_SOMBRA, 0.9)
-    # sombra bajo la nariz
-    R.pintar(R.m_elipse(-8, 26, 11, 3), PIEL_HONDA, 2.0, m, 0.8)
-    # los dos lobulos de la punta
-    for lx, col in ((-12.5, PIEL), (-3.5, PIEL)):
-        R.elipse(lx, 18.5, 5.0, 5.4, col)
-    mn = R.m_elipse(-12.5, 18.5, 5.0, 5.4, R.m_elipse(-3.5, 18.5, 5.0, 5.4))
-    R.pintar(R.m_elipse(-1.5, 20, 4, 5), PIEL_OSC, 1.5, mn, 0.9)
-    R.pintar(R.m_elipse(-11, 22, 5, 2.4), PIEL_OSC, 1.2, mn, 0.7)
-    R.pintar(R.m_elipse(-11, 17, 5, 5), ROJEZ, 2.0, mn, 0.45)
-    R.pintar(R.m_elipse(-4, 17, 4, 4), ROJEZ, 2.0, mn, 0.35)
-    R.pintar(R.m_elipse(-14, 16, 1.6, 1.4), PIEL_BRILLO, 0.6, mn, 1.0)
-    R.pintar(R.m_elipse(-5.5, 16, 1.4, 1.2), PIEL_LUZ, 0.6, mn, 1.0)
-    R.linea(bez((-17, 15), (-18.5, 21), (-14, 24), 5), TINTA, 1.1)
-    R.linea(bez((1, 15), (2.5, 21), (-2, 24), 5), PIEL_HONDA, 1.1)
-    # la hendidura: casi la parte en dos
-    R.pintar(R.m_linea([(-8, 13.5), (-8, 23.5)], 2.4), PIEL_SOMBRA, 0.7, mn, 1.0)
-    R.linea([(-8, 15.0), (-8.2, 23.8)], PIEL_HONDA, 1.1)
-    R.linea(bez((-17.5, 17), (-15, 24.5), (-8, 23.8), 6) + bez((-8, 23.8), (-2, 24.5), (1.5, 17), 6), TINTA, 1.3)
-    # los agujeros
-    R.elipse(-14.5, 23.2, 1.8, 1.0, PIEL_HONDA)
-    R.elipse(-2.0, 23.2, 1.6, 1.0, PIEL_HONDA)
+            R.linea([(cx + w * 0.7, cy + k * 1.6), (cx + w * 0.7 + 3.5, cy + k * 2.4)], PIEL_SOMBRA, 0.6)
 
 
 def nariz(R, m, cara):
-    """La nariz, mas grande que en la plantilla: se dibuja en un lienzo propio y se
-    escala desde el puente."""
-    f = cara.get('nariz', 1.35)
-    piv = (-6.0, -10.0)
+    """Ancha y carnosa; la punta en dos lobulos partidos por una hendidura (un
+    capullo). f la agranda desde el puente."""
+    f = cara.get('nariz', 1.3)
+    pv = (-6.0, -8.0)
 
-    class Escalado(object):
-        def __init__(self, R):
-            self.R = R
+    def T(pts):
+        return [(pv[0] + (x - pv[0]) * f, pv[1] + (y - pv[1]) * f) for x, y in pts]
 
-        def T(self, pts):
-            return [(piv[0] + (x - piv[0]) * f, piv[1] + (y - piv[1]) * f) for x, y in pts]
-
-        def P(self, pts):
-            return self.R.P(self.T(pts))
-
-        def m_poli(self, pts, m=None, v=255):
-            return self.R.m_poli(self.T(pts), m, v)
-
-        def m_elipse(self, cx, cy, rx, ry, m=None, v=255):
-            (cx, cy), = self.T([(cx, cy)])
-            return self.R.m_elipse(cx, cy, rx * f, ry * f, m, v)
-
-        def m_linea(self, pts, ancho, m=None, v=255):
-            return self.R.m_linea(self.T(pts), ancho * f, m, v)
-
-        def pintar(self, mm, col, blur=0.0, clip=None, alpha=1.0):
-            self.R.pintar(mm, col, blur * f, clip, alpha)
-
-        def poli(self, pts, col, borde=0.0, tinta=TINTA):
-            self.R.poli(self.T(pts), col, borde, tinta)
-
-        def elipse(self, cx, cy, rx, ry, col, borde=0.0, tinta=TINTA):
-            (cx, cy), = self.T([(cx, cy)])
-            self.R.elipse(cx, cy, rx * f, ry * f, col, borde, tinta)
-
-        def linea(self, pts, col=TINTA, ancho=1.0):
-            self.R.linea(self.T(pts), col, ancho * (1 + (f - 1) * 0.5))
-    nariz_(Escalado(R), m, cara)
+    def E(cx, cy, rx, ry):
+        (cx, cy), = T([(cx, cy)])
+        return cx, cy, rx * f, ry * f
+    # el puente: sombra a la derecha, luz a la izquierda, el perfil
+    R.pintar(R.m_poli(T([(-4, -8), (0, -8), (3, 10), (-1, 14)])), PIEL_OSC, 1.5, m, 0.9)
+    R.pintar(R.m_linea(T([(-6, -3), (-10, 10)]), 2.4), PIEL_LUZ, 1.0, m, 0.9)
+    R.linea(T(bez((-9, 4), (-12, 9), (-15, 13), 4)), PIEL_SOMBRA, 1.0)
+    # las aletas, anchas
+    for ax, ay in ((-19, 20.5), (2, 20.5)):
+        me = R.m_elipse(*E(ax, ay, 4.0, 3.4))
+        R.pintar(me, PIEL)
+        R.pintar(R.mover(me, 0.6, 0.6), PIEL_OSC, 1.0, me, 0.85)
+        R.linea(T(bez((ax - 3.6, ay + 2.4), (ax, ay - 4.6), (ax + 3.6, ay + 2.4), 6)), PIEL_SOMBRA, 1.0)
+    R.pintar(R.m_elipse(*E(-8, 26, 12, 3)), PIEL_HONDA, 1.8, m, 0.85)            # sombra debajo
+    # los dos lobulos
+    mn = R.m_elipse(*E(-12.5, 18, 5.4, 5.8))
+    mn = R.m_elipse(*E(-3.5, 18.5, 5.2, 5.6), mn)
+    R.pintar(mn, PIEL)
+    R.pintar(R.m_elipse(*E(-1, 20, 4, 5)), PIEL_OSC, 1.4, mn, 0.95)
+    R.pintar(R.m_elipse(*E(-11, 22.5, 5, 2.4)), PIEL_OSC, 1.0, mn, 0.8)
+    R.pintar(R.m_elipse(*E(-11, 17, 5, 5)), ROJEZ, 1.8, mn, 0.5)
+    R.pintar(R.m_elipse(*E(-4, 17, 4, 4)), ROJEZ, 1.8, mn, 0.4)
+    R.pintar(R.m_elipse(*E(-14, 15.5, 1.6, 1.4)), PIEL_BRILLO, 0.5, mn, 1.0)
+    R.pintar(R.m_elipse(*E(-5.5, 15.5, 1.3, 1.1)), PIEL_LUZ, 0.5, mn, 1.0)
+    # la hendidura: casi la parte en dos
+    R.pintar(R.m_linea(T([(-8, 12.5), (-8, 23.5)]), 2.6), PIEL_SOMBRA, 0.6, mn, 1.0)
+    R.linea(T([(-8, 14), (-8.2, 24)]), PIEL_HONDA, 1.2)
+    R.linea(T(bez((-18, 15), (-19, 22), (-14, 24.2), 5)), TINTA, 1.2)
+    R.linea(T(bez((-14, 24.2), (-8, 24.8), (-2, 24.2), 5)), TINTA, 1.3)
+    R.linea(T(bez((-2, 24.2), (2.5, 21), (1.5, 15), 5)), PIEL_HONDA, 1.1)
+    R.elipse(*E(-14.5, 23.4, 1.9, 1.0), PIEL_HONDA)
+    R.elipse(*E(-2.0, 23.4, 1.7, 1.0), PIEL_HONDA)
 
 
 def surcos(R, m, cara):
-    for a, b, c in (((-23, 28), (-29, 38), (-26, 48)), ((7, 28), (13, 38), (11, 50))):
-        R.pintar(R.m_linea(bez(a, b, c), 3.0), PIEL_SOMBRA, 1.5, m, 0.9)
-        R.linea(bez(a, b, c, 8), PIEL_HONDA, 0.9)
-        R.pintar(R.m_linea(bez((a[0] - 2, a[1] + 2), (b[0] - 2, b[1]), (c[0] - 1, c[1])), 2.0), PIEL_LUZ, 1.2, m, 0.6)
+    for a, b, c in (((-24, 26), (-30, 36), (-27, 46)), ((7, 26), (14, 36), (12, 48))):
+        R.pintar(R.m_linea(bez(a, b, c), 3.2), PIEL_SOMBRA, 1.3, m, 0.95)
+        R.linea(bez(a, b, c, 8), PIEL_HONDA, 1.1)
+        R.pintar(R.m_linea(bez((a[0] - 2.5, a[1] + 2), (b[0] - 2.5, b[1]), (c[0] - 1.5, c[1])), 2.0), PIEL_LUZ, 1.0, m, 0.6)
 
 
 def boca(R, m, cara):
     tipo = cara.get('boca', 'seria')
-    y = 42
+    y = 39
     if tipo == 'grito':
         abre = cara.get('abre_boca', 9)
-        top = bez((-20, y + 5), (-8, y - 4), (5, y + 5), 8)
-        bot = bez((5, y + 5), (3, y + abre + 1), (-8, y + abre + 1), 5) + bez((-8, y + abre + 1), (-18, y + abre + 1), (-20, y + 5), 5)
+        top = bez((-21, y + 4), (-8, y - 4), (6, y + 4), 8)
+        bot = bez((6, y + 4), (4, y + abre + 1), (-8, y + abre + 1), 5) + bez((-8, y + abre + 1), (-19, y + abre + 1), (-21, y + 4), 5)
         R.poli(top + bot, BOCA)
         mb = R.m_poli(top + bot)
-        R.pintar(R.m_poli([(-15, y - 2), (1, y - 2), (1, y + 2.2), (-15, y + 2.2)]), DIENTE, 0, mb)
-        R.linea([(-11, y - 1), (-11, y + 2)], LABIO_OSC, 0.5)
-        R.linea([(-5, y - 1), (-5, y + 2)], LABIO_OSC, 0.5)
+        R.pintar(R.m_poli([(-17, y - 3), (3, y - 3), (3, y + 2.6), (-17, y + 2.6)]), DIENTE, 0, mb)
+        for x in (-11, -5):
+            R.linea([(x, y - 2), (x, y + 1.4)], LABIO_OSC, 0.5)
         R.pintar(R.m_poli([(-14, y + abre - 1.5), (-2, y + abre - 1.5), (-2, y + abre + 2), (-14, y + abre + 2)]), DIENTE, 0, mb, 0.8)
         R.pintar(R.m_elipse(-8, y + abre - 2, 6, 2.5), LENGUA, 0.6, mb, 0.9)
-        R.linea(top + bot[:1], LABIO_OSC, 1.4)
-        R.linea(top + bot + top[:1], TINTA, 1.0)
-        R.pintar(R.m_elipse(-8, y + abre + 5, 9, 2.5), PIEL_SOMBRA, 1.5, m, 0.8)
+        R.linea(top, LABIO, 1.4)
+        R.linea(top + bot + top[:1], TINTA, 0.9)
+        R.pintar(R.m_elipse(-8, y + abre + 5, 9, 2.5), PIEL_SOMBRA, 1.4, m, 0.85)
         return
-    sonr = cara.get('sonrisa', 0.0)       # >0 la comisura de la derecha sube (sonrisa de pillo)
-    izq = (-21, y + 2.5)
-    der = (6, y + 2.5 - sonr * 5)
-    centro = (-8, y - 0.2)
-    # labio de arriba fino, de abajo un poco mas carnoso
-    sup = bez(izq, (-14, y - 2.4), centro, 5) + bez(centro, (-1, y - 2.2 - sonr * 1.5), der, 5)
-    inf = bez(der, (-6, y + 5.5 - sonr * 2), izq, 8)
-    R.poli(sup + inf, LABIO)
-    R.pintar(R.m_poli(inf + [centro]), PIEL_LUZ, 1.0, R.m_poli(sup + inf), 0.35)
-    linea = bez(izq, (-8, y + 1.6 - sonr * 1.2), der, 8)
-    R.linea(linea, TINTA, 1.1)
-    # las comisuras hundidas y la sombra bajo el labio
+    sonr = cara.get('sonrisa', 0.0)
+    izq = (-22, y + 3)
+    der = (7, y + 3 - sonr * 5)
+    centro = (-8, y - 0.6)
+    sup = bez(izq, (-14, y - 2.0), centro, 5) + bez(centro, (-1, y - 1.8 - sonr * 1.5), der, 5)
+    inf = bez(der, (-6, y + 5.0 - sonr * 2), izq, 8)
+    mb = R.m_poli(sup + inf)
+    R.pintar(mb, LABIO)
+    R.pintar(R.m_poli(inf + [centro]), PIEL_LUZ, 0.8, mb, 0.3)
+    R.linea(bez(izq, (-8, y + 1.2 - sonr * 1.2), der, 8), TINTA, 1.3)
     for p in (izq, der):
-        R.pintar(R.m_elipse(p[0], p[1] + 1, 2, 2), PIEL_HONDA, 1.0, m, 0.8)
-    R.pintar(R.m_elipse(-8, y + 7, 7, 2.2), PIEL_SOMBRA, 1.5, m, 0.8)
+        R.pintar(R.m_elipse(p[0], p[1] + 1, 2.2, 2.2), PIEL_HONDA, 0.9, m, 0.9)
+    R.pintar(R.m_elipse(-8, y + 7, 7, 2.2), PIEL_SOMBRA, 1.4, m, 0.85)
     if sonr > 0.3:
         R.linea(bez((der[0] - 1, der[1] - 1), (der[0] + 3, der[1] - 1), (der[0] + 3, der[1] + 3), 4), PIEL_SOMBRA, 0.9)
 
 
 def cuello(R):
-    """El cuello de la camisa, debajo de la papada."""
-    pts = [(-20, 50), (-6, 62), (14, 52), (20, 64), (-2, 70), (-24, 62)]
-    R.poli(pts, CAMISA, 1.1)
-    R.pintar(R.m_poli([(4, 54), (22, 58), (20, 66), (0, 68)]), CAMISA_OSC, 2, R.m_poli(pts), 0.9)
-    R.pintar(R.m_elipse(-2, 58, 22, 6), PIEL_HONDA, 2.5, R.m_poli(pts), 0.6)
+    pts = [(-20, 46), (-6, 58), (14, 48), (22, 60), (-2, 68), (-26, 58)]
+    mm = R.m_poli(pts)
+    R.pintar(mm, CAMISA)
+    R.pintar(R.m_poli([(4, 50), (24, 54), (22, 64), (0, 66)]), CAMISA_OSC, 2, mm, 0.9)
+    R.pintar(R.m_elipse(-2, 54, 22, 6), PIEL_HONDA, 2.5, mm, 0.6)
+    R.linea(pts + pts[:1], TINTA, 1.1)
 
 
 def cabeza(R, cara):
@@ -466,29 +420,34 @@ def cabeza(R, cara):
     oreja(R, 1, cara.get('orejas', 1.0), cara.get('ala', 0.0))
     cuello(R)
     pelo(R)
-    m = cara_base(R)
-    cejas(R, m, cara)
-    ojo(R, m, -14.5, -6, 10.5, cara, lejos=True)
-    ojo(R, m, 10.5, -6, 13.0, cara)
+    m = cara_base(R, cara)
     surcos(R, m, cara)
+    ojo(R, m, -14.5, -3, 10.5, cara, lejos=True)
+    ojo(R, m, 11, -3, 13.0, cara)
+    cejas(R, m, cara)
     nariz(R, m, cara)
     boca(R, m, cara)
 
 
-LIENZO = (170, 170, 85, 94)        # ancho, alto y origen del lienzo de la cabeza, en unidades
+LIENZO = (190, 190, 95, 104)        # ancho, alto y origen del lienzo de la cabeza, en unidades
 
 
-def retrato(cara, escala=0.85, k=8, colores=32):
-    R = Retrato(k=k, ancho=LIENZO[0], alto=LIENZO[1], ox=LIENZO[2], oy=LIENZO[3])
+def lienzo(cara, k):
+    """La cabeza pintada a k pixeles por unidad (sin reducir), en un Lienzo."""
+    R = Lienzo(k=k, ancho=LIENZO[0], alto=LIENZO[1], ox=LIENZO[2], oy=LIENZO[3])
     cabeza(R, cara)
-    return R.final(escala, colores)
+    return R
+
+
+def retrato(cara, escala=0.85, k=8, colores=40):
+    return lienzo(cara, k).final(escala, colores)
 
 
 CARAS = dict(
-    serio=dict(ceno=0.7, mira=-0.6, sonrisa=0.0),
-    pillo=dict(ceno=0.2, alza=1.0, mira=-0.9, sonrisa=1.0, abre=0.85),
-    enfado=dict(ceno=1.6, mira=-0.3, boca='grito', abre_boca=10, ojo_rojo=False, abre=1.1),
-    calculador=dict(ceno=0.5, ojo='cerrado', sonrisa=0.5),
-    furia=dict(ceno=1.8, mira=0.0, boca='grito', abre_boca=12, ojo_rojo=True, abre=1.2),
+    serio=dict(ceno=1.0, mira=-0.6),
+    pillo=dict(ceno=0.3, alza=1.0, mira=-0.9, sonrisa=1.0, abre=0.85),
+    enfado=dict(ceno=1.8, mira=-0.3, boca='grito', abre_boca=10, abre=1.05),
+    calculador=dict(ceno=0.6, ojo='cerrado', sonrisa=0.5),
+    furia=dict(ceno=2.0, mira=0.0, boca='grito', abre_boca=12, ojo_rojo=True, abre=1.15),
     susto=dict(ceno=-1.0, ojo='grande', mira=0.0, boca='grito', abre_boca=7),
 )
