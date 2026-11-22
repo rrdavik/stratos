@@ -35,7 +35,8 @@ QUE MONTA
                                una persona quieta y la de un grupo
                  huella        3 La huella inevitable: quietos construyen; la
                                fila cava tantas conchas como personas
-                 llena         4 Sala llena: Personas (18) entrando y saliendo
+                 llena         4 Sala llena: Personas (18) se van llenando la
+                               sala y cambian de sitio; una sola fila recta (v32)
                  genozilla     5 (v24) el publico juega a GENoZilla capitulo a
                                capitulo (ver DEMO GENOZILLA)
                  vacia         nadie
@@ -144,9 +145,11 @@ LAS DEMOS (v30, sala v18, motor v140)
                     llegar y al pararse, y sus celdas suenan y construyen encima);
                     La fila cava (Tfila 5: tres en fila abren una escision de 3
                     conchas; se suman dos y baja a 5)
-    4 Sala llena (90 s)  Personas entran deprisa, se mueven, se van y vuelven;
-                    la presencia en todas partes, inclusiones y, si una fila
-                    aguanta Tfila, escisiones
+    4 Sala llena (120 s, v32)  Personas entran de uno en uno hasta los 55 s,
+                    cada uno a su sitio (nunca junto a otro quieto); luego cambian
+                    de sitio, se van y vuelven. Modofila = recta mientras dura y
+                    una sola fila recta a proposito (62-76 s): un pozo, no uno
+                    por corrillo
     5 GENoZilla     como estaba
   LA CAMARA DE FASE1 SIGUE A LAS CELDAS donde pasan las cosas (la gente quieta, la
   testigo, la fila, el monstruo): la camara de globo gira alrededor del planeta a la
@@ -170,6 +173,16 @@ LAS DEMOS (v30, sala v18, motor v140)
   La autoprueba del titulo compara el punto medio escapado (\u00b7): exec(open(...)
   .read()) lee este archivo en cp1252 en Windows y un '·' literal no coincidia.
 
+  v32 (sala v20): LA SALA LLENA SE VA LLENANDO, SIN POZOS POR TODAS PARTES. Hasta
+  la v31 entraban casi a la vez a una rejilla apretada y los quietos quedaban en
+  casillas contiguas: con Modofila = cadena, cada corrillo de tres que aguantaba
+  Tfila abria una escision (el globo lleno de fulguritas). Ahora la seccion fija
+  Modofila = recta, Minfila 3 y Tfila 5 (y los devuelve al salir); entran de uno
+  en uno hasta los 55 s y cada quieto ocupa una casilla de columna y fila pares
+  (sitios_llena: dos quietos nunca son vecinos); despues cambian de sitio o se
+  van y vuelven cada 12-30 s; de 62 a 76 s, una sola fila recta de tres, a
+  proposito, abre un pozo; a los 100 s se vacia. Dura 120 s.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -184,7 +197,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v31  (las demos no tocan el giro de FASE1; Demo vacia y Siguecamara apagado por defecto; con_titulo bien enchufado)'
+VERSION = 'sala_virtual v32  (la sala llena se va llenando: Modofila recta, cada quieto en su sitio y una sola fila a proposito)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -1545,7 +1558,7 @@ def _prueba(t, m):
                 dentro = dentro and abs(x) <= hx - 0.3 and abs(z) <= hz
                 lejos = lejos and all(math.hypot(x - p[0], z - p[2]) > 0.9 for p in ev)
         return dentro, lejos, maximo, juntos, len(sm.personas(cc, cc['_hasta'] - 0.5, ev))
-    for demo, hasta in (('paseo', 82.0), ('huella', 26.0), ('llena', 92.0), ('vacia', 30.0)):
+    for demo, hasta in (('paseo', 82.0), ('huella', 26.0), ('llena', 120.0), ('vacia', 30.0)):
         c_ = dict(c, _hasta=hasta)
         if demo == 'vacia':
             sala.par.Demo = 'vacia'
@@ -1562,6 +1575,35 @@ def _prueba(t, m):
         elif demo == 'llena':
             t.check('v30: llena: Personas (18) en la sala a la vez casi todos, y al acabar se vacia',
                     maximo >= 15 and al_final == 0, 'hasta %d a la vez, al final %d' % (maximo, al_final))
+    # v32: la sala llena se va llenando y solo forma una fila recta, la de LLENA_LINEA
+    t.check('v32: la sala llena fija Modofila = recta (Minfila 3, Tfila 5) mientras dura',
+            sm.SECCIONES['llena']['pars'] == dict(Modofila='recta', Minfila=3, Tfila=5.0))
+    for n_ in (sm.LLENA_MIN, 18, sm.LLENA_MAX):
+        co_ = sm._coreo_llena(n_, c)
+        sitio_, pegados, maximo, t_ = {}, set(), 0, 0.0
+        llenos = []
+        while t_ <= sm.LLENA_DUR:
+            for tt, i_, d_ in co_:
+                if tt <= t_:
+                    sitio_[i_] = d_
+            q_ = sorted((i_, tuple(d_[1:])) for i_, d_ in sitio_.items() if d_ != 'fuera')
+            maximo = max(maximo, len(q_))
+            if t_ in (15.0, 30.0, 45.0):
+                llenos.append(len(q_))
+            for a_ in range(len(q_)):
+                for b_ in range(a_ + 1, len(q_)):
+                    (i_, p_), (j_, r_) = q_[a_], q_[b_]
+                    if max(abs(p_[0] - r_[0]), abs(p_[1] - r_[1])) <= 1:
+                        pegados.add((t_, i_, j_))
+            t_ += 0.5
+        l0, l1 = sm.LLENA_LINEA[3], sm.LLENA_LINEA[4]
+        t.check('v32: llena con %d: entran poco a poco, nadie queda junto a otro fuera de la fila de %g a %g s, '
+                'y al final se vacia' % (n_, l0, l1),
+                llenos == sorted(llenos) and llenos[0] < llenos[-1] and maximo >= min(n_, 20)
+                and all(l0 <= p_[0] <= l1 for p_ in pegados)
+                and {(p_[1], p_[2]) for p_ in pegados} == {(0, 2), (1, 2)}
+                and all(d_ == 'fuera' for d_ in sitio_.values()),
+                'a los 15, 30 y 45 s %s; hasta %d; %d instantes con vecinos' % (llenos, maximo, len(pegados)))
     sala.par.Demo = 'paseo'
     c = sm.cfg()
     sala.par.Modoluz = 'prueba'
