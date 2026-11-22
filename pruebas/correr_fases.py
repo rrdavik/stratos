@@ -15,12 +15,15 @@ rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
 mal donde toca.
-Con la sala virtual (sala_virtual v31), la demo GENoZilla de principio a fin
+Con la sala virtual (sala_virtual v33), la demo GENoZilla de principio a fin
 (Demo = genozilla, fotograma a fotograma): los 13 capitulos, la columna
-Comprobar de cada uno y, al acabar, FASE1 como estaba (el mundo, las armas,
-Fuente y Modojuego). Y las demos de secciones y casos (paseo, probabilidad,
-huella y llena), igual: la comprobacion de cada caso, FASE1 como estaba y (sala v19)
-el giro de FASE1 intacto mientras duran (Barsperturn y la camara en su sitio).
+Comprobar de cada uno y, al acabar, los parametros de FASE1 como estaban (las
+armas, Fuente y Modojuego). Y las demos de secciones y casos (paseo, probabilidad,
+huella y llena), igual. Durante todas, el giro de FASE1 intacto (Barsperturn y la
+camara en su sitio) y (sala v21) el mundo de FASE1 sigue adelante: el mismo W, sin
+volver atras (ni ciclos, ni conchas, ni escisiones menos) y sin guardarlo para
+devolverlo. La fila de la huella, sin conchas, espera con el titulo «Esperando que
+el mundo evolucione»; la prueba cierra ciclos (evolucionar) y la fila cava.
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
 Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
@@ -271,31 +274,89 @@ def firma_mundo(W):
             sorted(W.get('esc_celdas', {}).items()), 'juego' in W, W.get('ciclo_n'))
 
 
+def evolucionar(sim, conchas, fps=30.0):
+    """sala v21: el mundo de FASE1 como si hubiera evolucionado hasta tener al menos
+    'conchas' losetas debajo de cada celda (lo que harian sus ciclos con el tiempo), con la
+    misma superficie (_demo_conchas del motor: la prueba, no la demo). Devuelve las
+    conchas enterradas."""
+    base = sim.op('/project1/FASE1')
+    m = base.op('motor').module
+    W = m.world()
+    n = m._demo_conchas(W, dict(m.cfg(), presencia_activa=False), W.get('t') or 0.0, conchas, range(m.N))
+    m._CACHE['inst'] = m._CACHE['tiles'] = m._CACHE['frame'] = None
+    sim.fotograma(1.0 / fps)
+    return n
+
+
+class Giro(object):
+    """sala v21: lo que una demo no puede hacer al planeta, fotograma a fotograma: cambiar
+    Barsperturn, mover la camara (sin Siguecamara), cambiar el mundo por otro (guardarlo y
+    devolverlo, o rehacerlo: otro W) ni hacerlo volver atras (menos ciclos, menos conchas,
+    menos escisiones)."""
+
+    def __init__(self, base, m):
+        self.base, self.m = base, m
+        W = m.world()
+        self.bpt0, self.W0 = base.par.Barsperturn.eval(), id(W)
+        self.prev = self.firma()
+        self.fallos = []
+
+    def firma(self):
+        W = self.m.world()
+        return (W.get('ciclo_n') or 0, len(W['shells']), len(W.get('escisiones', [])))
+
+    def mira(self):
+        W = self.m.world()
+        f = self.firma()
+        if self.base.par.Barsperturn.eval() != self.bpt0:
+            self.fallos.append('Barsperturn %s' % self.base.par.Barsperturn.eval())
+        if self.m._CACHE.get('foco_dir') not in (None, self.m.CAM_DIR):
+            self.fallos.append('camara movida')
+        if id(W) != self.W0:
+            self.fallos.append('otro mundo (W cambiado por otro)')
+        if any(b < a for a, b in zip(self.prev, f)):
+            self.fallos.append('vuelve atras: ciclo/conchas/escisiones %s -> %s' % (self.prev, f))
+        self.prev = f
+
+    def bien(self):
+        return not self.fallos
+
+    def que(self):
+        return ('el giro de FASE1 intacto (Barsperturn %s, la camara en su sitio) y el mundo sigue adelante (ciclo '
+                '%d, %d conchas)%s' % (self.bpt0, self.prev[0], self.prev[1],
+                                       '' if not self.fallos else ' (FALLO: %s)' % '; '.join(sorted(set(self.fallos)))))
+
+
 def genozilla(sim, fps=30.0, fps_mic=60.0):
     """La demo GENoZilla de la sala virtual de principio a fin, fotograma a fotograma
     (el microfono a fps_mic en Estatuas y Grito, como en TouchDesigner). Devuelve
-    (resultados [(capitulo, bien, que)], FASE1 como estaba)."""
+    (resultados [(capitulo, bien, que)], parametros de FASE1 como estaban, antes, despues).
+    sala v21: sobre el mundo de FASE1 (que antes evoluciona hasta tener conchas que cavar)
+    y sin tocar su giro: al salir, el mundo no vuelve atras."""
     sala = sim.op('/project1/SALA')
     base = sim.op('/project1/FASE1')
     sm = sala.op('sala_motor').module
     m = base.op('motor').module
     pars = list(sm.ARMAS) + ['Fuente', 'Modojuego', 'Tfila', 'Barsperturn', 'Pasomonstruo', 'Noche', 'Oceano']
-    sim.fotograma(1.0 / fps)            # lo que FASE1 hace sola en un fotograma (limpiar celdas vacias) no es de la demo
-    antes = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars),
+    evolucionar(sim, 14)                # v21: conchas para las zanjas, el canal, el grito y la fila (se suman)
+    antes = (dict((k, getattr(base.par, k).eval()) for k in pars),
              str(sala.par.Vista.eval()), str(sala.par.Modoluz.eval()))
     demo0 = str(sala.par.Demo.eval())
     sala.par.Buclecap = False
     sala.par.Guion = True
     sala.par.Capitulo = sm.CAP_NOMBRES[0]
+    giro = Giro(base, m)
     sala.par.Demo = 'genozilla'
     tope = int((sum(c['dur'] for c in sm.CAPITULOS) + len(sm.CAPITULOS) * sm.TITULO + 10.0) * fps_mic)
     for _ in range(tope):
         dt = 1.0 / (fps_mic if sm._GZ.get('cap') in sm.MIC_CAPS else fps)
         sim.fotograma(dt)
+        giro.mira()
         if sm._GZ.get('acabada'):
             break
     res = list(sm._GZ.get('resultados') or [])
-    despues = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars),
+    res.append((len(res), giro.bien() and sm._guardado() is None, giro.que()))
+    despues = (dict((k, getattr(base.par, k).eval()) for k in pars),
                str(sala.par.Vista.eval()), str(sala.par.Modoluz.eval()))
     sala.par.Demo = demo0
     sim.fotograma(1.0 / fps)
@@ -304,7 +365,10 @@ def genozilla(sim, fps=30.0, fps_mic=60.0):
 
 def demos_sala(sim, fps=30.0):
     """sala_virtual v30: cada demo de secciones y casos (paseo, probabilidad, huella, llena)
-    de principio a fin, fotograma a fotograma. Devuelve {demo: (resultados, FASE1 como estaba)}."""
+    de principio a fin, fotograma a fotograma. Devuelve {demo: (resultados, parametros de
+    FASE1 como estaban, antes, despues)}. sala v21: sobre el mundo de FASE1 tal como esta;
+    el giro intacto y el mundo sin volver atras (Giro). La fila de la huella necesita 5
+    conchas: primero espera (el titulo lo dice) y, cuando el mundo evoluciona, cava."""
     sala = sim.op('/project1/SALA')
     base = sim.op('/project1/FASE1')
     sm = sala.op('sala_motor').module
@@ -313,27 +377,36 @@ def demos_sala(sim, fps=30.0):
     out = {}
     demo0 = str(sala.par.Demo.eval())
     sala.par.Buclecap = False
-    for demo in ('paseo', 'probabilidad', 'huella', 'llena'):
+    for demo in ('huella', 'paseo', 'probabilidad', 'llena'):     # v21: la huella primero (pocas conchas)
         sala.par.Demo = 'vacia'
         sim.fotograma(1.0 / fps)
-        antes = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars
-                                              if getattr(base.par, k, None) is not None), str(sala.par.Vista.eval()))
+        antes = (dict((k, getattr(base.par, k).eval()) for k in pars if getattr(base.par, k, None) is not None),
+                 str(sala.par.Vista.eval()))
+        giro = Giro(base, m)
+        espera = None
         sala.par.Demo = demo
-        tope = int((sum(c['dur'] for c in sm.casos(demo)) + len(sm.casos(demo)) * sm.TITULO + 10.0) * fps)
-        bpt0, giro = base.par.Barsperturn.eval(), set()
+        tope = int((sum(c['dur'] for c in sm.casos(demo)) + len(sm.casos(demo)) * sm.TITULO + 20.0) * fps)
         for _ in range(tope):
             sim.fotograma(1.0 / fps)
-            giro.add((base.par.Barsperturn.eval(), m._CACHE.get('foco_dir') not in (None, m.CAM_DIR)))
+            giro.mira()
+            if demo == 'huella' and sm._GZ.get('espera') is not None and espera is None:
+                # la fila espera a tener conchas que cavar: el titulo lo dice, entero
+                espera = (sm.titulo_texto('nombre'), sm.titulo_texto('sub'), sm.alfa_titulo(sm.ahora()),
+                          sm.cabecera_lineas(sm.fase1()))
+                evolucionar(sim, 6)     # el mundo evoluciona: en la proxima mirada, la fila cava
             if sm._GZ.get('acabada'):
                 break
         res = list(sm._GZ.get('resultados') or [])
-        # sala v19: las demos de seccion no tocan el giro de FASE1 ni, sin Siguecamara, su camara
-        res.append((len(res), giro == {(bpt0, False)}, 'el giro de FASE1 intacto: Barsperturn %s, camara en su sitio%s'
-                    % (bpt0, '' if giro == {(bpt0, False)} else ' (FALLO: %s)' % sorted(giro))))
+        res.append((len(res), giro.bien() and sm._guardado() is None, giro.que()))
+        if demo == 'huella':
+            bien_e = (espera is not None and espera[0] == sm.ESPERA_TITULO and 'La fila cava' in espera[1]
+                      and 'conchas' in espera[1] and espera[2] == 1.0 and sm.ESPERA_TITULO.lower() in espera[3])
+            res.append((len(res), bien_e, 'sin conchas, La fila cava espera con el titulo %s' % (
+                ' / '.join(str(x) for x in espera[:3]) if espera else '(no espero)')))
         sala.par.Demo = 'vacia'
         sim.fotograma(1.0 / fps)
-        despues = (firma_mundo(m.world()), dict((k, getattr(base.par, k).eval()) for k in pars
-                                                if getattr(base.par, k, None) is not None), str(sala.par.Vista.eval()))
+        despues = (dict((k, getattr(base.par, k).eval()) for k in pars if getattr(base.par, k, None) is not None),
+                   str(sala.par.Vista.eval()))
         out[demo] = (res, antes == despues, antes, despues)
     sala.par.Demo = demo0
     sala.par.Buclecap = True
@@ -423,36 +496,39 @@ def main():
             print('         %s' % dict((k, v) for k, v in h.items() if k != 'resultados'))
         W = m.world()
     sala = sim.op('/project1/SALA')
-    if sala is not None and sala.op('sala_motor') is not None and hasattr(sala.op('sala_motor').module, 'CAPITULOS'):
-        with contextlib.redirect_stdout(io.StringIO()):
-            res, igual, antes, despues = genozilla(sim)
-        bien = len(res) == 13 and all(r[1] for r in res) and igual
-        todo = todo and bien
-        print('%-6s demo GENoZilla (sala virtual): %d/%d capitulos comprobados, FASE1 %s al salir'
-              % ('OK' if bien else 'FALLO', sum(1 for r in res if r[1]), len(res),
-                 'como estaba' if igual else 'CAMBIADA'))
-        for k, b, que in res:
-            if not b:
-                print('         capitulo %d: %s' % (k, que))
-        if not igual:
-            print('         antes   %s' % (antes[1:],))
-            print('         despues %s' % (despues[1:],))
-        W = m.world()
+    # sala v21: primero las demos de seccion (la fila de la huella, aun sin conchas, espera); GENoZilla
+    # despues (la prueba deja que el mundo evolucione hasta tener conchas para sus zanjas)
     if sala is not None and sala.op('sala_motor') is not None and hasattr(sala.op('sala_motor').module, 'SECCIONES'):
         with contextlib.redirect_stdout(io.StringIO()):
             r_demos = demos_sala(sim)
         for demo, (res, igual, antes, despues) in r_demos.items():
-            n = len(sala.op('sala_motor').module.casos(demo)) + 1      # sala v19: y el giro intacto
+            # sala v19: y el giro intacto; v21: y el mundo sin volver atras (y la huella, la espera)
+            n = len(sala.op('sala_motor').module.casos(demo)) + (2 if demo == 'huella' else 1)
             bien = len(res) == n and all(r[1] for r in res) and igual
             todo = todo and bien
-            print('%-6s demo %s (sala virtual): %d/%d casos comprobados, FASE1 %s al salir'
+            print('%-6s demo %s (sala virtual): %d/%d casos comprobados, parametros de FASE1 %s al salir'
                   % ('OK' if bien else 'FALLO', demo, sum(1 for r in res if r[1]), len(res),
-                     'como estaba' if igual else 'CAMBIADA'))
+                     'como estaban' if igual else 'CAMBIADOS'))
             for k, b, que in res:
                 print('         caso %d: %s%s' % (k + 1, '' if b else 'FALLO  ', que))
             if not igual:
-                print('         antes   %s' % (antes[1:],))
-                print('         despues %s' % (despues[1:],))
+                print('         antes   %s' % (antes,))
+                print('         despues %s' % (despues,))
+        W = m.world()
+    if sala is not None and sala.op('sala_motor') is not None and hasattr(sala.op('sala_motor').module, 'CAPITULOS'):
+        with contextlib.redirect_stdout(io.StringIO()):
+            res, igual, antes, despues = genozilla(sim)
+        bien = len(res) == 14 and all(r[1] for r in res) and igual
+        todo = todo and bien
+        print('%-6s demo GENoZilla (sala virtual): %d/%d capitulos comprobados, parametros de FASE1 %s al salir'
+              % ('OK' if bien else 'FALLO', sum(1 for r in res if r[1]), len(res),
+                 'como estaban' if igual else 'CAMBIADOS'))
+        for k, b, que in res:
+            if not b or k == len(res) - 1:
+                print('         %s: %s%s' % ('capitulo %d' % k if k < 13 else 'el giro', '' if b else 'FALLO  ', que))
+        if not igual:
+            print('         antes   %s' % (antes,))
+            print('         despues %s' % (despues,))
         W = m.world()
     # relanzar sobre el proyecto avanzado: el mundo no se pierde
     antes = (m.occupied(W), list(W['occ']))
