@@ -6,11 +6,19 @@ No lo carga TouchDesigner: se corre una vez, fuera, para rehacer
 sprites/nefanyamuto_emociones.png (y la lamina de prueba) desde las imagenes de
 origen (JPG de 1024 x 1024 en pixel art, con la ciudad en llamas de fondo):
 
-    python3 sprites/hacer_atlas_nefanyamuto.py frente.jpg grita_rie.jpg dientes_llora.jpg
+    python3 sprites/hacer_atlas_nefanyamuto.py frente.jpg grita_rie.jpg dientes_llora.jpg fotos.webp fotos_extra.webp
 
   frente.jpg         una figura de frente, brazos largos, la boca abierta (de ella sale la cara seria)
   grita_rie.jpg      dos figuras: grita con los ojos cerrados (izq.) y se rie (der.)
   dientes_llora.jpg  dos figuras: aprieta los dientes (izq.) y llora de risa (der.)
+  fotos.webp         el collage de cinco fotos (1680 x 1500): se tapa la nariz, los dos
+                     indices, se rasca la cabeza, el atril, habla tranquilo
+  fotos_extra.webp   el collage de once fotos (1680 x 1500): de el, los ojos cerrados
+
+De las fotos solo se usa la cabeza (FOTOS: el recorte y la elipse de cada una), con
+el color pasado al de las cabezas pintadas y las lineas marcadas, sobre uno de los
+cuerpos (CUERPO_FOTO). Las doce caras (EMOCIONES) llenan las 4 x 3 celdas: las diez
+de EMOCIONES_MON y dos en las que no se entera de nada (despiste, pasmado).
 
 Necesita Pillow, NumPy, SciPy y rembg (el modelo isnet-general-use se baja la
 primera vez a ~/.rembg).
@@ -47,23 +55,31 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 CELDA_W, CELDA_H = 192, 256
 COLS, FILAS = 4, 3
 MARGEN = 6
-EMOCIONES = ['serio', 'enfado', 'furia', 'rie', 'carcajada', 'susto', 'mueca', 'llora', 'panico', 'calma']
+EMOCIONES = ['serio', 'enfado', 'furia', 'rie', 'carcajada', 'susto', 'mueca', 'llora', 'panico', 'calma',
+             'despiste', 'pasmado']
 TINTA = (24, 12, 12)
 
-# de que figura sale cada cara (las marcadas con * son provisionales: repiten otra
-# figura hasta que haya imagen propia)
+# de que figura sale cada cara, y su adorno
 ORIGEN = dict(
-    serio='serio',          # cabeza de frente.jpg sobre el cuerpo de 'dientes'
-    enfado='dientes',
-    furia='furia',          # el grito con la cara roja
-    rie='rie',
-    carcajada='llora_risa',
-    susto='grito',          # *
-    mueca='dientes',        # *
-    llora='llora_risa',     # *
-    panico='grito',         # *
-    calma='serio',          # *
+    serio=('serio', None),          # cabeza de frente.jpg sobre el cuerpo de 'dientes'
+    enfado=('dientes', None),
+    furia=('furia', None),          # el grito con la cara roja
+    rie=('rie', None),
+    carcajada=('llora_risa', None),
+    susto=('f_dedos', 'sudor'),     # foto: grita con los dos indices
+    mueca=('f_atril', None),        # foto: grita en el atril
+    llora=('f_nariz', 'lagrimas'),  # foto: se tapa la nariz con los ojos cerrados
+    panico=('grito', 'sudor'),
+    calma=('f_calma', None),        # foto: habla tranquilo
+    despiste=('f_rasca', 'pregunta'),       # foto: se rasca la cabeza (no se entera)
+    pasmado=('f_ojos_cerrados', 'pregunta'),  # foto: ojos cerrados, barbilla arriba (no se entera)
 )
+# el cuerpo sobre el que va cada cabeza de foto
+CUERPO_FOTO = dict(dedos='grito', atril='dientes', nariz='llora_risa', calma='dientes', rasca='rie',
+                   ojos_cerrados='llora_risa')
+BAJA_FOTO = dict(nariz=0.05, rasca=0.08)
+# el ancho de la cabeza medido a mano donde la mano o la inclinacion enganan a la medida
+ANCHO_FOTO = dict(rasca=185.0)
 
 
 # --- recorte ----------------------------------------------------------------------
@@ -75,6 +91,8 @@ def sin_fondo(ruta):
         _SESION
     except NameError:
         _SESION = new_session('isnet-general-use')
+    if ruta is None:
+        return None
     im = Image.open(ruta).convert('RGB')
     out = np.array(remove(im, session=_SESION))
     out[..., 3] = np.where(out[..., 3] >= 128, 255, 0)
@@ -221,12 +239,9 @@ def medidas_cabeza(f):
 
 
 def pon_cabeza(cuerpo, donante):
-    """La cabeza de 'donante' (con el cuello de la camisa) sobre 'cuerpo': a la
-    escala del ancho de su cabeza, alineada por la coronilla y el centro. La
-    cabeza vieja se borra hasta los hombros."""
-    cy0, ccx, chw, chom = medidas_cabeza(cuerpo)
+    """La cabeza de otra figura de las imagenes (con el cuello de la camisa) sobre
+    'cuerpo'."""
     dy0, dcx, dhw, dhom = medidas_cabeza(donante)
-    s = chw / dhw
     alto = dhom + 72
     x0 = int(dcx - dhw * 0.62)
     trozo = donante[dy0:dy0 + alto, x0:int(dcx + dhw * 0.62) + 1].copy()
@@ -235,23 +250,150 @@ def pon_cabeza(cuerpo, donante):
     xx = np.arange(trozo.shape[1])[None, :] + x0
     deja = np.abs(xx - dcx) < dhw * (0.62 - 0.22 * np.clip((yy - dhom - 30) / 42.0, 0, 1))
     trozo[..., 3] = np.where(deja, trozo[..., 3], 0)
+    return injerta(cuerpo, trozo, dcx - x0, dhw)
+
+
+def injerta(cuerpo, trozo, tcx, thw, baja=0.0):
+    """Pega 'trozo' (una cabeza con alfa; su centro en x tcx, su coronilla arriba y
+    su ancho de cabeza thw) sobre la cabeza de 'cuerpo', a la escala de esta. La
+    cabeza vieja se borra hasta los hombros; debajo, solo lo que tapa la nueva.
+    baja la desplaza hacia abajo (en anchos de cabeza)."""
+    cy0, ccx, chw, chom = medidas_cabeza(cuerpo)
+    s = chw / float(thw)
     t = Image.fromarray(trozo)
     t = t.resize((max(1, int(round(t.width * s))), max(1, int(round(t.height * s)))), Image.LANCZOS)
     tt = np.array(t)
     tt[..., 3] = np.where(tt[..., 3] >= 128, 255, 0)
-    px, py = int(round(ccx - (dcx - x0) * s)), int(cy0)
-    # se borra la cabeza vieja (hasta los hombros) y, debajo, solo lo que tapa la nueva
+    px, py = int(round(ccx - tcx * s)), int(round(cy0 + baja * chw))
     huella = np.zeros(cuerpo.shape[:2], bool)
     h, w = tt.shape[:2]
-    huella[py:py + h, px:px + w] = tt[..., 3] > 0
+    y0c, x0c = max(0, py), max(0, px)
+    huella[y0c:py + h, x0c:px + w] = tt[y0c - py:, x0c - px:, 3][:huella.shape[0] - y0c, :huella.shape[1] - x0c] > 0
     o = cuerpo.copy()
     yy = np.arange(o.shape[0])[:, None]
     xx = np.arange(o.shape[1])[None, :]
     vieja = ((yy < cy0 + chom) & (np.abs(xx - ccx) < chw * 0.56)) | huella
     o[..., 3] = np.where(vieja, 0, o[..., 3])
     out = Image.fromarray(o)
-    out.alpha_composite(Image.fromarray(tt), (px, py))
+    out.alpha_composite(Image.fromarray(tt), (px, py), (max(0, -px), max(0, -py)))
     return np.array(out)
+
+
+# --- las cabezas de las fotos -------------------------------------------------------------
+
+# (imagen, recorte en la imagen, centro de la cabeza en el recorte, semiejes de la
+#  elipse que la abarca). Las fotos son de 'fotos'
+#  (el collage de cinco) y 'fotos_extra' (el de once).
+FOTOS = dict(
+    nariz=('fotos', (520, 75, 1000, 475), (185, 150), (118, 152)),       # se tapa la nariz, ojos cerrados
+    dedos=('fotos', (440, 525, 728, 1010), (142, 122), (88, 122)),       # grita, los dos indices
+    rasca=('fotos', (5, 800, 445, 1250), (300, 200), (88, 125)),         # se rasca la cabeza, mira abajo
+    atril=('fotos', (1325, 405, 1650, 722), (184, 72), (54, 66)),        # grita en el atril
+    calma=('fotos', (1110, 985, 1500, 1245), (220, 96), (84, 94)),       # habla tranquilo
+    ojos_cerrados=('fotos_extra', (1040, 25, 1245, 350), (110, 138), (94, 118)),  # ojos cerrados, barbilla arriba
+)
+
+
+def color_cabeza(f):
+    """Media y dispersion por canal de la cabeza de una figura pintada (para pasarle
+    su color a las fotos)."""
+    y0, cx, hw, hom = medidas_cabeza(f)
+    trozo = f[y0:y0 + hom, int(cx - hw * 0.45):int(cx + hw * 0.45)]
+    a = trozo[..., 3] > 0
+    v = trozo[..., :3][a].astype(float)
+    return v.mean(0), v.std(0)
+
+
+def cabeza_foto(rutas, nombre, ref=None):
+    """La cabeza de una foto, sin fondo y recortada por su elipse, con un repaso de
+    color y de contorno para que case con el pixel art (mas saturada, mas
+    contraste y las lineas marcadas). Devuelve (rgba, centro x, ancho)."""
+    from rembg import remove
+    img, caja_f, (cx, cy), (rx, ry) = FOTOS[nombre]
+    im = Image.open(rutas[img]).convert('RGB').crop(caja_f)
+    sin_fondo(None)
+    rgba = np.array(remove(im, session=_SESION))
+    yy = np.arange(rgba.shape[0])[:, None]
+    xx = np.arange(rgba.shape[1])[None, :]
+    elipse = ((xx - cx) / float(rx)) ** 2 + ((yy - cy) / float(ry)) ** 2 < 1.0
+    a = (rgba[..., 3] >= 128) & elipse
+    lab, n = ndimage.label(a)
+    if n > 1:
+        tam = ndimage.sum(a, lab, range(1, n + 1))
+        a = lab == (1 + int(np.argmax(tam)))
+    if nombre == 'rasca':
+        # el gorro (la kipa) se pinta del gris del pelo
+        oscuro = (rgba[..., :3].astype(int).sum(2) < 150) & (yy < cy - ry * 0.55) & (np.abs(xx - cx) < rx * 0.7)
+        rgba[oscuro, :3] = (150, 150, 156)
+    ys = np.nonzero(a.any(1))[0]
+    top = ys.min()
+    rgba = rgba[top:]
+    a = a[top:]
+    # el ancho de la cabeza: la mediana de las filas entre el 30 y el 50 % de su alto
+    h = ys.max() - top
+    anchos = [np.ptp(np.nonzero(a[y])[0]) for y in range(int(h * 0.3), int(h * 0.5)) if a[y].any()]
+    hw = float(np.median(anchos))
+    hw = ANCHO_FOTO.get(nombre, hw)
+    # el repaso de dibujo
+    from PIL import ImageEnhance
+    pic = Image.fromarray(rgba[..., :3])
+    pic = ImageEnhance.Color(pic).enhance(1.35)
+    pic = ImageEnhance.Contrast(pic).enhance(1.25)
+    lum = np.array(pic.convert('L')).astype(float)
+    borde = np.hypot(ndimage.sobel(lum, 0), ndimage.sobel(lum, 1))
+    borde = np.clip((borde - 60) / 160.0, 0, 1) * 0.55
+    col = np.array(pic).astype(float)
+    if ref is not None:
+        # el color de la cabeza pintada de referencia (media y dispersion por canal)
+        for k in range(3):
+            v = col[..., k][a]
+            col[..., k] = ref[0][k] + (col[..., k] - v.mean()) * (ref[1][k] / (v.std() + 1e-6))
+    col = col * (1 - borde[..., None])
+    out = np.zeros_like(rgba)
+    out[..., :3] = col.clip(0, 255).astype(np.uint8)
+    out[..., 3] = np.where(a, 255, 0)
+    return out, cx, hw
+
+
+# --- adornos (en la celda) ---------------------------------------------------------------
+
+AGUA = (120, 200, 255)
+
+
+def _gota(d, x, y, r):
+    d.polygon([(x, y - r * 2.2), (x - r, y), (x + r, y)], fill=AGUA + (255,), outline=TINTA + (255,))
+    d.ellipse([x - r, y - r, x + r, y + r], fill=AGUA + (255,), outline=TINTA + (255,))
+
+
+def adornos(cel, tipo, cabeza):
+    """Lagrimas, sudor o interrogaciones junto a la cabeza (cabeza = (x, y, ancho) en la celda)."""
+    from PIL import ImageFont
+    d = ImageDraw.Draw(cel)
+    x, y, w = cabeza
+    if tipo == 'lagrimas':
+        for k in range(3):
+            _gota(d, x - w * 0.3, y + w * 0.78 + k * 8, 2.6 - k * 0.3)
+            _gota(d, x + w * 0.3, y + w * 0.82 + k * 8, 2.4 - k * 0.3)
+    elif tipo == 'sudor':
+        _gota(d, x + w * 0.62, y + w * 0.2, 3.0)
+        _gota(d, x - w * 0.66, y + w * 0.3, 2.6)
+        _gota(d, x + w * 0.5, y - w * 0.08, 2.2)
+    elif tipo == 'pregunta':
+        try:
+            f = ImageFont.load_default(size=22)
+        except TypeError:
+            f = ImageFont.load_default()
+        for (dx, dy, t) in ((0.7, -0.15, 22), (-0.85, 0.05, 16)):
+            try:
+                ff = ImageFont.load_default(size=t)
+            except TypeError:
+                ff = f
+            px, py = x + dx * w, y + dy * w
+            for ox in (-1, 0, 1):
+                for oy in (-1, 0, 1):
+                    d.text((px + ox, py + oy), '?', fill=TINTA + (255,), font=ff)
+            d.text((px, py), '?', fill=(255, 230, 60, 255), font=ff)
+    return cel
 
 
 # --- celdas -------------------------------------------------------------------------
@@ -280,31 +422,42 @@ def pixelar(im, colores=96):
     return q
 
 
-def figuras(frente, grita_rie, dientes_llora):
+def figuras(frente, grita_rie, dientes_llora, fotos, fotos_extra):
     f = {}
     f['frente'] = limpia(sin_fondo(frente))
     f['grito'], f['rie'] = separa(limpia(sin_fondo(grita_rie)))
     f['dientes'], f['llora_risa'] = separa(limpia(sin_fondo(dientes_llora)))
     f['serio'] = limpia(pon_cabeza(f['dientes'], f['frente']))
     f['furia'] = cara_roja(f['grito'])
+    rutas = dict(fotos=fotos, fotos_extra=fotos_extra)
+    ref = color_cabeza(f['dientes'])
+    for nombre, cuerpo in CUERPO_FOTO.items():
+        cab, cx, hw = cabeza_foto(rutas, nombre, ref)
+        f['f_' + nombre] = limpia(injerta(f[cuerpo], cab, cx, hw, BAJA_FOTO.get(nombre, 0.0)))
     return f
 
 
 def main(args):
-    if len(args) != 3:
+    if len(args) != 5:
         print(__doc__)
         sys.exit(1)
     f = figuras(*args)
-    usadas = set(ORIGEN.values())
+    usadas = set(o for o, _ in ORIGEN.values())
     alto = max(caja(f[k])[3] - caja(f[k])[1] for k in usadas)
     ancho = max(caja(f[k])[2] - caja(f[k])[0] for k in usadas)
     escala = min((CELDA_H - 2 * MARGEN) / float(alto), (CELDA_W - 2) / float(ancho))
     atlas = Image.new('RGBA', (CELDA_W * COLS, CELDA_H * FILAS), (0, 0, 0, 0))
     lamina = Image.new('RGBA', atlas.size, (60, 62, 68, 255))
     d = ImageDraw.Draw(lamina)
-    celdas = {k: a_celda(f[k], escala) for k in usadas}
     for i, nombre in enumerate(EMOCIONES):
-        im = celdas[ORIGEN[nombre]]
+        origen, adorno = ORIGEN[nombre]
+        im = a_celda(f[origen], escala)
+        if adorno:
+            y0, cx, hw, _ = medidas_cabeza(f[origen])
+            x0, yb0, x1, yb1 = caja(f[origen])
+            ox = (CELDA_W - int(round((x1 - x0) * escala))) // 2
+            oy = CELDA_H - MARGEN - int(round((yb1 - yb0) * escala))
+            im = adornos(im, adorno, (ox + (cx - x0) * escala, oy + (y0 - yb0) * escala, hw * escala))
         x, y = (i % COLS) * CELDA_W, (i // COLS) * CELDA_H
         atlas.paste(im, (x, y))
         lamina.alpha_composite(im, (x, y))
