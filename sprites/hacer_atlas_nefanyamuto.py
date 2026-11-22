@@ -4,7 +4,10 @@ ESTRATOS - NEFANYAMUTO: EL DISENO (y luego el atlas de emociones)
 =============================================================================
 No lo carga TouchDesigner: se corre fuera, con Pillow:
 
-    python3 sprites/hacer_atlas_nefanyamuto.py            # la lamina de diseno
+    python3 sprites/hacer_atlas_nefanyamuto.py   # nefanyamuto_diseno.png y nefanyamuto_caras.png
+
+La cabeza (v2, tres cuartos y sombreado pintado, como Trumpzilla) esta en
+sprites/nefanyamuto_cabeza.py; las orejas de soplillo hacen de alas (pose 'vuelo').
 
 NefanyaMuto: la cabeza caricaturizada (calva con canas peinadas hacia atras,
 cejas pesadas, ojeras, la nariz grande, papada) sobre un cuerpo de MUTO de 8 bits:
@@ -417,19 +420,74 @@ def dibujar(cara, alas=False, corbata=(CORBATA, CORBATA_OSC), pixel=1):
     return L.final(pixel)
 
 
-CARAS = dict(
-    serio=dict(ceja=0.6, sonrisa=-0.7),
-    enfado=dict(ceja=1.6, boca=7, sonrisa=-1.0, ojo_rojo=True),
+# --- v2: la cabeza de tres cuartos (nefanyamuto_cabeza) sobre el cuerpo ---------------
+
+sys.path.insert(0, AQUI)
+import nefanyamuto_cabeza as CAB          # noqa: E402
+
+ESCALA_CABEZA = 0.7                       # pixeles por unidad de cabeza en la celda
+CENTRO_CABEZA = (64, 57)                  # donde cae el origen de la cabeza (entre los ojos)
+
+PATAS_VUELO = dict(
+    # colgando, las rodillas dobladas hacia atras
+    del_cerca=((46, 132), (30, 160), (40, 206), (30, 236)),
+    del_lejos=((84, 134), (74, 166), (84, 208), (74, 232)),
+    tra_cerca=((160, 134), (176, 168), (170, 210), (180, 236)),
+    tra_lejos=((140, 130), (150, 166), (140, 206), (150, 230)),
 )
+
+
+def cuerpo(pose='suelo', corbata=(CORBATA, CORBATA_OSC)):
+    L = Lienzo()
+    dy = -16 if pose == 'vuelo' else 0
+
+    class Sube(object):
+        """Pasa lo que se dibuja dy pixeles hacia arriba (el cuerpo en vuelo)."""
+        def __getattr__(self, k):
+            f = getattr(L, k)
+            if k == 'elipse':
+                return lambda cx, cy, *a, **kw: f(cx, cy + dy, *a, **kw)
+            if k in ('poli', 'linea'):
+                return lambda pts, *a, **kw: f(_mov(pts, 0, dy), *a, **kw)
+            return f
+    B = Sube()
+    patas = PATAS_VUELO if pose == 'vuelo' else PATAS
+    sube = (lambda q: _mov(q, 0, -dy)) if pose == 'vuelo' else (lambda q: q)
+    pata(B, *sube(patas['tra_lejos']), osc=True)
+    pata(B, *sube(patas['del_lejos']), osc=True)
+    caparazon(B, False)
+    pata(B, *sube(patas['tra_cerca']))
+    torso(B, corbata)
+    pata(B, *sube(patas['del_cerca']))
+    if pose == 'vuelo':
+        brazo(B, (38, 116), (20, 128), (12, 144))
+    else:
+        brazo(B, (38, 116), (26, 140), (34, 160))
+    return L.final(), dy
+
+
+def dibujar2(cara, pose='suelo', corbata=(CORBATA, CORBATA_OSC)):
+    im, dy = cuerpo(pose, corbata)
+    c = dict(cara)
+    if pose == 'vuelo':
+        c['ala'] = 1.0
+        c['orejas'] = 1.15
+    cab = CAB.retrato(c, ESCALA_CABEZA)
+    ox, oy = CAB.LIENZO[2] * ESCALA_CABEZA, CAB.LIENZO[3] * ESCALA_CABEZA
+    x = int(round(CENTRO_CABEZA[0] - ox))
+    y = int(round(CENTRO_CABEZA[1] + dy * 0.5 - oy))
+    im.alpha_composite(cab, (max(0, x), max(0, y)), (max(0, -x), max(0, -y)))
+    return im
 
 
 def lamina_diseno(salida):
     """Las propuestas, lado a lado y a 3x (pixel a pixel) sobre gris."""
+    C = CAB.CARAS
     props = [
-        ('A  traje, corbata azul', dibujar(CARAS['serio'])),
-        ('A  enfado', dibujar(CARAS['enfado'], corbata=(CORBATA_ROJA, CORBATA_ROJA_OSC))),
-        ('B  con alas (MUTO macho)', dibujar(CARAS['serio'], alas=True)),
-        ('C  pixel gordo (x2)', dibujar(CARAS['serio'], pixel=2)),
+        ('serio', dibujar2(C['serio'])),
+        ('pillo', dibujar2(C['pillo'])),
+        ('enfado', dibujar2(C['enfado'], corbata=(CORBATA_ROJA, CORBATA_ROJA_OSC))),
+        ('vuela (orejas-alas)', dibujar2(C['furia'], 'vuelo', corbata=(CORBATA_ROJA, CORBATA_ROJA_OSC))),
     ]
     k = 3
     W, H = CELDA_W * k, CELDA_H * k
@@ -447,5 +505,34 @@ def lamina_diseno(salida):
     print(salida, lam.size)
 
 
+def lamina_caras(salida):
+    """El estudio de la cabeza: las caras a la escala del sprite (x4) y a 2x (x3)."""
+    nombres = ['serio', 'pillo', 'enfado', 'calculador', 'furia', 'susto']
+    try:
+        f = ImageFont.load_default(size=16)
+    except TypeError:
+        f = ImageFont.load_default()
+    w0, h0 = CAB.LIENZO[0], CAB.LIENZO[1]
+    filas = []
+    for esc, zoom in ((ESCALA_CABEZA, 4), (1.4, 3)):
+        filas.append([(n, esc, CAB.retrato(CAB.CARAS[n], esc).resize((int(round(w0 * esc)) * zoom, int(round(h0 * esc)) * zoom),
+                                                                     Image.NEAREST)) for n in nombres])
+    W = max(sum(im.size[0] + 10 for _, _, im in fila) for fila in filas) + 10
+    H = sum(fila[0][2].size[1] + 24 for fila in filas) + 10
+    lam = Image.new('RGBA', (W, H), (60, 62, 68, 255))
+    d = ImageDraw.Draw(lam)
+    y = 4
+    for fila in filas:
+        x = 10
+        for n, esc, im in fila:
+            d.text((x, y), '%s  (%.2f px/u)' % (n, esc), fill=(255, 230, 0), font=f)
+            lam.alpha_composite(im, (x, y + 20))
+            x += im.size[0] + 10
+        y += fila[0][2].size[1] + 24
+    lam.save(salida)
+    print(salida, lam.size)
+
+
 if __name__ == '__main__':
-    lamina_diseno(sys.argv[1] if len(sys.argv) > 1 else os.path.join(AQUI, 'nefanyamuto_diseno.png'))
+    lamina_diseno(os.path.join(AQUI, 'nefanyamuto_diseno.png'))
+    lamina_caras(os.path.join(AQUI, 'nefanyamuto_caras.png'))
