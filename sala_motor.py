@@ -133,9 +133,17 @@
 #               salir, el mundo de antes); la huella entierra 7 conchas de una vez para
 #               que la fila cave y vuelve al mundo de entrada en cada caso. Ninguna debe
 #               jugar sola: se eligen a mano.
+#   v20         LA SALA LLENA SE VA LLENANDO, SIN POZOS POR TODAS PARTES. La seccion fija
+#               Modofila = recta, Minfila 3 y Tfila 5 mientras dura (los devuelve al salir).
+#               Entran de uno en uno hasta LLENA_LLENA (55 s) y cada quieto ocupa una
+#               casilla de columna y fila pares (sitios_llena): dos quietos nunca son
+#               vecinos y no forman fila. Despues cambian de sitio o se van y vuelven;
+#               una sola vez (LLENA_LINEA, 62-76 s) tres en linea recta abren un pozo
+#               a proposito; a los 100 s se vacia. 120 s (antes 90: entraban casi a la
+#               vez a una rejilla apretada y cada corrillo de tres era una escision).
 # =============================================================================
 
-SALA_VERSION = 'sala v19'
+SALA_VERSION = 'sala v20'
 
 import math
 
@@ -1715,7 +1723,8 @@ CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
 #                   tres casos: minima (nadie quieto), una persona quieta, un grupo
 #   3 huella        la huella inevitable: quietos construyen y dejan inclusiones; la
 #                   fila cava tantas conchas como personas
-#   4 llena         la sala llena, con gente entrando y saliendo
+#   4 llena         la sala se va llenando y la gente cambia de sitio; una sola fila
+#                   recta, a proposito (v20)
 #   5 genozilla     GENoZilla, como estaba (13 capitulos)
 #   vacia           nadie (sin director)
 # Destinos de las coreografias: los de GENoZilla (ver arriba). Claves nuevas de un caso:
@@ -1747,7 +1756,7 @@ def _vaga(i, t0, t1, cada=5.0, semilla=41, zona_=(0.8, 10.2, 1.2, 7.8)):
     return out
 
 
-def _coreo_paseo(n):
+def _coreo_paseo(n, c=None):
     """Paseo (80 s): sueltos que entran y salen, una que se interesa por la obra y un
     grupo de cuatro que entra, se para y sale junto."""
     co = []
@@ -1773,39 +1782,122 @@ def _coreo_paseo(n):
     return co
 
 
-def _coreo_llena(n):
-    """Sala llena (90 s): entran deprisa, se reparten y, mientras, unos se mueven, otros
-    se van y vuelven; al final se vacia."""
+# v20: la sala llena se va llenando y evoluciona sin abrir pozos por todas partes. Hasta
+# la v19 entraban 0,7 s uno tras otro a una rejilla de 6 columnas (a casilla y media) y
+# daban pasos de +-1 casilla: los quietos quedaban en casillas contiguas, y con Modofila =
+# cadena cada corrillo de tres aguantando Tfila era una escision. Ahora la seccion fija
+# Modofila = recta (Minfila 3, Tfila 5) y cada persona quieta ocupa una casilla de la
+# rejilla par (columna y fila pares de la demo web, 11 x 9): dos quietos nunca son
+# vecinos, asi que no forman fila. Solo una vez, a proposito, tres se ponen en linea recta
+# (LLENA_LINEA): los de las casillas (4, 4) y (6, 4) y un tercero en medio.
+LLENA_DUR = 120.0               # s del caso
+LLENA_LLENA = 55.0              # s: para entonces han entrado todos (de uno en uno)
+LLENA_CAMBIOS = 98.0            # s: hasta aqui cambian de sitio, se van y vuelven
+LLENA_VACIA = 100.0             # s: empiezan a irse todos
+LLENA_LINEA = ((4, 4), (5, 4), (6, 4), 62.0, 76.0)    # la fila recta: extremos, medio, de t0 a t1
+
+
+def sitios_llena(c=None):
+    """Las casillas de la rejilla par (columna y fila pares de la demo web) donde puede
+    pararse alguien en la sala llena: en el suelo de la camara, lejos de la esfera y del
+    estrobo y sin quedar detras (como casillas_libres). Sin sala, todas."""
+    todos = [(cx, cy) for cy in range(0, REJILLA_WEB[1], 2) for cx in range(0, REJILLA_WEB[0], 2)]
+    if c is None:
+        return todos
+    try:
+        ev = evitar_de(equipos_o_defecto(c))
+        F = fase1()
+        c1 = F.cfg() if F is not None else dict(ancho_sala=5.4, fondo_sala=4.5)
+        w, f = REJILLA_WEB
+        out = []
+        for cx, cy in todos:
+            x, z = de_suelo(c1, (cx + 0.5) / w * c1['ancho_sala'], (cy + 0.5) / f * c1['fondo_sala'])
+            q = _libre(c, (x, z), ev)
+            if math.hypot(q[0] - x, q[1] - z) < 0.05:
+                out.append((cx, cy))
+        return out or todos
+    except Exception:
+        return todos
+
+
+def _coreo_llena(n, c=None):
+    """Sala llena (LLENA_DUR s): entran de uno en uno hasta LLENA_LLENA y cada uno se para
+    en una casilla libre de la rejilla par (nunca junto a otro quieto); luego, cada poco,
+    unos cambian de sitio y otros se van y vuelven; una sola vez, tres en linea recta
+    (LLENA_LINEA) abren un pozo; al final se vacia. Sin azar: h01 decide cada paso."""
+    (ax, ay), medio, (bx, by), t_l0, t_l1 = LLENA_LINEA
+    extremos = [(ax, ay), (bx, by)]
+    sitios = [s_ for s_ in sitios_llena(c) if s_ not in extremos]
     co = []
-    cols = 6
-    filas_ = int(math.ceil(n / float(cols)))
+    ocupa = {}                  # sitio: persona
+    sitio_de = {}               # persona: sitio (None, fuera)
+
+    def elige(i, v):
+        libres = [s_ for s_ in sitios if s_ not in ocupa]
+        if not libres:
+            return None
+        return max(libres, key=lambda s_: h01(i, v, s_[0], s_[1], 71))
+
+    def ir(t, i, s_):
+        viejo = sitio_de.get(i)
+        if viejo is not None and ocupa.get(viejo) == i:
+            del ocupa[viejo]
+        sitio_de[i] = s_
+        if s_ is None:
+            co.append([t, i, _FUERA])
+        else:
+            ocupa[s_] = i
+            co.append([t, i, ('suelo',) + tuple(s_)])
+
+    # cola de decisiones: (t, persona, que, vuelta, generacion); una decision de una
+    # generacion vieja (la persona ya cambio de plan) no cuenta
+    gen = dict((i, 0) for i in range(n))
+    cola = []
+    paso = (LLENA_LLENA - 5.0) / max(1, n)
     for i in range(n):
-        f, k = divmod(i, cols)
-        x = 0.9 + 9.2 * (k + 0.2 + 0.6 * h01(i, 51)) / cols
-        y = 1.2 + 6.8 * (f + 0.2 + 0.6 * h01(i, 52)) / filas_
-        t = 0.7 * i
-        co.append([t, i, ('suelo', x, y)])
-        t += 9.0 + 6.0 * h01(i, 53)
-        v = 0
-        while t < 76.0:
-            u = h01(i, v, 54)
-            if u < 0.55:                 # un paso corto
-                x = max(0.6, min(10.4, x + 2.0 * (h01(i, v, 55) - 0.5)))
-                y = max(1.0, min(8.0, y + 2.0 * (h01(i, v, 56) - 0.5)))
-                co.append([t, i, ('suelo', x, y)])
-                t += 8.0 + 8.0 * h01(i, v, 57)
-            elif u < 0.82:               # se va y vuelve a otro sitio (si le da tiempo antes del final)
-                co.append([t, i, _FUERA])
-                vuelve = t + 11.0 + 5.0 * h01(i, v, 60)
-                if vuelve > 70.0:
-                    break
-                x, y = 0.9 + 9.4 * h01(i, v, 58), 1.2 + 6.6 * h01(i, v, 59)
-                co.append([vuelve, i, ('suelo', x, y)])
-                t += 22.0 + 6.0 * h01(i, v, 61)
-            else:                        # se queda
-                t += 10.0
-            v += 1
-        co.append([78.0 + 0.3 * i, i, _FUERA])
+        cola.append((1.0 + paso * i + 0.4 * paso * h01(i, 72), i, 'entra', 0, 0))
+    if n >= 3:
+        cola.append((t_l0, 2, 'medio', 0, 0))           # el tercero se pone entre los dos
+    while cola:
+        cola.sort()
+        t, i, que, v, g = cola.pop(0)
+        if t >= LLENA_CAMBIOS or (g != gen[i] and que != 'medio'):
+            continue
+        if n >= 3 and i == 2 and que != 'medio' and t_l0 - 10.0 <= t < t_l0:
+            continue                                    # quieto (o fuera) hasta la fila: se mueve a t_l0
+        if i < 2 and n >= 3 and que == 'entra':         # los extremos de la fila: su casilla, quietos
+            ir(t, i, extremos[i])
+            cola.append((t_l1 + 4.0 + 6.0 * h01(i, 73), i, 'cambia', v + 1, gen[i]))
+            continue
+        if que == 'medio':                              # la fila recta, de t_l0 a t_l1
+            gen[i] += 1
+            viejo = sitio_de.get(i)
+            if viejo is not None and ocupa.get(viejo) == i:
+                del ocupa[viejo]
+            sitio_de[i] = None
+            co.append([t, i, ('suelo',) + tuple(medio)])
+            cola.append((t_l1, i, 'cambia', v + 1, gen[i]))
+            continue
+        if que in ('entra', 'vuelve'):
+            s_ = elige(i, v)
+            if s_ is None:                              # no cabe: espera fuera a que se libere un sitio
+                cola.append((t + 2.0, i, que, v + 1, g))
+                continue
+            ir(t, i, s_)
+            espera = max(0.0, LLENA_LLENA - t) + 14.0 + 16.0 * h01(i, v, 74)
+            cola.append((t + espera, i, 'cambia', v + 1, g))
+            continue
+        # cambia: a otro sitio libre (mas a menudo) o se va y vuelve (tambien si no hay sitio)
+        s_ = elige(i, v) if h01(i, v, 75) < 0.6 else None
+        if s_ is not None:
+            ir(t, i, s_)
+            cola.append((t + 12.0 + 12.0 * h01(i, v, 76), i, 'cambia', v + 1, g))
+        else:
+            ir(t, i, None)
+            cola.append((t + 8.0 + 8.0 * h01(i, v, 77), i, 'vuelve', v + 1, g))
+    for i in range(n):
+        co.append([LLENA_VACIA + 0.3 * i, i, _FUERA])
+    co.sort(key=lambda x: (x[0], x[1]))
     return co
 
 
@@ -1871,15 +1963,16 @@ CASOS_HUELLA = [
 ]
 
 CASOS_LLENA = [
-    dict(nombre='Sala llena', sub='Mucha gente entrando y saliendo: la presencia, en todas partes.',
-         dur=90.0, pars=dict(), musica=True, foco='quietos', coreo=_coreo_llena,
-         rotulos=[(0.0, 'La sala se llena: entra cada vez mas gente.'),
-                  (14.0, 'Llena, la presencia esta en todas partes: lo que llega prende en casi toda la cara '
-                         'visible.'),
-                  (32.0, 'Siempre hay quien se va y quien llega: cada llegada y cada parada deja su inclusion.'),
-                  (52.0, 'Juntos y quietos {tfila} s, tres o mas son una fila: abren un pozo de tantas conchas '
-                         'como personas.'),
-                  (78.0, 'La sala se vacia.')]),
+    dict(nombre='Sala llena', sub='La sala se va llenando y la gente cambia de sitio: el mundo crece donde esta.',
+         dur=LLENA_DUR, pars=dict(), musica=True, foco='quietos', coreo=_coreo_llena,
+         rotulos=[(0.0, 'La sala se va llenando: entran de uno en uno y cada uno se para en su sitio.'),
+                  (14.0, 'Quietos, sus celdas suenan: lo que llega prende y el mundo crece donde esta la gente.'),
+                  (32.0, 'Cada llegada y cada parada deja su inclusion.'),
+                  (LLENA_LLENA, 'Llena: unos cambian de sitio, otros se van y vuelven; el mundo sigue a la gente.'),
+                  (LLENA_LINEA[3], 'Tres en linea recta, quietos {tfila} s: abren un pozo de tantas conchas como '
+                                   'personas.'),
+                  (LLENA_LINEA[4], 'La fila se deshace: el pozo queda abierto, con su fulgurita.'),
+                  (LLENA_VACIA, 'La sala se vacia: lo que dejaron queda en el mundo.')]),
 ]
 
 SECCIONES = dict(
@@ -1887,7 +1980,8 @@ SECCIONES = dict(
     probabilidad=dict(num=2, titulo='Estrato humano', personas=6,
                       pars=dict(Activo=True, Cuanto=0.2, Pesocrear=1.0, Tfila=60.0), casos=CASOS_PROBABILIDAD),
     huella=dict(num=3, titulo='La huella inevitable', personas=8, pars=dict(Tfila=60.0), casos=CASOS_HUELLA),
-    llena=dict(num=4, titulo='Sala llena', personas='personas', pars=dict(), casos=CASOS_LLENA),
+    llena=dict(num=4, titulo='Sala llena', personas='personas',
+               pars=dict(Modofila='recta', Minfila=3, Tfila=5.0), casos=CASOS_LLENA),     # v20
     genozilla=dict(num=5, titulo='GENoZilla', personas=GZ_PERSONAS, pars=dict(), casos=CAPITULOS),
 )
 DEMOS = ['paseo', 'probabilidad', 'huella', 'llena', 'genozilla', 'vacia']
@@ -1923,7 +2017,7 @@ def casos(demo=None):
 
 def coreo_de(cp, c):
     co = cp['coreo']
-    return co(n_personas(c)) if callable(co) else co
+    return co(n_personas(c), c) if callable(co) else co
 
 
 def antetitulo(k, demo=None):
