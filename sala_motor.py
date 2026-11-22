@@ -156,9 +156,18 @@
 #               conchas debajo para que una fila o un grito caven), el caso espera: el
 #               titulo dice «Esperando que el mundo evolucione» y para probar que, y lo
 #               vuelve a mirar cada ESPERA_CADA s (Siguientecap lo salta).
+#   v22         LA OBRA, PROYECTADA EN UNA PANTALLA. Soporte (pagina Sala): pantalla (por
+#               defecto) o esfera (la de LEDs de antes). La pantalla cuelga en la pared del
+#               fondo, pegada a la de la izquierda y al techo (la esquina de arriba a la
+#               izquierda vista desde la entrada), con el render entero de FASE1 (16:9) y
+#               Altopantalla de alto (3,6 m: 6,4 x 3,6 m; el planeta, el 85 % del alto,
+#               unos 3 m: tres veces la esfera de 1 m). Un marco oscuro detras y un
+#               proyector colgado del techo delante. Las vistas (entrada, visitante) miran a
+#               la pantalla; la peana de la esfera no se dibuja. La fila 'esfera' de la
+#               tabla equipos sigue: es el sitio que la gente deja libre junto al estrobo.
 # =============================================================================
 
-SALA_VERSION = 'sala v21'
+SALA_VERSION = 'sala v22'
 
 import math
 
@@ -667,6 +676,15 @@ _SALA = dict(t0=None, frame=None, equipos=None, audio=None, t_audio=None, forzar
              col_esfera=None, col_frame=None, rotulo=None, rotulo_frame=None)
 ROTULO_CADA = 15            # v5: el rotulo se rehace cada 15 fotogramas (un cuarto de segundo)
 MODOS_LUZ = ['apagado', 'prueba']
+SOPORTES = ['pantalla', 'esfera']        # v22: donde se ve la obra (la pantalla proyectada, por defecto)
+SOPORTES_ETIQUETAS = ['Pantalla proyectada (en la esquina de arriba a la izquierda)', 'Esfera de LEDs (1 m)']
+PANT_ALTO = 3.6             # v22: m de alto de la pantalla (el planeta, ENCUADRE de ese alto: ~3 m)
+PANT_ASPECTO = 16.0 / 9.0   # el render de FASE1, entero
+PANT_MARGEN = 0.12          # m de la pantalla a la pared de la izquierda y al techo
+PANT_SEPARA = 0.06          # m de la pantalla a la pared del fondo (el marco, detras)
+PANT_MARCO = 0.08           # m que el marco sobresale por cada lado
+COL_MARCO = (0.03, 0.03, 0.035)
+COL_PROYECTOR = (0.12, 0.12, 0.13)
 VISTAS = ['visitante', 'entrada', 'orbita', 'cenital', 'juego']   # v2; hasta la v1, libre (= orbita) y cenital
 # v13: juego, la sala desde la entrada a la izquierda y la imagen de FASE1 a la derecha
 
@@ -714,7 +732,8 @@ def cfg():
                 col_monigote=(_p('Colormonigoter', COL_MONIGOTE[0]), _p('Colormonigoteg', COL_MONIGOTE[1]),
                               _p('Colormonigoteb', COL_MONIGOTE[2])),
                 capitulo=_menu('Capitulo', CAP_NOMBRES, 0), buclecap=bool(_p('Buclecap', True)),
-                guion=bool(_p('Guion', True)), alimentar=bool(_p('Alimentar', True)))
+                guion=bool(_p('Guion', True)), alimentar=bool(_p('Alimentar', True)),
+                soporte=_menu('Soporte', SOPORTES, 0), alto_pantalla=_p('Altopantalla', PANT_ALTO))   # v22
 
 
 def ahora():
@@ -796,18 +815,76 @@ def paseo_visitante(cfg, t, evitar=()):
     return pts[0]
 
 
+def es_pantalla(c=None):
+    """v22: la obra se ve en la pantalla proyectada (Soporte = pantalla), no en la esfera."""
+    c = c or cfg()
+    return SOPORTES[c.get('soporte', 0) % len(SOPORTES)] == 'pantalla'
+
+
+def pantalla_rect(c=None):
+    """v22: la pantalla en la pared del fondo, pegada a la izquierda y al techo: dict con
+    x0 x1 y0 y1 (sus bordes), z (su plano), w h (ancho y alto) y cx cy (su centro). El
+    alto es Altopantalla (como mucho el de la sala menos los margenes) y el ancho, 16:9;
+    si no cabe a lo ancho, se encoge."""
+    c = c or cfg()
+    hx, hz = 0.5 * c['ancho'], 0.5 * c['fondo']
+    h = max(0.5, min(float(c.get('alto_pantalla', PANT_ALTO)), c['alto'] - 2.0 * PANT_MARGEN))
+    w = h * PANT_ASPECTO
+    if w > c['ancho'] - 2.0 * PANT_MARGEN:
+        w = c['ancho'] - 2.0 * PANT_MARGEN
+        h = w / PANT_ASPECTO
+    x0, y1 = -hx + PANT_MARGEN, c['alto'] - PANT_MARGEN
+    return dict(x0=x0, x1=x0 + w, y0=y1 - h, y1=y1, z=-hz + PANT_SEPARA, w=w, h=h, cx=x0 + 0.5 * w,
+                cy=y1 - 0.5 * h)
+
+
+def pantalla(que, frame=None):
+    """v22: para las expresiones del Geometry COMP 'pantalla' (un cuadrado de 1 x 1 en XY):
+    tx ty tz (su centro) y sx sy (su ancho y su alto)."""
+    try:
+        c = cfg()
+        if que == 'scale':                  # sin Soporte = pantalla, casi 0 (no se ve)
+            return 1.0 if es_pantalla(c) else OCULTA
+        r = pantalla_rect(c)
+        return dict(tx=r['cx'], ty=r['cy'], tz=r['z'], sx=r['w'], sy=r['h'])[que]
+    except Exception:
+        return 0.0
+
+
+OCULTA = 1e-4               # v22: la escala de la obra que no es el Soporte (los render la llevan igual)
+
+
+def escala_esfera(frame=None):
+    """v22: la escala del Geometry COMP de la esfera: 1 con Soporte = esfera; si no, casi 0."""
+    try:
+        return OCULTA if es_pantalla() else 1.0
+    except Exception:
+        return 1.0
+
+
+def obra(c=None, eq=None):
+    """v22: el punto donde se ve la obra: el centro de la pantalla o el de la esfera."""
+    c = c or cfg()
+    if es_pantalla(c):
+        r = pantalla_rect(c)
+        return (r['cx'], r['cy'], r['z'])
+    eq = equipos() if eq is None else eq
+    esf = next((e for e in eq if e['tipo'] == 'esfera'), None)
+    return esf['pos'] if esf is not None else (0.0, 1.3, -0.5 * c['fondo'])
+
+
 def ojos(c=None, frame=None):
     """(posicion, a donde mira) de la camara principal segun Vista."""
     c = c or cfg()
     eq = equipos()
     esf = next((e for e in eq if e['tipo'] == 'esfera'), None)
-    mira = esf['pos'] if esf is not None else (0.0, 1.3, -0.5 * c['fondo'])
+    mira = obra(c, eq)              # v22: la pantalla (o la esfera)
     modo = VISTAS[c['vista'] % len(VISTAS)]
     if modo == 'visitante':
         x, z = paseo_visitante(c, ahora(), evitar_de(eq))
         return (x, OJOS, z), mira
     if modo in ('entrada', 'juego'):          # v13: juego, desde la entrada (a la izquierda del monitor)
-        return vista_entrada(c, esf)
+        return vista_entrada(c, esf, modo)
     if modo == 'cenital':
         cam = next((e for e in eq if e['tipo'] == 'camara'), None)
         p = cam['pos'] if cam is not None else (0.0, 3.5, 0.0)
@@ -821,7 +898,7 @@ ENTRADA_ATRAS = 2.2         # v3: m por detras de la puerta (la pared de la entr
 ENTRADA_ALTO = 2.8          # m: algo por encima de los ojos, para ver la reticula del suelo
 
 
-def vista_entrada(c, esf=None):
+def vista_entrada(c, esf=None, modo='entrada'):
     """(posicion, a donde mira) de la vista entrada (v3): un poco por detras
     de la puerta y por encima de la gente, mirando hacia abajo y hacia el
     fondo, entre el centro del suelo del publico y la esfera. Se ven la
@@ -829,10 +906,22 @@ def vista_entrada(c, esf=None):
     perspectiva."""
     hz = 0.5 * c['fondo']
     p = (0.0, min(ENTRADA_ALTO, c['alto'] - 0.3), hz + ENTRADA_ATRAS)
+    if es_pantalla(c):              # v22: inclinada para que quepa la pantalla entera, hasta su borde de arriba
+        r = pantalla_rect(c)
+        if modo == 'juego':
+            v = FOV_JUEGO
+        else:
+            v = 2.0 * math.degrees(math.atan(math.tan(math.radians(0.5 * 80.0)) * 720.0 / 1280.0))
+        arriba = math.degrees(math.atan2(r['y1'] - p[1], p[2] - r['z']))
+        cab = math.radians(arriba - (0.5 * v - ENTRADA_HOLGURA))
+        zm = -0.2 * hz                  # hacia el fondo, como con la esfera
+        return p, (0.3 * r['cx'], p[1] + math.tan(cab) * (p[2] - zm), zm)
     if esf is None:
         return p, (0.0, 0.0, -0.25 * hz)
     return p, (0.3 * esf['x'], 0.25 * esf['y'], 0.2 * esf['z'])
 
+
+ENTRADA_HOLGURA = 3.0       # v22: grados entre el borde de arriba de la pantalla y el del cuadro
 
 CENITAL_ASPECTO = 320.0 / 288.0     # render_cenital (y la miniatura, 200 x 180, v9)
 
@@ -950,10 +1039,14 @@ def inclina_esfera(frame=None):
 
 
 def luz_esfera(que, frame=None):
-    """La luz de la esfera (Light COMP luz_esfera): tx ty tz y r g b d."""
+    """La luz de la esfera (Light COMP luz_esfera): tx ty tz y r g b d. v22: con la
+    pantalla, medio metro delante de su centro."""
     try:
         e = equipo('esfera')
         if que in ('tx', 'ty', 'tz'):
+            if es_pantalla():
+                x, y, z = obra()
+                return (x, y, z + 0.5)[('tx', 'ty', 'tz').index(que)]
             return e['pos'][('tx', 'ty', 'tz').index(que)] if e is not None else 0.0
         if que == 'd':                      # v4: Luzesfera (0 por defecto: la mancha en la pared sobraba)
             c = cfg()
@@ -1035,6 +1128,8 @@ def _filas_equipos(c, eq, t):
         if e['tipo'] == 'sub':              # v6: va dentro de la peana; dibujado, sus caras y las de la
             continue                        # peana coincidian y salian rayas bajo la esfera
         if e['tipo'] == 'esfera':           # la peana; la esfera tiene su geometria
+            if es_pantalla(c):              # v22: con la pantalla, ni esfera ni peana
+                continue
             alto = max(0.05, e['y'] - 0.5 * e['tam'])
             out.append([e['x'], 0.0, e['z'], 0, 0, 0, 0.6 * e['tam'], alto, 0.6 * e['tam']]
                        + list(COL_EQUIPO['esfera']))
@@ -1046,7 +1141,16 @@ def _filas_equipos(c, eq, t):
             l = luz_de(c, e, t)             # el aparato se enciende con su luz
             col = tuple(max(a, b * l[3]) for a, b in zip(col, l[:3]))
         out.append([e['x'], e['y'] - 0.5 * sy, e['z'], rx, ry, 0, sx, sy, sz] + list(col))
+    if es_pantalla(c):                      # v22: el marco de la pantalla y el proyector
+        r = pantalla_rect(c)
+        out.append([r['cx'], r['y0'] - PANT_MARCO, r['z'] - 0.5 * PANT_SEPARA, 0, 0, 0, r['w'] + 2 * PANT_MARCO,
+                    r['h'] + 2 * PANT_MARCO, 0.5 * PANT_SEPARA] + list(COL_MARCO))
+        out.append([r['cx'], c['alto'] - 0.45, r['z'] + PROYECTOR_A, 0, 0, 0, 0.45, 0.18, 0.40] + list(COL_PROYECTOR))
+        out.append([r['cx'], c['alto'] - 0.27, r['z'] + PROYECTOR_A, 0, 0, 0, 0.04, 0.27, 0.04] + list(COL_PROYECTOR))
     return out
+
+
+PROYECTOR_A = 4.2           # v22: m de la pantalla al proyector (colgado del techo, delante)
 
 
 def _filas_personas(c, eq, t):
