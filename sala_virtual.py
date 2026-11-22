@@ -167,6 +167,8 @@ LAS DEMOS (v30, sala v18, motor v140)
   el rotulo y la cabecera se enchufan desenchufando antes lo que hubiera (enchufa):
   en un proyecto de antes de la v30, con_titulo seguia con con_rotulo_demo en su
   segunda entrada y no con con_cabecera; la autoprueba dice que hay en cada una.
+  La autoprueba del titulo compara el punto medio escapado (\u00b7): exec(open(...)
+  .read()) lee este archivo en cp1252 en Windows y un '·' literal no coincidia.
 
 COMO USARLO
 -----------
@@ -1972,8 +1974,11 @@ def _prueba_demos(t, m, copy, motor_):
               entrada(sala.op('con_cabecera'), 0), entrada(sala.op('con_cabecera'), 1)]
     t.check('v30: cada caso con su titulo (la seccion y el caso) y la cabecera arriba a la derecha con la seccion, '
             'el caso y la probabilidad medida',
-            ante == 'STRATOS · 2 · ESTRATO HUMANO · CASO 2 / 3' and nom == 'Una persona quieta'
-            and ante1 == 'STRATOS · 1 · PASEO' and cab.startswith('2 · ESTRATO HUMANO') and 'P 0,43' in cab
+            # v31: el punto medio, escapado (\u00b7): exec(open(...).read()) lee este archivo en
+            # cp1252 en Windows y un '·' literal llegaba como 'Â·' (sala_motor se lee en utf-8)
+            ante == u'STRATOS \u00b7 2 \u00b7 ESTRATO HUMANO \u00b7 CASO 2 / 3' and nom == 'Una persona quieta'
+            and ante1 == u'STRATOS \u00b7 1 \u00b7 PASEO' and cab.startswith(u'2 \u00b7 ESTRATO HUMANO')
+            and 'P 0,43' in cab
             and 'prenden 4/10' in cab and sala.op('cabecera_demo') is not None
             and cadena == ['titulo_fundido', 'con_cabecera', 'cabecera_fundido', 'con_rotulo_demo'],
             '%s | %s | %s | con_titulo <- %s' % (ante, ante1, cab.replace(chr(10), ' / '), ' / '.join(cadena)))
