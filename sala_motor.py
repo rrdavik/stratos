@@ -141,9 +141,24 @@
 #               una sola vez (LLENA_LINEA, 62-76 s) tres en linea recta abren un pozo
 #               a proposito; a los 100 s se vacia. 120 s (antes 90: entraban casi a la
 #               vez a una rejilla apretada y cada corrillo de tres era una escision).
+#   v21         LAS DEMOS TOMAN EL MUNDO DE FASE1 DONDE ESTA Y NO TOCAN SU GIRO. Hasta la
+#               v20, al entrar se guardaba el mundo y al salir se devolvia (el planeta
+#               volvia atras: ciclos, conchas y lo construido durante la demo); la
+#               probabilidad y la huella volvian al mundo de la entrada en cada caso
+#               (mundo = 'base') y despejaban celdas; la fila de la huella enterraba 7
+#               conchas de golpe; GENoZilla rehacia el mundo en cada capitulo, enterraba 6
+#               conchas para sus zanjas y ponia Barsperturn 450 (45 y 9 en el primero y el
+#               ultimo). Ahora ninguna demo guarda, devuelve, vacia ni entierra el mundo,
+#               ni cambia Barsperturn: el planeta gira siempre con los parametros de FASE1
+#               (y su giro vivo) y cierra sus ciclos con sus reglas. Los parametros de la
+#               demo si se devuelven al salir. Si el mundo aun no tiene lo que un caso
+#               necesita (dos celdas vacias bajo la sala para medir la probabilidad;
+#               conchas debajo para que una fila o un grito caven), el caso espera: el
+#               titulo dice «Esperando que el mundo evolucione» y para probar que, y lo
+#               vuelve a mirar cada ESPERA_CADA s (Siguientecap lo salta).
 # =============================================================================
 
-SALA_VERSION = 'sala v20'
+SALA_VERSION = 'sala v21'
 
 import math
 
@@ -1575,7 +1590,7 @@ def _sitios(lista, t=-1.0):
 
 CAPITULOS = [
     dict(nombre='GENoZilla', sub='Toda la sala, un solo equipo, contra un monstruo que devora lo construido.',
-         dur=14.0, pars=dict(Barsperturn=45.0),
+         dur=14.0, pars=dict(),          # v21: sin Barsperturn (el giro es el de FASE1)
          coreo=_sitios([('suelo', 2, 6), ('suelo', 5, 3), ('suelo', 8, 5), ('suelo', 3, 2), ('suelo', 9, 7)])
          + _paseo(range(5), 0.5, 13.0),
          rotulos=[(0.0, 'La camara cenital situa a cada persona en una celda del planeta: un anillo en la pantalla.'),
@@ -1695,13 +1710,12 @@ CAPITULOS = [
                   (7.0, 'La zanja se abre a su lado: relampago, y queda aturdido {taturdido} segundos.')]),
     dict(nombre='Fin de ronda', sub='Al acabar la ronda se cuentan todas las celdas del globo, tambien las de la cara '
                                     'oculta.',
-         dur=17.0, pars=dict(Barsperturn=9.0, Noche=('min', 4.0), Tfila=60.0),
+         dur=17.0, pars=dict(Noche=('min', 4.0), Tfila=60.0),      # v21: sin Barsperturn
          coreo=_sitios([('suelo', 2, 4), ('suelo', 4, 6), ('suelo', 6, 3), ('suelo', 8, 5), ('suelo', 9, 7)]),
          rotulos=[(0.0, 'Recuento: publico contra mal, en todo el planeta.'),
                   (3.5, '{gana}'),
                   (9.0, 'El mundo se entierra: la concha guarda el mapa de la partida.')]),
 ]
-GIRO_DEMO = 450.0           # Barsperturn del resto de capitulos de GENoZilla: el giro, despacio (0,4 grados por segundo)
 CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
 
 
@@ -1714,9 +1728,10 @@ CAP_ETIQUETAS = ['%d %s' % (k, cp['nombre']) for k, cp in enumerate(CAPITULOS)]
 # cabecera arriba a la derecha (cabecera_texto) con la seccion, el caso y, donde
 # cuenta, lo que mide FASE1 en vivo. Las personas las mueve la coreografia del caso.
 # Con Siguecamara (v19: apagado por defecto), la camara de FASE1 sigue a las celdas donde
-# pasan las cosas (foco del caso; motor v140, foco_camara), sin cambiar de altura. Las de
-# seccion no tocan el giro de FASE1 (v19; GENoZilla lo pone despacio). Al entrar se guarda FASE1 (escena,
-# mundo, parametros, tabla) y al salir se devuelve, como en GENoZilla.
+# pasan las cosas (foco del caso; motor v140, foco_camara), sin cambiar de altura. Las
+# demos no tocan el giro de FASE1 (v19; v21, tampoco GENoZilla). Al entrar se guarda la escena,
+# los parametros y la tabla de FASE1 y al salir se devuelven; el mundo no (v21): la demo lo toma
+# donde esta y lo deja como quede. Si le falta algo, el caso espera (falta_caso).
 #   1 paseo         la gente entra, pasea y sale, a veces en grupo; algo de la obra
 #                   la detiene y, quieta, construye
 #   2 probabilidad  estrato humano: la probabilidad de que prenda lo que llega, en
@@ -1915,7 +1930,7 @@ CASOS_PASEO = [
 
 CASOS_PROBABILIDAD = [
     dict(nombre='Probabilidad minima', sub='Sin nadie quieto, cada celda tiene la misma probabilidad: Cuanto.',
-         dur=18.0, pars=dict(), lluvia=('testigo', 'control'), foco=('refs', 'testigo'), mundo='base',
+         dur=18.0, pars=dict(), lluvia=('testigo', 'control'), foco=('refs', 'testigo'),
          coreo=[[6.0, 0, ('suelo', 2, 7)], [6.8, 1, ('suelo', 9, 6)]]
          + _vaga(0, 8.0, 16.0, cada=2.2, semilla=21) + _vaga(1, 8.5, 16.0, cada=2.2, semilla=22)
          + [[16.0, 0, _FUERA], [16.3, 1, _FUERA]],
@@ -1923,13 +1938,13 @@ CASOS_PROBABILIDAD = [
                   (6.0, 'Dos personas cruzan andando: su densidad sube despacio y se va con ellas.'),
                   (11.0, 'La celda testigo y la vacia prenden lo mismo: nadie cambia el devenir del mundo.')]),
     dict(nombre='Una persona quieta', sub='P = Cuanto + (1 - Cuanto) x densidad: quieta, su densidad sube.',
-         dur=20.0, pars=dict(), lluvia=('testigo', 'control'), foco=('refs', 'testigo'), mundo='base',
+         dur=20.0, pars=dict(), lluvia=('testigo', 'control'), foco=('refs', 'testigo'),
          coreo=[[0.0, 0, ('celda', 'testigo', 0.0, 0.0)]] + _sigue(0, ('celda', 'testigo', 0.0, 0.0), 3.0, 20.0),
          rotulos=[(0.0, 'Una persona entra y se para sobre la celda testigo.'),
                   (4.0, 'Quieta, la densidad de su casilla sube (Subida) y con ella la probabilidad de su celda.'),
                   (10.0, 'En su celda prende mas que en la vacia: el mundo se inclina hacia donde esta.')]),
     dict(nombre='Un grupo', sub='Varios juntos sobre la misma celda llenan su casilla: casi todo prende.',
-         dur=22.0, pars=dict(), lluvia=('testigo', 'control'), foco=('refs', 'testigo'), mundo='base',
+         dur=22.0, pars=dict(), lluvia=('testigo', 'control'), foco=('refs', 'testigo'),
          coreo=[[-1.0, 0, ('celda', 'testigo', 0.0, 0.0)]]
          + [[0.6 * j, 1 + j, ('celda', 'testigo', dx, dz)]
             for j, (dx, dz) in enumerate(((0.4, 0.0), (-0.4, 0.0), (0.0, 0.4), (0.0, -0.4)))]
@@ -1943,7 +1958,7 @@ CASOS_PROBABILIDAD = [
 
 CASOS_HUELLA = [
     dict(nombre='Quietos, construyen', sub='Nadie pasa sin dejar algo: al llegar, al pararse y al construir.',
-         dur=24.0, pars=dict(), musica=True, foco='quietos', mundo='base',
+         dur=24.0, pars=dict(), musica=True, foco='quietos',
          coreo=[[1.2 * j, j, ('suelo',) + d] for j, d in enumerate(((2.5, 3.0), (8.0, 2.0), (3.0, 6.5), (8.5, 6.0)))]
          + [[18.0 + 0.4 * j, j, _FUERA] for j in range(4)],
          rotulos=[(0.0, 'Al entrar, cada persona deja una inclusion con probabilidad {probllegada}.'),
@@ -1952,7 +1967,6 @@ CASOS_HUELLA = [
                   (18.0, 'Se van: la huella se queda en el mundo y, al enterrarlo, en su concha.')]),
     dict(nombre='La fila cava', sub='Una fila quieta {tfila} s abre un pozo de tantas conchas como personas.',
          dur=26.0, pars=dict(Minfila=3, Conchasporpersona=1, Tfila=5.0), arco=True, foco=('refs', 'fila_celdas'),
-         mundo='base',
          coreo=[[0.4 * j, j, ('casilla', 'fila', 1 + j)] for j in range(3)]
          + [[11.0, 3, ('casilla', 'fila', 0)], [11.3, 4, ('casilla', 'fila', 4)]]
          + [[21.0 + 0.3 * j, j, _FUERA] for j in range(5)],
@@ -1997,7 +2011,7 @@ PARS_DEMO = dict(Fuente='simulada', Modojuego=True)
 PARS_SECCION = dict(Fuente='simulada', Modojuego=False)
 PARS_CAPITULO = sorted(set(k for sec in SECCIONES.values() for cp in sec['casos'] for k in cp['pars'])
                        | set(k for sec in SECCIONES.values() for k in sec['pars']) | set(ARMAS)
-                       | {'Barsperturn', 'Umbralaparicion'})
+                       | {'Umbralaparicion'})       # v21: Barsperturn, nunca (el giro es el de FASE1)
 
 
 def pars_demo(demo):
@@ -2038,7 +2052,8 @@ def antetitulo(k, demo=None):
 _GZ = dict(activo=False, acabada=False, cap=None, t_titulo=None, t0=None, hechas=set(), refs={}, tramos={},
            ruido=[], ganancia=1.0, cortes0=None, t_gan=None, reg={}, saltar=False, cap_par=None,
            antes_cap={}, resultados=[], libres=None, rotulo=None, rotulo_frame=None, ultima_tabla=None,
-           demo=None, sec={}, coreo=[], t_nota=None, sueltas=[], t_lluvia=None, cabecera=None, cab_frame=None)
+           demo=None, sec={}, coreo=[], t_nota=None, sueltas=[], t_lluvia=None, cabecera=None, cab_frame=None,
+           espera=None)
 
 
 def ruido_demo(t):
@@ -2375,14 +2390,14 @@ def _valor_par(F, nombre, valor):
 
 
 def entrar(c, t, F, now):
-    """Demo = genozilla: guarda la escena de FASE1 en su hueco (Guardarescena en
-    GZ_HUECO), su mundo, sus parametros y la tabla sala_personas; luego pone los de
-    la demo y empieza en Capitulo. Si ya habia algo guardado (la sala se recargo a
-    mitad), no lo pisa."""
-    import copy
+    """Al entrar en una demo: guarda la escena de FASE1 en su hueco (Guardarescena en
+    GZ_HUECO), sus parametros y la tabla sala_personas; luego pone los de la demo y
+    empieza en Capitulo (GENoZilla) o en el primer caso. v21: el mundo no se guarda: la
+    demo juega sobre el de FASE1 tal como esta. Si ya habia algo guardado (la sala se
+    recargo a mitad), no lo pisa."""
     demo = DEMOS[c['demo'] % len(DEMOS)]
     _GZ.update(activo=True, acabada=False, tramos={}, saltar=False, resultados=[], cap=None, conservas=[],
-               demo=demo, sec={}, sueltas=[], t_nota=None, t_lluvia=None)
+               demo=demo, sec={}, sueltas=[], t_nota=None, t_lluvia=None, espera=None)
     if _guardado() is None and F is not None:
         try:
             F.m.guardar_escena(GZ_HUECO)
@@ -2390,8 +2405,8 @@ def entrar(c, t, F, now):
             pass
         tb = F.base.op('sala_personas')
         nombres = sorted(set(PARS_DEMO) | set(PARS_SECCION) | set(PARS_CAPITULO))
-        _guardar(dict(W=copy.deepcopy(F.motor.fetch('W', None)),
-                      pars=dict((k, F.par(k)) for k in nombres if F.par(k) is not None),
+        # v21: el mundo no se guarda (ni se devuelve al salir): la demo lo toma donde esta
+        _guardar(dict(pars=dict((k, F.par(k)) for k in nombres if F.par(k) is not None),
                       tabla=[[x.val for x in tb.row(r)] for r in range(tb.numRows)] if tb is not None else None,
                       sala=dict((k, _p(k, None)) for k in SALA_DEMO)))
     if F is not None:
@@ -2404,9 +2419,9 @@ def entrar(c, t, F, now):
 
 
 def salir(F, cfg_sala=None):
-    """Deja FASE1 como estaba al entrar: los parametros del capitulo y de la demo,
-    la escena (Cargarescena del hueco), el mundo y la tabla sala_personas."""
-    import copy
+    """Devuelve a FASE1 lo que la demo le cambio: los parametros del capitulo y de la
+    demo, la escena (Cargarescena del hueco) y la tabla sala_personas. v21: el mundo
+    no: sigue como lo dejo la demo (el planeta no vuelve atras)."""
     g = _guardado()
     if F is not None and _GZ.get('antes_cap'):
         for k, v in _GZ['antes_cap'].items():
@@ -2418,7 +2433,7 @@ def salir(F, cfg_sala=None):
         except Exception:
             pass
     _GZ.update(activo=False, cap=None, antes_cap={}, ruido=[], ganancia=1.0, tramos={}, saltar=False, demo=None,
-               sueltas=[], cabecera=None)
+               sueltas=[], cabecera=None, espera=None)
     if g is not None and F is not None:
         for k, v in g.get('pars', {}).items():
             F.poner(k, v)
@@ -2433,15 +2448,6 @@ def salir(F, cfg_sala=None):
                         t.appendRow(f)
         except Exception:
             pass
-        if g.get('W') is not None:
-            F.motor.store('W', copy.deepcopy(g['W']))
-        else:
-            F.m.reset_world()
-        for k in ('inst', 'tiles', 'frame'):
-            try:
-                F.m._CACHE[k] = None
-            except Exception:
-                pass
         tb = F.base.op('sala_personas')
         if tb is not None and g.get('tabla') is not None:
             tb.clear()
@@ -2458,8 +2464,8 @@ def salir(F, cfg_sala=None):
 
 
 def _cap_pars(F, k, c):
-    """Los parametros de FASE1 del capitulo k: sus armas (solo la suya), su giro y lo
-    suyo. Devuelve los de antes, para devolverlos al acabar."""
+    """Los parametros de FASE1 del capitulo k: sus armas (solo la suya) y lo suyo (v21:
+    nunca el giro). Devuelve los de antes, para devolverlos al acabar."""
     demo = demo_activa()
     cp = casos(demo)[k]
     if demo == 'genozilla':
@@ -2467,8 +2473,7 @@ def _cap_pars(F, k, c):
         quiere['Umbralaparicion'] = 1.0     # el monstruo aparece cuando lo dice el guion
     else:
         quiere = dict(SECCIONES[demo]['pars'])
-    if demo == 'genozilla':             # v19: el giro despacio, solo en GENoZilla (como en la v17); las
-        quiere['Barsperturn'] = GIRO_DEMO   # demos de seccion dejan el giro de FASE1 (y su giro vivo)
+    # v21: ninguna demo toca el giro (Barsperturn): el planeta gira con los parametros de FASE1
     # v16: el Oceano de FASE1 se respeta (hasta la v15 se apagaba: con el, el mundo vacio de cada
     # capitulo era todo mar y el monstruo solo anda por tierra; sobre el mundo de FASE1 no hace falta)
     quiere.update(cp['pars'])
@@ -2484,66 +2489,87 @@ def _cap_pars(F, k, c):
 
 def capitulo(c, t, F, now, k):
     """Empieza el capitulo (el caso) k en t (s de la sala): su titulo, los parametros y
-    el guion de FASE1 (en GENoZilla, con Guion) y donde esta cada persona."""
+    el guion de FASE1 (en GENoZilla, con Guion) y donde esta cada persona. v21: sobre el
+    mundo de FASE1 tal como esta; si aun no tiene lo que el caso necesita (falta_caso),
+    el caso espera (_GZ['espera']) con el titulo «Esperando que el mundo evolucione» y
+    gz_tick lo vuelve a mirar cada ESPERA_CADA s."""
     demo = demo_activa()
     caps_ = casos(demo)
     k = int(k) % len(caps_)
+    previa = _GZ.get('espera')
+    previa = previa if previa is not None and previa.get('cap') == k else None
     if F is not None and _GZ.get('antes_cap'):
         for nm, v in _GZ['antes_cap'].items():
             F.poner(nm, v)
     _GZ['antes_cap'] = {}
     cp = caps_[k]
-    t0 = t + TITULO
-    _GZ.update(cap=k, t_titulo=t, t0=t0, hechas=set(), refs={}, saltar=False,
+    if previa is not None:              # v21: la espera acaba: el titulo, ya entero (sin fundido de entrada)
+        t_tit = t - TITULO_ENTRA
+    else:
+        t_tit = t
+    t0 = t_tit + TITULO
+    _GZ.update(cap=k, t_titulo=t_tit, t0=t0, hechas=set(), refs={}, saltar=False,
                ruido=[(t0 + a, t0 + b, md) for a, b, md in cp.get('ruido', ())], ganancia=1.0, cortes0=None,
-               t_gan=None, reg=dict(cap=k), coreo=coreo_de(cp, c), t_lluvia=None)
+               t_gan=None, reg=dict(cap=k), coreo=coreo_de(cp, c), t_lluvia=None, espera=None)
     ev = evitar_de(equipos_o_defecto(c))
-    if F is not None and demo != 'genozilla':
-        _soltar_notas(F, now)
-        _GZ['antes_cap'] = _cap_pars(F, k, c)
-        c1 = F.cfg(fresca=True)
-        _GZ['libres'] = casillas_libres(c, c1, F.m, ev)
-        try:
-            _GZ['refs'] = preparar_caso(demo, k, cp, c1, F, now)
-        except Exception as e:
-            print('SALA  demo %s: no pude preparar el caso %d (%s)' % (demo, k, e))
-        try:
-            _GZ['reg'].update(registro_inicial(F))
-        except Exception:
-            pass
-    elif F is not None:
-        if c['guion']:
+    falta = None
+    if F is not None:
+        if demo != 'genozilla':
+            _soltar_notas(F, now)
+        if demo != 'genozilla' or c['guion']:
             _GZ['antes_cap'] = _cap_pars(F, k, c)
         c1 = F.cfg(fresca=True)
         W = F.W()
         _GZ['libres'] = casillas_libres(c, c1, F.m, ev)
         refs = {}
-        try:
-            refs = F.m.demo_refs(W, c1, k, _GZ['libres'])
-            if c['guion']:
-                # v16: el capitulo empieza en el mundo con el que entro la demo (motor v133)
-                base = (_guardado() or {}).get('W')
-                refs = F.m.guion_demo(W, c1, k, 'inicio', now, refs=refs, libres=_GZ['libres'], base=base) or refs
+        try:                            # los sitios del caso (solo leen el mundo)
+            if demo == 'genozilla':
+                refs = brote_vivo(F, c1, W, k, F.m.demo_refs(W, c1, k, _GZ['libres']) or {}, _GZ['libres'])
+            else:
+                refs = refs_caso(demo, k, c1, F, W, _GZ['libres'])
         except Exception as e:
-            print('SALA  GENoZilla: el guion del capitulo %d fallo (%s)' % (k, e))
+            print('SALA  demo %s: no pude preparar el caso %d (%s)' % (demo, k, e))
         _GZ['refs'] = refs
-        try:                            # v16: lo que ya habia, para comprobar solo lo nuevo
-            Wc = F.W()
-            _GZ['reg']['coronas0'] = set(x for x in range(len(Wc['occ'])) if Wc['occ'][x] >= c1['th_crown'])
-            # y cuanto del mundo de FASE1 se conserva: sus celdas ocupadas (menos las que el
-            # capitulo despeja, cava o hace brote a proposito) siguen con su ocupacion o mas
-            occ0 = ((_guardado() or {}).get('W') or {}).get('occ')
-            if occ0 is not None and len(occ0) == len(Wc['occ']):
+        try:
+            falta = falta_caso(demo, k, F, c1, W, refs)
+        except Exception as e:
+            falta = None
+            print('SALA  demo %s: no pude mirar lo que necesita el caso %d (%s)' % (demo, k, e))
+        if falta:
+            _GZ['espera'] = dict(cap=k, que=falta, desde=previa['desde'] if previa else t, revisa=t + ESPERA_CADA)
+            _GZ['t_titulo'], _GZ['t0'] = t, t + TITULO
+            if previa is None and not _GZ.get('callado'):
+                print('SALA  demo %s, caso %d %s: esperando que el mundo evolucione (%s)'
+                      % (demo, k, cp['nombre'], falta))
+        elif demo != 'genozilla':
+            try:
+                _GZ['reg'].update(registro_inicial(F))
+            except Exception:
+                pass
+        else:
+            occ0 = list(W['occ'])       # v21: el mundo de FASE1 al empezar el capitulo (no el de la entrada)
+            if c['guion']:
+                try:                    # v21 (motor v141): sobre el mundo vivo, sin rehacerlo
+                    refs = F.m.guion_demo(W, c1, k, 'inicio', now, refs=refs, libres=_GZ['libres'],
+                                          vivo=True) or refs
+                except Exception as e:
+                    print('SALA  GENoZilla: el guion del capitulo %d fallo (%s)' % (k, e))
+                _GZ['refs'] = refs
+            try:                        # v16: lo que ya habia, para comprobar solo lo nuevo
+                Wc = F.W()
+                _GZ['reg']['coronas0'] = set(x for x in range(len(Wc['occ'])) if Wc['occ'][x] >= c1['th_crown'])
+                # y cuanto del mundo de FASE1 se conserva: sus celdas ocupadas (menos las que el
+                # capitulo cava o hace brote a proposito) siguen con su ocupacion o mas
                 r_ = refs or {}
-                desp = set(r_.get('despejar') or ()) | set(r_.get('canal') or ()) | {r_.get('brote')}
+                desp = set(r_.get('canal') or ()) | {r_.get('brote')}
                 cand = [x for x in range(len(occ0)) if occ0[x] > 0 and x not in desp]
                 _GZ['reg']['conserva'] = (sum(1 for x in cand if Wc['occ'][x] >= occ0[x]), len(cand))
                 _GZ.setdefault('conservas', []).append((k,) + _GZ['reg']['conserva'])
-        except Exception:
-            pass
+            except Exception:
+                pass
     quien = set()
     for j, (tt, i, d) in enumerate(_GZ['coreo']):
-        if tt < 0:
+        if tt < 0 and not falta:
             q = destino_a_punto(c, F, d, _GZ['refs'], ev)
             if q is not None:
                 mover(c, i, q, t, ev, salto=True)
@@ -2551,12 +2577,91 @@ def capitulo(c, t, F, now, k):
             _GZ['hechas'].add(j)
     for i in range(n_personas(dict(c, demo=DEMOS.index(demo)))):    # los demas, fuera (entraran si les toca)
         if i not in quien:
-            mover(c, i, _FUERA, t, ev, salto=True)
+            mover(c, i, _FUERA, t, ev, salto=previa is None)
     for i in list(_GZ['tramos']):       # los que sobran (menos Personas en la sala llena), fuera
         if i >= n_personas(dict(c, demo=DEMOS.index(demo))):
             del _GZ['tramos'][i]
     _GZ['rotulo'] = None
     _GZ['cabecera'] = None
+
+
+ESPERA_CADA = 2.0           # v21: s entre una mirada y otra a lo que necesita un caso que espera
+ESPERA_TITULO = 'Esperando que el mundo evolucione'
+
+
+def _celdas_de_casillas(F, c1, W, ks):
+    out = []
+    for q in ks or ():
+        x = F.m.celda_de_casilla(W, c1, q) if q is not None else None
+        if x is not None and x not in out:
+            out.append(x)
+    return out
+
+
+def brote_vivo(F, c1, W, k, refs, libres):
+    """v21: el brote de los capitulos 3 y 4 de GENoZilla, en una celda vacia bajo la sala (el
+    guion no borra lo construido para plantarlo); en el 3, con al menos BROTE_VECINAS vecinas
+    vacias (el mal desborda sin pisar al publico: antes se despejaban). Sin ninguna, None
+    (el capitulo espera: falta_caso)."""
+    if k not in (3, 4):
+        return refs
+    m = F.m
+    r = dict(refs)
+    vac = _vacias_bajo_sala(F, c1, W, libres)
+    vacia = lambda x: W['occ'][x] == 0 and W['sp'][x] == 0      # noqa: E731
+    cols = m.rejilla_sala(c1)[0]
+    k0 = m.demo_casilla(c1, 6.0, 4.0)
+    orden = sorted(vac, key=lambda x: ((vac[x] % cols - k0 % cols) ** 2 + (vac[x] // cols - k0 // cols) ** 2, x))
+    if k == 3:
+        orden = [x for x in orden if sum(1 for v in m.NEIGH[x] if vacia(v)) >= BROTE_VECINAS]
+    b = orden[0] if orden else None
+    r['brote'] = b
+    r['musica'] = [b] if b is not None else []
+    r['despejar'] = []
+    if k == 4 and b is not None:
+        r['aliadas'] = m._vecinas_a_la_vista(W, c1, b, max(1, int(c1.get('aliados', 3))), libres)
+    return r
+
+
+BROTE_VECINAS = 3           # v21: vecinas vacias que pide el brote del capitulo 3 para desbordar
+
+
+def falta_caso(demo, k, F, c1, W, refs):
+    """v21: lo que el caso k necesita del mundo de FASE1 y aun no tiene (un texto), o
+    None. La demo no lo fabrica (ni vacia celdas ni entierra conchas): espera a que el
+    mundo evolucione (el giro trae celdas nuevas bajo la sala; los ciclos, conchas)."""
+    r = refs or {}
+    if demo == 'probabilidad':
+        if r.get('testigo') is None or r.get('control') is None:
+            return ('hacen falta dos celdas vacias bajo la sala, no vecinas, para medir la probabilidad (hay %d)'
+                    % len(r.get('vacias') or ()))
+        return None
+    if demo == 'genozilla' and k in (3, 4) and r.get('brote') is None:
+        return ('hace falta una celda vacia bajo la sala%s para plantar el brote'
+                % (' con %d vecinas vacias' % BROTE_VECINAS if k == 3 else ''))
+    pp = max(1, int(c1.get('conchas_persona', 1)))
+    pide = []                           # (conchas, celdas, quien cava)
+    if demo == 'huella' and k == 1:
+        pide.append((5 * pp, r.get('fila_celdas') or [], 'la fila'))
+    elif demo == 'genozilla':
+        if k == 5:
+            pide.append((3 * pp, _celdas_de_casillas(F, c1, W, r.get('fila')), 'la fila'))
+        elif k == 6:
+            fila = _celdas_de_casillas(F, c1, W, r.get('fila'))
+            pide.append((4 * pp, fila, 'la fila'))
+            pide.append((2, [x for x in (r.get('canal') or ()) if x not in fila], 'la zanja'))
+        elif k == 10:
+            pide.append((max(1, int(c1.get('prof_grito', 2))), [r.get('monstruo')], 'el grito'))
+        elif k == 11:
+            pide.append((3 * pp, _celdas_de_casillas(F, c1, W, r.get('fila')), 'la fila'))
+    for n, celdas, quien in pide:
+        celdas = [x for x in celdas if x is not None]
+        if not celdas:
+            continue
+        hay = F.m.losetas_bajo(W, celdas)
+        if hay < n:
+            return 'hacen falta %d conchas debajo para que %s cave (hay %d)' % (n, quien, hay)
+    return None
 
 
 def equipos_o_defecto(c):
@@ -2594,6 +2699,18 @@ def gz_tick(c, t, F, now, emular=False):
         cerrar_capitulo(F, now)
         capitulo(c, t, F, now, c['capitulo'])
     caps_ = casos(demo)
+    esp = _GZ.get('espera')
+    if esp is not None and not _GZ.get('saltar'):     # v21: el caso espera a que el mundo evolucione
+        if t >= esp['revisa']:
+            capitulo(c, t, F, now, _GZ['cap'])          # lo vuelve a mirar: si ya lo tiene, empieza
+        esp = _GZ.get('espera')
+        if esp is not None:
+            _GZ['t_titulo'], _GZ['t0'] = t, t + TITULO  # el caso no corre mientras espera
+            if F is not None:
+                foco_tick(c, F, t, evitar_de(equipos_o_defecto(c)))
+                if not emular:
+                    a_la_tabla(c, F, t, evitar_de(equipos_o_defecto(c)))
+            return None
     cp = caps_[_GZ['cap']]
     if _GZ.get('saltar') or t - _GZ['t0'] >= cp['dur']:
         cerrar_capitulo(F, now)
@@ -2676,26 +2793,47 @@ def _fila_central(F, c1, libres, n=5):
     return [f0 * cols + max(0, min(cols - n, col0 - n // 2)) + j for j in range(n)]
 
 
+def _vacias_bajo_sala(F, c1, W, libres):
+    """v21: las celdas vacias (sin ocupacion, sin especie, sin zanja) que miran a alguna
+    casilla al alcance del publico: {celda: la casilla mas al centro que la mira}."""
+    m = F.m
+    cols, filas = m.rejilla_sala(c1)
+    zj = (W.get('juego') or {}).get('zanjas') or {}
+    out = {}
+    for k in sorted(libres or (), key=lambda q: (abs(q % cols - (cols - 1) / 2.0)
+                                                 + abs(q // cols - (filas - 1) / 2.0), q)):
+        x = m.celda_de_casilla(W, c1, k)
+        if x is None or x in out or x in zj:
+            continue
+        if W['occ'][x] == 0 and W['sp'][x] == 0:
+            out[x] = k
+    return out
+
+
 def refs_caso(demo, k, c1, F, W, libres):
-    """Los sitios con nombre del caso (solo lee): celdas y casillas de su coreografia, y lo
-    que el caso necesita libre (despejar) o con conchas debajo (conchas, de celdas)."""
+    """Los sitios con nombre del caso (solo lee): celdas y casillas de su coreografia.
+    v21: nada que despejar ni conchas que enterrar: la probabilidad mide sobre dos celdas
+    que ya esten vacias bajo la sala (si no las hay, el caso espera: falta_caso)."""
     m = F.m
     cel = lambda cx, cy: m.demo_celda(W, c1, cx, cy, libres)       # noqa: E731
     r = dict(demo=demo, cap=int(k))
     if demo == 'probabilidad':
-        t_ = cel(5.0, 4.0)
-        r['testigo'] = t_
+        vac = _vacias_bajo_sala(F, c1, W, libres)
+        r['vacias'] = sorted(vac)
+        cols = m.rejilla_sala(c1)[0]
+        k0 = m.demo_casilla(c1, 5.0, 4.0)
+        d2 = lambda q, q0: (q % cols - q0 % cols) ** 2 + (q // cols - q0 // cols) ** 2     # noqa: E731
+        orden = sorted(vac, key=lambda x: (d2(vac[x], k0), x))
+        t_ = orden[0] if orden else None
         ctrl = None
-        for cx, cy in ((9.0, 1.5), (9.0, 7.0), (1.5, 7.0), (9.5, 4.0), (1.0, 4.5)):
-            x = cel(cx, cy)
-            if x is not None and x != t_ and (t_ is None or x not in m.NEIGH[t_]):
-                ctrl = x
-                break
+        if t_ is not None:              # la de control: vacia, no vecina y lo mas lejos de la testigo
+            lejos = [x for x in orden if x != t_ and x not in m.NEIGH[t_]]
+            if lejos:
+                ctrl = max(lejos, key=lambda x: (d2(vac[x], vac[t_]), -x))
+        r['testigo'] = t_
         r['control'] = ctrl
-        r['despejar'] = [x for x in (t_, ctrl) if x is not None]
     elif demo == 'huella' and k == 0:
         r['quietos'] = [cel(cx, cy) for cx, cy in ((2.5, 3.0), (8.0, 2.0), (3.0, 6.5), (8.5, 6.0))]
-        r['despejar'] = [x for x in r['quietos'] if x is not None]
     elif demo == 'huella' and k == 1:
         r['fila'] = _fila_central(F, c1, libres, 5)
         fc = []
@@ -2703,33 +2841,7 @@ def refs_caso(demo, k, c1, F, W, libres):
             x = m.celda_de_casilla(W, c1, q)
             if x not in fc:
                 fc.append(x)
-        r['fila_celdas'] = fc
-        r['conchas'] = (7, fc)          # siete conchas debajo: cinco personas cavan cinco
-    return r
-
-
-def preparar_caso(demo, k, cp, c1, F, now):
-    """El mundo del caso (con mundo = 'base', el de la entrada a la demo) y lo que necesita
-    libre o con conchas. Devuelve sus refs."""
-    m = F.m
-    W = F.W()
-    r = refs_caso(demo, k, c1, F, W, _GZ.get('libres'))
-    seco = dict(c1, presencia_activa=False)
-    if cp.get('mundo') == 'base':
-        base = (_guardado() or {}).get('W')
-        if base is not None:
-            m._demo_mundo(W, seco, now, base, 0)
-    if r.get('despejar'):
-        m._demo_despejar(W, seco, r['despejar'])
-    if r.get('conchas'):
-        n, celdas = r['conchas']
-        m._demo_conchas(W, seco, now, n, [x for x in celdas if x is not None])
-    for x in ('inst', 'tiles', 'frame'):
-        try:
-            m._CACHE[x] = None
-        except Exception:
-            pass
-    W['dirty'] = True
+        r['fila_celdas'] = fc           # v21: sin conchas enterradas a proposito (falta_caso las pide)
     return r
 
 
@@ -2878,8 +2990,8 @@ def comprobar_caso(F, demo, k, reg, now):
         que = 'P media %.2f (Cuanto %.2f), testigo %d/%d, control %d/%d' % (p, cu, lt[1], lt[0], lc[1], lc[0])
         if not c1.get('presencia_activa') or lt[0] < 10:
             return False, que + ' (sin sorteo o sin lluvia)'
-        if k == 0:
-            return p <= cu + 0.06, que
+        if k == 0:                      # v21: con margen hasta el de una persona quieta (cu + 0,08)
+            return p < cu + 0.08, que
         if k == 1:
             return p >= cu + 0.08 and p <= 0.9, que
         t_ = r.get('testigo')
@@ -3222,7 +3334,9 @@ def cerrar_capitulo(F, now):
         return None
     demo = demo_activa()
     try:
-        if demo == 'genozilla':
+        if _GZ.get('espera') is not None:           # v21: no llego a empezar
+            bien, que = False, 'sin probar: esperando que el mundo evolucione (%s)' % _GZ['espera']['que']
+        elif demo == 'genozilla':
             bien, que = comprobar_capitulo(F, k, _GZ['reg'], now)
         else:
             bien, que = comprobar_caso(F, demo, k, _GZ['reg'], now)
@@ -3284,6 +3398,8 @@ def alfa_titulo(t):
     fundido (TITULO_ENTRA de entrada y TITULO_SALE de salida)."""
     if not _GZ.get('activo') or _GZ.get('t_titulo') is None:
         return 0.0
+    if _GZ.get('espera') is not None:   # v21: mientras el caso espera, el titulo lo dice entero
+        return 1.0
     u = t - _GZ['t_titulo']
     if u < 0.0 or u > TITULO:
         return 0.0
@@ -3298,6 +3414,11 @@ def titulo_texto(que, frame=None):
     if que == 'ante':
         return antetitulo(k)
     cp = casos()[k]
+    esp = _GZ.get('espera')
+    if esp is not None:                 # v21: el caso espera: lo dice y dice por que
+        if que == 'nombre':
+            return ESPERA_TITULO
+        return 'para probar %s: %s' % (cp['nombre'], esp['que'])
     if que == 'nombre':
         return cp['nombre']
     return _formato(cp['sub'], None if demo_activa() == 'genozilla' else fase1())
@@ -3306,7 +3427,7 @@ def titulo_texto(que, frame=None):
 def rotulo_texto(t=None, F=None):
     """El rotulo del capitulo en t (vacio durante el titulo)."""
     k = _GZ.get('cap')
-    if not _GZ.get('activo') or k is None:
+    if not _GZ.get('activo') or k is None or _GZ.get('espera') is not None:     # v21: esperando, sin rotulo
         return ''
     t = ahora() if t is None else t
     tc = t - _GZ['t0']
@@ -3358,7 +3479,9 @@ def cabecera_lineas(F=None):
     reg = _GZ.get('reg') or {}
     l2 = ''
     try:
-        if demo == 'probabilidad' and 'p_ahora' in reg:
+        if _GZ.get('espera') is not None:           # v21
+            l2 = '%s: %s' % (ESPERA_TITULO.lower(), _GZ['espera']['que'])
+        elif demo == 'probabilidad' and 'p_ahora' in reg:
             ll = reg.get('llueve') or {}
             lt, lc = ll.get('testigo', [0, 0]), ll.get('control', [0, 0])
             l2 = 'testigo  P %s  prenden %d/%d      vacia  P %s  prenden %d/%d' % (
@@ -3400,9 +3523,11 @@ def legend_demo():
     caps_ = casos(demo)
     tc = ahora() - _GZ['t0']
     hechos = _GZ.get('resultados') or []
+    esp = _GZ.get('espera')
     return '%s  %d/%d %s   %s   comprobados %d/%d' % (
         nombre, k, len(caps_) - 1, caps_[k]['nombre'],
-        'titulo' if tc < 0 else '%.1f/%.0f s' % (tc, caps_[k]['dur']),
+        ('esperando que el mundo evolucione: %s' % esp['que']) if esp is not None
+        else 'titulo' if tc < 0 else '%.1f/%.0f s' % (tc, caps_[k]['dur']),
         sum(1 for r in hechos if r[1]), len(hechos))
 
 
@@ -3485,11 +3610,18 @@ def ensayo(c, demo, hasta, fn, dt=0.25):
         _GZ.update(viejo)
 
 
-def simular_demo(c, F, caps=None, dt=1.0 / 15.0, dt_mic=1.0 / 60.0, t_ini=10000.0, now_ini=None, demo='genozilla'):
+def simular_demo(c, F, caps=None, dt=1.0 / 15.0, dt_mic=1.0 / 60.0, t_ini=10000.0, now_ini=None, demo='genozilla',
+                 evoluciona=None, espera_max=30.0):
     """Una demo (GENoZilla, si no se dice) en tiempo simulado, caso a caso: el director
     con un reloj a mano (el de la sala y el de FASE1) y FASE1 paso a paso (paso_fase1).
     Entra (guarda la escena), juega los casos y sale (la devuelve). Devuelve
-    [(caso, bien, que)], la comprobacion de cada uno."""
+    [(caso, bien, que)], la comprobacion de cada uno. v21: la demo ya no devuelve el
+    mundo al salir; esta prueba si (es de la autoprueba: deja FASE1 como estaba). Sin el
+    giro del planeta ni sus ciclos, un caso que espera no veria evolucionar el mundo:
+    evoluciona(F, demo, caso, que), si se da, hace de el (una vez por caso); como mucho
+    espera_max s y el caso queda sin probar."""
+    import copy
+    W_antes = copy.deepcopy(F.motor.fetch('W', None)) if F is not None else None
     lista = casos(demo)
     caps = list(range(len(lista))) if caps is None else list(caps)
     eq = equipos_o_defecto(c)
@@ -3511,8 +3643,14 @@ def simular_demo(c, F, caps=None, dt=1.0 / 15.0, dt_mic=1.0 / 60.0, t_ini=10000.
                 gz_tick(cc, t, F, now, emular=True)
             mic = demo == 'genozilla' and k in MIC_CAPS
             paso = dt_mic if mic else dt
-            fin = _GZ['t0'] + lista[k]['dur'] - 1e-6
-            while t + paso < fin:
+            t_esp, evolucionado = t, False
+            while t + paso < _GZ['t0'] + lista[k]['dur'] - 1e-6:     # v21: t0 se aplaza mientras espera
+                if _GZ.get('espera') is not None:
+                    if evoluciona is not None and not evolucionado:
+                        evolucionado = True
+                        evoluciona(F, demo, k, _GZ['espera']['que'])
+                    if t - t_esp > espera_max:
+                        break
                 t += paso
                 now += paso
                 gz_tick(cc, t, F, now, emular=True)
@@ -3521,4 +3659,11 @@ def simular_demo(c, F, caps=None, dt=1.0 / 15.0, dt_mic=1.0 / 60.0, t_ini=10000.
     finally:
         salir(F)
         _GZ.update(activo=False, acabada=False, cap=None, callado=False)
+        if W_antes is not None:
+            F.motor.store('W', W_antes)
+            for k_ in ('inst', 'tiles', 'frame'):
+                try:
+                    F.m._CACHE[k_] = None
+                except Exception:
+                    pass
     return list(_GZ['resultados'])

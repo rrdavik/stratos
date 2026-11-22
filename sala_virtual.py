@@ -183,6 +183,23 @@ LAS DEMOS (v30, sala v18, motor v140)
   van y vuelven cada 12-30 s; de 62 a 76 s, una sola fila recta de tres, a
   proposito, abre un pozo; a los 100 s se vacia. Dura 120 s.
 
+  v33 (sala v21, motor v141): LAS DEMOS TOMAN EL MUNDO DONDE ESTA Y NO TOCAN EL
+  GIRO. Hasta la v32, cada demo guardaba el mundo de FASE1 al entrar y lo devolvia
+  al salir (el planeta volvia atras: ciclos, conchas y lo construido), la
+  probabilidad y la huella volvian al mundo de la entrada en cada caso y
+  despejaban celdas, la fila de la huella enterraba 7 conchas de golpe y
+  GENoZilla rehacia el mundo en cada capitulo, enterraba 6 conchas y ponia
+  Barsperturn 450 (45 y 9). Ahora ninguna demo guarda, devuelve, vacia ni
+  entierra el mundo ni cambia Barsperturn: el planeta gira con los parametros de
+  FASE1 (y su giro vivo) y cierra sus ciclos con sus reglas; los parametros que
+  pone la demo si se devuelven al salir. Si al mundo aun le falta lo que un caso
+  necesita (dos celdas vacias bajo la sala para la probabilidad; conchas debajo
+  para que caven la fila de la huella y las zanjas, el canal y el grito de
+  GENoZilla), el caso espera con el titulo 'Esperando que el mundo evolucione'
+  y para probar que; lo vuelve a mirar cada 2 s (Siguientecap lo salta). La
+  autoprueba juega las demos sobre una copia: deja que esa copia evolucione
+  (cierra ciclos) y al acabar FASE1 vuelve a su mundo.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -197,7 +214,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v32  (la sala llena se va llenando: Modofila recta, cada quieto en su sitio y una sola fila a proposito)'
+VERSION = 'sala_virtual v33  (las demos toman el mundo donde esta y no tocan el giro; si falta algo, esperan a que evolucione)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -1876,18 +1893,51 @@ def prueba_genozilla(t, m):
     sala.par.Guion = True
     motor_ = fase1.op('motor')
     # v27: la demo juega sobre el mundo de FASE1; si esta casi vacio (un proyecto recien
-    # montado), uno compuesto para la prueba, sin conchas (el guion las entierra donde cava).
-    # Al acabar, FASE1 vuelve a su mundo.
+    # montado), uno compuesto para la prueba. v33: la demo ya no entierra conchas para sus
+    # zanjas (espera a que el mundo las tenga): la prueba deja que el mundo evolucione hasta
+    # tenerlas (evolucionar). Al acabar, FASE1 vuelve a su mundo.
     Worig = copy.deepcopy(motor_.fetch('W', None))
-    compuesto = False
+    cambiado = False
     try:
-        compuesto = componer_mundo(m)
+        cambiado = componer_mundo(m)
+        cambiado = evolucionar(m, 14) > 0 or cambiado
         _prueba_genozilla(t, m, copy, caps, motor_)
     finally:
-        if compuesto:
+        if cambiado:
             motor_.store('W', Worig)
             for k_ in ('inst', 'tiles', 'frame'):
                 m._CACHE[k_] = None
+
+
+def evolucionar(m, conchas):
+    """v33: el mundo de FASE1 como si hubiera evolucionado hasta tener al menos 'conchas'
+    losetas debajo de cada celda (lo que harian sus ciclos con el tiempo), con la misma
+    superficie (_demo_conchas del motor). Solo para la autoprueba (que luego devuelve el
+    mundo). Devuelve las conchas enterradas."""
+    W = m.world()
+    n = m._demo_conchas(W, dict(m.cfg(), presencia_activa=False), W.get('t') or 0.0, conchas, range(m.N))
+    if n:
+        for k_ in ('inst', 'tiles', 'frame'):
+            m._CACHE[k_] = None
+    return n
+
+
+def evoluciona(F, demo, k, que):
+    """v33: para simular_demo, que juega sin el giro del planeta ni sus ciclos: un caso que
+    espera ve evolucionar la copia del mundo de la autoprueba como la veria en la sala
+    (conchas nuevas debajo; celdas vacias que el giro trae bajo la sala)."""
+    m = F.m
+    if 'conchas' in que:
+        evolucionar(m, len(m.world()['shells']) + 6)
+        return
+    W, c1 = F.W(), F.cfg()
+    cols, filas = m.rejilla_sala(c1)
+    centro = m.celda_de_casilla(W, c1, m.demo_casilla(c1, 6.0, 4.0))
+    lejos = m.celda_de_casilla(W, c1, m.demo_casilla(c1, 1.0, 7.0))
+    celdas = [x for x in [centro, lejos] + list(m.NEIGH[centro] if centro is not None else ()) if x is not None]
+    m._demo_despejar(W, dict(c1, presencia_activa=False), celdas)
+    for k_ in ('inst', 'tiles', 'frame'):
+        m._CACHE[k_] = None
 
 
 def componer_mundo(m, minimo=12):
@@ -1911,7 +1961,7 @@ def _prueba_genozilla(t, m, copy, caps, motor_):
                                                                           'Barsperturn'))
     vista0 = str(sala.par.Vista.eval())
     F = sm.Fase1(fase1)
-    res = sm.simular_demo(sm.cfg(), F)
+    res = sm.simular_demo(sm.cfg(), F, evoluciona=evoluciona)
     for k, bien, que in res:
         t.check('v24: GENoZilla %d %s: %s' % (k, caps[k]['nombre'], COMPRUEBA[k]), bien, que)
     t.check('v24: GENoZilla: se juegan los 13 capitulos', len(res) == 13, '%d' % len(res))
@@ -1959,17 +2009,56 @@ def prueba_demos(t, m):
     import copy
     motor_ = fase1.op('motor')
     Worig = copy.deepcopy(motor_.fetch('W', None))
-    compuesto = False
+    cambiado = False
     try:
-        compuesto = componer_mundo(m)
+        cambiado = componer_mundo(m)
+        _prueba_espera(t, m, motor_)            # v33: antes de evolucionar (con las conchas que haya)
+        cambiado = evolucionar(m, 6) > 0 or cambiado
         _prueba_demos(t, m, copy, motor_)
     finally:
-        if compuesto:
+        if cambiado:
             motor_.store('W', Worig)
             for k_ in ('inst', 'tiles', 'frame'):
                 m._CACHE[k_] = None
         m.foco_camara(None)
         m._CACHE.pop('foco_dir', None)
+
+
+def _prueba_espera(t, m, motor_):
+    """v33: ninguna demo toca el giro; y un caso al que le falta algo del mundo espera,
+    con el titulo que lo dice."""
+    con_giro = [cp['nombre'] for sec in sm.SECCIONES.values() for cp in sec['casos'] if 'Barsperturn' in cp['pars']]
+    t.check('v33: ninguna demo cambia Barsperturn (el planeta gira con los parametros de FASE1) ni guarda el '
+            'mundo para devolverlo',
+            not con_giro and 'Barsperturn' not in sm.PARS_CAPITULO and not hasattr(sm, 'GIRO_DEMO')
+            and not any('Barsperturn' in sec['pars'] for sec in sm.SECCIONES.values())
+            and 'W' not in (sm._guardado() or {}),
+            ', '.join(con_giro))
+    F = sm.Fase1(fase1)
+    W, c1 = F.W(), dict(F.cfg(fresca=True), conchas_persona=1)
+    lib = sm.casillas_libres(sm.cfg(), c1, m, sm.evitar_de(sm.equipos_o_defecto(sm.cfg())))
+    refs = sm.refs_caso('huella', 1, c1, F, W, lib)
+    hay = m.losetas_bajo(W, refs['fila_celdas'])
+    falta = sm.falta_caso('huella', 1, F, c1, W, refs)
+    t.check('v33: La fila cava pide 5 conchas debajo de la fila; sin ellas, espera (y no las entierra)',
+            (falta is None) == (hay >= 5) and (falta is None or 'conchas' in falta)
+            and m.losetas_bajo(F.W(), refs['fila_celdas']) == hay,
+            'hay %d: %s' % (hay, falta or 'puede cavar'))
+    g = dict(sm._GZ)
+    try:
+        sm._GZ.update(activo=True, cap=1, demo='huella', t_titulo=100.0, t0=100.0 + sm.TITULO, cabecera=None,
+                      espera=dict(cap=1, que='hacen falta 5 conchas debajo para que la fila cave (hay 2)',
+                                  desde=100.0, revisa=102.0))
+        txt = (sm.titulo_texto('nombre'), sm.titulo_texto('sub'), sm.alfa_titulo(130.0), sm.rotulo_texto(130.0),
+               sm.cabecera_lineas(F))
+    finally:
+        sm._GZ.clear()
+        sm._GZ.update(g)
+    t.check('v33: mientras espera, el titulo lo dice entero (Esperando que el mundo evolucione) para probar el '
+            'caso y que le falta',
+            txt[0] == 'Esperando que el mundo evolucione' and txt[1].startswith('para probar La fila cava: hacen falta')
+            and txt[2] == 1.0 and txt[3] == '' and 'esperando que el mundo evolucione' in txt[4],
+            ' | '.join(str(x) for x in txt).replace(chr(10), ' / '))
 
 
 def _prueba_demos(t, m, copy, motor_):
@@ -1984,13 +2073,13 @@ def _prueba_demos(t, m, copy, motor_):
         antes = dict((nm, F.par(nm)) for nm in nombres if F.par(nm) is not None)
         vista0 = str(sala.par.Vista.eval())
         sala.par.Demo = demo
-        res = sm.simular_demo(sm.cfg(), F, demo=demo)
+        res = sm.simular_demo(sm.cfg(), F, demo=demo, evoluciona=evoluciona)
         cs = sm.casos(demo)
         for k, bien, que in res:
             t.check('v30: demo %s, caso %d %s' % (demo, k + 1, cs[k]['nombre']), bien, que)
         W1 = motor_.fetch('W', None)
         despues = dict((nm, F.par(nm)) for nm in antes)
-        t.check('v30: demo %s: se juegan sus %d casos y al salir FASE1 queda como estaba (el mundo, los parametros '
+        t.check('v30: demo %s: se juegan sus %d casos y al salir FASE1 queda como estaba (la autoprueba devuelve el mundo; los parametros '
                 'y la Vista de la sala)' % (demo, len(cs)),
                 len(res) == len(cs) and W1 == W0 and despues == antes and str(sala.par.Vista.eval()) == vista0
                 and sm._guardado() is None,
@@ -2072,7 +2161,8 @@ print('  Ahora: mira salida_sala (todo en una imagen; Vista = entrada, visitante
 print('  cenital o juego). Modoluz = prueba recorre la luz en un minuto; Bruma, los haces en el aire.')
 print('  Demo: 1 paseo, 2 probabilidad (estrato humano), 3 huella, 4 llena, 5 genozilla: cada una con')
 print('  sus casos y su titulo (Vista = juego); con Siguecamara la camara de FASE1 sigue a las celdas.')
-print('  Demo = vacia (por defecto): FASE1 gira y cierra sus ciclos sola; las demas demos la toman.')
+print('  Demo = vacia (por defecto). Ninguna demo reinicia el mundo ni toca el giro: lo toman donde esta;')
+print('  si le falta algo a un caso, su titulo dice: Esperando que el mundo evolucione.')
 print('  Palmada: la oye FASE1. Personas y Ruidopublico para mas o menos publico.')
 print('  ' + sm.legend())
 print('=' * 66)

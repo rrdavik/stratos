@@ -526,7 +526,7 @@ La **música** de las demos (paseo, huella 1 y llena): una nota del SEQ1 cada 0,
 
 **Parámetros.** `Demo` (paseo / probabilidad / huella / llena / genozilla / vacía; vacía por defecto desde la v31), `Siguecamara` (apagado desde la v31), `Siguientecap` (salta al caso siguiente en cualquier demo), `Buclecap` (al acabar el último caso, vuelve al primero), `Personas` (ahora, la gente de la sala llena: 18 por defecto). Fuera `Llegada` y las demos *grupo* y *goteo* (el grupo va dentro del paseo). `Capitulo` y `Guion` siguen siendo de GENoZilla.
 
-**Ojo:** como GENoZilla, cualquier demo menos la vacía toma FASE1 mientras dura (`Fuente` simulada, sin `Modojuego`, su giro). Para usar FASE1 sola con la sala montada, `Demo` = vacía o `Activa` apagada.
+**Ojo:** como GENoZilla, cualquier demo menos la vacía toma FASE1 mientras dura (`Fuente` simulada, sin `Modojuego`; desde la v33, sin tocar su giro ni su mundo: ver abajo). Para usar FASE1 sola con la sala montada, `Demo` = vacía o `Activa` apagada.
 
 **Autoprueba (v30).** La gente de cada demo (`sm.ensayo`, sin FASE1): dentro de la sala y lejos de la esfera, se entra por la puerta, el grupo de cuatro junto, la sala llena casi entera y vacía al final. Cada demo en tiempo simulado con FASE1 de verdad (`simular_demo(..., demo=...)`), con la comprobación de cada caso (las tres probabilidades medidas y en orden, las inclusiones y las celdas que construyen, la escisión de 3 a 5 conchas...) y FASE1 como estaba al salir. El título y la cabecera. La cámara: con foco llega a menos de 3° de su objetivo, no pasa de 55° y no cambia de distancia; sin foco, vuelve. `pruebas/correr_fases.py` juega además las cuatro demos fotograma a fotograma.
 
@@ -535,6 +535,28 @@ La **música** de las demos (paseo, huella 1 y llena): una nota del SEQ1 cada 0,
 Con la v30, en cuanto la sala estaba activa, la `Demo` por defecto (*paseo*) **tomaba FASE1**: `Fuente` simulada, sin `Modojuego`, notas en las celdas de la gente quieta y, al salir, el mundo de antes. Cada caso ponía `Barsperturn` 450 (el planeta casi parado: el giro vivo no se notaba) y la cámara de globo perseguía a la gente de celda en celda: al ir de unas a otras, **el planeta parecía girar a un lado y al otro** (en la sesión simulada, la cámara oscilaba entre 50° y 136° de azimut mientras el planeta avanzaba 0,2° por segundo). La *huella*, además, entierra 7 conchas de golpe al empezar La fila cava (para que la fila tenga por dónde cavar, `_demo_conchas`) y vuelve al mundo de entrada en cada caso: **conchas a los pocos compases que no son del ciclo**.
 
 Desde la v31: el `Barsperturn` de la demo es solo de GENoZilla (como en la v17); `Siguecamara` viene apagado; y la `Demo` por defecto es la *vacía*, así que FASE1 gira siempre hacia el mismo lado y cierra sus ciclos con sus reglas (madurez, novedad, `Ciclomin`), frenando con el giro vivo a medida que el mundo deja de cambiar. Las demás demos se eligen a mano. Al relanzar `sala_virtual.py`, una vez por proyecto: `Demo` paseo → vacía y `Siguecamara` → apagado. `pruebas/correr_fases.py` comprueba que durante cada demo de sección `Barsperturn` no cambia y la cámara no se mueve de su sitio.
+
+### Las demos toman el mundo donde está (v33, sala v21, motor v141)
+
+Hasta la v32, aunque `Barsperturn` ya no cambiaba en las demos de sección, **activar una demo rompía el ciclo del planeta**: al entrar se guardaba el mundo de FASE1 y al salir se devolvía (el planeta volvía atrás: los ciclos, las conchas y lo construido durante la demo desaparecían); la *probabilidad* y la *huella* volvían al mundo de la entrada en cada caso (`mundo = 'base'`) y despejaban celdas; *La fila cava* enterraba 7 conchas de golpe; y GENoZilla rehacía el mundo en cada capítulo (`_demo_mundo`), enterraba 6 conchas para sus zanjas (`_demo_conchas`) y ponía `Barsperturn` 450 (45 en el primero y 9 en el último). En la sesión simulada, al salir de la probabilidad el ciclo pasaba de 3 a 2 y el giro vivo saltaba de 0,25 a 0,43.
+
+Desde la v33 **ninguna demo guarda, devuelve, vacía, despeja ni entierra el mundo, ni cambia `Barsperturn`**. El planeta gira siempre con los parámetros de FASE1 (`Barsperturn` y su giro vivo) y cierra sus ciclos con sus reglas; la demo pone su gente y, en GENoZilla, lo suyo encima (siembras, el brote, el monstruo, el canal), sobre el mundo tal como está. Los parámetros que pone la demo (`Fuente`, `Modojuego`, `Tfila`, las armas...) sí vuelven como estaban al salir; la escena y la tabla `sala_personas`, también. El motor v141 da a `guion_demo` el modo `vivo` (la sala lo pide siempre): sin `_demo_mundo`, sin `_demo_vaciar`, sin `_demo_conchas`, sin despejar y sin llenar el globo en el Fin de ronda; solo suelta las zanjas fijadas de la partida de antes (cada capítulo empieza la suya).
+
+**Si al mundo le falta lo que un caso necesita, el caso espera.** El título se queda entero con «Esperando que el mundo evolucione» y, debajo, «para probar *caso*: *lo que falta*»; la cabecera lo repite y el rótulo calla; la gente se queda fuera y el caso no corre. Cada 2 s (`ESPERA_CADA`) la sala lo vuelve a mirar; en cuanto el mundo lo tiene, el caso empieza con su título. `Siguientecap` lo salta (queda «sin probar»). Lo que se pide (`falta_caso`):
+
+| Caso | Necesita |
+|---|---|
+| Estrato humano (los tres) | dos celdas vacías bajo la sala, no vecinas: la testigo y la de control (antes se despejaban) |
+| La fila cava | 5 conchas debajo de la fila (antes se enterraban 7) |
+| GENoZilla · Brotes del mal | una celda vacía bajo la sala con 3 vecinas vacías para el brote (antes se despejaban) |
+| GENoZilla · Rescatar un brote | una celda vacía bajo la sala para el brote (el guion ya no borra lo construido para plantarlo) |
+| GENoZilla · Cebo y Relámpago | 3 conchas debajo de la fila |
+| GENoZilla · Canal | 4 conchas debajo de la fila y 2 debajo de la zanja |
+| GENoZilla · Grito | `Profgrito` conchas debajo del monstruo |
+
+El giro trae celdas nuevas bajo la sala y cada ciclo, una concha más. La espera es la de la sesión: con pocas conchas, la fila de la huella y las zanjas de GENoZilla tardan tantos ciclos como conchas falten.
+
+**Autoprueba.** Sin demo, nada cambia. Que ningún caso tenga `Barsperturn` y que la sala no guarde el mundo. *La fila cava* pide sus 5 conchas y, sin ellas, el título dice que espera. Las demos se juegan sobre una copia del mundo (`simular_demo` la devuelve al acabar): como esa simulación no gira ni cierra ciclos, cuando un caso espera la autoprueba hace que la copia evolucione (conchas nuevas debajo, celdas vacías bajo la sala). `pruebas/correr_fases.py` juega las demos fotograma a fotograma y comprueba que durante todas el giro no cambia, que FASE1 sigue con el mismo `W` y que el mundo no vuelve atrás (ni ciclos, ni conchas, ni escisiones de menos); la huella va primero, con pocas conchas, para ver la espera y su título, y luego la prueba hace que el mundo evolucione.
 
 ### Lo que la maqueta no es
 
