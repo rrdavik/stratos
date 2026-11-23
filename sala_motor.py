@@ -169,9 +169,12 @@
 #               mundo esta construido al 50 %: sobre el mundo vivo de FASE1 se colaba en los
 #               capitulos (se comia el brote del Rescate). Cada capitulo de GENoZilla lo
 #               apaga, como pone Umbralaparicion a 1, y al salir vuelve como estaba.
+#   v24         LA PANTALLA, EN LA PARED DEL FONDO. Centrada (antes, en la esquina de arriba a
+#               la izquierda), pegada al techo. La imagen de FASE1 la pone un GLSL MAT que saca
+#               su coordenada de la posicion del punto (sala_virtual v40).
 # =============================================================================
 
-SALA_VERSION = 'sala v23'
+SALA_VERSION = 'sala v24'
 
 import math
 
@@ -681,10 +684,10 @@ _SALA = dict(t0=None, frame=None, equipos=None, audio=None, t_audio=None, forzar
 ROTULO_CADA = 15            # v5: el rotulo se rehace cada 15 fotogramas (un cuarto de segundo)
 MODOS_LUZ = ['apagado', 'prueba']
 SOPORTES = ['pantalla', 'esfera']        # v22: donde se ve la obra (la pantalla proyectada, por defecto)
-SOPORTES_ETIQUETAS = ['Pantalla proyectada (en la esquina de arriba a la izquierda)', 'Esfera de LEDs (1 m)']
+SOPORTES_ETIQUETAS = ['Pantalla proyectada (en la pared del fondo)', 'Esfera de LEDs (1 m)']
 PANT_ALTO = 3.6             # v22: m de alto de la pantalla (el planeta, ENCUADRE de ese alto: ~3 m)
 PANT_ASPECTO = 16.0 / 9.0   # el render de FASE1, entero
-PANT_MARGEN = 0.12          # m de la pantalla a la pared de la izquierda y al techo
+PANT_MARGEN = 0.12          # m de la pantalla al techo (y a las paredes, si no cabe a lo ancho)
 PANT_SEPARA = 0.06          # m de la pantalla a la pared del fondo (el marco, detras)
 PANT_MARCO = 0.08           # m que el marco sobresale por cada lado
 COL_MARCO = (0.03, 0.03, 0.035)
@@ -826,7 +829,8 @@ def es_pantalla(c=None):
 
 
 def pantalla_rect(c=None):
-    """v22: la pantalla en la pared del fondo, pegada a la izquierda y al techo: dict con
+    """v22: la pantalla en la pared del fondo (v24: centrada; antes, en la esquina de la
+    izquierda), pegada al techo: dict con
     x0 x1 y0 y1 (sus bordes), z (su plano), w h (ancho y alto) y cx cy (su centro). El
     alto es Altopantalla (como mucho el de la sala menos los margenes) y el ancho, 16:9;
     si no cabe a lo ancho, se encoge."""
@@ -837,7 +841,7 @@ def pantalla_rect(c=None):
     if w > c['ancho'] - 2.0 * PANT_MARGEN:
         w = c['ancho'] - 2.0 * PANT_MARGEN
         h = w / PANT_ASPECTO
-    x0, y1 = -hx + PANT_MARGEN, c['alto'] - PANT_MARGEN
+    x0, y1 = -0.5 * w, c['alto'] - PANT_MARGEN          # v24: centrada en la pared del fondo
     return dict(x0=x0, x1=x0 + w, y0=y1 - h, y1=y1, z=-hz + PANT_SEPARA, w=w, h=h, cx=x0 + 0.5 * w,
                 cy=y1 - 0.5 * h)
 

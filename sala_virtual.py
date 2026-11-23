@@ -209,6 +209,12 @@ LAS DEMOS (v30, sala v18, motor v140)
   vistas entrada, juego y visitante la miran; con la pantalla, la esfera y su
   peana no se dibujan (render_sala y render_plano eligen una u otra).
 
+  v40 (sala v24): LA PANTALLA, EN LA PARED DEL FONDO. Centrada en la pared del fondo
+  (antes, en la esquina de arriba a la izquierda) y pegada al techo. Su material es un
+  GLSL MAT (mat_pantalla: pantalla_vertex y pantalla_pixel) que saca la coordenada de
+  la imagen de FASE1 de la posicion de cada punto del rectangulo, sin uv en la
+  geometria: en TouchDesigner las uv escritas desde Python no quedaban (v36 a v39).
+
   v39: el lienzo prueba primero vertice.uv.val = (u, v, 0) (en TouchDesigner la uv es un
   AttributeData: ni asignarla entera ni por componentes la escribia; la v38 leia 0) y
   comprueba cada forma; lo que paso queda en el lienzo (uv_informe) y sale en el FALLO.
@@ -245,7 +251,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v39  (la uv de la pantalla por AttributeData.val, comprobada al ponerla)'
+VERSION = 'sala_virtual v40  (la pantalla, en el centro de la pared del fondo, con un GLSL MAT)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -477,7 +483,7 @@ try:                    # v34: una vez por proyecto, a la pantalla (la esfera de
         sala.par.Soporte.default = 'pantalla'
         if str(sala.par.Soporte.eval()) != 'pantalla':
             sala.par.Soporte = 'pantalla'
-        ok('Soporte: pantalla (la obra proyectada arriba a la izquierda; la esfera de LEDs, en Soporte = esfera)')
+        ok('Soporte: pantalla (la obra proyectada en la pared del fondo; la esfera de LEDs, en Soporte = esfera)')
 except Exception as e:
     info('Soporte: no pude ponerlo en pantalla (%s); ponlo a mano' % e)
 add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 = aire limpio)', 0.5, 0.0, 1.0,
@@ -897,13 +903,14 @@ if imagen:
        'equirectangular 2:1)')
 else:
     info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = esfera_espejo')
-# v34: la pantalla proyectada: un rectangulo de 1 x 1 en XY (Script SOP 'lienzo', con uv de 0 a
-# 1) que el Geometry COMP escala y coloca (sala_motor.pantalla). Su material lleva el render
-# entero de FASE1 (imagen_fase1, 16:9): lo mismo que recibiria el proyector.
-PANTALLA_CB = r"""# Script SOP 'lienzo' de la pantalla (sala_virtual v34): un rectangulo de 1 x 1
-# en el plano XY, mirando a +Z, con las coordenadas de textura de 0 a 1.
-# v36: la uv, por vertice (como la llevan los SOP de TouchDesigner); si no se puede, por
-# punto. El poligono se recorre por indice.
+# v34: la pantalla proyectada: un rectangulo de 1 x 1 en XY (Script SOP 'lienzo') que el
+# Geometry COMP escala y coloca (sala_motor.pantalla). v40: en el centro de la pared del
+# fondo, y su material es un GLSL MAT (mat_pantalla) que saca la coordenada de la imagen de
+# la posicion de cada punto (P.xy + 0,5): la geometria no lleva uv (en TouchDesigner, las uv
+# escritas desde Python no quedaban). Lleva el render entero de FASE1 (imagen_fase1, 16:9):
+# lo mismo que recibiria el proyector.
+PANTALLA_CB = r"""# Script SOP 'lienzo' de la pantalla (sala_virtual v40): un rectangulo de 1 x 1
+# en el plano XY, mirando a +Z. Sin uv: el material (mat_pantalla) las saca de la posicion.
 
 ESQUINAS = ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5))
 
@@ -912,158 +919,50 @@ def onSetupParameters(scriptOp):
     return
 
 
-def clase_uv(scriptOp):
-    # 'vertex' o 'point': donde va la uv (la que ya haya o la que se pueda crear)
-    for clase in ('vertex', 'point'):
-        if 'uv' in [a.name for a in getattr(scriptOp, clase + 'Attribs')]:
-            return clase
-    for clase in ('vertex', 'point'):
-        try:
-            getattr(scriptOp, clase + 'Attribs').create('uv', (0.0, 0.0, 0.0))
-            return clase
-        except Exception:
-            pass
-    return None
-
-
-def _uv_es(e, uv):
-    try:
-        return abs(float(e.uv[0]) - uv[0]) < 1e-6 and abs(float(e.uv[1]) - uv[1]) < 1e-6
-    except Exception:
-        return False
-
-
-def _uv_val(e, uv):
-    e.uv.val = uv
-
-
-def _uv_todo(e, uv):
-    e.uv = uv
-
-
-def _uv_componentes(e, uv):
-    for k in range(3):
-        e.uv[k] = uv[k]
-
-
-FORMAS_UV = (('val', _uv_val), ('asignar', _uv_todo), ('componentes', _uv_componentes))
-
-
-def poner_uv(e, uv, informe):
-    # v39: la uv por la primera forma que quede (en TouchDesigner, vertice.uv es un
-    # AttributeData: asignar entera o por componentes no la escribia). informe: la forma
-    # que valio o, de cada una, el error o 'no queda'
-    for nombre, poner in FORMAS_UV:
-        try:
-            poner(e, uv)
-        except Exception as ex:
-            informe.setdefault(nombre, '%s: %s' % (type(ex).__name__, ex))
-            continue
-        if _uv_es(e, uv):
-            informe['vale'] = nombre
-            return True
-        informe.setdefault(nombre, 'no queda')
-    return False
-
-
 def onCook(scriptOp):
     scriptOp.clear()
-    clase = clase_uv(scriptOp)
-    informe = {}
     pr = scriptOp.appendPoly(4, closed=True, addPoints=True)
     for k in range(4):
-        x, y = ESQUINAS[k]
-        v = pr[k]
-        q = v.point
-        q.x, q.y, q.z = x, y, 0.0
-        uv = (x + 0.5, y + 0.5, 0.0)
-        if clase == 'vertex':
-            poner_uv(v, uv, informe)
-        elif clase == 'point':
-            poner_uv(q, uv, informe)
-    try:
-        scriptOp.store('uv_informe', dict(informe, clase=clase))
-    except Exception:
-        pass
+        q = pr[k].point
+        q.x, q.y, q.z = ESQUINAS[k][0], ESQUINAS[k][1], 0.0
     return
 """
+PANTALLA_VERTEX = r"""// sala_virtual v40: la pantalla. La coordenada de la imagen sale de la posicion del punto
+// en el rectangulo de 1 x 1 (P.xy + 0.5): la geometria no necesita uv.
+out Vertex {
+    vec2 uv;
+    flat int camIndex;
+} oVert;
 
+void main()
+{
+    vec4 wpos = TDDeform(P);
+    gl_Position = TDWorldToProj(wpos);
+#ifndef TD_PICKING_ACTIVE
+    oVert.uv = P.xy + 0.5;
+    oVert.camIndex = TDCameraIndex();
+#else
+    TDWritePickingValues();
+#endif
+}
+"""
+PANTALLA_PIXEL = r"""// sala_virtual v40: la pantalla lleva la imagen de FASE1 (sImagen) tal cual, sin luz.
+uniform sampler2D sImagen;
 
-LEER_UV = (('indice', lambda x: (x[0], x[1])), ('val', lambda x: x.val), ('secuencia', lambda x: tuple(x)))
+in Vertex {
+    vec2 uv;
+    flat int camIndex;
+} iVert;
 
+layout(location = 0) out vec4 oFragColor[TD_NUM_COLOR_BUFFERS];
 
-def _leer_uv(a, como):
-    t = dict(LEER_UV)[como](a)
-    return (round(float(t[0]), 3), round(float(t[1]), 3))
-
-
-def _vertices(pr):
-    try:
-        return [pr[k] for k in range(len(pr))]
-    except Exception:
-        return list(pr)
-
-
-def _elementos_uv(lz):
-    if any(a.name == 'uv' for a in lz.vertexAttribs):
-        return [v for pr in lz.prims for v in _vertices(pr)]
-    return list(lz.points)
-
-
-ESQUINAS_UV = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
-
-
-def uvs_lienzo(lz, errores=None):
-    """v36: las uv del rectangulo (por vertice o por punto), redondeadas y ordenadas.
-    v38: se prueban todas las formas de leerlas (LEER_UV; TouchDesigner no siempre
-    las da como el simulado): vale la primera que da las cuatro esquinas; si ninguna,
-    la primera que se puede leer, y en errores lo que da cada una con el primer vertice."""
-    if lz is None:
-        return []
-    try:
-        els = _elementos_uv(lz)
-    except Exception as e:
-        if errores is not None:
-            errores.append('%s: %s' % (type(e).__name__, e))
-        return []
-    leidas = []
-    for como, _ in LEER_UV:
-        try:
-            leidas.append(sorted(_leer_uv(x.uv, como) for x in els))
-        except Exception:
-            continue
-        if leidas[-1] == ESQUINAS_UV:
-            return leidas[-1]
-    if errores is not None and els:
-        a = els[0].uv
-        partes = ['%s %r' % (type(a).__name__, a)]
-        for como, leer in LEER_UV:
-            try:
-                partes.append('%s %r' % (como, leer(a)))
-            except Exception as e:
-                partes.append('%s (%s)' % (como, type(e).__name__))
-        errores.append('primer vertice: ' + ', '.join(partes))
-    return leidas[0] if leidas else []
-
-
-def diag_lienzo(lz):
-    """v36: lo que tiene el Script SOP lienzo, para el FALLO de la autoprueba."""
-    if lz is None:
-        return 'no existe'
-    try:
-        at = ['%s:%s' % (k[0], a.name) for k in ('vertex', 'point') for a in getattr(lz, k + 'Attribs')]
-        err = (lz.errors() or '').strip().replace('\n', ' / ')
-        try:
-            inf = lz.fetch('uv_informe', None)
-        except Exception:
-            inf = None
-        return '%d puntos, %d prims, atributos %s%s%s' % (len(lz.points), len(lz.prims), at,
-                                                         (', error: ' + err) if err else '',
-                                                         (', al poner la uv: %s' % inf) if inf else '')
-    except Exception as e:
-        return 'no lo pude leer (%s)' % e
-
-
+void main()
+{
+    TDCheckDiscard();
+    vec4 c = texture(sImagen, iVert.uv);
+    oFragColor[0] = TDOutputSwizzle(vec4(c.rgb, 1.0));
+}
+"""
 pantalla = fresh(sala, 'geometryCOMP', 'pantalla', 0, -560)
 for k in list(pantalla.children):
     try:
@@ -1083,22 +982,37 @@ for attr in ('render', 'display'):
 for ax in ('tx', 'ty', 'tz', 'sx', 'sy', 'scale'):
     setexpr(pantalla, ax, "%s.pantalla('%s', absTime.frame)" % (SM, ax))
 setexpr(esfera, 'scale', "%s.escala_esfera(absTime.frame)" % SM)      # v34: sin Soporte = esfera, no se ve
-mat_pantalla = make_constant(sala, 'mat_pantalla', 660, -560, (1.0, 1.0, 1.0))
-con_imagen = setp_any(mat_pantalla, ['colormap', 'map'], 'imagen_fase1')
+viejo_mat = sala.op('mat_pantalla')
+if viejo_mat is not None and viejo_mat.OPType != 'glslMAT':     # v40: el Constant MAT de antes
+    viejo_mat.destroy()
+pv_dat = get_or_make(sala, 'textDAT', 'pantalla_vertex', 660, -480)
+pv_dat.text = PANTALLA_VERTEX
+pp_dat = get_or_make(sala, 'textDAT', 'pantalla_pixel', 660, -400)
+pp_dat.text = PANTALLA_PIXEL
+mat_pantalla = get_or_make(sala, 'glslMAT', 'mat_pantalla', 660, -560)
+con_shader = bool(setp_any(mat_pantalla, ['vdat', 'vertexdat'], 'pantalla_vertex'))
+con_shader = bool(setp_any(mat_pantalla, ['pdat', 'pixeldat'], 'pantalla_pixel')) and con_shader
+try:
+    if mat_pantalla.seq.sampler.numBlocks < 1:
+        mat_pantalla.seq.sampler.numBlocks = 1
+except Exception:
+    pass
+con_imagen = bool(setp(mat_pantalla, 'sampler0name', 'sImagen'))
+con_imagen = bool(setp_any(mat_pantalla, ['sampler0top'], 'imagen_fase1')) and con_imagen
+setmenu(mat_pantalla, ['cullface'], ['neither'])
 setp(pantalla, 'material', 'mat_pantalla')
 try:
     lienzo_sop.cook(force=True)
-    lienzo_bien = len(lienzo_sop.points) == 4 and not lienzo_sop.errors() \
-        and any('uv' in [a.name for a in getattr(lienzo_sop, k_ + 'Attribs')] for k_ in ('vertex', 'point'))
+    lienzo_bien = len(lienzo_sop.points) == 4 and not lienzo_sop.errors()
 except Exception:
     lienzo_bien = False
-if con_imagen and lienzo_bien:
+if con_shader and con_imagen and lienzo_bien:
     r_ = sm.pantalla_rect()
-    ok('pantalla: %s x %s m arriba a la izquierda (pared del fondo), con el render entero de FASE1; el planeta, '
-       'unos %s m' % tuple(('%.1f' % v).replace('.', ',') for v in (r_['w'], r_['h'], 0.85 * r_['h'])))
+    ok('pantalla: %s x %s m en el centro de la pared del fondo, con el render entero de FASE1 (mat_pantalla, '
+       'GLSL); el planeta, unos %s m' % tuple(('%.1f' % v).replace('.', ',') for v in (r_['w'], r_['h'], 0.85 * r_['h'])))
 else:
-    info('pantalla: el rectangulo (Script SOP lienzo) o su imagen (mat_pantalla, Color Map = imagen_fase1) no '
-         'quedaron bien; revisalos (lienzo: %s)' % diag_lienzo(lienzo_sop))
+    info('pantalla: revisa mat_pantalla (GLSL MAT: Vertex Shader pantalla_vertex, Pixel Shader pantalla_pixel, '
+         'Samplers: sImagen -> imagen_fase1) y el rectangulo (Script SOP lienzo, 4 puntos)')
 # v2: la imagen de la esfera, pequena, para el monitor y para medir su color medio
 mini = get_or_make(sala, 'resolutionTOP', 'esfera_mini', 880, -40)
 connect(mini, sel_fase1, 0)
@@ -2162,28 +2076,31 @@ def prueba_genozilla(t, m):
 
 
 def prueba_pantalla(t, c, eq, hx, hz):
-    """v34: la pantalla proyectada, arriba a la izquierda, entera en la vista entrada."""
+    """v34: la pantalla proyectada (v40: en el centro de la pared del fondo), entera en la vista entrada."""
     r = sm.pantalla_rect(c)
-    t.check('v34: Soporte = pantalla por defecto; la pantalla, pegada a la pared del fondo, a la de la izquierda y '
-            'al techo, 16:9, con el planeta unas tres veces la esfera de 1 m',
+    t.check('v40: Soporte = pantalla por defecto; la pantalla, en el centro de la pared del fondo y pegada al '
+            'techo, 16:9, con el planeta unas tres veces la esfera de 1 m',
             str(sala.par.Soporte.default) == 'pantalla' and sm.es_pantalla(c)
-            and abs(r['x0'] + hx - sm.PANT_MARGEN) < 1e-9 and abs(r['y1'] - (c['alto'] - sm.PANT_MARGEN)) < 1e-9
+            and abs(r['x0'] + r['x1']) < 1e-9 and abs(r['y1'] - (c['alto'] - sm.PANT_MARGEN)) < 1e-9
             and abs(r['z'] + hz - sm.PANT_SEPARA) < 1e-9 and abs(r['w'] / r['h'] - 16.0 / 9.0) < 1e-6
             and 0.85 * r['h'] >= 2.8 and r['x1'] <= hx,
             '%.2f x %.2f m, planeta %.2f m' % (r['w'], r['h'], 0.85 * r['h']))
     pan = sala.op('pantalla')
     lz = pan.op('lienzo') if pan is not None else None
-    err_uv = []
-    uvs = uvs_lienzo(lz, err_uv)
-    t.check('v34: la pantalla lleva el render entero de FASE1 (mat_pantalla, Color Map = imagen_fase1, uv de 0 a 1) '
-            'y se coloca y escala sola (sala_motor.pantalla)',
-            pan is not None and str(sala.op('mat_pantalla').par.colormap.val).split('/')[-1] == 'imagen_fase1'
-            and uvs == [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+    mat = sala.op('mat_pantalla')
+    tops = [str(getattr(mat.par, 'sampler0top', '')).split('/')[-1]] if mat is not None else []
+    t.check('v40: la pantalla lleva el render entero de FASE1 (mat_pantalla, un GLSL MAT que saca la coordenada '
+            'de la imagen de la posicion del punto: sImagen -> imagen_fase1; el lienzo, 4 puntos sin uv) y se '
+            'coloca y escala sola (sala_motor.pantalla)',
+            pan is not None and mat is not None and mat.OPType == 'glslMAT'
+            and str(mat.par.sampler0name.eval()) == 'sImagen' and 'P.xy + 0.5' in sala.op('pantalla_vertex').text
+            and lz is not None and len(lz.points) == 4
             and abs(float(pan.par.sx.eval()) - r['w']) < 1e-6 and abs(float(pan.par.ty.eval()) - r['cy']) < 1e-6
             and float(pan.par.scale.eval()) == 1.0 and float(sala.op('esfera').par.scale.eval()) < 1e-3
             and all(n_ in str(sala.op(rn).par.geometry.val).split() for rn in ('render_sala', 'render_plano')
                     for n_ in ('pantalla', 'esfera')),
-            'uv %s; lienzo: %s%s' % (uvs, diag_lienzo(lz), ('; ' + err_uv[0]) if err_uv else ''))
+            'material %s, sampler %s, lienzo %s puntos' % (mat.OPType if mat is not None else '-', tops,
+                                                            len(lz.points) if lz is not None else '-'))
     # entera en la vista entrada: sus cuatro esquinas dentro del cuadro (80 grados, 16:9)
     p, m_ = sm.vista_entrada(c, None, 'entrada')
 
