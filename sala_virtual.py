@@ -209,6 +209,11 @@ LAS DEMOS (v30, sala v18, motor v140)
   vistas entrada, juego y visitante la miran; con la pantalla, la esfera y su
   peana no se dibujan (render_sala y render_plano eligen una u otra).
 
+  v36: LA PANTALLA EN TOUCHDESIGNER. El Script SOP lienzo crea la uv por vertice
+  (como los SOP de TouchDesigner; si no puede, por punto) y recorre el poligono por
+  indice: en TouchDesigner la autoprueba no le encontraba puntos (uv []). Si vuelve a
+  fallar, el FALLO dice que tiene el lienzo (puntos, prims, atributos y su error).
+
   v35 (sala v23): GENOZILLA SIN NEFANYAMUTO. Con la fase 41, NefanyaMuto sale solo
   cuando el mundo esta construido al 50 %; sobre el mundo vivo de FASE1 se colaba
   en los capitulos. Cada capitulo de GENoZilla lo apaga (como pone Umbralaparicion
@@ -228,7 +233,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v35  (GENoZilla sin NefanyaMuto: cada capitulo lo apaga y lo devuelve al salir)'
+VERSION = 'sala_virtual v36  (la pantalla en TouchDesigner: la uv del lienzo por vertice)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -885,23 +890,79 @@ else:
 # entero de FASE1 (imagen_fase1, 16:9): lo mismo que recibiria el proyector.
 PANTALLA_CB = r"""# Script SOP 'lienzo' de la pantalla (sala_virtual v34): un rectangulo de 1 x 1
 # en el plano XY, mirando a +Z, con las coordenadas de textura de 0 a 1.
+# v36: la uv, por vertice (como la llevan los SOP de TouchDesigner); si no se puede, por
+# punto. El poligono se recorre por indice.
+
+ESQUINAS = ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5))
 
 
 def onSetupParameters(scriptOp):
     return
 
 
+def clase_uv(scriptOp):
+    # 'vertex' o 'point': donde va la uv (la que ya haya o la que se pueda crear)
+    for clase in ('vertex', 'point'):
+        if 'uv' in [a.name for a in getattr(scriptOp, clase + 'Attribs')]:
+            return clase
+    for clase in ('vertex', 'point'):
+        try:
+            getattr(scriptOp, clase + 'Attribs').create('uv', (0.0, 0.0, 0.0))
+            return clase
+        except Exception:
+            pass
+    return None
+
+
 def onCook(scriptOp):
     scriptOp.clear()
-    if 'uv' not in [a.name for a in scriptOp.pointAttribs]:
-        scriptOp.pointAttribs.create('uv', (0.0, 0.0, 0.0))
+    clase = clase_uv(scriptOp)
     pr = scriptOp.appendPoly(4, closed=True, addPoints=True)
-    for v, (x, y) in zip(pr, ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5))):
+    for k in range(4):
+        x, y = ESQUINAS[k]
+        v = pr[k]
         q = v.point
         q.x, q.y, q.z = x, y, 0.0
-        q.uv = (x + 0.5, y + 0.5, 0.0)
+        uv = (x + 0.5, y + 0.5, 0.0)
+        if clase == 'vertex':
+            v.uv = uv
+        elif clase == 'point':
+            q.uv = uv
     return
 """
+
+
+def uvs_lienzo(lz):
+    """v36: las uv del rectangulo (por vertice o por punto), redondeadas y ordenadas."""
+    if lz is None:
+        return []
+    out = []
+    try:
+        if any(a.name == 'uv' for a in lz.vertexAttribs):
+            for pr in lz.prims:
+                for k in range(len(pr)):
+                    out.append(tuple(round(float(v), 3) for v in tuple(pr[k].uv)[:2]))
+        else:
+            for q in lz.points:
+                out.append(tuple(round(float(v), 3) for v in tuple(q.uv)[:2]))
+    except Exception:
+        return []
+    return sorted(out)
+
+
+def diag_lienzo(lz):
+    """v36: lo que tiene el Script SOP lienzo, para el FALLO de la autoprueba."""
+    if lz is None:
+        return 'no existe'
+    try:
+        at = ['%s:%s' % (k[0], a.name) for k in ('vertex', 'point') for a in getattr(lz, k + 'Attribs')]
+        err = (lz.errors() or '').strip().replace('\n', ' / ')
+        return '%d puntos, %d prims, atributos %s%s' % (len(lz.points), len(lz.prims), at,
+                                                       (', error: ' + err) if err else '')
+    except Exception as e:
+        return 'no lo pude leer (%s)' % e
+
+
 pantalla = fresh(sala, 'geometryCOMP', 'pantalla', 0, -560)
 for k in list(pantalla.children):
     try:
@@ -926,8 +987,8 @@ con_imagen = setp_any(mat_pantalla, ['colormap', 'map'], 'imagen_fase1')
 setp(pantalla, 'material', 'mat_pantalla')
 try:
     lienzo_sop.cook(force=True)
-    lienzo_bien = len(lienzo_sop.points) == 4 and 'uv' in [a.name for a in lienzo_sop.pointAttribs] \
-        and not lienzo_sop.errors()
+    lienzo_bien = len(lienzo_sop.points) == 4 and not lienzo_sop.errors() \
+        and any('uv' in [a.name for a in getattr(lienzo_sop, k_ + 'Attribs')] for k_ in ('vertex', 'point'))
 except Exception:
     lienzo_bien = False
 if con_imagen and lienzo_bien:
@@ -936,7 +997,7 @@ if con_imagen and lienzo_bien:
        'unos %s m' % tuple(('%.1f' % v).replace('.', ',') for v in (r_['w'], r_['h'], 0.85 * r_['h'])))
 else:
     info('pantalla: el rectangulo (Script SOP lienzo) o su imagen (mat_pantalla, Color Map = imagen_fase1) no '
-         'quedaron bien; revisalos')
+         'quedaron bien; revisalos (lienzo: %s)' % diag_lienzo(lienzo_sop))
 # v2: la imagen de la esfera, pequena, para el monitor y para medir su color medio
 mini = get_or_make(sala, 'resolutionTOP', 'esfera_mini', 880, -40)
 connect(mini, sel_fase1, 0)
@@ -2011,7 +2072,7 @@ def prueba_pantalla(t, c, eq, hx, hz):
             '%.2f x %.2f m, planeta %.2f m' % (r['w'], r['h'], 0.85 * r['h']))
     pan = sala.op('pantalla')
     lz = pan.op('lienzo') if pan is not None else None
-    uvs = sorted(tuple(round(v, 3) for v in q.uv[:2]) for q in lz.points) if lz is not None else []
+    uvs = uvs_lienzo(lz)
     t.check('v34: la pantalla lleva el render entero de FASE1 (mat_pantalla, Color Map = imagen_fase1, uv de 0 a 1) '
             'y se coloca y escala sola (sala_motor.pantalla)',
             pan is not None and str(sala.op('mat_pantalla').par.colormap.val).split('/')[-1] == 'imagen_fase1'
@@ -2020,7 +2081,7 @@ def prueba_pantalla(t, c, eq, hx, hz):
             and float(pan.par.scale.eval()) == 1.0 and float(sala.op('esfera').par.scale.eval()) < 1e-3
             and all(n_ in str(sala.op(rn).par.geometry.val).split() for rn in ('render_sala', 'render_plano')
                     for n_ in ('pantalla', 'esfera')),
-            'uv %s' % uvs)
+            'uv %s; lienzo: %s' % (uvs, diag_lienzo(lz)))
     # entera en la vista entrada: sus cuatro esquinas dentro del cuadro (80 grados, 16:9)
     p, m_ = sm.vista_entrada(c, None, 'entrada')
 
