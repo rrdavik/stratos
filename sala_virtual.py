@@ -209,6 +209,10 @@ LAS DEMOS (v30, sala v18, motor v140)
   vistas entrada, juego y visitante la miran; con la pantalla, la esfera y su
   peana no se dibujan (render_sala y render_plano eligen una u otra).
 
+  v38: el lienzo comprueba que la uv ha quedado (si no, la pone componente a
+  componente) y la autoprueba prueba todas las formas de leerla: en TouchDesigner la
+  v37 leia (0, 0) en las cuatro esquinas. Si falla, dice que da cada forma.
+
   v37: la autoprueba lee la uv del lienzo como la de TouchDesigner (.val, por indice o
   como secuencia): con la v36 el lienzo ya estaba bien (4 puntos, la uv por vertice),
   pero tuple() no la leia y la prueba daba uv [].
@@ -237,7 +241,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v37  (la autoprueba lee la uv de la pantalla como la da TouchDesigner)'
+VERSION = 'sala_virtual v38  (la uv de la pantalla: se comprueba al ponerla y se lee de todas las formas)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -918,6 +922,24 @@ def clase_uv(scriptOp):
     return None
 
 
+def poner_uv(e, uv):
+    # v38: la uv entera y, si al leerla no ha quedado (TouchDesigner), componente a componente
+    try:
+        e.uv = uv
+    except Exception:
+        pass
+    try:
+        if abs(float(e.uv[0]) - uv[0]) < 1e-6 and abs(float(e.uv[1]) - uv[1]) < 1e-6:
+            return
+    except Exception:
+        pass
+    for k in range(3):
+        try:
+            e.uv[k] = uv[k]
+        except Exception:
+            pass
+
+
 def onCook(scriptOp):
     scriptOp.clear()
     clase = clase_uv(scriptOp)
@@ -929,23 +951,19 @@ def onCook(scriptOp):
         q.x, q.y, q.z = x, y, 0.0
         uv = (x + 0.5, y + 0.5, 0.0)
         if clase == 'vertex':
-            v.uv = uv
+            poner_uv(v, uv)
         elif clase == 'point':
-            q.uv = uv
+            poner_uv(q, uv)
     return
 """
 
 
-def _uv2(a):
-    """v37: (u, v) de un valor de uv de TouchDesigner, se lea como se lea: .val, por
-    indice o como secuencia (en TouchDesigner no siempre se deja convertir con tuple)."""
-    for leer in (lambda x: x.val, lambda x: (x[0], x[1]), lambda x: tuple(x), lambda x: x):
-        try:
-            t = leer(a)
-            return (round(float(t[0]), 3), round(float(t[1]), 3))
-        except Exception:
-            pass
-    raise ValueError('no se como leer %s (%r)' % (type(a).__name__, a))
+LEER_UV = (('indice', lambda x: (x[0], x[1])), ('val', lambda x: x.val), ('secuencia', lambda x: tuple(x)))
+
+
+def _leer_uv(a, como):
+    t = dict(LEER_UV)[como](a)
+    return (round(float(t[0]), 3), round(float(t[1]), 3))
 
 
 def _vertices(pr):
@@ -955,25 +973,46 @@ def _vertices(pr):
         return list(pr)
 
 
+def _elementos_uv(lz):
+    if any(a.name == 'uv' for a in lz.vertexAttribs):
+        return [v for pr in lz.prims for v in _vertices(pr)]
+    return list(lz.points)
+
+
+ESQUINAS_UV = [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+
+
 def uvs_lienzo(lz, errores=None):
     """v36: las uv del rectangulo (por vertice o por punto), redondeadas y ordenadas.
-    v37: si no se pueden leer, el porque va a errores (una lista)."""
+    v38: se prueban todas las formas de leerlas (LEER_UV; TouchDesigner no siempre
+    las da como el simulado): vale la primera que da las cuatro esquinas; si ninguna,
+    la primera que se puede leer, y en errores lo que da cada una con el primer vertice."""
     if lz is None:
         return []
-    out = []
     try:
-        if any(a.name == 'uv' for a in lz.vertexAttribs):
-            for pr in lz.prims:
-                for v in _vertices(pr):
-                    out.append(_uv2(v.uv))
-        else:
-            for q in lz.points:
-                out.append(_uv2(q.uv))
+        els = _elementos_uv(lz)
     except Exception as e:
         if errores is not None:
             errores.append('%s: %s' % (type(e).__name__, e))
         return []
-    return sorted(out)
+    leidas = []
+    for como, _ in LEER_UV:
+        try:
+            leidas.append(sorted(_leer_uv(x.uv, como) for x in els))
+        except Exception:
+            continue
+        if leidas[-1] == ESQUINAS_UV:
+            return leidas[-1]
+    if errores is not None and els:
+        a = els[0].uv
+        partes = ['%s %r' % (type(a).__name__, a)]
+        for como, leer in LEER_UV:
+            try:
+                partes.append('%s %r' % (como, leer(a)))
+            except Exception as e:
+                partes.append('%s (%s)' % (como, type(e).__name__))
+        errores.append('primer vertice: ' + ', '.join(partes))
+    return leidas[0] if leidas else []
 
 
 def diag_lienzo(lz):
@@ -2108,7 +2147,7 @@ def prueba_pantalla(t, c, eq, hx, hz):
             and float(pan.par.scale.eval()) == 1.0 and float(sala.op('esfera').par.scale.eval()) < 1e-3
             and all(n_ in str(sala.op(rn).par.geometry.val).split() for rn in ('render_sala', 'render_plano')
                     for n_ in ('pantalla', 'esfera')),
-            'uv %s; lienzo: %s%s' % (uvs, diag_lienzo(lz), ('; al leer la uv: ' + err_uv[0]) if err_uv else ''))
+            'uv %s; lienzo: %s%s' % (uvs, diag_lienzo(lz), ('; ' + err_uv[0]) if err_uv else ''))
     # entera en la vista entrada: sus cuatro esquinas dentro del cuadro (80 grados, 16:9)
     p, m_ = sm.vista_entrada(c, None, 'entrada')
 
