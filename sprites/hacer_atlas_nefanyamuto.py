@@ -76,6 +76,8 @@ ORIGEN = dict(
     despiste=('bizco', 'pregunta'),   # bizco (no se entera)
     pasmado=('f_calma', None),        # foto: hurgandose la nariz (no se entera)
 )
+# la gorra plana de campo, ladeada: en que caras y hacia que lado cae (+1 a la derecha de la imagen)
+GORRA = dict(rie=1, susto=-1, despiste=1)
 # el cuerpo sobre el que va cada cabeza de foto
 CUERPO_FOTO = dict(dedos='grito', atril='dientes', nariz='grito', calma='rie', rasca='rie')
 BAJA_FOTO = dict(nariz=0.05, rasca=0.08)
@@ -686,6 +688,64 @@ def color_muto(f):
     return v.mean(0), v.std(0)
 
 
+# --- la gorra -------------------------------------------------------------------------
+
+TWEED = (118, 102, 74)
+
+
+def gorra(fig, lado=1, inclina=13.0):
+    """Una gorra plana de campo (de tweed, achatada, con la visera corta), ladeada
+    hacia 'lado', sobre la cabeza de la figura; y la sombra de la visera en la frente."""
+    import math
+    cy0, ccx, chw, chom = medidas_cabeza(fig)
+    H, W = fig.shape[:2]
+    capa = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(capa)
+    w = chw * 0.94
+    ox, oy = ccx + lado * 0.06 * w, cy0 + 0.30 * w      # el centro de la gorra
+
+    def P(x, y):
+        return (ox + x * w, oy + y * w)
+    base = TWEED
+    osc = tuple(int(v * 0.62) for v in base)
+    luz = tuple(min(255, int(v * 1.3)) for v in base)
+    borde = max(3, int(w * 0.03))
+    # la copa: ancha y achatada, cae un poco por delante sobre la visera
+    copa = [P(*q) for q in ((-0.60, 0.08), (-0.62, -0.06), (-0.52, -0.20), (-0.30, -0.30), (0.0, -0.33),
+                            (0.30, -0.31), (0.54, -0.22), (0.66, -0.06), (0.64, 0.08), (0.40, 0.14),
+                            (0.0, 0.16), (-0.40, 0.14))]
+    d.polygon(copa, fill=base + (255,))
+    # el volumen: sombra abajo, luz arriba
+    d.polygon([P(*q) for q in ((-0.60, 0.02), (0.64, 0.02), (0.40, 0.14), (0.0, 0.16), (-0.40, 0.14))], fill=osc + (255,))
+    d.line([P(-0.48, -0.20), P(-0.22, -0.29), P(0.10, -0.30)], fill=luz + (255,), width=borde * 2)
+    # el tejido: rayas finas en espiga
+    for k in range(-5, 6):
+        x = k * 0.11
+        d.line([P(x - 0.03, -0.27 + abs(x) * 0.12), P(x + 0.03, 0.02)], fill=osc + (255,), width=max(1, borde // 2))
+    # la costura del frente y el boton de arriba
+    d.line([P(-0.48, -0.04), P(0.0, -0.12), P(0.52, -0.04)], fill=osc + (255,), width=borde)
+    d.ellipse([P(-0.03, -0.35), P(0.05, -0.29)], fill=osc + (255,))
+    d.polygon(copa, outline=TINTA + (255,), width=borde)
+    # la visera: corta, hacia delante (abajo en la imagen)
+    visera = [P(*q) for q in ((-0.46, 0.10), (-0.20, 0.24), (0.0, 0.27), (0.24, 0.24), (0.48, 0.10), (0.0, 0.15))]
+    d.polygon(visera, fill=tuple(int(v * 0.5) for v in base) + (255,), outline=TINTA + (255,), width=borde)
+    d.line([P(-0.32, 0.17), P(0.0, 0.22), P(0.32, 0.17)], fill=osc + (255,), width=borde)
+    capa = capa.rotate(-lado * inclina, resample=Image.BICUBIC, center=(ox, oy))
+    # la sombra de la visera en la frente
+    sombra = Image.new('L', (W, H), 0)
+    ImageDraw.Draw(sombra).ellipse([ox - 0.48 * w, oy + 0.12 * w, ox + 0.48 * w, oy + 0.42 * w], fill=110)
+    sombra = sombra.rotate(-lado * inclina, center=(ox, oy)).filter(ImageFilter.GaussianBlur(w * 0.05))
+    sombra = Image.fromarray(np.minimum(np.array(sombra), fig[..., 3]))
+    out = Image.fromarray(fig)
+    oscuro = Image.new('RGBA', (W, H), (30, 14, 12, 0))
+    oscuro.putalpha(sombra)
+    out.alpha_composite(oscuro)
+    a = np.array(capa)
+    a[..., 3] = np.where(a[..., 3] >= 128, 255, 0)
+    out.alpha_composite(Image.fromarray(a))
+    return np.array(out)
+
+
 # --- adornos (en la celda) ---------------------------------------------------------------
 
 AGUA = (120, 200, 255)
@@ -817,10 +877,11 @@ def main(args):
     d = ImageDraw.Draw(lamina)
     for i, nombre in enumerate(EMOCIONES):
         origen, adorno = ORIGEN[nombre]
-        im = a_celda(f[origen], escala)
+        fig = gorra(f[origen], GORRA[nombre]) if nombre in GORRA else f[origen]
+        im = a_celda(fig, escala)
         if adorno:
             y0, cx, hw, _ = medidas_cabeza(f[origen])
-            x0, yb0, x1, yb1 = caja(f[origen])
+            x0, yb0, x1, yb1 = caja(fig)
             ox = (CELDA_W - int(round((x1 - x0) * escala))) // 2
             oy = CELDA_H - MARGEN - int(round((yb1 - yb0) * escala))
             cab = (ox + (cx - x0) * escala, oy + (y0 - yb0) * escala, hw * escala)
