@@ -318,6 +318,15 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v141 (sala v21): EL GUION DE GENOZILLA, SOBRE EL MUNDO VIVO. Con
+#                 vivo (la sala lo pide siempre), guion_demo('inicio') no toca el mundo de
+#                 FASE1: ni lo cambia por la copia de la entrada (_demo_mundo), ni lo vacia
+#                 (_demo_vaciar), ni entierra conchas de golpe (_demo_conchas), ni despeja
+#                 celdas, ni llena el globo en el Fin de ronda (solo suelta las zanjas fijadas
+#                 de la partida de antes: cada capitulo empieza la suya). Solo pone lo del capitulo
+#                 encima (siembras, brote, monstruo, el canal): el planeta sigue su ciclo y su
+#                 giro. Lo que el capitulo necesita y el mundo aun no tiene (conchas que
+#                 cavar) lo mira la sala (losetas_bajo) y espera a que el mundo evolucione.
 #                 Motor v140 (sala v18): LA CAMARA SIGUE A LAS CELDAS. En las demos de la
 #                 sala, la sala dice cada fotograma a que celdas mirar (foco_camara: donde se
 #                 para la gente, la fila, el monstruo...) y la camara de globo gira alrededor
@@ -373,7 +382,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v140'
+MOTOR_VERSION = 'motor v141'
 
 import math
 import time as _time
@@ -20547,6 +20556,13 @@ def _demo_despejar(W, cfg, celdas):
     return out
 
 
+def losetas_bajo(W, celdas):
+    """Motor v141: las conchas que se pueden cavar debajo de las celdas (la columna mas
+    corta: sus losetas hasta el nucleo). Sin celdas, 0."""
+    cs = [c for c in celdas if c is not None and 0 <= c < N]
+    return min(len(W['cols'][c]) for c in cs) if cs else 0
+
+
 def _demo_juego(W, cfg, now):
     """Modojuego y Nuevapartida: la ronda 1 empieza ahora."""
     if cfg['nivel'] < 32 or not cfg.get('modo_juego'):
@@ -20592,12 +20608,14 @@ def _demo_brote(W, cfg, celda, occ, now):
     return celda
 
 
-def guion_demo(W, cfg, capitulo, evento='inicio', now=None, t=0.0, refs=None, libres=None, base=None):
+def guion_demo(W, cfg, capitulo, evento='inicio', now=None, t=0.0, refs=None, libres=None, base=None,
+               vivo=False):
     """El guion de la demo GENoZilla (motor v119): con evento 'inicio' prepara FASE1
     para el capitulo (al empezar su titulo); con 'tick', cada fotograma, lo que pasa a
     su hora (t, s desde que acaba el titulo) y la musica de la demo. Solo actua con
     Demo = genozilla. Devuelve los sitios del capitulo (demo_refs) o lo hecho.
-    Motor v133: base, el mundo de FASE1 con el que entro la demo (sin el, de cero)."""
+    Motor v133: base, el mundo de FASE1 con el que entro la demo (sin el, de cero).
+    Motor v141: vivo, sobre el mundo de FASE1 tal como esta (ni base ni de cero)."""
     if not demo_genozilla():
         return None
     now = (W.get('t') or 0.0) if now is None else now
@@ -20605,17 +20623,19 @@ def guion_demo(W, cfg, capitulo, evento='inicio', now=None, t=0.0, refs=None, li
     if evento == 'inicio':
         refs = refs if refs is not None else demo_refs(W, cfg, cap, libres)
         _GUION.update(cap=cap, hechos=set(), t_nota=None, sueltas=[], refs=refs, muertes=0)
-        _demo_inicio(W, cfg, cap, now, refs, base)
+        _demo_inicio(W, cfg, cap, now, refs, base, vivo)
         return refs
     if _GUION.get('cap') != cap:
         return None
     return _demo_tick(W, cfg, cap, now, float(t), _GUION.get('refs') or {})
 
 
-def _demo_inicio(W, cfg, cap, now, r, base=None):
+def _demo_inicio(W, cfg, cap, now, r, base=None, vivo=False):
     cfg = dict(cfg, presencia_activa=False)     # lo que siembra el guion prende entero (sin el sorteo de la fase 22)
     conchas = DEMO_CONCHAS if cap in (5, 6, 10, 11) else 0
-    if base is None:
+    if vivo:                            # motor v141: el mundo de FASE1 como esta (ni copia, ni vacio, ni conchas);
+        W.pop('bloqueadas', None)       # solo sin las zanjas fijadas de la partida de antes (la demo empieza la suya)
+    elif base is None:
         _demo_vaciar(W, cfg, now, conchas)
     else:                               # motor v133: el mundo de FASE1, y libre solo lo que hace falta
         _demo_mundo(W, cfg, now, base, conchas)
@@ -20639,7 +20659,7 @@ def _demo_inicio(W, cfg, cap, now, r, base=None):
             m['aturdido'] = now + DEMO_TITULO + 4.6
     elif cap == 9:
         _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=9)
-    elif cap == 12 and base is None:
+    elif cap == 12 and base is None and not vivo:
         for i in range(N):              # el globo entero: publico y mal (v133: solo sin el mundo de FASE1)
             x = _hash01(i, 77, 12)
             if x < 0.42:

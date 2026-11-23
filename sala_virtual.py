@@ -183,6 +183,32 @@ LAS DEMOS (v30, sala v18, motor v140)
   van y vuelven cada 12-30 s; de 62 a 76 s, una sola fila recta de tres, a
   proposito, abre un pozo; a los 100 s se vacia. Dura 120 s.
 
+  v33 (sala v21, motor v141): LAS DEMOS TOMAN EL MUNDO DONDE ESTA Y NO TOCAN EL
+  GIRO. Hasta la v32, cada demo guardaba el mundo de FASE1 al entrar y lo devolvia
+  al salir (el planeta volvia atras: ciclos, conchas y lo construido), la
+  probabilidad y la huella volvian al mundo de la entrada en cada caso y
+  despejaban celdas, la fila de la huella enterraba 7 conchas de golpe y
+  GENoZilla rehacia el mundo en cada capitulo, enterraba 6 conchas y ponia
+  Barsperturn 450 (45 y 9). Ahora ninguna demo guarda, devuelve, vacia ni
+  entierra el mundo ni cambia Barsperturn: el planeta gira con los parametros de
+  FASE1 (y su giro vivo) y cierra sus ciclos con sus reglas; los parametros que
+  pone la demo si se devuelven al salir. Si al mundo aun le falta lo que un caso
+  necesita (dos celdas vacias bajo la sala para la probabilidad; conchas debajo
+  para que caven la fila de la huella y las zanjas, el canal y el grito de
+  GENoZilla), el caso espera con el titulo 'Esperando que el mundo evolucione'
+  y para probar que; lo vuelve a mirar cada 2 s (Siguientecap lo salta). La
+  autoprueba juega las demos sobre una copia: deja que esa copia evolucione
+  (cierra ciclos) y al acabar FASE1 vuelve a su mundo.
+
+  v34 (sala v22): LA OBRA, PROYECTADA EN UNA PANTALLA. Soporte (pagina Sala):
+  pantalla (por defecto; una vez por proyecto se pasa a ella) o esfera (la de LEDs
+  de antes). La pantalla cuelga en la pared del fondo, pegada a la de la izquierda
+  y al techo, y lleva el render entero de FASE1 (16:9, sin recortes): con
+  Altopantalla 3,6 m mide 6,4 x 3,6 y el planeta, unos 3 m (tres veces la esfera
+  de 1 m). Un marco oscuro detras y el proyector colgado del techo, delante. Las
+  vistas entrada, juego y visitante la miran; con la pantalla, la esfera y su
+  peana no se dibujan (render_sala y render_plano eligen una u otra).
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -197,7 +223,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v32  (la sala llena se va llenando: Modofila recta, cada quieto en su sitio y una sola fila a proposito)'
+VERSION = 'sala_virtual v34  (la obra, proyectada en una pantalla grande arriba a la izquierda; la esfera, opcional)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -417,6 +443,21 @@ add_par(sala, page, 'float', 'Inclinasfera', 'Inclinacion de la esfera (grados h
         'a la camara de la entrada)', 0.0, -90.0, 90.0)
 add_par(sala, page, 'float', 'Girosfera', 'Giro de la esfera (grados; 0 = el planeta mira a la sala)', 0.0,
         -180.0, 180.0)
+# v34: la obra en una pantalla proyectada (por defecto) o en la esfera de LEDs
+add_par(sala, page, 'menu', 'Soporte', 'Donde se ve la obra', 'pantalla', menu=sm.SOPORTES,
+        menu_labels=sm.SOPORTES_ETIQUETAS)
+menu_al_dia('Soporte', sm.SOPORTES, sm.SOPORTES_ETIQUETAS)
+add_par(sala, page, 'float', 'Altopantalla', 'Pantalla: alto en m (16:9; el planeta, el 85 % del alto)', sm.PANT_ALTO,
+        1.0, 6.0)
+try:                    # v34: una vez por proyecto, a la pantalla (la esfera de LEDs se queda como opcion)
+    if not sala.fetch('soporte_v34', False, search=False):
+        sala.store('soporte_v34', True)
+        sala.par.Soporte.default = 'pantalla'
+        if str(sala.par.Soporte.eval()) != 'pantalla':
+            sala.par.Soporte = 'pantalla'
+        ok('Soporte: pantalla (la obra proyectada arriba a la izquierda; la esfera de LEDs, en Soporte = esfera)')
+except Exception as e:
+    info('Soporte: no pude ponerlo en pantalla (%s); ponlo a mano' % e)
 add_par(sala, page, 'float', 'Bruma', 'Bruma: los haces de los focos se ven (0 = aire limpio)', 0.5, 0.0, 1.0,
         clamp=True)
 VISTAS_ETIQUETAS = ['Visitante (pasea entre el publico)', 'Entrada (la sala desde la puerta)', 'Orbita (desde fuera)',
@@ -834,6 +875,63 @@ if imagen:
        'equirectangular 2:1)')
 else:
     info('esfera: no pude ponerle la imagen; en mat_esfera, Color Map = esfera_espejo')
+# v34: la pantalla proyectada: un rectangulo de 1 x 1 en XY (Script SOP 'lienzo', con uv de 0 a
+# 1) que el Geometry COMP escala y coloca (sala_motor.pantalla). Su material lleva el render
+# entero de FASE1 (imagen_fase1, 16:9): lo mismo que recibiria el proyector.
+PANTALLA_CB = r"""# Script SOP 'lienzo' de la pantalla (sala_virtual v34): un rectangulo de 1 x 1
+# en el plano XY, mirando a +Z, con las coordenadas de textura de 0 a 1.
+
+
+def onSetupParameters(scriptOp):
+    return
+
+
+def onCook(scriptOp):
+    scriptOp.clear()
+    if 'uv' not in [a.name for a in scriptOp.pointAttribs]:
+        scriptOp.pointAttribs.create('uv', (0.0, 0.0, 0.0))
+    pr = scriptOp.appendPoly(4, closed=True, addPoints=True)
+    for v, (x, y) in zip(pr, ((-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5))):
+        q = v.point
+        q.x, q.y, q.z = x, y, 0.0
+        q.uv = (x + 0.5, y + 0.5, 0.0)
+    return
+"""
+pantalla = fresh(sala, 'geometryCOMP', 'pantalla', 0, -560)
+for k in list(pantalla.children):
+    try:
+        k.render = False
+        k.display = False
+    except Exception:
+        pass
+cb_lienzo = mk(pantalla, 'textDAT', 'lienzo_callbacks', 200, 0)
+cb_lienzo.text = PANTALLA_CB
+lienzo_sop = mk(pantalla, 'scriptSOP', 'lienzo', 0, 0)
+setp_any(lienzo_sop, ['callbacks', 'callbackdat', 'dat'], 'lienzo_callbacks')
+for attr in ('render', 'display'):
+    try:
+        setattr(lienzo_sop, attr, True)
+    except Exception:
+        pass
+for ax in ('tx', 'ty', 'tz', 'sx', 'sy', 'scale'):
+    setexpr(pantalla, ax, "%s.pantalla('%s', absTime.frame)" % (SM, ax))
+setexpr(esfera, 'scale', "%s.escala_esfera(absTime.frame)" % SM)      # v34: sin Soporte = esfera, no se ve
+mat_pantalla = make_constant(sala, 'mat_pantalla', 660, -560, (1.0, 1.0, 1.0))
+con_imagen = setp_any(mat_pantalla, ['colormap', 'map'], 'imagen_fase1')
+setp(pantalla, 'material', 'mat_pantalla')
+try:
+    lienzo_sop.cook(force=True)
+    lienzo_bien = len(lienzo_sop.points) == 4 and 'uv' in [a.name for a in lienzo_sop.pointAttribs] \
+        and not lienzo_sop.errors()
+except Exception:
+    lienzo_bien = False
+if con_imagen and lienzo_bien:
+    r_ = sm.pantalla_rect()
+    ok('pantalla: %s x %s m arriba a la izquierda (pared del fondo), con el render entero de FASE1; el planeta, '
+       'unos %s m' % tuple(('%.1f' % v).replace('.', ',') for v in (r_['w'], r_['h'], 0.85 * r_['h'])))
+else:
+    info('pantalla: el rectangulo (Script SOP lienzo) o su imagen (mat_pantalla, Color Map = imagen_fase1) no '
+         'quedaron bien; revisalos')
 # v2: la imagen de la esfera, pequena, para el monitor y para medir su color medio
 mini = get_or_make(sala, 'resolutionTOP', 'esfera_mini', 880, -40)
 connect(mini, sel_fase1, 0)
@@ -917,7 +1015,8 @@ if sala.op('vista_plano') is not None:         # v10: la miniatura es la camara 
     sala.op('vista_plano').destroy()
 MINI_W, MINI_H = 200, 180         # v10: la miniatura de la camara cenital
 PUBLICO = 'personas personas_bolas personas_conos'       # v24: los monigotes
-geos = 'sala_caja lineas equipos_geo %s arcos esfera haces' % PUBLICO
+# v34: la pantalla y la esfera, las dos en los render; la que no es el Soporte, a escala casi 0
+geos = 'sala_caja lineas equipos_geo %s arcos esfera pantalla haces' % PUBLICO
 r1 = get_or_make(sala, 'renderTOP', 'render_sala', 660, 360)
 setexpr(r1, 'camera', "'vista_cenital' if str(parent().par.Vista) == 'cenital' else 'vista'")
 setp(r1, 'geometry', geos)
@@ -940,7 +1039,7 @@ setp(luz_plano, 'dimmer', 0.5)
 # planta de la sala (fov_cenital). Mas pequena: 200 x 180, la proporcion de render_cenital.
 rp = get_or_make(sala, 'renderTOP', 'render_plano', 660, 120)
 setp(rp, 'camera', 'vista_cenital')
-setp(rp, 'geometry', 'sala_caja lineas equipos_geo %s arcos esfera' % PUBLICO)
+setp(rp, 'geometry', 'sala_caja lineas equipos_geo %s arcos esfera pantalla' % PUBLICO)
 setexpr(rp, 'lights', "%s.luces_render('plano_luz')" % SM)
 setp_any(rp, ['resolutionw'], MINI_W)
 setp_any(rp, ['resolutionh'], MINI_H)
@@ -1489,10 +1588,11 @@ def _prueba(t, m):
             and len(set(pasos)) > 5 and vel <= 1.5 * sm.VEL_VISITANTE < sm.VELOCIDAD,
             '%.2f m/s como mucho (arranca y frena suave)' % vel)
     p, mira = sm.ojos(c)
-    t.check('visitante: los ojos a 1,65 m y mirando la esfera',
-            abs(p[1] - sm.OJOS) < 1e-9 and esf is not None and mira == esf['pos'])
+    obra_ = sm.obra(c, eq)              # v34: la pantalla (o la esfera, con Soporte = esfera)
+    t.check('visitante: los ojos a 1,65 m y mirando la obra (v34: la pantalla, o la esfera)',
+            abs(p[1] - sm.OJOS) < 1e-9 and esf is not None and mira == obra_)
     t.check('el monitor mira por la camara de la Vista', sm.vista('ty') == sm.OJOS
-            and abs(sm.vista('mx') - esf['pos'][0]) < 1e-9)
+            and abs(sm.vista('mx') - obra_[0]) < 1e-9)
     sala.par.Vista = 'orbita'
     t.check('orbita: desde fuera, como la vista libre de antes', sm.vista('ty') == float(sala.par.Alturavista))
     sala.par.Vista = 'entrada'
@@ -1500,6 +1600,7 @@ def _prueba(t, m):
     t.check('v4: entrada, desde detras de la puerta y por encima de la gente, mirando hacia abajo y al fondo',
             sm.vista('tz') > hz and sm.vista('ty') > sm.OJOS and sm.vista('my') < sm.vista('ty')
             and sm.vista('mz') < 0.0)
+    prueba_pantalla(t, c, eq, hx, hz)
     mg = sm.margen_esfera(c, eq)
     g0 = math.radians(sm.giro_esfera())             # 'frente' pone la imagen en el +Z de la bola
     hacia = (math.sin(g0), math.cos(g0))
@@ -1620,8 +1721,9 @@ def _prueba(t, m):
     t.check('sin Bruma o con la luz apagada, ningun haz',
             not sm._filas_haces(dict(c, bruma=0.0), eq, 5.0)
             and not sm._filas_haces(dict(c, modo_luz=0), eq, 5.0))
-    t.check('la esfera es una luz: luz_esfera, en su sitio y con el color medio de su imagen (Luzesfera)',
-            sala.op('luz_esfera') is not None and abs(sm.luz_esfera('ty') - esf['y']) < 1e-9
+    t.check('la obra es una luz: luz_esfera, en su sitio (v34: delante de la pantalla) y con el color medio de su '
+            'imagen (Luzesfera)',
+            sala.op('luz_esfera') is not None and abs(sm.luz_esfera('ty') - sm.obra(c)[1]) < 1e-9
             and all(0.0 <= sm.luz_esfera(ch) <= 1.0 for ch in 'rgb'))
     # v6: rendimiento
     lz = sala.par.Luzesfera.eval()
@@ -1876,18 +1978,99 @@ def prueba_genozilla(t, m):
     sala.par.Guion = True
     motor_ = fase1.op('motor')
     # v27: la demo juega sobre el mundo de FASE1; si esta casi vacio (un proyecto recien
-    # montado), uno compuesto para la prueba, sin conchas (el guion las entierra donde cava).
-    # Al acabar, FASE1 vuelve a su mundo.
+    # montado), uno compuesto para la prueba. v33: la demo ya no entierra conchas para sus
+    # zanjas (espera a que el mundo las tenga): la prueba deja que el mundo evolucione hasta
+    # tenerlas (evolucionar). Al acabar, FASE1 vuelve a su mundo.
     Worig = copy.deepcopy(motor_.fetch('W', None))
-    compuesto = False
+    cambiado = False
     try:
-        compuesto = componer_mundo(m)
+        cambiado = componer_mundo(m)
+        cambiado = evolucionar(m, 14) > 0 or cambiado
         _prueba_genozilla(t, m, copy, caps, motor_)
     finally:
-        if compuesto:
+        if cambiado:
             motor_.store('W', Worig)
             for k_ in ('inst', 'tiles', 'frame'):
                 m._CACHE[k_] = None
+
+
+def prueba_pantalla(t, c, eq, hx, hz):
+    """v34: la pantalla proyectada, arriba a la izquierda, entera en la vista entrada."""
+    r = sm.pantalla_rect(c)
+    t.check('v34: Soporte = pantalla por defecto; la pantalla, pegada a la pared del fondo, a la de la izquierda y '
+            'al techo, 16:9, con el planeta unas tres veces la esfera de 1 m',
+            str(sala.par.Soporte.default) == 'pantalla' and sm.es_pantalla(c)
+            and abs(r['x0'] + hx - sm.PANT_MARGEN) < 1e-9 and abs(r['y1'] - (c['alto'] - sm.PANT_MARGEN)) < 1e-9
+            and abs(r['z'] + hz - sm.PANT_SEPARA) < 1e-9 and abs(r['w'] / r['h'] - 16.0 / 9.0) < 1e-6
+            and 0.85 * r['h'] >= 2.8 and r['x1'] <= hx,
+            '%.2f x %.2f m, planeta %.2f m' % (r['w'], r['h'], 0.85 * r['h']))
+    pan = sala.op('pantalla')
+    lz = pan.op('lienzo') if pan is not None else None
+    uvs = sorted(tuple(round(v, 3) for v in q.uv[:2]) for q in lz.points) if lz is not None else []
+    t.check('v34: la pantalla lleva el render entero de FASE1 (mat_pantalla, Color Map = imagen_fase1, uv de 0 a 1) '
+            'y se coloca y escala sola (sala_motor.pantalla)',
+            pan is not None and str(sala.op('mat_pantalla').par.colormap.val).split('/')[-1] == 'imagen_fase1'
+            and uvs == [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)]
+            and abs(float(pan.par.sx.eval()) - r['w']) < 1e-6 and abs(float(pan.par.ty.eval()) - r['cy']) < 1e-6
+            and float(pan.par.scale.eval()) == 1.0 and float(sala.op('esfera').par.scale.eval()) < 1e-3
+            and all(n_ in str(sala.op(rn).par.geometry.val).split() for rn in ('render_sala', 'render_plano')
+                    for n_ in ('pantalla', 'esfera')),
+            'uv %s' % uvs)
+    # entera en la vista entrada: sus cuatro esquinas dentro del cuadro (80 grados, 16:9)
+    p, m_ = sm.vista_entrada(c, None, 'entrada')
+
+    def dentro(q, fov_h=80.0, asp=1280.0 / 720.0):
+        f = [m_[k] - p[k] for k in range(3)]
+        lf = math.sqrt(sum(v * v for v in f))
+        f = [v / lf for v in f]
+        der = [-f[2], 0.0, f[0]]
+        ld = math.sqrt(sum(v * v for v in der))
+        der = [v / ld for v in der]
+        arr = [der[1] * f[2] - der[2] * f[1], der[2] * f[0] - der[0] * f[2], der[0] * f[1] - der[1] * f[0]]
+        d = [q[k] - p[k] for k in range(3)]
+        z_ = sum(a * b for a, b in zip(d, f))
+        th = math.tan(math.radians(0.5 * fov_h))
+        return z_ > 0 and abs(sum(a * b for a, b in zip(d, der)) / z_) <= th \
+            and abs(sum(a * b for a, b in zip(d, arr)) / z_) <= th / asp
+    esquinas = [(x, y, r['z']) for x in (r['x0'], r['x1']) for y in (r['y0'], r['y1'])]
+    t.check('v34: desde la entrada se ve la pantalla entera (sus cuatro esquinas en el cuadro)',
+            all(dentro(q) for q in esquinas), ' '.join('%s' % dentro(q) for q in esquinas))
+    e_ = next(e for e in eq if e['tipo'] == 'esfera')
+    peana = lambda c_: [f_ for f_ in sm._filas_equipos(c_, eq, 5.0)         # noqa: E731
+                        if abs(f_[0] - e_['x']) < 1e-9 and abs(f_[2] - e_['z']) < 1e-9]
+    t.check('v34: con la pantalla, la esfera y su peana no se dibujan; con Soporte = esfera, si',
+            not peana(c) and len(peana(dict(c, soporte=1))) == 1 and sm.obra(dict(c, soporte=1), eq) == e_['pos'])
+
+
+def evolucionar(m, conchas):
+    """v33: el mundo de FASE1 como si hubiera evolucionado hasta tener al menos 'conchas'
+    losetas debajo de cada celda (lo que harian sus ciclos con el tiempo), con la misma
+    superficie (_demo_conchas del motor). Solo para la autoprueba (que luego devuelve el
+    mundo). Devuelve las conchas enterradas."""
+    W = m.world()
+    n = m._demo_conchas(W, dict(m.cfg(), presencia_activa=False), W.get('t') or 0.0, conchas, range(m.N))
+    if n:
+        for k_ in ('inst', 'tiles', 'frame'):
+            m._CACHE[k_] = None
+    return n
+
+
+def evoluciona(F, demo, k, que):
+    """v33: para simular_demo, que juega sin el giro del planeta ni sus ciclos: un caso que
+    espera ve evolucionar la copia del mundo de la autoprueba como la veria en la sala
+    (conchas nuevas debajo; celdas vacias que el giro trae bajo la sala)."""
+    m = F.m
+    if 'conchas' in que:
+        evolucionar(m, len(m.world()['shells']) + 6)
+        return
+    W, c1 = F.W(), F.cfg()
+    cols, filas = m.rejilla_sala(c1)
+    centro = m.celda_de_casilla(W, c1, m.demo_casilla(c1, 6.0, 4.0))
+    lejos = m.celda_de_casilla(W, c1, m.demo_casilla(c1, 1.0, 7.0))
+    celdas = [x for x in [centro, lejos] + list(m.NEIGH[centro] if centro is not None else ()) if x is not None]
+    m._demo_despejar(W, dict(c1, presencia_activa=False), celdas)
+    for k_ in ('inst', 'tiles', 'frame'):
+        m._CACHE[k_] = None
 
 
 def componer_mundo(m, minimo=12):
@@ -1911,7 +2094,7 @@ def _prueba_genozilla(t, m, copy, caps, motor_):
                                                                           'Barsperturn'))
     vista0 = str(sala.par.Vista.eval())
     F = sm.Fase1(fase1)
-    res = sm.simular_demo(sm.cfg(), F)
+    res = sm.simular_demo(sm.cfg(), F, evoluciona=evoluciona)
     for k, bien, que in res:
         t.check('v24: GENoZilla %d %s: %s' % (k, caps[k]['nombre'], COMPRUEBA[k]), bien, que)
     t.check('v24: GENoZilla: se juegan los 13 capitulos', len(res) == 13, '%d' % len(res))
@@ -1959,17 +2142,56 @@ def prueba_demos(t, m):
     import copy
     motor_ = fase1.op('motor')
     Worig = copy.deepcopy(motor_.fetch('W', None))
-    compuesto = False
+    cambiado = False
     try:
-        compuesto = componer_mundo(m)
+        cambiado = componer_mundo(m)
+        _prueba_espera(t, m, motor_)            # v33: antes de evolucionar (con las conchas que haya)
+        cambiado = evolucionar(m, 6) > 0 or cambiado
         _prueba_demos(t, m, copy, motor_)
     finally:
-        if compuesto:
+        if cambiado:
             motor_.store('W', Worig)
             for k_ in ('inst', 'tiles', 'frame'):
                 m._CACHE[k_] = None
         m.foco_camara(None)
         m._CACHE.pop('foco_dir', None)
+
+
+def _prueba_espera(t, m, motor_):
+    """v33: ninguna demo toca el giro; y un caso al que le falta algo del mundo espera,
+    con el titulo que lo dice."""
+    con_giro = [cp['nombre'] for sec in sm.SECCIONES.values() for cp in sec['casos'] if 'Barsperturn' in cp['pars']]
+    t.check('v33: ninguna demo cambia Barsperturn (el planeta gira con los parametros de FASE1) ni guarda el '
+            'mundo para devolverlo',
+            not con_giro and 'Barsperturn' not in sm.PARS_CAPITULO and not hasattr(sm, 'GIRO_DEMO')
+            and not any('Barsperturn' in sec['pars'] for sec in sm.SECCIONES.values())
+            and 'W' not in (sm._guardado() or {}),
+            ', '.join(con_giro))
+    F = sm.Fase1(fase1)
+    W, c1 = F.W(), dict(F.cfg(fresca=True), conchas_persona=1)
+    lib = sm.casillas_libres(sm.cfg(), c1, m, sm.evitar_de(sm.equipos_o_defecto(sm.cfg())))
+    refs = sm.refs_caso('huella', 1, c1, F, W, lib)
+    hay = m.losetas_bajo(W, refs['fila_celdas'])
+    falta = sm.falta_caso('huella', 1, F, c1, W, refs)
+    t.check('v33: La fila cava pide 5 conchas debajo de la fila; sin ellas, espera (y no las entierra)',
+            (falta is None) == (hay >= 5) and (falta is None or 'conchas' in falta)
+            and m.losetas_bajo(F.W(), refs['fila_celdas']) == hay,
+            'hay %d: %s' % (hay, falta or 'puede cavar'))
+    g = dict(sm._GZ)
+    try:
+        sm._GZ.update(activo=True, cap=1, demo='huella', t_titulo=100.0, t0=100.0 + sm.TITULO, cabecera=None,
+                      espera=dict(cap=1, que='hacen falta 5 conchas debajo para que la fila cave (hay 2)',
+                                  desde=100.0, revisa=102.0))
+        txt = (sm.titulo_texto('nombre'), sm.titulo_texto('sub'), sm.alfa_titulo(130.0), sm.rotulo_texto(130.0),
+               sm.cabecera_lineas(F))
+    finally:
+        sm._GZ.clear()
+        sm._GZ.update(g)
+    t.check('v33: mientras espera, el titulo lo dice entero (Esperando que el mundo evolucione) para probar el '
+            'caso y que le falta',
+            txt[0] == 'Esperando que el mundo evolucione' and txt[1].startswith('para probar La fila cava: hacen falta')
+            and txt[2] == 1.0 and txt[3] == '' and 'esperando que el mundo evolucione' in txt[4],
+            ' | '.join(str(x) for x in txt).replace(chr(10), ' / '))
 
 
 def _prueba_demos(t, m, copy, motor_):
@@ -1984,13 +2206,13 @@ def _prueba_demos(t, m, copy, motor_):
         antes = dict((nm, F.par(nm)) for nm in nombres if F.par(nm) is not None)
         vista0 = str(sala.par.Vista.eval())
         sala.par.Demo = demo
-        res = sm.simular_demo(sm.cfg(), F, demo=demo)
+        res = sm.simular_demo(sm.cfg(), F, demo=demo, evoluciona=evoluciona)
         cs = sm.casos(demo)
         for k, bien, que in res:
             t.check('v30: demo %s, caso %d %s' % (demo, k + 1, cs[k]['nombre']), bien, que)
         W1 = motor_.fetch('W', None)
         despues = dict((nm, F.par(nm)) for nm in antes)
-        t.check('v30: demo %s: se juegan sus %d casos y al salir FASE1 queda como estaba (el mundo, los parametros '
+        t.check('v30: demo %s: se juegan sus %d casos y al salir FASE1 queda como estaba (la autoprueba devuelve el mundo; los parametros '
                 'y la Vista de la sala)' % (demo, len(cs)),
                 len(res) == len(cs) and W1 == W0 and despues == antes and str(sala.par.Vista.eval()) == vista0
                 and sm._guardado() is None,
@@ -2072,7 +2294,8 @@ print('  Ahora: mira salida_sala (todo en una imagen; Vista = entrada, visitante
 print('  cenital o juego). Modoluz = prueba recorre la luz en un minuto; Bruma, los haces en el aire.')
 print('  Demo: 1 paseo, 2 probabilidad (estrato humano), 3 huella, 4 llena, 5 genozilla: cada una con')
 print('  sus casos y su titulo (Vista = juego); con Siguecamara la camara de FASE1 sigue a las celdas.')
-print('  Demo = vacia (por defecto): FASE1 gira y cierra sus ciclos sola; las demas demos la toman.')
+print('  Demo = vacia (por defecto). Ninguna demo reinicia el mundo ni toca el giro: lo toman donde esta;')
+print('  si le falta algo a un caso, su titulo dice: Esperando que el mundo evolucione.')
 print('  Palmada: la oye FASE1. Personas y Ruidopublico para mas o menos publico.')
 print('  ' + sm.legend())
 print('=' * 66)
