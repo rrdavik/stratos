@@ -2,7 +2,7 @@
 Ejecuta los scripts de fase en un TouchDesigner simulado y resume lo que
 dicen: versiones, lineas FALLO y AUTOPRUEBA de cada uno.
 
-    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 40 (las que haya)
+    python3 pruebas/correr_fases.py            # desde cero: base y fases 3 a 41 (las que haya)
     python3 pruebas/correr_fases.py --hasta=fase24   # solo hasta esa fase
     python3 pruebas/correr_fases.py -v         # con todo el Textport
 
@@ -10,7 +10,7 @@ Despues de las fases simula una sesion corta (SEQ1, SEQ2 y bateria por el
 camino del MIDI real, fotograma a fotograma; desde la fase 21, onsets del
 microfono: palmadas de la sala virtual, que la sesion oye por su microfono
 virtual) y evalua todas las expresiones.
-Desde la fase 35, una partida del juego «El devorador» (fases 32 a 37, sin Godzilla): dos
+Desde la fase 35, una partida del juego «El devorador» (fases 32 a 37, sin Godzilla ni NefanyaMuto): dos
 rondas de 60 s con el monstruo, una fila de 3 que lo atrapa, una de 4 que lo
 ahoga, un rescate y un brote que crece, por el mismo camino (fotogramas, MIDI y
 la tabla de la sala simulada); al final, el recuento y las dos conchas con el
@@ -26,6 +26,10 @@ devolverlo. La fila de la huella, sin conchas, espera con el titulo «Esperando 
 el mundo evolucione»; la prueba cierra ciclos (evolucionar) y la fila cava.
 Luego relanza cada fase (de la 3 a la ultima) sobre el proyecto ya
 avanzado, como al refrescar el motor, y comprueba que el mundo se conserva.
+Con --hasta, todo eso solo hasta el corte: relanza las fases que corrio (no
+las de despues, que subirian el nivel) y monta la sala (y juega la partida y
+las demos) si el corte llega a la fase 40 (SALA_DESDE); antes, sin sala ni
+partida, que sin ella no parten del mundo de la bateria completa.
 Si existe sala_virtual.py, monta la maqueta de la sala tras las fases (la
 sesion la oye por su microfono virtual) y la relanza con ellas.
 """
@@ -48,8 +52,12 @@ FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_espec
          'fase25_huella.py', 'fase26_borrado.py', 'fase27_clasificacion.py', 'fase28_noche.py',
          'fase29_fila.py', 'fase30_relampago.py', 'fase31_historico.py',
          'fase32_juego.py', 'fase33_monstruo.py', 'fase34_zanjas.py', 'fase35_rescate.py', 'fase36_luzjuego.py',
-         'fase37_armas.py', 'fase38_trumpzilla.py', 'fase39_mal.py', 'fase40_godzilla.py']
+         'fase37_armas.py', 'fase38_trumpzilla.py', 'fase39_mal.py', 'fase40_godzilla.py',
+         'fase41_nefanyamuto.py']
 SALA = 'sala_virtual.py'           # no es una fase: la maqueta de la instalacion
+# con --hasta, la sala se monta tras las fases si el corte llega a esta (sus demos juegan a
+# GENoZilla con lo de las fases 32 a 40); antes no, y sin ella no se juega la partida simulada
+SALA_DESDE = 'fase40_godzilla.py'
 
 
 def correr(sim, archivo, verbose=False):
@@ -139,6 +147,10 @@ def partida(sim, fps=30.0, ronda=60.0):
     godz0 = godz.eval() if godz is not None else None   # autopruebas de las fases 32 a 39 (comun v91)
     if godz is not None:
         godz.val = False
+    nefa = getattr(base.par, 'Nefanyamuto', None)   # y sin NefanyaMuto (fase 41)
+    nefa0 = nefa.eval() if nefa is not None else None
+    if nefa is not None:
+        nefa.val = False
     paso = 60.0 / 120.0 / 4
     fpp = fps * paso
     notas = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76]
@@ -260,6 +272,8 @@ def partida(sim, fps=30.0, ronda=60.0):
     base.par.Tfila = tfila
     if godz is not None:
         godz.val = godz0
+    if nefa is not None:
+        nefa.val = nefa0
     poner([])
     for _ in range(int((base.par.Noche.eval() + 1.0) * fps)):     # que acabe la noche del ultimo entierro
         sim.fotograma(1.0 / fps)
@@ -449,14 +463,20 @@ def main():
     for f, k, v in dup:
         print('         %s: %s (lineas %s)' % (f, k, ', '.join(str(x) for x in v)))
     todo = todo and not dup
+    corridas = []
     for f in FASES:
         if not os.path.exists(os.path.join(REPO, f)):
             continue
         bien, _ = correr(sim, f, verbose)
         todo = todo and bien
+        corridas.append(f)
         if hasta and f.startswith(hasta):
             break
-    if os.path.exists(os.path.join(REPO, SALA)) and not hasta:
+    # la sala, tras las fases, tambien con --hasta si el corte llega a SALA_DESDE: la sesion la
+    # oye por su microfono y la partida y las demos parten del mundo que deja, el mismo que
+    # en la bateria completa (sin ella, la partida daba otro resultado: un falso FALLO)
+    con_sala = os.path.exists(os.path.join(REPO, SALA)) and (not hasta or SALA_DESDE in corridas)
+    if con_sala:
         bien, _ = correr(sim, SALA, verbose)
         todo = todo and bien
         # sala_virtual v27: la sala alimenta a FASE1 con su publico (Alimentar; lo prueba su
@@ -479,7 +499,10 @@ def main():
     print('%-6s sesion simulada: %d expresiones con error' % ('OK' if not malas else 'FALLO', len(malas)))
     for m_ in malas[:10]:
         print('         %s.%s: %s' % m_)
-    if m.cfg()['nivel'] >= 35:          # fases 32 a 37: una partida de dos rondas
+    if m.cfg()['nivel'] >= 35 and not con_sala and os.path.exists(os.path.join(REPO, SALA)):
+        print('       partida simulada: no se juega (--hasta corta antes de %s: sin la sala, su mundo no es '
+              'el de la bateria completa)' % SALA_DESDE)
+    elif m.cfg()['nivel'] >= 35:        # fases 32 a 37: una partida de dos rondas
         with contextlib.redirect_stdout(io.StringIO()):
             h = partida(sim)
         rs = h['resultados']
@@ -538,7 +561,9 @@ def main():
     sala = sim.op('/project1/SALA')
     if sala is not None and sala.op('con_titulo') is not None and sala.op('con_rotulo_demo') is not None:
         sala.op('con_titulo').inputConnectors[1].connect(sala.op('con_rotulo_demo'))
-    for f in FASES[1:] + [SALA]:
+    # solo lo que se corrio: con --hasta, ni las fases de despues del corte (subirian el nivel
+    # del proyecto) ni la sala si no se monto
+    for f in corridas[1:] + ([SALA] if con_sala else []):
         if not os.path.exists(os.path.join(REPO, f)):
             continue
         bien, _ = correr(sim, f, verbose)

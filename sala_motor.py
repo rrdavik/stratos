@@ -165,9 +165,13 @@
 #               proyector colgado del techo delante. Las vistas (entrada, visitante) miran a
 #               la pantalla; la peana de la esfera no se dibuja. La fila 'esfera' de la
 #               tabla equipos sigue: es el sitio que la gente deja libre junto al estrobo.
+#   v23         GENOZILLA SIN NEFANYAMUTO. Con la fase 41, NefanyaMuto sale solo cuando el
+#               mundo esta construido al 50 %: sobre el mundo vivo de FASE1 se colaba en los
+#               capitulos (se comia el brote del Rescate). Cada capitulo de GENoZilla lo
+#               apaga, como pone Umbralaparicion a 1, y al salir vuelve como estaba.
 # =============================================================================
 
-SALA_VERSION = 'sala v22'
+SALA_VERSION = 'sala v23'
 
 import math
 
@@ -2115,7 +2119,7 @@ PARS_DEMO = dict(Fuente='simulada', Modojuego=True)
 PARS_SECCION = dict(Fuente='simulada', Modojuego=False)
 PARS_CAPITULO = sorted(set(k for sec in SECCIONES.values() for cp in sec['casos'] for k in cp['pars'])
                        | set(k for sec in SECCIONES.values() for k in sec['pars']) | set(ARMAS)
-                       | {'Umbralaparicion'})       # v21: Barsperturn, nunca (el giro es el de FASE1)
+                       | {'Umbralaparicion', 'Nefanyamuto'})       # v21: Barsperturn, nunca (el giro es el de FASE1)
 
 
 def pars_demo(demo):
@@ -2575,6 +2579,7 @@ def _cap_pars(F, k, c):
     if demo == 'genozilla':
         quiere = dict((a, False) for a in ARMAS)
         quiere['Umbralaparicion'] = 1.0     # el monstruo aparece cuando lo dice el guion
+        quiere['Nefanyamuto'] = False       # v23: sin NefanyaMuto (fase 41): el guion es de Trumpzilla
     else:
         quiere = dict(SECCIONES[demo]['pars'])
     # v21: ninguna demo toca el giro (Barsperturn): el planeta gira con los parametros de FASE1
