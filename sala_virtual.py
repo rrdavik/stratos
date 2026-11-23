@@ -209,6 +209,11 @@ LAS DEMOS (v30, sala v18, motor v140)
   vistas entrada, juego y visitante la miran; con la pantalla, la esfera y su
   peana no se dibujan (render_sala y render_plano eligen una u otra).
 
+  v35 (sala v23): GENOZILLA SIN NEFANYAMUTO. Con la fase 41, NefanyaMuto sale solo
+  cuando el mundo esta construido al 50 %; sobre el mundo vivo de FASE1 se colaba
+  en los capitulos. Cada capitulo de GENoZilla lo apaga (como pone Umbralaparicion
+  a 1) y al salir vuelve como estaba.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -223,7 +228,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v34  (la obra, proyectada en una pantalla grande arriba a la izquierda; la esfera, opcional)'
+VERSION = 'sala_virtual v35  (GENoZilla sin NefanyaMuto: cada capitulo lo apaga y lo devuelve al salir)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 

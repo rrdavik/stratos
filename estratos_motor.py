@@ -318,6 +318,14 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v142 (fase 41): NEFANYAMUTO, el segundo monstruo del mal (un MUTO con
+#                 la cabeza de NefanyaMuto). Aparece con la cara visible construida al 50 %
+#                 (Umbralnefa) y siembra el mal como Trumpzilla, por su cuenta. Si se
+#                 juntan, bailan Tiemposbaile tiempos (8), uno de los dos lanza su golpe
+#                 especial (Trumpzilla absorbe para el mal las construcciones a dos celdas;
+#                 NefanyaMuto enciende su anillo y abre una zanja de cinco celdas hacia
+#                 Trumpzilla, tres conchas en lo mas hondo), se giran y se van por caminos
+#                 contrarios. Doce caras (las diez y despiste y pasmado).
 #                 Motor v141 (sala v21): EL GUION DE GENOZILLA, SOBRE EL MUNDO VIVO. Con
 #                 vivo (la sala lo pide siempre), guion_demo('inicio') no toca el mundo de
 #                 FASE1: ni lo cambia por la copia de la entrada (_demo_mundo), ni lo vacia
@@ -382,7 +390,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v141'
+MOTOR_VERSION = 'motor v142'
 
 import math
 import time as _time
@@ -636,6 +644,9 @@ DEFAULT_CFG = dict(
     # fase 40: Godzilla, el monstruo de la creacion
     godzilla=1, godzilla_sala=0, t_vacia=15.0, mal_godzilla=1, pasos_lucha=8, tregua=16, alto_godzilla=0.8,
     emocion_godzilla='auto',
+    # fase 41: NefanyaMuto, el segundo monstruo del mal
+    nefanya=1, umbral_nefa=0.5, tiempos_baile=8, golpe_baile=0, radio_absorbe=2, largo_zanja_nefa=5,
+    prof_zanja_nefa=3, alto_nefa=0.9, emocion_nefa='auto',
 )
 
 
@@ -17558,7 +17569,8 @@ def valores_dmx(W, cfg, now, filas):
 
 MAL = 4
 SPECIES_NAME[MAL] = 'mal'
-ESTADOS_MON = ('espera', 'aparece', 'busca', 'devora', 'cae', 'muere', 'lucha', 'se_va')    # v123: lucha, se_va
+ESTADOS_MON = ('espera', 'aparece', 'busca', 'devora', 'cae', 'muere', 'lucha', 'se_va',  # v123: lucha, se_va
+               'baile')                                                                   # v142: baile
 # casi negro, croma baja (lejos del cian, el ambar, los verdes, el azul y la paleta humana)
 COL_MAL = (0.050, 0.044, 0.056)
 COL_MONSTRUO = (0.085, 0.060, 0.095)
@@ -17668,6 +17680,9 @@ def fin_de_ronda(W, cfg, now):
     if 'bien' in J:                     # fase 40: Godzilla tambien espera a la ronda siguiente
         J['bien'] = bien_nuevo(0, cfg)
         J['lucha'] = J['tregua'] = None
+    if 'nefa' in J:                     # fase 41: NefanyaMuto tambien
+        J['nefa'] = nefa_nuevo(0, cfg)
+        J['baile'] = J['tregua_baile'] = None
     J['rescates'] = {}
     J['rescate_cas'] = {}
     J['paso'] = 0
@@ -17706,7 +17721,7 @@ def juego_al_enterrar(W, cfg, now):
     J['rescate_cas'] = {}
     J['filas'] = {}
     W.pop('bloqueadas', None)
-    for m in (J['mon'], J.get('bien')):
+    for m in (J['mon'], J.get('bien'), J.get('nefa')):     # v142: y NefanyaMuto
         if m is None:
             continue
         m['objetivo'], m['camino'], m['mov'] = None, [], 0.0
@@ -17753,6 +17768,8 @@ def juego_avanzar(W, cfg, now, semis):
         monstruo_reloj(W, cfg, now)
     if cfg['nivel'] >= 40:              # fase 40: Godzilla aparece con la sala vacia (y se va si llega gente)
         godzilla_reloj(W, cfg, now)
+    if cfg['nivel'] >= 41:              # fase 41: NefanyaMuto aparece con el mundo construido al 50 %
+        nefa_reloj(W, cfg, now)
     J['semi_f'] += max(0.0, float(semis))
     k = 0
     while J['semi_f'] >= 1.0 - 1e-9 and k < SEMIS_MAX:
@@ -17780,6 +17797,11 @@ def semicorchea_juego(W, cfg, now):
         encuentro(W, cfg, now)
         mover_godzilla(W, cfg, now)
         encuentro(W, cfg, now)
+    if cfg['nivel'] >= 41 and nefa_on(W, cfg):     # fase 41: NefanyaMuto anda; junto a Trumpzilla, el baile
+        encuentro_baile(W, cfg, now)
+        mover_monstruo(W, cfg, now, nefa_estado(W, cfg))
+        encuentro_baile(W, cfg, now)
+        baile_semi(W, cfg, now)
     if J['semis'] % max(1, int(cfg['paso_juego'])) == 0:
         J['paso'] += 1
         paso_de_juego(W, cfg, now)
@@ -17796,6 +17818,8 @@ def paso_de_juego(W, cfg, now):
     if cfg['nivel'] >= 40:              # fase 40: Godzilla devora el mal y crea; la lucha cuenta sus pasos
         godzilla_paso(W, cfg, now)
         lucha_paso(W, cfg, now)
+    if cfg['nivel'] >= 41 and nefa_on(W, cfg):     # fase 41: NefanyaMuto devora y siembra el mal
+        monstruo_paso(W, cfg, now, nefa_estado(W, cfg))
 
 
 def _giro_juego(W, cfg):
@@ -18134,14 +18158,14 @@ def need_mon(W, cfg, m, nxt=None):
     return paso_mon(cfg, m) * k
 
 
-def mover_monstruo(W, cfg, now):
-    """Una semicorchea: el monstruo avanza por su camino una celda cada
+def mover_monstruo(W, cfg, now, m=None):
+    """Una semicorchea: el monstruo (motor v142: m, o Trumpzilla; NefanyaMuto igual) avanza por su camino una celda cada
     Pasomonstruo (Pasogrande) semicorcheas; entrar en una zanja, o salir de su
     fondo, cuesta Costezanja veces mas. Motor v126: con Saltosmonstruo se dibuja a
     saltos de media celda (pos_monstruo); la logica no cambia: sigue en su celda
     hasta que mov llega a need."""
     J = W['juego']
-    m = J['mon']
+    m = J['mon'] if m is None else m
     if m['estado'] not in ('aparece', 'busca', 'devora', 'cae') or m['celda'] is None:
         return
     if parado(W, cfg, m, now) or not m['camino']:
@@ -18190,13 +18214,13 @@ def caer(W, cfg, m, now):
     m['estado'] = 'cae'
 
 
-def monstruo_paso(W, cfg, now):
-    """Un paso de juego del monstruo: el recalculo (cada Recalculo pasos y
+def monstruo_paso(W, cfg, now, m=None):
+    """Un paso de juego del monstruo (motor v142: m, o Trumpzilla): el recalculo (cada Recalculo pasos y
     siempre que vacia una celda) y el devorar (Ritmodevora o Ritmogrande
     escalones de su objetivo, cuando esta en el)."""
     J = W['juego']
-    m = J['mon']
-    if m['estado'] in ('espera', 'muere', 'lucha') or m['celda'] is None:
+    m = J['mon'] if m is None else m
+    if m['estado'] in ('espera', 'muere', 'lucha', 'baile') or m['celda'] is None:
         return
     if m['estado'] == 'cae' and m.get('cae_paso') == J['paso']:
         return                          # acaba de caer en este paso
@@ -18322,6 +18346,8 @@ def build_juego(W, cfg, now, out):
         out['emblemas_mal'] = []
     if lvl >= 40:
         out['godzilla'] = []
+    if lvl >= 41:
+        out['nefanyamuto'] = []
     if not juego_on(W, cfg):
         if cfg.get('marca_publico', 1):     # motor v132: la marca del publico, tambien sin juego
             out['marcas'] = filas_marcas(W, cfg)
@@ -18349,6 +18375,8 @@ def build_juego(W, cfg, now, out):
             out['trumpzilla'] = filas_trumpzilla(W, cfg, m, now)
         if lvl >= 40 and cfg.get('godzilla', 1) and J.get('bien') is not None:     # fase 40: Godzilla
             out['godzilla'] = filas_godzilla(W, cfg, J['bien'], now)
+        if lvl >= 41 and cfg.get('nefanya', 1) and J.get('nefa') is not None:     # fase 41: NefanyaMuto
+            out['nefanyamuto'] = filas_nefa(W, cfg, J['nefa'], now)
         if cfg.get('ver_objetivo', 1) and m['objetivo'] is not None and m['estado'] not in ('espera', 'muere'):
             c = m['objetivo']
             r0 = base_radius(W, cfg, c)
@@ -18414,7 +18442,7 @@ def destino_mon(W, cfg, m):
     entonces ya es su celda); sin, continuo (mov / need, hasta 0,95). Con f 0, siguiente
     None. None en la lucha (pos_monstruo la dibuja aparte) o sin celda."""
     c = m.get('celda')
-    if c is None or m['estado'] == 'lucha':
+    if c is None or m['estado'] in ('lucha', 'baile'):
         return None
     if not m.get('camino') or m['estado'] == 'cae':
         return [c, None, 0.0]
@@ -18444,7 +18472,7 @@ def seguir_saltos(W, cfg, now):
     celda, la celda entera, otro camino), empieza un salto de Tiemposalto s desde el
     destino de antes. Si salta a otro sitio (aparece, la demo lo pone), sin salto."""
     J = W.get('juego') or {}
-    for m in (J.get('mon'), J.get('bien')):
+    for m in (J.get('mon'), J.get('bien'), J.get('nefa')):
         if m is None:
             continue
         d = destino_mon(W, cfg, m) if cfg.get('saltos_monstruo', 1) else None
@@ -18472,7 +18500,7 @@ def bote_monstruo(W, cfg, m, now=None):
     """Motor v126: la altura del bote del salto en curso, en veces el alto del
     monstruo (Botesalto en el centro del salto; 0 sin salto). La suma quien lo
     dibuja (su sombra se queda en el suelo)."""
-    if m.get('celda') is None or m['estado'] == 'lucha':
+    if m.get('celda') is None or m['estado'] in ('lucha', 'baile'):
         return 0.0
     u = _avance_salto(W, cfg, m, now, destino_mon(W, cfg, m))
     if u is None:
@@ -18489,7 +18517,7 @@ def pos_monstruo(W, cfg, m, now=None):
     c = m['celda']
     n = normal_i(c)
     r = base_radius(W, cfg, c)
-    if m['estado'] == 'lucha':
+    if m['estado'] in ('lucha', 'baile'):      # v142: en el baile, igual: cara a cara en el borde
         now = (W.get('t') or 0.0) if now is None else now
         x, borde = m.get('rival'), LUCHA_BORDE
         if x is None or x == c:         # en la misma celda: cada uno, hacia donde venia
@@ -18563,11 +18591,11 @@ def cavar_zanja(W, cfg, c, prof, now):
         esc = W.setdefault('esc_celdas', {})
         esc[c] = esc.get(c, 0) + 1
         J['rescates'].pop(c, None)
-    m = J['mon']
-    if m['celda'] == c and m['estado'] not in ('espera', 'muere'):
-        caer(W, cfg, m, now)
-    elif m['objetivo'] == c:
-        m['recalc'] = 10 ** 6
+    for m in monstruos_mal(J):          # v142: Trumpzilla y NefanyaMuto
+        if m['celda'] == c and m['estado'] not in ('espera', 'muere'):
+            caer(W, cfg, m, now)
+        elif m['objetivo'] == c:
+            m['recalc'] = 10 ** 6
     J['ev']['zanja'] = dict(t=now, celda=int(c), prof=J['zanjas'][c])
     W['dirty'] = True
     return len(fuera)
@@ -18609,11 +18637,11 @@ def registrar_zanja(W, cfg, c, prof, now):
     if prof <= 0:
         return
     J['zanjas'][c] = max(int(prof), J['zanjas'].get(c, 0))
-    m = J['mon']
-    if m['celda'] == c and m['estado'] not in ('espera', 'muere', 'cae'):
-        caer(W, cfg, m, now)
-    elif m['objetivo'] == c:
-        m['recalc'] = 10 ** 6
+    for m in monstruos_mal(J):          # v142: Trumpzilla y NefanyaMuto
+        if m['celda'] == c and m['estado'] not in ('espera', 'muere', 'cae'):
+            caer(W, cfg, m, now)
+        elif m['objetivo'] == c:
+            m['recalc'] = 10 ** 6
 
 
 def zanja_cavar(W, cfg, fila, zj, now):
@@ -18726,11 +18754,11 @@ def inundar_zanjas(W, cfg, now):
                 capv = J['zanjas'][v] * om
                 J['agua'][v] = min(capv, J['agua'].get(v, 0) + int(cfg['desborde_agua']))
     W['dirty'] = True
-    m = J['mon']
-    c = m['celda']
-    if c is not None and m['estado'] not in ('espera', 'muere') and c in J['agua'] and c in J['zanjas'] \
-            and J['agua'][c] >= cfg['ahoga'] * J['zanjas'][c] * om - 1e-9:
-        morir(W, cfg, m, now)
+    for m in monstruos_mal(J):          # v142: Trumpzilla y NefanyaMuto se ahogan
+        c = m['celda']
+        if c is not None and m['estado'] not in ('espera', 'muere') and c in J['agua'] and c in J['zanjas'] \
+                and J['agua'][c] >= cfg['ahoga'] * J['zanjas'][c] * om - 1e-9:
+            morir(W, cfg, m, now)
 
 
 # --- el rescate (fase 35) ------------------------------------------------------
@@ -18929,7 +18957,8 @@ def rayo_relampago(W, cfg, celdas, now):
 EMOCIONES_MON = ('serio', 'enfado', 'furia', 'rie', 'carcajada', 'susto', 'mueca', 'llora', 'panico', 'calma')
 ATLAS_MON = (4, 3)              # columnas y filas del atlas (celdas de 192 x 256)
 ASPECTO_SPRITE = 0.75           # ancho / alto de una celda del atlas
-ANIMS_MON = ('respira', 'camina', 'devora', 'tiembla', 'hunde', 'piedra', 'aturdido', 'lucha', 'adios')  # v123
+ANIMS_MON = ('respira', 'camina', 'devora', 'tiembla', 'hunde', 'piedra', 'aturdido', 'lucha', 'adios',  # v123
+             'baile', 'anillo')                                    # v142 (fase 41)
 SPRITE_SOMBRA = 256
 SOMBRA_OPACIDAD = 0.45
 T_SUSTO = 1.5                   # s con cara de susto tras caer en una zanja
@@ -18977,6 +19006,8 @@ def emocion_mon(W, cfg, m, now):
         e, a = 'panico', 'hunde'
     elif m['estado'] == 'lucha':        # fase 40: manotazos (alterna con Godzilla: da y recibe)
         e, a = (('mueca', 'tiembla') if manotazo(m, now) == 0 else ('furia', 'lucha'))
+    elif m['estado'] == 'baile':        # fase 41: baila con NefanyaMuto; el golpe especial
+        e, a = emocion_baile(W, cfg, m, now, 'trumpzilla')
     elif m.get('piedra') is not None and now < m['piedra']:
         e, a = 'calma', 'piedra'
     elif m.get('aturdido') is not None and now < m['aturdido']:
@@ -19010,7 +19041,7 @@ def rumbo_mon(W, cfg, m, p, n):
     camino, la direccion de su ultimo paso; sin paso, el este. Motor v123: en la
     lucha, hacia su rival."""
     c = m['celda']
-    r = m.get('rival') if m['estado'] == 'lucha' else None
+    r = m.get('rival') if m['estado'] in ('lucha', 'baile') else None
     if r is not None and r != c:
         d = _hacia(n, p, _mul(normal_i(r), _len(p)))
     elif m['camino'] and m['camino'][0] != c:
@@ -19038,7 +19069,7 @@ def filas_trumpzilla(W, cfg, m, now):
     return _filas_sprite(W, cfg, m, now, e, a, f, cfg.get('alto_sprite', 0.8))
 
 
-def _filas_sprite(W, cfg, m, now, e, a, f, alto):
+def _filas_sprite(W, cfg, m, now, e, a, f, alto, caras=EMOCIONES_MON):     # v142: caras, las de su atlas
     """El sprite (cara e, animacion a) y su sombra; f, lo hundido (0 a 1, sin sombra
     si > 0); alto, en celdas por tam. Lo comparten Trumpzilla y Godzilla (v123)."""
     p, n = pos_monstruo(W, cfg, m, now)
@@ -19055,7 +19086,7 @@ def _filas_sprite(W, cfg, m, now, e, a, f, alto):
                             (SOMBRA_OPACIDAD, 0.0, 0.0)) + [float(SPRITE_SOMBRA)])
     b = bote_monstruo(W, cfg, m, now) if f <= 0.0 else 0.0     # motor v126: el bote del salto (la sombra, abajo)
     rows.append(_fila_m(_add(p, n, (b - f) * h), marco, w, h, w, (k, k, k))
-                + [float(EMOCIONES_MON.index(e) + 16 * ANIMS_MON.index(a))])
+                + [float(caras.index(e) + 16 * ANIMS_MON.index(a))])
     return rows
 
 
@@ -19717,7 +19748,8 @@ def bien_estado(W, cfg):
 
 def activo_mon(m):
     """El monstruo esta en el planeta y puede pelear (ni esperando, ni muriendo, ni yendose)."""
-    return m is not None and m.get('celda') is not None and m['estado'] in ('aparece', 'busca', 'devora', 'lucha')
+    return m is not None and m.get('celda') is not None and m['estado'] in ('aparece', 'busca', 'devora', 'lucha',
+                                                                         'baile')
 
 
 def rival_de(W, m):
@@ -19752,17 +19784,27 @@ def comestible_bien(W, cfg, g, c):
 
 
 def muro_tregua(W, cfg, m):
-    """Fase 40: durante la tregua, la celda del rival y sus vecinas son muro (menos la propia)."""
+    """Fase 40: durante la tregua, la celda del rival y sus vecinas son muro (menos la propia).
+    Motor v142: dos treguas, la de la lucha (Trumpzilla y Godzilla) y la del baile
+    (Trumpzilla y NefanyaMuto)."""
     if cfg['nivel'] < 40:
         return set()
     J = W.get('juego') or {}
-    T = J.get('tregua')
-    if not T or J.get('paso', 0) >= T.get('hasta', 0):
-        return set()
-    r = rival_de(W, m)
-    if not activo_mon(r):
-        return set()
-    return ({r['celda']} | set(NEIGH[r['celda']])) - {m['celda']}
+    out = set()
+    for clave, a, b in (('tregua', 'mon', 'bien'), ('tregua_baile', 'mon', 'nefa')):
+        T = J.get(clave)
+        if not T or J.get('paso', 0) >= T.get('hasta', 0):
+            continue
+        if m is J.get(a):
+            r = J.get(b)
+        elif m is J.get(b):
+            r = J.get(a)
+        else:
+            continue
+        if not activo_mon(r):
+            continue
+        out |= ({r['celda']} | set(NEIGH[r['celda']])) - {m['celda']}
+    return out
 
 
 def en_tregua(W):
@@ -20190,6 +20232,510 @@ def _legend_lucha(W, c):
     if en_tregua(W):
         return '  LUCHA    tregua %d pasos   (luchas %d)' % (J['tregua']['hasta'] - J['paso'], J.get('luchas', 0))
     return '  LUCHA    -   (luchas %d)' % J.get('luchas', 0)
+
+
+# =============================================================================
+# 1. NUCLEO - NefanyaMuto, el segundo monstruo del mal (fase 41, motor v142)
+# =============================================================================
+# Un MUTO con la cabeza de NefanyaMuto: siembra el mal como Trumpzilla, cada uno por su
+# cuenta. Si se juntan, bailan y uno de los dos lanza su golpe especial.
+#   APARECE    cuando la cara visible esta construida (del publico) Umbralnefa o mas
+#              (0,5: al 50 %), en la celda vacia de la cara visible por la que entran
+#              las celdas con el giro, lejos de Trumpzilla y de Godzilla. Si se ahoga,
+#              vuelve Esperamonstruo s despues (si el mundo sigue construido a ese punto).
+#   DEVORA     como Trumpzilla y con sus mismas reglas (el objetivo, el ritmo, el dano,
+#              el paso, el tamano, solo por tierra, la luz) y deja brotes del mal. Cae en
+#              las zanjas del publico y se ahoga como el. Las armas de la fase 37 son
+#              solo para Trumpzilla.
+#   BAILE      si Trumpzilla y NefanyaMuto quedan en celdas contiguas (o en la misma),
+#              fuera de su tregua: se acercan al borde mirandose y bailan Tiemposbaile
+#              tiempos (8; un tiempo, Pasos por tiempo semicorcheas): ni andan ni
+#              devoran. Luego uno de los dos (Golpebaile: al azar, determinista, o uno
+#              fijo) lanza SU GOLPE ESPECIAL y se queda GOLPE_TIEMPOS tiempos en la pose:
+#                Trumpzilla  ABSORBE para el mal todas las construcciones (las celdas del
+#                            publico) a Radioabsorbe celdas (2) o menos de cualquiera de
+#                            los dos: pasan a ser del mal con lo que tenian (la obra del
+#                            mal empieza en su etapa).
+#                NefanyaMuto se le enciende el ANILLO (un pulso electromagnetico alrededor
+#                            de la cabeza) y abre una ZANJA delante de el, hacia
+#                            Trumpzilla: Largozanjanefa celdas (5) en linea, con
+#                            Profzanjanefa conchas (3) en la mas honda (la del medio) y
+#                            menos hacia los extremos. Si Trumpzilla queda dentro, cae.
+#              Despues se giran y se van por caminos contrarios (cada uno a la vecina
+#              mas lejos del otro) y hay Tregua pasos en que no se cruzan ni vuelven a
+#              bailar.
+#   EMOCIONES  el atlas sprites/nefanyamuto_emociones.png: las diez caras de
+#              Trumpzilla y dos de no enterarse de nada (despiste, pasmado). En el baile,
+#              rie y carcajada a cada tiempo (animacion baile, los dos); en el golpe,
+#              furia el que lo lanza (NefanyaMuto con el anillo) y el otro susto (o
+#              despiste, NefanyaMuto). Sin nada que comer, pasmado; por la cara oculta,
+#              despiste.
+# Todo va en W['juego']['nefa'], W['juego']['baile'] y W['juego']['tregua_baile'] (se
+# vacian con el modo y en cada ronda) y en la geometria 'nefanyamuto' (mat_nefanyamuto:
+# el shader de Trumpzilla con su atlas). Con Nefanyamuto apagado, el juego es el de la
+# fase 40.
+
+EMOCIONES_NEFA = EMOCIONES_MON + ('despiste', 'pasmado')
+GOLPES_BAILE = ['azar', 'trumpzilla', 'nefanyamuto']
+GOLPE_TIEMPOS = 2               # tiempos que dura la pose del golpe especial antes de irse
+T_ANILLO = 2.5                  # s que brilla el anillo de NefanyaMuto
+_VISTA_NEFA = {}
+
+
+def nefa_on(W, cfg):
+    return cfg['nivel'] >= 41 and bool(cfg.get('nefanya', 1)) and juego_on(W, cfg)
+
+
+def nefa_nuevo(n, cfg):
+    x = mon_nuevo(n, cfg.get('tam_inicial', 0.5))
+    x.update(rival=None, retira=None, anillo=None)
+    return x
+
+
+def nefa_estado(W, cfg):
+    J = W['juego']
+    x = J.get('nefa')
+    if x is None:
+        x = J['nefa'] = nefa_nuevo(0, cfg)
+    return x
+
+
+def monstruos_mal(J):
+    """Los monstruos del mal que estan en juego: Trumpzilla y, si hay, NefanyaMuto."""
+    return [x for x in (J.get('mon'), J.get('nefa')) if x is not None]
+
+
+def celda_aparicion_nefa(W, cfg, vis=None):
+    """La celda vacia de la cara visible mas cercana al borde de entrada (como
+    Trumpzilla, con otro desempate), lejos de Trumpzilla y de Godzilla. En tierra."""
+    J = W['juego']
+    vis = cara_visible(cfg) if vis is None else vis
+    lejos = set()
+    for x in (J.get('mon'), J.get('bien')):
+        if x is not None and x.get('celda') is not None and x['estado'] != 'espera':
+            lejos |= {x['celda']} | set(NEIGH[x['celda']])
+    mar = mar_mon(W, cfg)
+    libre = []
+    for grupo in (vis, range(N)):
+        libre = [i for i in grupo if W['occ'][i] <= 0 and i not in J['zanjas'] and i not in mar and i not in lejos]
+        if libre:
+            break
+    if not libre:                       # todo lo vacio es mar: en una isla
+        libre = [i for i in vis if W['occ'][i] > 0 and W['sp'][i] != MAL and i not in J['zanjas'] and i not in lejos]
+    if not libre:
+        return None
+    lon0 = float(cfg.get('lon_central', 0.0))
+    sg = J.get('giro', 1.0)
+    n = nefa_estado(W, cfg)['n']
+
+    def borde(i):
+        d = (lonlat_celda(i)[1] - lon0 + 180.0) % 360.0 - 180.0
+        return (sg * d, _hash01(i, n + 1, 41))
+    return max(libre, key=borde)
+
+
+def aparecer_nefa(W, cfg, now, celda):
+    J = W['juego']
+    viejo = nefa_estado(W, cfg)
+    x = J['nefa'] = nefa_nuevo(viejo['n'] + 1, cfg)
+    x.update(estado='aparece', celda=int(celda), t_estado=now)
+    recalcular_objetivo(W, cfg, x, now)
+    J['ev']['nefanyamuto'] = dict(t=now, celda=int(celda), n=x['n'])
+    W['aviso'] = 'NefanyaMuto #%d en la celda %d' % (x['n'], celda)
+    W['dirty'] = True
+    return x
+
+
+def nefa_reloj(W, cfg, now):
+    """Cada fotograma: ahogado, vuelve tras Esperamonstruo s; esperando, aparece cuando la
+    cara visible esta construida Umbralnefa (al 50 %)."""
+    J = W['juego']
+    if not nefa_on(W, cfg):
+        x = J.get('nefa')
+        if x is not None and x['estado'] != 'espera':      # apagado: fuera del planeta
+            J['nefa'] = nefa_nuevo(x['n'], cfg)
+            if J.get('baile'):
+                terminar_baile(W, cfg, now)
+        return
+    x = nefa_estado(W, cfg)
+    if x['estado'] == 'muere':
+        if x['t_muerte'] is None or now - x['t_muerte'] >= cfg['espera_monstruo'] - 1e-9:
+            x['estado'] = 'espera'
+            x['celda'] = None
+    if x['estado'] != 'espera':
+        return
+    vis = cara_visible(cfg)
+    if construida_visible(W, cfg, vis) >= float(cfg.get('umbral_nefa', 0.5)) - 1e-9:
+        c = celda_aparicion_nefa(W, cfg, vis)
+        if c is not None:
+            aparecer_nefa(W, cfg, now, c)
+            encuentro_baile(W, cfg, now)
+
+
+# --- el baile y los golpes especiales (fase 41) ------------------------------------
+
+def tiempo_semis(cfg):
+    return max(1, int(cfg.get('steps_per_beat', 4)))
+
+
+def en_tregua_baile(W):
+    J = W['juego']
+    T = J.get('tregua_baile')
+    return bool(T) and J['paso'] < T.get('hasta', 0)
+
+
+def encuentro_baile(W, cfg, now):
+    """Si Trumpzilla y NefanyaMuto quedan en celdas contiguas (o en la misma), fuera de su
+    tregua y sin estar Trumpzilla petrificado ni aturdido, empieza el baile."""
+    if not nefa_on(W, cfg):
+        return False
+    J = W['juego']
+    m, x = J['mon'], J.get('nefa')
+    if J.get('baile') or x is None or en_tregua_baile(W):
+        return False
+    libres = ('aparece', 'busca', 'devora')
+    if m['estado'] not in libres or x['estado'] not in libres:
+        return False
+    if m['celda'] is None or x['celda'] is None or parado(W, cfg, m, now):
+        return False
+    if m['celda'] != x['celda'] and x['celda'] not in NEIGH[m['celda']]:
+        return False
+    empezar_baile(W, cfg, now)
+    return True
+
+
+def empezar_baile(W, cfg, now):
+    J = W['juego']
+    m, x = J['mon'], J['nefa']
+    J['bailes'] = J.get('bailes', 0) + 1
+    J['baile'] = dict(t0=now, semi0=J['semis'], mon=m['celda'], nefa=x['celda'], n=J['bailes'],
+                      golpe=None, t_golpe=None, semi_golpe=None)
+    for a, b in ((m, x), (x, m)):
+        a.update(estado='baile', rival=b['celda'], t_estado=now, mov=0.0, retira=None)
+    J['ev']['baile'] = dict(t=now, mon=m['celda'], nefa=x['celda'])
+    W['aviso'] = 'baile: Trumpzilla (celda %d) y NefanyaMuto (celda %d)' % (m['celda'], x['celda'])
+    W['dirty'] = True
+
+
+def quien_golpea(W, cfg):
+    """'trumpzilla' o 'nefanyamuto'. Golpebaile al azar: determinista (el numero del
+    baile y las celdas), para que la misma partida de lo mismo."""
+    J = W['juego']
+    fijo = GOLPES_BAILE[int(cfg.get('golpe_baile', 0)) % len(GOLPES_BAILE)]
+    if fijo != 'azar':
+        return fijo
+    B = J['baile']
+    return 'trumpzilla' if _hash01(B['n'], B['mon'], B['nefa'], 41) < 0.5 else 'nefanyamuto'
+
+
+def baile_semi(W, cfg, now):
+    """Cada semicorchea: tras Tiemposbaile tiempos, el golpe especial; GOLPE_TIEMPOS
+    tiempos despues, se van. Si uno deja de bailar (se ahoga, cae, se apaga), se acaba."""
+    J = W['juego']
+    B = J.get('baile')
+    if not B:
+        return
+    m, x = J['mon'], J.get('nefa')
+    if x is None or m['estado'] != 'baile' or x['estado'] != 'baile' or not nefa_on(W, cfg):
+        terminar_baile(W, cfg, now)
+        return
+    ts = tiempo_semis(cfg)
+    if B['golpe'] is None:
+        if J['semis'] - B['semi0'] >= int(cfg.get('tiempos_baile', 8)) * ts:
+            golpe_especial(W, cfg, now, quien_golpea(W, cfg))
+    elif J['semis'] - B['semi_golpe'] >= GOLPE_TIEMPOS * ts:
+        terminar_baile(W, cfg, now)
+
+
+def golpe_especial(W, cfg, now, quien):
+    J = W['juego']
+    B = J['baile']
+    B.update(golpe=quien, t_golpe=now, semi_golpe=J['semis'])
+    golpes = J.setdefault('golpes', dict(trumpzilla=0, nefanyamuto=0))
+    golpes[quien] = golpes.get(quien, 0) + 1
+    if quien == 'trumpzilla':
+        n = absorber_mal(W, cfg, now)
+        W['aviso'] = 'golpe de Trumpzilla: absorbe %d construcciones para el mal' % n
+    else:
+        celdas = zanja_nefa(W, cfg, now)
+        W['aviso'] = 'golpe de NefanyaMuto: el anillo y una zanja de %d celdas' % len(celdas)
+    W['dirty'] = True
+
+
+def absorber_mal(W, cfg, now):
+    """El golpe de Trumpzilla: las construcciones (celdas del publico) a Radioabsorbe
+    celdas o menos de cualquiera de los dos pasan al mal con lo que tenian."""
+    J = W['juego']
+    R = max(0, int(cfg.get('radio_absorbe', 2)))
+    zona = set()
+    for x in (J['mon'], J.get('nefa')):
+        if x is not None and x.get('celda') is not None:
+            zona |= set(c for c, _ in rings(x['celda'], R))
+    hechas = []
+    for i in sorted(zona):
+        if W['occ'][i] <= 0 or W['sp'][i] == MAL or i in J['zanjas']:
+            continue
+        if W['sp'][i] == HIB:
+            _quitar_colona(W, i, now)
+        own = W['own'][i] if W['own'][i] in (GEO, ARQ) else GEO
+        W['own'][i] = own
+        W['sp'][i] = MAL
+        W['traza'][i] = _bit(own)
+        W['t_nac'][i] = now
+        J['rescates'].pop(i, None)
+        hechas.append(i)
+    J['absorbidas'] = J.get('absorbidas', 0) + len(hechas)
+    J['ev']['absorbe'] = dict(t=now, celdas=hechas)
+    for x in monstruos_mal(J):          # lo que era su presa ya es del mal
+        if x.get('objetivo') in hechas:
+            x['recalc'] = 10 ** 6
+    W['dirty'] = True
+    return len(hechas)
+
+
+def linea_zanja(W, cfg, desde, hacia, largo):
+    """Las celdas de una linea de 'largo' celdas que sale de 'desde' hacia 'hacia' (la
+    vecina que mas avanza en esa direccion, sin volver atras)."""
+    p0 = normal_i(desde)
+    d = _add(normal_i(hacia), p0, -1.0) if hacia is not None and hacia != desde else tangents(p0)[0]
+    if _len(d) < 1e-9:
+        d = tangents(p0)[0]
+    d = _norm(d)
+    out, cur, vistas = [], desde, {desde}
+    for _ in range(max(0, int(largo))):
+        cand = [v for v in NEIGH[cur] if v not in vistas]
+        if not cand:
+            break
+        cur = max(cand, key=lambda v: (_dot(_add(normal_i(v), normal_i(cur), -1.0), d), -v))
+        vistas.add(cur)
+        out.append(cur)
+    return out
+
+
+def perfil_zanja(largo, prof):
+    """La profundidad (conchas) de cada celda de la zanja: prof en medio, 1 en los extremos."""
+    L = max(1, int(largo))
+    P = max(1, int(prof))
+    mid = (L - 1) / 2.0
+    return [max(1, int(round(P - (P - 1) * abs(k - mid) / max(1.0, mid)))) for k in range(L)]
+
+
+def zanja_nefa(W, cfg, now):
+    """El golpe de NefanyaMuto: el anillo y una zanja de Largozanjanefa celdas delante de
+    el, hacia Trumpzilla, con Profzanjanefa conchas en la mas honda. Las celdas de mar no
+    se cavan (la zanja sigue por encima)."""
+    J = W['juego']
+    x, m = J['nefa'], J['mon']
+    x['anillo'] = now
+    hacia = m['celda'] if m.get('celda') is not None and m['celda'] != x['celda'] else x.get('de')
+    if hacia == x['celda']:
+        hacia = None
+    linea = linea_zanja(W, cfg, x['celda'], hacia, int(cfg.get('largo_zanja_nefa', 5)))
+    profs = perfil_zanja(len(linea), int(cfg.get('prof_zanja_nefa', 3)))
+    mar = mar_mon(W, cfg)
+    hechas = []
+    for c, p in zip(linea, profs):
+        if c in mar or c == x['celda']:
+            continue
+        cavar_zanja(W, cfg, c, p, now)
+        if c in J['zanjas']:
+            hechas.append(c)
+    J['ev']['zanja_nefa'] = dict(t=now, celdas=hechas, prof=profs)
+    return hechas
+
+
+def celda_contraria(W, cfg, x, rival):
+    """La vecina mas lejos del rival (se van por caminos contrarios); sin agua ni mar ni la
+    celda del rival. None si no hay."""
+    J = W['juego']
+    c = x['celda']
+    mar = mar_mon(W, cfg)
+    cand = [v for v in NEIGH[c] if v != rival and J['agua'].get(v, 0) <= 0 and v not in mar]
+    if not cand:
+        return None
+    nr = normal_i(rival if rival is not None else c)
+    return min(cand, key=lambda v: (_dot(normal_i(v), nr), _hash01(v, 41)))
+
+
+def terminar_baile(W, cfg, now):
+    """Fin del baile: los que siguen bailando se giran y se van a la vecina mas lejos del
+    otro; empieza la tregua (Tregua pasos)."""
+    J = W['juego']
+    m, x = J['mon'], J.get('nefa')
+    for a, b in ((m, x), (x, m)):
+        if a is None or a['estado'] != 'baile':
+            continue
+        rc = b['celda'] if b is not None and b.get('celda') is not None else None
+        dest = celda_contraria(W, cfg, a, rc)
+        a.update(estado='busca', rival=None, objetivo=None, mov=0.0, t_estado=now, recalc=0,
+                 camino=[dest] if dest is not None else [], retira=dest)
+        if dest is None:
+            a['recalc'] = 10 ** 6
+    J['baile'] = None
+    J['tregua_baile'] = dict(hasta=J['paso'] + int(cfg.get('tregua', 16)), desde=J['paso'])
+    J['ev']['fin_baile'] = dict(t=now)
+    W['dirty'] = True
+
+
+def tiempo_baile(W, cfg, x, now):
+    """El tiempo del baile en que va (0, 1, 2...), para alternar las caras."""
+    J = W['juego']
+    B = J.get('baile')
+    if not B:
+        return 0
+    return max(0, int((J['semis'] - B['semi0']) // tiempo_semis(cfg)))
+
+
+# --- lo visual (fase 41) ----------------------------------------------------------
+
+def emocion_baile(W, cfg, x, now, yo):
+    """(emocion, animacion) en el baile, para Trumpzilla (yo 'trumpzilla') o NefanyaMuto."""
+    B = W['juego'].get('baile') or {}
+    if B.get('golpe') is None:
+        return ('rie' if tiempo_baile(W, cfg, x, now) % 2 == 0 else 'carcajada'), 'baile'
+    if B['golpe'] == yo:
+        return 'furia', ('anillo' if yo == 'nefanyamuto' else 'lucha')
+    return ('despiste' if yo == 'nefanyamuto' else 'susto'), 'tiembla'
+
+
+def emocion_nefa(W, cfg, x, now):
+    """(emocion, animacion) de NefanyaMuto, la primera que vale:
+      se ahoga (muere)        panico     hunde
+      baile                   rie / carcajada a cada tiempo, baile; en el golpe, furia y el
+                              anillo (si lo lanza el) o despiste y tiembla (si lo recibe)
+      el anillo aun brilla    furia      anillo
+      cae, o hace < T_SUSTO   susto      tiembla
+      su zanja tiene agua     panico     tiembla
+      en una zanja            llora      respira    (reflexivo)
+      devora, o < T_RISA      rie        devora     carcajada si es grande
+      aparece                 serio      respira
+      por la cara oculta      despiste   camina     (va a la luz)
+      busca y anda            enfado     camina     furia si es grande
+      sin nada que comer      pasmado    respira
+      quieto                  serio      respira    furia si es grande
+    Con Emocionnefa distinta de auto, esa cara con la animacion del estado."""
+    J = W['juego']
+    v = _vista_mon(x, now, _VISTA_NEFA)
+    c = x['celda']
+    big = grande(x)
+    if x['estado'] == 'muere':
+        e, a = 'panico', 'hunde'
+    elif x['estado'] == 'baile':
+        e, a = emocion_baile(W, cfg, x, now, 'nefanyamuto')
+    elif x.get('anillo') is not None and 0.0 <= now - x['anillo'] < T_ANILLO:
+        e, a = 'furia', 'anillo'
+    elif x['estado'] == 'cae' or now - v['t_caida'] < T_SUSTO:
+        e, a = 'susto', 'tiembla'
+    elif J['agua'].get(c, 0) > 0:
+        e, a = 'panico', 'tiembla'
+    elif c in J['zanjas']:
+        e, a = 'llora', 'respira'
+    elif x['estado'] == 'devora' or now - v['t_comio'] < T_RISA:
+        e, a = ('carcajada' if big else 'rie'), 'devora'
+    elif x['estado'] == 'aparece':
+        e, a = 'serio', 'respira'
+    elif x.get('sombra') and x['camino'] and x['camino'][0] != c:
+        e, a = 'despiste', 'camina'
+    elif x['camino'] and x['camino'][0] != c:
+        e, a = ('furia' if big else 'enfado'), 'camina'
+    elif x['objetivo'] is None:
+        e, a = 'pasmado', 'respira'
+    else:
+        e, a = ('furia' if big else 'serio'), 'respira'
+    fija = cfg.get('emocion_nefa', 'auto')
+    if fija in EMOCIONES_NEFA:
+        e = fija
+    return e, a
+
+
+def filas_nefa(W, cfg, x, now):
+    """El sprite de NefanyaMuto y su sombra (filas de 'nefanyamuto'). Ahogado, se hunde
+    T_HUNDE s (sin sombra) y desaparece."""
+    if x is None or x['celda'] is None or x['estado'] == 'espera':
+        return []
+    f = 0.0
+    if x['estado'] == 'muere':
+        f = (now - (x['t_muerte'] if x['t_muerte'] is not None else now)) / T_HUNDE
+        if f >= 1.0:
+            return []
+    e, a = emocion_nefa(W, cfg, x, now)
+    return _filas_sprite(W, cfg, x, now, e, a, f, cfg.get('alto_nefa', 0.9), EMOCIONES_NEFA)
+
+
+def sim_nefa(W, cfg, now, celda=None):
+    """Simnefa: aparece ya (sin esperar a que el mundo este construido), en la celda de
+    aparicion o en celda."""
+    if not juego_on(W, cfg):
+        return 'NEFANYA  enciende antes Modojuego'
+    if cfg['nivel'] < 41 or not cfg.get('nefanya', 1):
+        return 'NEFANYA  enciende antes Nefanyamuto (Fase41)'
+    c = celda_aparicion_nefa(W, cfg) if celda is None else max(0, min(N - 1, int(celda)))
+    if c is None:
+        return 'NEFANYA  no hay celda vacia donde aparecer'
+    x = aparecer_nefa(W, cfg, now, c)
+    encuentro_baile(W, cfg, now)
+    return 'NEFANYA  #%d aparece en la celda %d   objetivo %s' % (
+        x['n'], c, x['objetivo'] if x['objetivo'] is not None else '-')
+
+
+def sim_baile(W, cfg, now):
+    """Simbaile: Trumpzilla en Simceldamon (si no esta) y NefanyaMuto en una vecina: el baile."""
+    if not juego_on(W, cfg):
+        return 'BAILE    enciende antes Modojuego'
+    if cfg['nivel'] < 41 or not cfg.get('nefanya', 1):
+        return 'BAILE    enciende antes Nefanyamuto (Fase41)'
+    J = W['juego']
+    m = J['mon']
+    if not activo_mon(m) or m['estado'] in ('lucha', 'baile'):
+        m = aparecer(W, cfg, now, max(0, min(N - 1, int(cfg['sim_celda_mon']))))
+    J['tregua_baile'] = J['baile'] = None
+    if J.get('lucha'):
+        terminar_lucha(W, cfg, now)
+    J['tregua_baile'] = None
+    mar = mar_mon(W, cfg)
+    v = min(NEIGH[m['celda']], key=lambda y: (y in mar, W['occ'][y] > 0, _hash01(y, 42)))
+    aparecer_nefa(W, cfg, now, v)
+    encuentro_baile(W, cfg, now)
+    return 'BAILE    Trumpzilla en la celda %d, NefanyaMuto en la %d: %s' % (
+        m['celda'], v, 'bailan' if J.get('baile') else 'no bailan')
+
+
+def _legend_nefa(W, c):
+    """NEFANYA (fase 41): el estado, la celda, el objetivo, el tamano y la cara; esperando,
+    lo construido de la cara visible."""
+    J = W.get('juego')
+    if not c.get('nefanya', 1):
+        return '  NEFANYA  apagado (Nefanyamuto)'
+    if not J:
+        return '  NEFANYA  -'
+    x = J.get('nefa') or nefa_nuevo(0, c)
+    now = W.get('t') or 0.0
+    if x['estado'] == 'espera' or x['celda'] is None:
+        return '  NEFANYA  #%d  espera   construido %.0f %% (aparece con %.0f %%)' % (
+            x['n'], 100.0 * construida_visible(W, c), 100.0 * float(c['umbral_nefa']))
+    return '  NEFANYA  #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d   cara %s' % (
+        x['n'], x['estado'], x['celda'], x['objetivo'] if x['objetivo'] is not None else '-', x['tam'],
+        min(x['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), emocion_nefa(W, c, x, now)[0])
+
+
+def _legend_baile(W, c):
+    """BAILE (fase 41): los tiempos, el golpe o la tregua."""
+    J = W.get('juego')
+    if not J:
+        return '  BAILE    -'
+    B = J.get('baile')
+    g = J.get('golpes') or {}
+    cuenta = '(bailes %d, golpes T %d / N %d, absorbidas %d)' % (
+        J.get('bailes', 0), g.get('trumpzilla', 0), g.get('nefanyamuto', 0), J.get('absorbidas', 0))
+    if B:
+        if B.get('golpe'):
+            return '  BAILE    golpe de %s   celdas %d | %d   %s' % (B['golpe'], B['mon'], B['nefa'], cuenta)
+        tb = int(c['tiempos_baile'])
+        return '  BAILE    %d/%d tiempos   celdas %d | %d   %s' % (
+            min(tiempo_baile(W, c, None, W.get('t') or 0.0), tb), tb, B['mon'], B['nefa'], cuenta)
+    if en_tregua_baile(W):
+        return '  BAILE    tregua %d pasos   %s' % (J['tregua_baile']['hasta'] - J['paso'], cuenta)
+    return '  BAILE    -   %s' % cuenta
 
 
 # --- la demo GENoZilla de la sala virtual (motor v119) ---------------------------------
@@ -20910,6 +21456,7 @@ def chop_names(c=None):
     extra += ['i_trumpzilla'] if c['nivel'] >= 38 else []                       # fase 38: el sprite
     extra += ['i_emblemas_mal'] if c['nivel'] >= 39 else []                     # fase 39: emblemas y demonios
     extra += ['i_godzilla'] if c['nivel'] >= 40 else []                         # fase 40: Godzilla
+    extra += ['i_nefanyamuto'] if c['nivel'] >= 41 else []                      # fase 41: NefanyaMuto
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -21426,6 +21973,17 @@ def cfg():
                  tregua=max(0, int(_p('Tregua', c['tregua']))),
                  alto_godzilla=max(0.2, min(4.0, _p('Altogodzilla', c['alto_godzilla']))),
                  emocion_godzilla=fg if fg in EMOCIONES_MON else 'auto')
+    if c['nivel'] >= 41:                # fase 41: NefanyaMuto
+        fn = _p('Emocionnefa', 'auto')
+        c.update(nefanya=int(bool(_p('Nefanyamuto', True))),
+                 umbral_nefa=max(0.0, min(1.0, _p('Umbralnefa', c['umbral_nefa']))),
+                 tiempos_baile=max(1, int(_p('Tiemposbaile', c['tiempos_baile']))),
+                 golpe_baile=_menu('Golpebaile', GOLPES_BAILE, c['golpe_baile']),
+                 radio_absorbe=max(0, min(6, int(_p('Radioabsorbe', c['radio_absorbe'])))),
+                 largo_zanja_nefa=max(1, min(12, int(_p('Largozanjanefa', c['largo_zanja_nefa'])))),
+                 prof_zanja_nefa=max(1, min(12, int(_p('Profzanjanefa', c['prof_zanja_nefa'])))),
+                 alto_nefa=max(0.2, min(4.0, _p('Altonefa', c['alto_nefa']))),
+                 emocion_nefa=fn if fn in EMOCIONES_NEFA else 'auto')
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -22279,6 +22837,12 @@ def on_pulse(name):
     elif name == 'Simlucha':            # fase 40: Godzilla junto a Trumpzilla: la lucha
         juego_al_dia(W, c, now)
         print(sim_lucha(W, c, now))
+    elif name == 'Simnefa':             # fase 41: NefanyaMuto aparece ya
+        juego_al_dia(W, c, now)
+        print(sim_nefa(W, c, now))
+    elif name == 'Simbaile':            # fase 41: NefanyaMuto junto a Trumpzilla: el baile
+        juego_al_dia(W, c, now)
+        print(sim_baile(W, c, now))
     elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
         print(capturar_fondo(c))
     elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
@@ -24484,6 +25048,9 @@ def _legend():
     if lvl >= 40:                       # fase 40: Godzilla y la lucha
         lines.append(_legend_godzilla(W, c))
         lines.append(_legend_lucha(W, c))
+    if lvl >= 41:                       # fase 41: NefanyaMuto y el baile
+        lines.append(_legend_nefa(W, c))
+        lines.append(_legend_baile(W, c))
     return '\n'.join(lines)
 
 

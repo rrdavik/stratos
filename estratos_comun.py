@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v98'
+VERSION_COMUN = 'comun v99'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -41,6 +41,7 @@ RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'r
                 # trumpzilla (fase 38), el monstruo en sprite
                 'marcas', 'brotes_mal', 'tocon', 'monstruo', 'agua_juego', 'trumpzilla',
                 'godzilla',                        # comun v91 (fase 40): Godzilla, el monstruo de la creacion
+                'nefanyamuto',                     # comun v99 (fase 41): NefanyaMuto, el segundo monstruo del mal
                 'particulas', 'humo',
                 'luz_conchas',                     # comun v93: sin luz_celda (la loseta de luz)
                 'luz_local',                       # lo transparente (motas, humo) y las capas aditivas, al final
@@ -2575,6 +2576,8 @@ def install_core(base, carpeta, fase):
         emblemas_al_dia(base, carpeta)
     if base.op('godzilla') is not None:        # comun v91 (fase 40): Godzilla
         godzilla_al_dia(base, carpeta)
+    if base.op('nefanyamuto') is not None:     # comun v99 (fase 41): NefanyaMuto
+        nefanyamuto_al_dia(base, carpeta)
     try:
         motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
     except Exception:
@@ -2860,6 +2863,7 @@ def particulas_al_dia(base, crear=False):
 # --- Trumpzilla: el monstruo en sprite (comun v83, fase 38, motor v112) -------------
 SPRITE_ATLAS = 'sprites/trumpzilla_emociones.png'
 GODZILLA_ATLAS = 'sprites/godzilla_emociones.png'           # comun v91 (fase 40)
+NEFA_ATLAS = 'sprites/nefanyamuto_emociones.png'            # comun v99 (fase 41)
 SPRITE_U = "parent().op('frame_u')['sprite_t']"
 LUCES_SPRITE = ('uLuz0', 'uLuz0Col', 'uLuz1', 'uLuz1Col', 'uLuz2', 'uLuz2Col', 'uAmbiente')   # comun v86
 
@@ -2951,6 +2955,15 @@ void main()
             rot = voltea * 0.12 * g;
         } else if (anim == 8) {                             // adios (comun v91): se mece; el motor lo hunde
             rot = 0.06 * sin(t * 2.0);
+        } else if (anim == 9) {                             // baile (comun v99): se balancea y bota a tiempo
+            float b = sin(t * 4.0);
+            rot = 0.11 * b;
+            d = vec2(0.05 * b, 0.06 * abs(sin(t * 8.0)));
+            k = vec2(1.0 + 0.03 * sin(t * 8.0), 1.0 - 0.03 * sin(t * 8.0));
+        } else if (anim == 10) {                            // anillo (comun v99): el golpe de NefanyaMuto,
+            float g = sin(t * 14.0);                        // se hincha y tiembla (el anillo, en el pixel)
+            k = vec2(1.0 + 0.035 * g, 1.0 + 0.035 * g);
+            d = vec2(0.012 * sin(t * 41.0), 0.0);
         }                                                   // piedra (5): quieto
         vec2 q = vec2(P.x * k.x * w, (P.y + 0.5) * k.y * h);
         q = vec2(q.x * cos(rot) - q.y * sin(rot), q.x * sin(rot) + q.y * cos(rot));
@@ -3039,8 +3052,22 @@ void main()
     float fila = floor(c / cols + 1e-3);
     vec2 px = (vec2(col, rej.y - 1.0 - fila) + uv) * celda;    // la fila 0 del atlas, arriba
     vec4 t = texelFetch(sAtlas, ivec2(clamp(px, vec2(0.0), tam - 1.0)), 0);
-    if (t.a < 0.5)
-        discard;
+    float anillo = 0.0;
+    if (iVert.anim == 10) {             // comun v99: el anillo de NefanyaMuto alrededor de la cabeza (un
+        vec2 q = (iVert.uv - vec2(0.5, 0.74)) * vec2(celda.x / celda.y, 1.0);    // pulso electromagnetico)
+        float r = length(q);
+        float R = 0.155 + 0.010 * sin(uSprite.x * 9.0);
+        anillo = 1.0 - smoothstep(0.006, 0.016, abs(r - R));
+        float f = fract(uSprite.x * 1.4);                      // la onda que se abre
+        anillo = max(anillo, (1.0 - f) * (1.0 - smoothstep(0.004, 0.012, abs(r - (0.155 + 0.11 * f)))));
+    }
+    vec3 RAYO = vec3(0.62, 0.90, 1.0);
+    if (t.a < 0.5) {
+        if (anillo < 0.35)
+            discard;
+        oFragColor[0] = TDOutputSwizzle(vec4(RAYO * (1.0 + 0.6 * anillo), 1.0));
+        return;
+    }
     vec3 rgb = t.rgb / t.a;
     if (iVert.anim == 5) {
         float l = dot(rgb, vec3(0.30, 0.59, 0.11));
@@ -3054,7 +3081,10 @@ void main()
     if (dot(uAmbiente.rgb, vec3(1.0)) < 1e-5)
         luz = vec3(1.0);                            // sin las luces enlazadas: como antes, sin luz
     float brillo = uSpriteInc.y > 0.0 ? uSpriteInc.y : 1.0;
-    oFragColor[0] = TDOutputSwizzle(vec4(rgb * luz * brillo * iVert.color.rgb, 1.0));
+    vec3 sale = rgb * luz * brillo * iVert.color.rgb;
+    if (iVert.anim == 10)               // el anillo, con luz propia, tambien por delante de la cara
+        sale = mix(sale + 0.25 * RAYO, RAYO * 1.4, 0.8 * anillo);
+    oFragColor[0] = TDOutputSwizzle(vec4(sale, 1.0));
 }
 """
 
@@ -3075,6 +3105,15 @@ def trumpzilla_al_dia(base, carpeta, crear=False):
     """comun v83 (fase 38): el monstruo en sprite (ver _sprite_al_dia)."""
     return _sprite_al_dia(base, carpeta, crear, 'trumpzilla', 'mat_sprite', 'trumpzilla_atlas', SPRITE_ATLAS,
                           (-440, 2780), (1180, 300), (1400, 260), 'el monstruo en sprite')
+
+
+def nefanyamuto_al_dia(base, carpeta, crear=False):
+    """comun v99 (fase 41): NefanyaMuto, el segundo monstruo del mal. La geometria
+    'nefanyamuto' con mat_nefanyamuto: los shaders de Trumpzilla con el atlas
+    sprites/nefanyamuto_emociones.png (nefanyamuto_atlas), del mismo formato (4 x 3: las
+    diez caras y despiste y pasmado)."""
+    return _sprite_al_dia(base, carpeta, crear, 'nefanyamuto', 'mat_nefanyamuto', 'nefanyamuto_atlas', NEFA_ATLAS,
+                          (-440, 2900), (1180, 460), (1400, 420), 'NefanyaMuto en sprite')
 
 
 def godzilla_al_dia(base, carpeta, crear=False):
@@ -5668,9 +5707,9 @@ def pagina_version(base, fase, etiqueta, version):
 def guardar_sala(base, nombres):
     """Lo que una autoprueba de sala cambia: parametros y la tabla sala_personas.
     comun v91: tambien Godzilla (SalaJuego lo apaga en las autopruebas de las fases 32
-    a 39, que prueban a Trumpzilla solo)."""
+    a 39, que prueban a Trumpzilla solo). comun v99: y Nefanyamuto (fase 41)."""
     guarda = {}
-    for nm in list(nombres) + ['Godzilla']:
+    for nm in list(nombres) + ['Godzilla', 'Nefanyamuto']:
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -5731,11 +5770,12 @@ class SalaJuego(object):
     avanza a mano; una semicorchea son SEMI s (120 BPM)."""
     SEMI = 0.125
 
-    def __init__(self, base, m, t0, godzilla=False):
+    def __init__(self, base, m, t0, godzilla=False, nefanya=False):
         self.base, self.m = base, m
         self.reloj = [float(t0)]
         self.tb = base.op('sala_personas')
         self.godzilla = godzilla            # comun v91: sin Godzilla (fase 40), salvo que se pida
+        self.nefanya = nefanya              # comun v99: sin NefanyaMuto (fase 41), salvo que se pida
 
     @property
     def now(self):
@@ -5756,6 +5796,8 @@ class SalaJuego(object):
             pass
         if has_par(self.base, 'Godzilla'):
             self.base.par.Godzilla = bool(self.godzilla)
+        if has_par(self.base, 'Nefanyamuto'):
+            self.base.par.Nefanyamuto = bool(self.nefanya)
         W, c = m.world(), m.cfg()
         for _ in range(conchas):
             m.end_cycle(W, c, self.reloj[0])
