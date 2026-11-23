@@ -209,6 +209,10 @@ LAS DEMOS (v30, sala v18, motor v140)
   vistas entrada, juego y visitante la miran; con la pantalla, la esfera y su
   peana no se dibujan (render_sala y render_plano eligen una u otra).
 
+  v39: el lienzo prueba primero vertice.uv.val = (u, v, 0) (en TouchDesigner la uv es un
+  AttributeData: ni asignarla entera ni por componentes la escribia; la v38 leia 0) y
+  comprueba cada forma; lo que paso queda en el lienzo (uv_informe) y sale en el FALLO.
+
   v38: el lienzo comprueba que la uv ha quedado (si no, la pone componente a
   componente) y la autoprueba prueba todas las formas de leerla: en TouchDesigner la
   v37 leia (0, 0) en las cuatro esquinas. Si falla, dice que da cada forma.
@@ -241,7 +245,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v38  (la uv de la pantalla: se comprueba al ponerla y se lee de todas las formas)'
+VERSION = 'sala_virtual v39  (la uv de la pantalla por AttributeData.val, comprobada al ponerla)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -922,27 +926,50 @@ def clase_uv(scriptOp):
     return None
 
 
-def poner_uv(e, uv):
-    # v38: la uv entera y, si al leerla no ha quedado (TouchDesigner), componente a componente
+def _uv_es(e, uv):
     try:
-        e.uv = uv
+        return abs(float(e.uv[0]) - uv[0]) < 1e-6 and abs(float(e.uv[1]) - uv[1]) < 1e-6
     except Exception:
-        pass
-    try:
-        if abs(float(e.uv[0]) - uv[0]) < 1e-6 and abs(float(e.uv[1]) - uv[1]) < 1e-6:
-            return
-    except Exception:
-        pass
+        return False
+
+
+def _uv_val(e, uv):
+    e.uv.val = uv
+
+
+def _uv_todo(e, uv):
+    e.uv = uv
+
+
+def _uv_componentes(e, uv):
     for k in range(3):
+        e.uv[k] = uv[k]
+
+
+FORMAS_UV = (('val', _uv_val), ('asignar', _uv_todo), ('componentes', _uv_componentes))
+
+
+def poner_uv(e, uv, informe):
+    # v39: la uv por la primera forma que quede (en TouchDesigner, vertice.uv es un
+    # AttributeData: asignar entera o por componentes no la escribia). informe: la forma
+    # que valio o, de cada una, el error o 'no queda'
+    for nombre, poner in FORMAS_UV:
         try:
-            e.uv[k] = uv[k]
-        except Exception:
-            pass
+            poner(e, uv)
+        except Exception as ex:
+            informe.setdefault(nombre, '%s: %s' % (type(ex).__name__, ex))
+            continue
+        if _uv_es(e, uv):
+            informe['vale'] = nombre
+            return True
+        informe.setdefault(nombre, 'no queda')
+    return False
 
 
 def onCook(scriptOp):
     scriptOp.clear()
     clase = clase_uv(scriptOp)
+    informe = {}
     pr = scriptOp.appendPoly(4, closed=True, addPoints=True)
     for k in range(4):
         x, y = ESQUINAS[k]
@@ -951,9 +978,13 @@ def onCook(scriptOp):
         q.x, q.y, q.z = x, y, 0.0
         uv = (x + 0.5, y + 0.5, 0.0)
         if clase == 'vertex':
-            poner_uv(v, uv)
+            poner_uv(v, uv, informe)
         elif clase == 'point':
-            poner_uv(q, uv)
+            poner_uv(q, uv, informe)
+    try:
+        scriptOp.store('uv_informe', dict(informe, clase=clase))
+    except Exception:
+        pass
     return
 """
 
@@ -1022,8 +1053,13 @@ def diag_lienzo(lz):
     try:
         at = ['%s:%s' % (k[0], a.name) for k in ('vertex', 'point') for a in getattr(lz, k + 'Attribs')]
         err = (lz.errors() or '').strip().replace('\n', ' / ')
-        return '%d puntos, %d prims, atributos %s%s' % (len(lz.points), len(lz.prims), at,
-                                                       (', error: ' + err) if err else '')
+        try:
+            inf = lz.fetch('uv_informe', None)
+        except Exception:
+            inf = None
+        return '%d puntos, %d prims, atributos %s%s%s' % (len(lz.points), len(lz.prims), at,
+                                                         (', error: ' + err) if err else '',
+                                                         (', al poner la uv: %s' % inf) if inf else '')
     except Exception as e:
         return 'no lo pude leer (%s)' % e
 
