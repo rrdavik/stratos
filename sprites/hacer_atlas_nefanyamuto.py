@@ -18,7 +18,10 @@ De las fotos se usa la cabeza (FOTOS: el recorte y la elipse de cada una), con e
 color pasado al de las cabezas pintadas y las lineas marcadas, sobre uno de los
 cuerpos (CUERPO_FOTO); las manos que hacen el gesto (el indice levantado, la mano
 en la cabeza, los dos indices que apuntan) entran pasadas al color del monstruo,
-como garras suyas. Los ojos bizcos y el dedo en la nariz se pintan. Las doce caras
+como garras suyas. Los ojos bizcos y el dedo en la nariz se pintan, y a todas se
+les pintan detras las dos patas largas que le faltan al cuerpo para ser un MUTO
+(seis extremidades): suben de los hombros a una rodilla alta y bajan al suelo
+con el garfio hacia dentro (patas_muto). Las doce caras
 (EMOCIONES) llenan las 4 x 3 celdas: las diez de EMOCIONES_MON y dos en las que no
 se entera de nada (despiste: bizco; pasmado: hurgandose la nariz).
 
@@ -746,6 +749,95 @@ def gorra(fig, lado=1, inclina=13.0):
     return np.array(out)
 
 
+# --- las dos patas largas del MUTO ----------------------------------------------------
+
+# en anchos de cabeza desde el centro de la cabeza (x, a cada lado) y su coronilla (y);
+# el pie, desde el suelo (los pies de la figura)
+PATA_HOMBRO = (0.66, 1.50)
+PATA_RODILLA = (1.08, 0.24)
+PATA_MEDIO = (1.30, -2.10)            # y desde el suelo (la articulacion de la espinilla)
+PATA_TOBILLO = (1.22, -0.78)          # y desde el suelo
+PATA_PIE = (1.06, 0.0)                # y desde el suelo
+PATA_GROSOR = 0.13                    # medio grosor del muslo
+
+
+def patas_muto(fig, ref_muto, margen=260):
+    """Las dos patas largas del MUTO, detras del cuerpo: salen de los hombros,
+    suben a una rodilla alta junto a la cabeza y bajan al suelo a los lados de los
+    pies, con el garfio de la punta hacia dentro."""
+    import math
+    cy0, ccx, chw, chom = medidas_cabeza(fig)
+    suelo = caja(fig)[3]
+    H, W = fig.shape[:2]
+    grande = np.zeros((H, W + 2 * margen, 4), np.uint8)
+    grande[:, margen:margen + W] = fig
+    ccx += margen
+    capa = Image.new('RGBA', (grande.shape[1], H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(capa)
+    base = tuple(int(v) for v in np.clip(ref_muto[0] * 1.15 + 6, 0, 255))
+    osc = tuple(int(v * 0.6) for v in base)
+    luz = (206, 104, 58)
+    g0 = PATA_GROSOR * chw
+    ancho = max(3, int(g0 * 0.22))
+
+    def tramo(a, b, ga, gb, col):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        n = math.hypot(dx, dy)
+        nx, ny = -dy / n, dx / n
+        pts = [(a[0] + nx * ga, a[1] + ny * ga), (b[0] + nx * gb, b[1] + ny * gb),
+               (b[0] - nx * gb, b[1] - ny * gb), (a[0] - nx * ga, a[1] - ny * ga)]
+        d.polygon(pts, fill=col + (255,))
+        # sombra en un lado, vetas y filo de luz en el otro
+        d.polygon([pts[2], pts[3], ((a[0] + pts[3][0]) / 2 + (a[0] - pts[3][0]) * 0.1, (a[1] + pts[3][1]) / 2),
+                   ((b[0] + pts[2][0]) / 2, (b[1] + pts[2][1]) / 2)], fill=tuple(int(v * 0.75) for v in col) + (255,))
+        for k in (-0.3, 0.25):
+            d.line([(a[0] + dx * 0.1 + nx * ga * k, a[1] + dy * 0.1 + ny * ga * k),
+                    (a[0] + dx * 0.9 + nx * gb * k, a[1] + dy * 0.9 + ny * gb * k)], fill=osc + (255,), width=max(2, ancho // 2))
+        for t in (0.3, 0.55, 0.8):              # grietas de corteza
+            q = (a[0] + dx * t, a[1] + dy * t)
+            d.line([(q[0] + nx * ga * 0.6, q[1] + ny * ga * 0.6), (q[0] + nx * ga * 0.1, q[1] + ny * ga * 0.1 + gb * 0.3)],
+                   fill=osc + (255,), width=max(2, ancho // 2))
+        d.line([pts[0], pts[1]], fill=luz + (255,), width=ancho)
+        d.polygon(pts, outline=TINTA + (255,), width=ancho)
+
+    def nudo(p, r, col):
+        d.polygon([(p[0] - r, p[1]), (p[0] - r * 0.3, p[1] - r * 1.1), (p[0] + r * 0.5, p[1] - r * 0.9), (p[0] + r, p[1]),
+                   (p[0] + r * 0.4, p[1] + r), (p[0] - r * 0.6, p[1] + r * 0.8)], fill=col + (255,), outline=TINTA + (255,), width=ancho)
+
+    for lado in (-1, 1):
+        col = base if lado > 0 else tuple(int(v * 0.85) for v in base)
+        hombro = (ccx + lado * PATA_HOMBRO[0] * chw, cy0 + PATA_HOMBRO[1] * chw)
+        rodilla = (ccx + lado * PATA_RODILLA[0] * chw, cy0 + PATA_RODILLA[1] * chw)
+        medio = (ccx + lado * PATA_MEDIO[0] * chw, suelo + PATA_MEDIO[1] * chw)
+        tobillo = (ccx + lado * PATA_TOBILLO[0] * chw, suelo + PATA_TOBILLO[1] * chw)
+        pie = (ccx + lado * PATA_PIE[0] * chw, suelo + PATA_PIE[1] * chw)
+        tramo(hombro, rodilla, g0, g0 * 0.85, col)
+        tramo(rodilla, medio, g0 * 0.8, g0 * 0.62, col)
+        tramo(medio, tobillo, g0 * 0.58, g0 * 0.5, col)
+        # la cuchilla del pie con el garfio hacia dentro (hacia el cuerpo), la punta clara
+        gx = -lado
+        cuchilla = [(tobillo[0] - g0 * 0.5, tobillo[1]), (tobillo[0] + g0 * 0.5, tobillo[1]),
+                    (pie[0] + g0 * 0.3, pie[1] - g0 * 1.3), (pie[0] + gx * g0 * 0.2, pie[1]),
+                    (pie[0] + gx * g0 * 2.0, pie[1] - g0 * 2.2), (pie[0] + gx * g0 * 0.6, pie[1] - g0 * 1.7),
+                    (pie[0] - g0 * 0.3, pie[1] - g0 * 1.5)]
+        d.polygon(cuchilla, fill=col + (255,), outline=TINTA + (255,), width=ancho)
+        d.line([cuchilla[0], cuchilla[2]], fill=luz + (255,), width=ancho)
+        d.polygon([cuchilla[3], cuchilla[4], cuchilla[5]], fill=(176, 150, 128, 255), outline=TINTA + (255,), width=ancho)
+        nudo(rodilla, g0 * 1.25, col)
+        nudo(medio, g0 * 0.8, col)
+        nudo(tobillo, g0 * 0.7, col)
+        # el espolon de la rodilla, hacia arriba y afuera
+        d.polygon([(rodilla[0] - g0 * 0.5, rodilla[1] - g0 * 0.7), (rodilla[0] + lado * g0 * 0.8, rodilla[1] - g0 * 2.1),
+                   (rodilla[0] + g0 * 0.5, rodilla[1] - g0 * 0.6)], fill=col + (255,), outline=TINTA + (255,), width=ancho)
+        d.line([(rodilla[0] - g0 * 0.9, rodilla[1] - g0 * 0.3), (rodilla[0] - g0 * 0.2, rodilla[1] - g0 * 1.0)],
+               fill=luz + (255,), width=ancho)
+    a = np.array(capa)
+    a[..., 3] = np.where(a[..., 3] >= 128, 255, 0)
+    capa = Image.fromarray(a)
+    capa.alpha_composite(Image.fromarray(grande))
+    return np.array(capa)
+
+
 # --- adornos (en la celda) ---------------------------------------------------------------
 
 AGUA = (120, 200, 255)
@@ -868,19 +960,25 @@ def main(args):
         print(__doc__)
         sys.exit(1)
     f = figuras(*args)
-    usadas = set(o for o, _ in ORIGEN.values())
-    alto = max(caja(f[k])[3] - caja(f[k])[1] for k in usadas)
-    ancho = max(caja(f[k])[2] - caja(f[k])[0] for k in usadas)
+    ref_muto = color_muto(f['dientes'])
+    figs = {}
+    for nombre in EMOCIONES:
+        origen = ORIGEN[nombre][0]
+        fig = gorra(f[origen], GORRA[nombre]) if nombre in GORRA else f[origen]
+        figs[nombre] = patas_muto(fig, ref_muto)
+    alto = max(caja(v)[3] - caja(v)[1] for v in figs.values())
+    ancho = max(caja(v)[2] - caja(v)[0] for v in figs.values())
     escala = min((CELDA_H - 2 * MARGEN) / float(alto), (CELDA_W - 2) / float(ancho))
     atlas = Image.new('RGBA', (CELDA_W * COLS, CELDA_H * FILAS), (0, 0, 0, 0))
     lamina = Image.new('RGBA', atlas.size, (60, 62, 68, 255))
     d = ImageDraw.Draw(lamina)
     for i, nombre in enumerate(EMOCIONES):
         origen, adorno = ORIGEN[nombre]
-        fig = gorra(f[origen], GORRA[nombre]) if nombre in GORRA else f[origen]
+        fig = figs[nombre]
         im = a_celda(fig, escala)
         if adorno:
             y0, cx, hw, _ = medidas_cabeza(f[origen])
+            cx += 260                       # el margen que anade patas_muto
             x0, yb0, x1, yb1 = caja(fig)
             ox = (CELDA_W - int(round((x1 - x0) * escala))) // 2
             oy = CELDA_H - MARGEN - int(round((yb1 - yb0) * escala))
@@ -888,7 +986,9 @@ def main(args):
             if adorno == 'golpe':
                 # donde el puno da en la palma (PUNO_SOBRE, desde la esquina de la figura de las garras)
                 (gx, gy), ancho = PUNO_SOBRE
-                cab = (ox + (gx + ancho * 0.42) * escala, oy + (gy - ancho * 0.25) * escala, hw * escala)
+                fx0, fy0 = caja(f[origen])[:2]
+                gx, gy = fx0 + 260 + gx + ancho * 0.42, fy0 + gy - ancho * 0.25
+                cab = (ox + (gx - x0) * escala, oy + (gy - yb0) * escala, hw * escala)
             im = adornos(im, adorno, cab)
         x, y = (i % COLS) * CELDA_W, (i // COLS) * CELDA_H
         atlas.paste(im, (x, y))
