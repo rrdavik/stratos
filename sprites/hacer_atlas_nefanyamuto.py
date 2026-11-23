@@ -20,7 +20,7 @@ cuerpos (CUERPO_FOTO); las manos que hacen el gesto (el indice levantado, la man
 en la cabeza, los dos indices que apuntan) entran pasadas al color del monstruo,
 como garras suyas. Los ojos bizcos y el dedo en la nariz se pintan. Las doce caras
 (EMOCIONES) llenan las 4 x 3 celdas: las diez de EMOCIONES_MON y dos en las que no
-se entera de nada (despiste: bizco; pasmado: bizco y hurgandose la nariz).
+se entera de nada (despiste: bizco; pasmado: hurgandose la nariz).
 
 Necesita Pillow, NumPy, SciPy y rembg (el modelo isnet-general-use se baja la
 primera vez a ~/.rembg).
@@ -64,36 +64,52 @@ TINTA = (24, 12, 12)
 # de que figura sale cada cara, y su adorno
 ORIGEN = dict(
     serio=('serio', None),            # cabeza de frente.jpg sobre el cuerpo de 'dientes'
-    enfado=('enfado_dedos', None),    # aprieta los dientes y apunta con los dos indices (las manos de la foto)
+    enfado=('enfado_puno', 'golpe'),  # aprieta los dientes y se golpea la palma con el puno
     furia=('furia', None),            # el grito con la cara roja
     rie=('rie', None),
-    carcajada=('llora_risa', None),
+    carcajada=('carcajada', 'jaja'),  # se parte de risa (sin las lagrimas)
     susto=('f_dedos', 'sudor'),       # foto: grita con los dos indices
     mueca=('f_atril', None),          # foto: grita en el atril con el indice levantado
-    llora=('f_nariz', 'lagrimas'),    # foto: se tapa la nariz con los ojos cerrados
+    llora=('f_nariz', None),          # foto: reflexivo, los dedos en la boca (la mano es la de su brazo)
     panico=('grito', 'sudor'),
     calma=('f_rasca', None),          # foto: se rasca la cabeza con la garra, sonrie
     despiste=('bizco', 'pregunta'),   # bizco (no se entera)
-    pasmado=('f_calma', None),        # foto: bizco y hurgandose la nariz (no se entera)
+    pasmado=('f_calma', None),        # foto: hurgandose la nariz (no se entera)
 )
 # el cuerpo sobre el que va cada cabeza de foto
-CUERPO_FOTO = dict(dedos='grito', atril='dientes', nariz='llora_risa', calma='llora_risa', rasca='rie')
+CUERPO_FOTO = dict(dedos='grito', atril='dientes', nariz='grito', calma='rie', rasca='rie')
 BAJA_FOTO = dict(nariz=0.05, rasca=0.08)
 # brazos y manos de las fotos que entran con la cabeza (poligonos en el recorte):
-# se pasan al color del monstruo, como garras suyas
+# se pasan al color del monstruo, como garras suyas. En MANO_DENTRO la mano esta
+# delante de la cara y se toma tambien dentro de la elipse.
 BRAZOS_FOTO = dict(
     atril=[(222, 6), (300, 6), (300, 135), (236, 135)],                     # el indice levantado
     rasca=[(118, 18), (292, 18), (292, 118), (225, 215), (138, 236), (96, 204)],   # la mano en la cabeza
+    nariz=[(30, 236), (236, 236), (236, 300), (160, 400), (20, 400)],      # la mano bajo la nariz
 )
+MANO_DENTRO = ('nariz',)
 # el antebrazo de monstruo que se dibuja bajo esas manos: muneca, salida y grosor (en anchos de cabeza)
 ANTEBRAZO_FOTO = dict(atril=((262, 116), (272, 150), 0.12), rasca=((152, 196), (126, 222), 0.12))
+# brazos del cuerpo que se rehacen para que acaben en la mano de la cara: (figura,
+# poligono del antebrazo y el puno que se borran, de donde sale el antebrazo nuevo;
+# en pixeles desde la esquina de la figura) y a que punto de la foto va (la muneca)
+BRAZO_NUEVO = dict(
+    nariz=('grito', [(52, 432), (165, 432), (165, 562), (52, 562)], (38, 446), (70, 372)),
+    calma=('rie', [(0, 288), (98, 288), (98, 398), (0, 398)], (52, 402), None),     # va al puno del dedo
+)
+# el puno de 'grito' (recuadro desde su esquina) que se pone sobre la garra izquierda
+# de 'llora_risa' (centro y ancho), golpeando la otra garra
+PUNO_GRITO = (58, 440, 162, 560)
+PUNO_SOBRE = ((158, 468), 132)
+# las lagrimas de la carcajada (recuadro desde la esquina de 'llora_risa')
+LAGRIMAS = (108, 120, 290, 215)
 # las manos que apuntan de la foto de los dos indices (poligono en su recorte); van
 # juntas sobre el pecho, del ancho de MANOS_ANCHO cabezas y con su centro MANOS_BAJA
 # cabezas por debajo de los hombros
 MANOS_DEDOS = [(58, 268), (262, 268), (262, 432), (58, 432)]
 MANOS_ANCHO, MANOS_BAJA = 1.15, 0.85
 # bizco: los dos ojos (centros) y su radio, en el recorte de la foto o en frente.jpg
-BIZCO_FOTO = dict(calma=((206, 105), (246, 107), 10.5))
+BIZCO_FOTO = dict()
 BIZCO_FRENTE = ((464, 256), (542, 255), 15)
 # hurgarse la nariz: la fosa y el puno, en el recorte de la foto
 MOCO_FOTO = dict(calma=dict(fosa=(219, 136), puno=(186, 206)))
@@ -298,6 +314,110 @@ def injerta(cuerpo, trozo, tcx, thw, baja=0.0):
     return np.array(out)
 
 
+def donde_injerta(cuerpo, tcx, thw, baja=0.0):
+    """La transformacion de injerta: (px, py, s), un punto (x, y) del trozo va a
+    (px + x * s, py + y * s)."""
+    cy0, ccx, chw, chom = medidas_cabeza(cuerpo)
+    s = chw / float(thw)
+    return ccx - tcx * s, cy0 + baja * chw, s
+
+
+def rellena(rgb, m, vueltas=80):
+    """Rellena los pixeles 'm' con el color de alrededor (difusion)."""
+    out = rgb.astype(float)
+    conocido = (~m).astype(float)
+    out[m] = 0
+    for _ in range(vueltas):
+        suma = ndimage.uniform_filter(out * conocido[..., None], size=(5, 5, 1))
+        peso = ndimage.uniform_filter(conocido, size=5)
+        nuevo = suma / np.maximum(peso[..., None], 1e-6)
+        out[m] = nuevo[m]
+        conocido = np.where(m & (peso > 0), 1.0, conocido)
+    return out.clip(0, 255).astype(np.uint8)
+
+
+def sin_lagrimas(f):
+    """La carcajada sin las lagrimas: los azules y blancos de la cara se pintan con
+    la piel de alrededor."""
+    x0, y0 = caja(f)[:2]
+    a, b, c, d = LAGRIMAS
+    out = f.copy()
+    trozo = out[y0 + b:y0 + d, x0 + a:x0 + c]
+    r, g, bl = [trozo[..., k].astype(int) for k in range(3)]
+    agua = (trozo[..., 3] > 0) & (bl > r - 12) & (bl > 120)
+    agua = ndimage.binary_dilation(agua, iterations=3)
+    trozo[..., :3] = rellena(trozo[..., :3], agua)
+    return out
+
+
+def borra(f, pts):
+    """Borra (alfa 0) un poligono dado desde la esquina de la figura."""
+    x0, y0 = caja(f)[:2]
+    m = mascara_poli(f.shape[:2], [(x0 + x, y0 + y) for x, y in pts])
+    out = f.copy()
+    out[..., 3] = np.where(m, 0, out[..., 3])
+    return out
+
+
+def antebrazo(f, a, b, g, ref_muto, curva=0.12):
+    """Un antebrazo de monstruo de a a b (absolutos) sobre la figura: un poco curvo,
+    grueso en el codo y fino en la muneca, con sombra abajo, filo de luz arriba,
+    vetas y contorno."""
+    import math
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = math.hypot(dx, dy)
+    nx, ny = -dy / n, dx / n
+    if ny > 0:                                   # la normal hacia arriba (la luz)
+        nx, ny = -nx, -ny
+    medio = (a[0] + dx * 0.5 + nx * n * curva, a[1] + dy * 0.5 + ny * n * curva)
+    eje = _bez(a, medio, b, 20)
+    arriba, abajo = [], []
+    for k, (x, y) in enumerate(eje):
+        t = k / 20.0
+        gg = g * (1.2 - 0.45 * t + 0.18 * math.sin(math.pi * t))
+        arriba.append((x + nx * gg, y + ny * gg))
+        abajo.append((x - nx * gg, y - ny * gg))
+    base = tuple(int(v) for v in np.clip(ref_muto[0], 0, 255))
+    osc = tuple(int(v * 0.55) for v in base)
+    im = Image.fromarray(f.copy())
+    d = ImageDraw.Draw(im)
+    ancho = max(2, int(round(g * 0.22)))
+    d.polygon(arriba + abajo[::-1], fill=base + (255,))
+    # sombra: la mitad de abajo
+    sombra = [((x0 + x1) / 2, (y0 + y1) / 2) for (x0, y0), (x1, y1) in zip(arriba, abajo)]
+    d.polygon(sombra + abajo[::-1], fill=tuple(int(v * 0.72) for v in base) + (255,))
+    # vetas a lo largo
+    for k in (0.3, 0.62):
+        d.line([(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k) for (x0, y0), (x1, y1) in zip(arriba, abajo)][2:-2],
+               fill=osc + (255,), width=max(2, int(g * 0.09)))
+    d.line(arriba[1:-1], fill=(200, 100, 56, 255), width=ancho)
+    d.line(arriba, fill=TINTA + (255,), width=ancho)
+    d.line(abajo, fill=TINTA + (255,), width=ancho)
+    return np.array(im)
+
+
+def _bez(p0, p1, p2, n):
+    return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0],
+             (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]) for t in (k / float(n) for k in range(n + 1))]
+
+
+def puno_en_palma(f_garras, f_puno, ref_golpe=True):
+    """El puno de una figura sobre la garra izquierda de la otra: se golpea la palma."""
+    x0, y0 = caja(f_puno)[:2]
+    a, b, c, d = PUNO_GRITO
+    trozo = f_puno[y0 + b:y0 + d, x0 + a:x0 + c].copy()
+    im = Image.fromarray(trozo)
+    (cx, cy), ancho = PUNO_SOBRE
+    s = ancho / float(im.width)
+    im = im.resize((int(im.width * s), int(im.height * s)), Image.LANCZOS)
+    t = np.array(im)
+    t[..., 3] = np.where(t[..., 3] >= 128, 255, 0)
+    gx0, gy0 = caja(f_garras)[:2]
+    out = Image.fromarray(f_garras)
+    out.alpha_composite(Image.fromarray(t), (int(gx0 + cx - im.width / 2), int(gy0 + cy - im.height / 2)))
+    return np.array(out)
+
+
 # --- las cabezas de las fotos -------------------------------------------------------------
 
 # (imagen, recorte en la imagen, centro de la cabeza en el recorte, semiejes de la
@@ -371,7 +491,9 @@ def cabeza_foto(rutas, nombre, ref=None, ref_muto=None):
     a = (rgba[..., 3] >= 128) & elipse
     brazo = np.zeros_like(a)
     if nombre in BRAZOS_FOTO:
-        brazo = mascara_poli(a.shape, BRAZOS_FOTO[nombre]) & (rgba[..., 3] >= 100) & piel(rgba) & ~a
+        brazo = mascara_poli(a.shape, BRAZOS_FOTO[nombre]) & (rgba[..., 3] >= 100) & piel(rgba)
+        if nombre not in MANO_DENTRO:
+            brazo &= ~a
         brazo = ndimage.binary_closing(brazo, iterations=3) & mascara_poli(a.shape, BRAZOS_FOTO[nombre])
         a = a | brazo
     lab, n = ndimage.label(a)
@@ -587,6 +709,25 @@ def adornos(cel, tipo, cabeza):
         _gota(d, x + w * 0.62, y + w * 0.2, 3.0)
         _gota(d, x - w * 0.66, y + w * 0.3, 2.6)
         _gota(d, x + w * 0.5, y - w * 0.08, 2.2)
+    elif tipo == 'jaja':
+        try:
+            ff = ImageFont.load_default(size=13)
+        except TypeError:
+            ff = ImageFont.load_default()
+        for (dx, dy, t) in ((0.62, -0.05, 'JA'), (-1.05, 0.12, 'JA'), (0.75, 0.4, 'JA')):
+            px, py = x + dx * w, y + dy * w
+            for ox in (-1, 0, 1):
+                for oy in (-1, 0, 1):
+                    d.text((px + ox, py + oy), t, fill=TINTA + (255,), font=ff)
+            d.text((px, py), t, fill=(255, 230, 60, 255), font=ff)
+    elif tipo == 'golpe':
+        # lineas de impacto donde el puno da en la palma
+        gx, gy = x, y
+        for ang in (-150, -115, -80, -45, -10):
+            import math
+            ca, sa = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+            d.line([(gx + ca * 6, gy + sa * 6), (gx + ca * 13, gy + sa * 13)], fill=TINTA + (255,), width=3)
+            d.line([(gx + ca * 6, gy + sa * 6), (gx + ca * 13, gy + sa * 13)], fill=(255, 240, 150, 255), width=1)
     elif tipo == 'pregunta':
         try:
             f = ImageFont.load_default(size=22)
@@ -639,14 +780,26 @@ def figuras(frente, grita_rie, dientes_llora, fotos):
     f['serio'] = limpia(pon_cabeza(f['dientes'], f['frente']))
     f['furia'] = cara_roja(f['grito'])
     f['bizco'] = limpia(pon_cabeza(f['llora_risa'], bizco(f['frente'].copy(), *BIZCO_FRENTE)))
+    f['carcajada'] = sin_lagrimas(f['llora_risa'])
     rutas = dict(fotos=fotos)
     ref = color_cabeza(f['dientes'])
     ref_muto = color_muto(f['dientes'])
+    # enfado: la cabeza de los dientes sobre las garras, y el puno golpeando la palma
+    f['enfado_puno'] = limpia(pon_cabeza(puno_en_palma(f['llora_risa'], f['grito']), f['dientes']))
     for nombre, cuerpo in CUERPO_FOTO.items():
         cab, cx, hw, top = cabeza_foto(rutas, nombre, ref, ref_muto)
-        f['f_' + nombre] = limpia(injerta(f[cuerpo], cab, cx, hw, BAJA_FOTO.get(nombre, 0.0)))
-        if nombre == 'dedos':
-            f['enfado_dedos'] = limpia(sobre_pecho(f['dientes'], manos_foto(rutas, ref_muto)))
+        base = f[cuerpo]
+        if nombre in BRAZO_NUEVO:
+            fig, poli, codo, muneca = BRAZO_NUEVO[nombre]
+            px, py, s = donde_injerta(base, cx, hw, BAJA_FOTO.get(nombre, 0.0))
+            if muneca is None:              # el puno del dedo en la nariz
+                muneca = MOCO_FOTO[nombre]['puno']
+                muneca = (muneca[0] - hw * 0.06, muneca[1] + hw * 0.1)
+            x0, y0 = caja(base)[:2]
+            fin = (px + muneca[0] * s, py + (muneca[1] - top) * s)
+            base = antebrazo(borra(base, poli), (x0 + codo[0], y0 + codo[1]), fin, 0.12 * medidas_cabeza(base)[2],
+                             ref_muto)
+        f['f_' + nombre] = limpia(injerta(base, cab, cx, hw, BAJA_FOTO.get(nombre, 0.0)))
     return f
 
 
@@ -670,7 +823,12 @@ def main(args):
             x0, yb0, x1, yb1 = caja(f[origen])
             ox = (CELDA_W - int(round((x1 - x0) * escala))) // 2
             oy = CELDA_H - MARGEN - int(round((yb1 - yb0) * escala))
-            im = adornos(im, adorno, (ox + (cx - x0) * escala, oy + (y0 - yb0) * escala, hw * escala))
+            cab = (ox + (cx - x0) * escala, oy + (y0 - yb0) * escala, hw * escala)
+            if adorno == 'golpe':
+                # donde el puno da en la palma (PUNO_SOBRE, desde la esquina de la figura de las garras)
+                (gx, gy), ancho = PUNO_SOBRE
+                cab = (ox + (gx + ancho * 0.42) * escala, oy + (gy - ancho * 0.25) * escala, hw * escala)
+            im = adornos(im, adorno, cab)
         x, y = (i % COLS) * CELDA_W, (i // COLS) * CELDA_H
         atlas.paste(im, (x, y))
         lamina.alpha_composite(im, (x, y))
