@@ -32,9 +32,21 @@ QUE HACE
                encuentre en el globo (Marcajugador). v2 (motor v132): con
                Marcapublico (encendido), tambien con Modojuego apagado: la sala
                virtual marca a su publico en todas sus demos.
+  LIBRE        v3 (motor v143), para pruebas: con Partidalibre la partida no
+               tiene reloj ni rondas (Duracionronda y Rondas no cuentan): el
+               mundo sigue combatiendo hasta que gana un bando. Gana el MAL
+               cuando tiene Dominio de las celdas ocupadas del globo (1, por
+               defecto: todas, el publico exterminado). Gana el BIEN (el
+               publico) cuando tiene Dominio de ellas, el mal ya ha entrado en
+               juego en esta partida y no queda monstruo del mal en pie
+               (Trumpzilla y NefanyaMuto esperando o muertos). Al ganar:
+               recuento, entierro como un fin de ronda y espera; Nuevapartida
+               empieza otra. La demo GENoZilla de la sala la apaga mientras dura.
+               Para la sala de verdad, apagado: rondas con reloj.
   RITMO        el juego cuenta en pasos de juego: Pasojuego semicorcheas del
                pulso (fase 17), por defecto 4 (una negra).
   LEYENDA      JUEGO    ronda 2/4   4:12   publico 38   mal 14   (globo)
+               JUEGO    libre   12:40   publico 38   mal 14   (globo)   hasta exterminar
 
 OPERADORES (en /project1/FASE1)
 -------------------------------
@@ -46,6 +58,9 @@ PROBAR
   Modojuego y Duracionronda 20: a los 20 s se entierra el mundo y la ronda
   pasa a 2. Simponer (fase 22) en una casilla: aparece el anillo en la celda
   que mira. Apagar Modojuego a mitad de ronda: el mundo sigue como estaba.
+  Partidalibre (v3): la linea JUEGO dice libre y el tiempo que lleva; la
+  partida no acaba hasta que gana el bien o el mal (Dominio 0,9 para que
+  acabe antes, con el 90 % del globo ocupado).
 
 COMO USARLO
 -----------
@@ -56,7 +71,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase32 v2  (la marca del publico tambien sin juego: Marcapublico)'
+VERSION = 'fase32 v3  (la partida libre, para pruebas: Partidalibre y Dominio)'
 banner(VERSION)
 
 base = require_base(32)
@@ -76,8 +91,11 @@ add_par(base, page, 'float', 'Herenciamal', 'Herencia del mal', 0.0, 0.0, 1.0, c
 add_par(base, page, 'toggle', 'Marcajugador', 'Marca de jugador', True)
 add_par(base, page, 'toggle', 'Marcapublico', 'Marca tambien sin juego', True)     # v2
 add_par(base, page, 'pulse', 'Nuevapartida', 'Nueva partida')
+add_par(base, page, 'toggle', 'Partidalibre', 'Partida libre (pruebas)', False)     # v3
+add_par(base, page, 'float', 'Dominio', 'Dominio para ganar (libre)', 1.0, 0.5, 1.0, clamp=True)     # v3
 ok('pagina Fase32: Modojuego (apagado), Duracionronda 360 s, Rondas 4, Pasojuego 4, Herenciamal 0, '
-   'Marcajugador, Marcapublico (v2: la marca tambien sin juego), Nuevapartida')
+   'Marcajugador, Marcapublico (v2: la marca tambien sin juego), Nuevapartida, Partidalibre (v3: apagado, '
+   'sin reloj hasta que gana un bando) y Dominio 1')
 
 # -----------------------------------------------------------------------------
 # OPERADORES
@@ -102,7 +120,10 @@ leeme(base, 32, """FASE 32 - EL DEVORADOR: MODO DE JUEGO Y RONDA
   En modo juego solo entierra la ronda. Herenciamal 0: el mal no se hereda.
   Marcajugador: un anillo en la celda de cada persona (Marcapublico: tambien
   con Modojuego apagado). Pasojuego: el paso de
-  juego en semicorcheas (4, una negra). Geometria marcas.""")
+  juego en semicorcheas (4, una negra). Geometria marcas.
+  Partidalibre (pruebas): sin reloj ni rondas, hasta que gana un bando: el
+  mal con Dominio de las celdas ocupadas del globo (1: todas); el bien con
+  Dominio, el mal ya en juego y ningun monstruo del mal en pie.""")
 
 print_report()
 
@@ -114,7 +135,7 @@ print_report()
 PARS32 = ('Fuente', 'Alturamin', 'Alturamax', 'Anchosala', 'Fondosala', 'Tamcasilla', 'Separacioncabezas',
           'Confirmapersona', 'Simcasilla', 'Espejo', 'Anchoangular', 'Latnorte', 'Latsur', 'Probllegada',
           'Tparada', 'Temaenciclo', 'Modojuego', 'Duracionronda', 'Rondas', 'Herenciamal', 'Umbralaparicion',
-          'Simbalance', 'Colapsoon', 'Marcapublico')
+          'Simbalance', 'Colapsoon', 'Marcapublico', 'Partidalibre', 'Dominio')
 
 
 def prueba(t):
@@ -280,6 +301,85 @@ def _prueba(t, m, copy):
             len(con) == m.MARCA_SEGMENTOS and sin == [], '%d filas con, %d sin' % (len(con), len(sin)))
     o = base.op('i_marcas')
     t.check('marcas e i_marcas (Geometry COMP instanciado)', o is not None and base.op('marcas') is not None)
+
+    # 8. v3: la partida libre
+    _prueba_libre(t, m, S)
+
+
+def _prueba_libre(t, m, S):
+    if has_par(base, 'Umbralaparicion'):
+        base.par.Umbralaparicion = 1.0      # el monstruo no aparece solo: lo pone la prueba
+    W, c = S.nuevo(3)
+    base.par.Partidalibre = True
+    base.par.Dominio = 1.0
+    base.par.Duracionronda = 20.0
+    base.par.Rondas = 1
+    c = m.cfg()
+    J = W['juego']
+    vis = sorted(m.cara_visible(c))
+    pub, mal = vis[:4], vis[6:8]
+    for i in pub:
+        W['occ'][i], W['sp'][i], W['own'][i] = 2, m.GEO, m.GEO
+    J['t0'] = S.now - 100.0                 # el reloj de la ronda, muy pasado
+    S.semis(W, c, 2)
+    leg = m._legend_juego(W, c)
+    t.check('v3: con Partidalibre no hay reloj ni rondas (Duracionronda 20 s, 100 s pasados, Rondas 1): sigue la '
+            'ronda 1; sin el mal aun, el publico no gana; la linea JUEGO dice libre',
+            J['estado'] == 'juego' and J['ronda'] == 1 and not J['resultados'] and not J.get('mal_visto')
+            and 'libre' in leg and 'sin el mal aun' in leg and 'hasta exterminar' in leg, leg.strip())
+
+    for i in mal:                           # el mal entra
+        W['occ'][i], W['sp'][i], W['own'][i] = 1, m.MAL, m.GEO
+    S.semis(W, c, 1)
+    v_mal_dentro = J['estado'] == 'juego' and J.get('mal_visto')
+    for i in mal:                           # el mal desaparece; su monstruo, en pie
+        W['occ'][i] = 0
+        W['sp'][i] = W['own'][i] = 0
+    J['mon'].update(estado='busca', celda=vis[10])
+    v_pie = m.victoria_libre(W, c, J, len(pub), 0)
+    J['mon'].update(estado='muere', t_muerte=S.now)
+    v_muerto = m.victoria_libre(W, c, J, len(pub), 0)
+    J['mon'] = m.mon_nuevo(1, c['tam_inicial'])
+    t.check('v3: el bien gana solo con el mal ya en juego y sin monstruo del mal en pie (Trumpzilla buscando: no; '
+            'muerto: si)', v_mal_dentro and v_pie is None and v_muerto == 'publico', '%s / %s' % (v_pie, v_muerto))
+    t.check('v3: el mal gana al exterminar al publico; con Dominio 0,9, con el 90 % de las celdas ocupadas',
+            m.victoria_libre(W, c, J, 0, 5) == 'mal' and m.victoria_libre(W, c, J, 1, 9) is None
+            and m.victoria_libre(W, dict(c, dominio=0.9), J, 1, 9) == 'mal'
+            and m.victoria_libre(W, dict(c, dominio=0.9), J, 9, 1) == 'publico'
+            and m.victoria_libre(W, dict(c, dominio=0.9), J, 8, 2) is None)
+
+    conchas = m.n_shells(W)
+    ev = S.semis(W, c, 1)                   # sin mal ni monstruo: gana el bien
+    leg = m._legend_juego(W, c)
+    r = J['resultados'][-1] if J['resultados'] else {}
+    t.check('v3: al ganar el bien, recuento, entierro (una concha mas) y espera; la linea JUEGO lo dice',
+            ev is not None and J['estado'] == 'espera' and r.get('gana') == 'publico' and r.get('libre')
+            and m.n_shells(W) == conchas + 1 and m.resultado_partida(J)['gana'] == 'publico'
+            and 'fin de la partida libre' in leg and 'gana el bien' in leg, leg.strip())
+
+    m.on_pulse('Nuevapartida')
+    W = m.world()
+    J = W['juego']
+    c = m.cfg()
+    for i in pub:
+        W['occ'][i] = 0
+        W['sp'][i] = W['own'][i] = 0
+    for i in mal:
+        W['occ'][i], W['sp'][i], W['own'][i] = 2, m.MAL, m.GEO
+    S.semis(W, c, 1)
+    leg = m._legend_juego(W, c)
+    t.check('v3: Nuevapartida empieza otra libre; sin publico en el globo, gana el mal',
+            J['estado'] == 'espera' and J['resultados'][-1]['gana'] == 'mal' and 'gana el mal' in leg, leg.strip())
+
+    base.par.Partidalibre = False
+    c = m.cfg()
+    m.on_pulse('Nuevapartida')
+    W = m.world()
+    J = W['juego']
+    J['t0'] = S.now - 20.0
+    S.semis(W, c, 1)
+    t.check('v3: Partidalibre apagado, vuelve el reloj: a los 20 s acaba la ronda (Rondas 1: espera)',
+            J['estado'] == 'espera' and len(J['resultados']) == 1 and not J['resultados'][0].get('libre'))
 
 
 run_test(base, prueba)

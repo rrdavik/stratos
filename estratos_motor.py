@@ -318,6 +318,15 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v143 (fase 32 v3): LA PARTIDA LIBRE, PARA PRUEBAS. Con Partidalibre
+#                 la partida no tiene reloj ni rondas: el mundo sigue combatiendo hasta
+#                 que gana un bando (victoria_libre). El mal gana cuando tiene Dominio de
+#                 las celdas ocupadas del globo (1: todas, el publico exterminado); el
+#                 bien (el publico), cuando tiene Dominio de
+#                 ellas, el mal ya ha entrado en juego y no queda monstruo del mal en pie
+#                 (Trumpzilla y NefanyaMuto esperando o muertos). Al ganar: recuento,
+#                 entierro como un fin de ronda y espera (Nuevapartida). El guion de
+#                 GENoZilla fuerza su fin de ronda con fin_ya (antes movia t0).
 #                 Motor v142 (fase 41): NEFANYAMUTO, el segundo monstruo del mal (un MUTO con
 #                 la cabeza de NefanyaMuto). Aparece con la cara visible construida al 50 %
 #                 (Umbralnefa) y siembra el mal como Trumpzilla, por su cuenta. Si se
@@ -390,7 +399,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v142'
+MOTOR_VERSION = 'motor v143'
 
 import math
 import time as _time
@@ -630,6 +639,7 @@ DEFAULT_CFG = dict(
     carpeta_historico='',
     # fases 32 a 37: el juego «El devorador» (lo apagado por defecto: Modojuego y las armas)
     modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1, marca_publico=1,
+    partida_libre=0, dominio=1.0,       # motor v143: la partida libre (pruebas), hasta que gane un bando
     umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3, dano_monstruo=0.5,
     paso_monstruo=32, paso_grande=16, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0, saltos_monstruo=1, tiempo_salto=0.15, bote_salto=0.15,
@@ -17539,7 +17549,8 @@ def valores_dmx(W, cfg, now, filas):
 #            close_cycle, el camino de Forzarciclo), el recuento sobre TODO el
 #            globo (publico: occ > 0 y sp != MAL; mal: occ > 0 y sp == MAL; en
 #            empate gana el publico), Herenciamal al enterrar y la marca de cada
-#            jugador (un anillo en la celda que mira su casilla).
+#            jugador (un anillo en la celda que mira su casilla). Motor v143:
+#            Partidalibre, sin reloj ni rondas, hasta que gana un bando (Dominio).
 #   FASE 33  el monstruo: aparece al construirse Umbralaparicion de la cara
 #            visible, por el borde por el que entran las celdas con el giro;
 #            elige su objetivo con un Dijkstra (occ / (1 + coste)); avanza una
@@ -17664,15 +17675,18 @@ def ganador(pub, mal):
 
 def tiempo_ronda(W, cfg, now):
     J = W.get('juego') or {}
+    if partida_libre(cfg):              # motor v143: sin reloj, el tiempo que lleva
+        return max(0.0, now - J.get('t_libre', J.get('t0', now)))
     return max(0.0, cfg['duracion_ronda'] - max(0.0, now - J.get('t0', now)))
 
 
-def fin_de_ronda(W, cfg, now):
+def fin_de_ronda(W, cfg, now, gana=None):
     """El recuento, el entierro forzado (close_cycle: la concha, la clasificacion
-    y la noche de la fase 28) y la ronda siguiente; tras Rondas, espera."""
+    y la noche de la fase 28) y la ronda siguiente; tras Rondas, espera. Motor v143:
+    con gana ('publico' o 'mal'), la partida libre acaba con ese ganador (espera)."""
     J = W['juego']
     pub, mal = recuento(W)
-    J['resultados'].append(dict(ronda=J['ronda'], publico=pub, mal=mal, gana=ganador(pub, mal), t=now))
+    J['resultados'].append(dict(ronda=J['ronda'], publico=pub, mal=mal, gana=gana or ganador(pub, mal), t=now))
     ev = close_cycle(W, cfg, now, 'ronda')
     ev['juego'] = dict(J['resultados'][-1])
     J['recuento'] = dict(publico=0, mal=0)
@@ -17687,7 +17701,12 @@ def fin_de_ronda(W, cfg, now):
     J['rescate_cas'] = {}
     J['paso'] = 0
     J['t0'] = now
-    if J['ronda'] >= int(cfg['rondas']):
+    if gana is not None:                # motor v143: la partida libre, ganada
+        J['resultados'][-1]['libre'] = True
+        J['estado'] = 'espera'
+        W['aviso'] = 'fin de la partida libre: gana %s (publico %d, mal %d, %s)' % (
+            BANDO[gana], pub, mal, _mmss(now - J.get('t_libre', now)))
+    elif J['ronda'] >= int(cfg['rondas']):
         J['estado'] = 'espera'
         r = resultado_partida(J)
         W['aviso'] = 'fin de la partida: gana %s %d-%d' % (r['gana'], r['publico'], r['mal'])
@@ -17699,9 +17718,45 @@ def fin_de_ronda(W, cfg, now):
     return ev
 
 
+# --- la partida libre (motor v143) -------------------------------------------------
+
+BANDO = dict(publico='el bien', mal='el mal')
+
+
+def partida_libre(cfg):
+    """Partidalibre: sin reloj ni rondas, hasta que gana un bando (para pruebas)."""
+    return bool(cfg.get('partida_libre'))
+
+
+def mal_en_pie(J):
+    """Trumpzilla o NefanyaMuto en el planeta (ni esperando ni muertos)."""
+    return any(x is not None and x.get('estado') not in ('espera', 'muere') and x.get('celda') is not None
+               for x in (J.get('mon'), J.get('nefa')))
+
+
+def victoria_libre(W, cfg, J, pub, mal):
+    """El bando que gana la partida libre, o None. Dominio (1 por defecto: todas) es la
+    parte de las celdas ocupadas del globo que necesita. El bien (el publico), ademas,
+    con el mal ya en juego en esta partida y sin monstruo del mal en pie: si no, ganaria
+    antes de que el mal apareciera, o con Trumpzilla vivo, que lo vuelve a sembrar."""
+    tot = pub + mal
+    if tot <= 0:
+        return None
+    d = max(0.5, min(1.0, float(cfg.get('dominio', 1.0))))
+    if mal > 0 and mal >= d * tot - 1e-9 and mal > pub:
+        return 'mal'
+    if J.get('mal_visto') and pub > 0 and pub >= d * tot - 1e-9 and pub > mal and not mal_en_pie(J):
+        return 'publico'
+    return None
+
+
 def resultado_partida(J):
-    """Rondas ganadas por cada bando (en empate de rondas, gana el publico)."""
+    """Rondas ganadas por cada bando (en empate de rondas, gana el publico). Motor
+    v143: la partida libre la gana quien gano su final."""
     rs = J.get('resultados', [])
+    if rs and rs[-1].get('libre'):
+        r = rs[-1]
+        return dict(publico=int(r['gana'] == 'publico'), mal=int(r['gana'] == 'mal'), gana=r['gana'])
     p = sum(1 for r in rs if r['gana'] == 'publico')
     m = len(rs) - p
     return dict(publico=p, mal=m, gana='mal' if m > p else 'publico')
@@ -17762,7 +17817,12 @@ def juego_avanzar(W, cfg, now, semis):
     _giro_juego(W, cfg)
     if J['estado'] != 'juego':
         return None
-    if now - J['t0'] >= cfg['duracion_ronda'] - 1e-9:
+    libre = partida_libre(cfg)
+    if libre and J.get('t_libre') is None:
+        J['t_libre'] = float(now)       # motor v143: desde cuando se combate sin reloj
+    elif not libre:
+        J.pop('t_libre', None)
+    if J.pop('fin_ya', False) or (not libre and now - J['t0'] >= cfg['duracion_ronda'] - 1e-9):
         return fin_de_ronda(W, cfg, now)
     if cfg['nivel'] >= 33:
         monstruo_reloj(W, cfg, now)
@@ -17783,6 +17843,12 @@ def juego_avanzar(W, cfg, now, semis):
         mal_tick(W, cfg, now)
     pub, mal = recuento(W)
     J['recuento'] = dict(publico=pub, mal=mal)
+    if mal > 0 or mal_en_pie(J):
+        J['mal_visto'] = True           # motor v143: el mal ya ha entrado en juego
+    if libre:
+        gana = victoria_libre(W, cfg, J, pub, mal)
+        if gana is not None:
+            return fin_de_ronda(W, cfg, now, gana)
     return None
 
 
@@ -21255,7 +21321,7 @@ def _demo_tick(W, cfg, cap, now, t, r):
             if _demo_monstruo(W, cfg, now, r.get('monstruo'), acum=10) is not None:
                 hecho.append('devora la corona de la celda %s' % r.get('monstruo'))
         elif cap == 12 and t >= 3.0 and _una_vez('fin'):
-            J['t0'] = now - float(cfg['duracion_ronda'])    # el fin de ronda, ya
+            J['fin_ya'] = True          # el fin de ronda, ya (v143: tambien en la partida libre)
             hecho.append('fin de ronda')
         if cap == 5 and t >= 6.0:       # v133: el monstruo, a por la torre
             hecho += _demo_cebo(W, cfg, J['mon'], r.get('torre'))
@@ -21320,8 +21386,17 @@ def _legend_juego(W, c):
     if J['estado'] != 'juego':
         rp = resultado_partida(J)
         ult = J['resultados'][-1] if J['resultados'] else dict(publico=0, mal=0)
+        if ult.get('libre'):            # motor v143
+            return '  JUEGO    fin de la partida libre   gana %s   (publico %d   mal %d)   Nuevapartida' % (
+                BANDO[ult['gana']], ult['publico'], ult['mal'])
         return '  JUEGO    fin   gana %s %d-%d   (ronda %d: publico %d   mal %d)   Nuevapartida' % (
             rp['gana'], rp['publico'], rp['mal'], J['ronda'], ult['publico'], ult['mal'])
+    if partida_libre(c):                # motor v143: sin reloj, lo que lleva y lo que falta para ganar
+        d = max(0.5, min(1.0, float(c.get('dominio', 1.0))))
+        meta = 'hasta exterminar' if d >= 1.0 - 1e-9 else 'hasta el %d%%' % int(round(d * 100))
+        return '  JUEGO    libre   %s   publico %d   mal %d   (globo)   %s%s' % (
+            _mmss(tiempo_ronda(W, c, W.get('t') or 0.0)), r['publico'], r['mal'], meta,
+            '' if J.get('mal_visto') else ', sin el mal aun')
     return '  JUEGO    ronda %d/%d   %s   publico %d   mal %d   (globo)' % (
         J['ronda'], int(c['rondas']), _mmss(tiempo_ronda(W, c, W.get('t') or 0.0)), r['publico'], r['mal'])
 
@@ -21911,7 +21986,9 @@ def cfg():
                  paso_juego=max(1, int(_p('Pasojuego', c['paso_juego']))),
                  herencia_mal=max(0.0, min(1.0, _p('Herenciamal', c['herencia_mal']))),
                  marca_jugador=int(bool(_p('Marcajugador', True))),
-                 marca_publico=int(bool(_p('Marcapublico', True))))
+                 marca_publico=int(bool(_p('Marcapublico', True))),
+                 partida_libre=int(bool(_p('Partidalibre', False))),             # motor v143
+                 dominio=max(0.5, min(1.0, _p('Dominio', c['dominio']))))
     if c['nivel'] >= 33:
         c.update(umbral_aparicion=max(0.0, min(1.0, _p('Umbralaparicion', c['umbral_aparicion']))),
                  tam_inicial=max(0.1, min(1.0, _p('Tamanoinicial', c['tam_inicial']))),
@@ -22819,7 +22896,10 @@ def on_pulse(name):
             print('JUEGO  enciende antes Modojuego')
         else:
             nueva_partida(W, c, now)
-            print('JUEGO  nueva partida: ronda 1 de %d, %d s' % (int(c['rondas']), int(c['duracion_ronda'])))
+            if partida_libre(c):
+                print('JUEGO  nueva partida libre: sin reloj, hasta que gane el bien o el mal')
+            else:
+                print('JUEGO  nueva partida: ronda 1 de %d, %d s' % (int(c['rondas']), int(c['duracion_ronda'])))
     elif name == 'Simmonstruo':         # fase 33: el monstruo aparece ya
         juego_al_dia(W, c, now)
         print(sim_monstruo(W, c, now))

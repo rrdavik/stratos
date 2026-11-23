@@ -237,6 +237,11 @@ LAS DEMOS (v30, sala v18, motor v140)
   en los capitulos. Cada capitulo de GENoZilla lo apaga (como pone Umbralaparicion
   a 1) y al salir vuelve como estaba.
 
+  v41 (sala v25, motor v143): GENOZILLA SIN PARTIDA LIBRE. La partida libre de
+  las pruebas (Partidalibre, pagina Fase32: sin reloj, hasta que gana un bando)
+  acabaria un capitulo en cuanto ganara alguien. GENoZilla la apaga mientras dura,
+  como enciende Modojuego, y al salir vuelve como estaba.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -251,7 +256,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v40  (la pantalla, en el centro de la pared del fondo, con un GLSL MAT)'
+VERSION = 'sala_virtual v41  (GENoZilla apaga la partida libre de las pruebas mientras dura)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 

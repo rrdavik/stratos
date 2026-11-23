@@ -11,6 +11,7 @@ Turf War de toda la sala contra un monstruo. El público construye quedándose q
 |---|---|---|---|
 | 32 | `fase32_juego.py` | Modo de juego, ronda, recuento del globo, herencia del mal y marca de jugador | v106 |
 | 32 v2 | `fase32_juego.py` | La marca del público también sin juego (`Marcapublico`, encendido): la sala virtual marca a su público en todas sus demos | v132 |
+| 32 v3 | `fase32_juego.py` | La partida libre, para pruebas (`Partidalibre`, apagado; `Dominio` 1): sin reloj ni rondas, el mundo combate hasta que gana el bien o el mal. Con comun v100 y sala v25 | v143 |
 | 33 | `fase33_monstruo.py` | El monstruo (aparición, objetivo, movimiento, devorar, crecer) y los brotes del mal | v107 |
 | 33 v4 | `fase33_monstruo.py` | GENoZilla un tercio más lento: `Pasomonstruo` 24 y `Pasogrande` 12 (antes 16 y 8) | v120 |
 | 33 v6 | `fase33_monstruo.py` | GENoZilla más lento y a saltos de media celda: `Pasomonstruo` 32 y `Pasogrande` 16 (8 y 4 negras por celda); `Saltosmonstruo`, `Tiemposalto` 0,15 s y `Botesalto` 0,15 | v126 |
@@ -64,6 +65,11 @@ exec(open('C:/Users/DareDave/Downloads/est/fase32_juego.py').read())
 - **Solo entierra la ronda.** En modo juego ni el ciclo de la fase 6 (estancado, edad máxima, cambio de pattern) ni el colapso de la fase 23 cierran el mundo: lo cierra la ronda (o `Forzarciclo`, a mano). El mundo sigue midiendo madurez y novedad como siempre.
 - **Recuento.** Sobre **todas las celdas del globo**, en la cara visible y fuera de ella (D3). Público: celdas con `occ > 0` y `sp != MAL`; mal: celdas con `occ > 0` y `sp == MAL`. Gana el mayor; en empate, el público. Se recalcula en cada fotograma (85 celdas: nada). La partida la gana quien gane más rondas (en empate de rondas, el público).
 - **Herencia del mal.** Al enterrar en modo juego, la ocupación del mal se hereda con `Herenciamal` (0, D9) en lugar de `Herencia`. La concha guarda `sp = MAL` en sus celdas, como guarda cualquier especie.
+- **Partida libre (v3, motor v143), para pruebas.** Con `Partidalibre` la partida no tiene reloj ni rondas (`Duracionronda` y `Rondas` no cuentan): el mundo sigue combatiendo hasta que gana un bando, y la leyenda dice el tiempo que lleva.
+  - **Gana el mal** cuando tiene `Dominio` de las celdas ocupadas del globo: con 1 (por defecto), todas, es decir, el público exterminado.
+  - **Gana el bien** (el público) cuando tiene `Dominio` de ellas, **el mal ya ha entrado en juego** en esta partida (un brote o un monstruo del mal; si no, ganaría nada más empezar) y **no queda monstruo del mal en pie** (Trumpzilla y NefanyaMuto esperando o muertos; con uno vivo el mal vuelve a brotar). Con `Dominio` 1: ni una celda del mal y los monstruos muertos.
+  - Al ganar: recuento, entierro como un fin de ronda y espera; `Nuevapartida` empieza otra (libre, si sigue encendido). Apagar `Partidalibre` a mitad devuelve el reloj de la ronda.
+  - Para la sala de verdad, apagado: rondas con reloj. La demo GENoZilla de la sala virtual la apaga mientras dura (sala v25) y las autopruebas de las fases 32 a 41 juegan con reloj (comun v100).
 - **Marca de jugador.** Un anillo de 8 listones en la celda que mira cada persona de la sala (fase 24), de un solo color de la paleta humana para toda la sala (familia plástico, como las inclusiones).
 
 ### Operadores (en `/project1/FASE1`)
@@ -74,18 +80,22 @@ exec(open('C:/Users/DareDave/Downloads/est/fase32_juego.py').read())
 
 ### Parámetros (página Fase32)
 
-`Modojuego` apagado · `Duracionronda` 360 s · `Rondas` 4 · `Pasojuego` 4 · `Herenciamal` 0 · `Marcajugador` encendido · `Marcapublico` encendido (v2) · `Nuevapartida` (pulso)
+`Modojuego` apagado · `Duracionronda` 360 s · `Rondas` 4 · `Pasojuego` 4 · `Herenciamal` 0 · `Marcajugador` encendido · `Marcapublico` encendido (v2) · `Nuevapartida` (pulso) · `Partidalibre` apagado (v3) · `Dominio` 1 (v3; de 0,5 a 1: la parte del globo ocupado que necesita un bando para ganar la partida libre)
 
 ### Leyenda
 
 ```
 JUEGO    ronda 2/4   4:12   publico 38   mal 14   (globo)
 JUEGO    fin   gana publico 3-1   (ronda 4: publico 30   mal 22)   Nuevapartida
+JUEGO    libre   12:40   publico 38   mal 14   (globo)   hasta exterminar
+JUEGO    fin de la partida libre   gana el mal   (publico 0   mal 41)   Nuevapartida
 ```
 
 ### Prueba manual
 
 `Modojuego` y `Duracionronda` 20: a los 20 s se entierra el mundo (fila `ronda` en la tabla `ciclos`) y la leyenda pasa a la ronda 2. `Simponer` en una casilla: aparece el anillo en la celda que mira. Apagar `Modojuego` a mitad de ronda: el mundo sigue como estaba, sin los brotes del mal.
+
+`Partidalibre` (v3): la línea `JUEGO` dice `libre` y cuenta hacia arriba; pasan los 20 s y no se entierra nada. La partida acaba cuando gana el bien o el mal (con `Dominio` 0,9, antes: con el 90 % del globo ocupado).
 
 ### Autoprueba
 
@@ -95,6 +105,7 @@ JUEGO    fin   gana publico 3-1   (ronda 4: publico 30   mal 22)   Nuevapartida
 - La marca: 8 listones en la celda de la persona, del color de la paleta humana; `Marcajugador` apagado, ninguno. La línea `JUEGO`.
 - (v2, motor v132) Con `Modojuego` apagado y una persona en la sala, su anillo sale igual (`Marcapublico`); con `Marcapublico` apagado, ninguno. Dos personas en la misma celda, un solo anillo. La sala virtual lo usa para marcar a su público en todas sus demos (sala_virtual v27).
 - Apagar a mitad de ronda: sin estado de juego ni brotes; las columnas y el resto de la ocupación, iguales.
+- (v3, motor v143) La partida libre: con el reloj de la ronda muy pasado y `Rondas` 1 sigue la ronda 1; sin el mal aún, el público no gana. El bien gana solo con el mal ya en juego y sin monstruo del mal en pie (Trumpzilla buscando: no; muerto: sí). El mal gana al exterminar al público; con `Dominio` 0,9, con el 90 %. Al ganar el bien: entierro (una concha más), espera y la línea `JUEGO`. `Nuevapartida` empieza otra; sin público en el globo, gana el mal. Apagado, vuelve el reloj.
 
 ---
 
@@ -334,7 +345,7 @@ Una por arma con su interruptor encendido y las demás apagadas; con todas apaga
 
 ## Qué ajustar en sala
 
-- **`Duracionronda` y `Rondas`**: 360 s y 4 (D5). Para enseñar el juego, 120 s y 2.
+- **`Duracionronda` y `Rondas`**: 360 s y 4 (D5). Para enseñar el juego, 120 s y 2. Para probar cómo se combate sin límite, `Partidalibre` (v3), y `Dominio` por debajo de 1 si el exterminio tarda demasiado.
 - **`Umbralaparicion`**: con poca gente el 25 % de la cara visible tarda en llenarse; bájalo si el monstruo no llega, o usa `Simmonstruo`.
 - **`Pasomonstruo` / `Pasogrande`**: desde la fase 33 v4 (motor v120) GENoZilla anda un tercio más lento: el pequeño da un paso cada compás y medio (24 semicorcheas; antes 16) y el grande cada 12 (antes 8). Un proyecto con los valores de antes pasa a los nuevos una sola vez; el tope sube a 128. Si la sala no llega a cortarle el camino, súbelo.
 - **Fase 33 v6 (motor v126): más lento y a saltos.** `Pasomonstruo` 32 (8 negras por celda, media celda cada 4) y `Pasogrande` 16 (4 negras, media celda cada 2); quien tenía 24 y 12 pasa a 32 y 16 una sola vez, y un valor puesto a mano se respeta. Si los saltos se ven bruscos, sube `Tiemposalto`; si el bote distrae, baja `Botesalto` (0: sin bote); `Saltosmonstruo` apagado vuelve al deslizamiento continuo.
