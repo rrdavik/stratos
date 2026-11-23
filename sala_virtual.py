@@ -209,6 +209,10 @@ LAS DEMOS (v30, sala v18, motor v140)
   vistas entrada, juego y visitante la miran; con la pantalla, la esfera y su
   peana no se dibujan (render_sala y render_plano eligen una u otra).
 
+  v37: la autoprueba lee la uv del lienzo como la de TouchDesigner (.val, por indice o
+  como secuencia): con la v36 el lienzo ya estaba bien (4 puntos, la uv por vertice),
+  pero tuple() no la leia y la prueba daba uv [].
+
   v36: LA PANTALLA EN TOUCHDESIGNER. El Script SOP lienzo crea la uv por vertice
   (como los SOP de TouchDesigner; si no puede, por punto) y recorre el poligono por
   indice: en TouchDesigner la autoprueba no le encontraba puntos (uv []). Si vuelve a
@@ -233,7 +237,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v36  (la pantalla en TouchDesigner: la uv del lienzo por vertice)'
+VERSION = 'sala_virtual v37  (la autoprueba lee la uv de la pantalla como la da TouchDesigner)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -932,20 +936,42 @@ def onCook(scriptOp):
 """
 
 
-def uvs_lienzo(lz):
-    """v36: las uv del rectangulo (por vertice o por punto), redondeadas y ordenadas."""
+def _uv2(a):
+    """v37: (u, v) de un valor de uv de TouchDesigner, se lea como se lea: .val, por
+    indice o como secuencia (en TouchDesigner no siempre se deja convertir con tuple)."""
+    for leer in (lambda x: x.val, lambda x: (x[0], x[1]), lambda x: tuple(x), lambda x: x):
+        try:
+            t = leer(a)
+            return (round(float(t[0]), 3), round(float(t[1]), 3))
+        except Exception:
+            pass
+    raise ValueError('no se como leer %s (%r)' % (type(a).__name__, a))
+
+
+def _vertices(pr):
+    try:
+        return [pr[k] for k in range(len(pr))]
+    except Exception:
+        return list(pr)
+
+
+def uvs_lienzo(lz, errores=None):
+    """v36: las uv del rectangulo (por vertice o por punto), redondeadas y ordenadas.
+    v37: si no se pueden leer, el porque va a errores (una lista)."""
     if lz is None:
         return []
     out = []
     try:
         if any(a.name == 'uv' for a in lz.vertexAttribs):
             for pr in lz.prims:
-                for k in range(len(pr)):
-                    out.append(tuple(round(float(v), 3) for v in tuple(pr[k].uv)[:2]))
+                for v in _vertices(pr):
+                    out.append(_uv2(v.uv))
         else:
             for q in lz.points:
-                out.append(tuple(round(float(v), 3) for v in tuple(q.uv)[:2]))
-    except Exception:
+                out.append(_uv2(q.uv))
+    except Exception as e:
+        if errores is not None:
+            errores.append('%s: %s' % (type(e).__name__, e))
         return []
     return sorted(out)
 
@@ -2072,7 +2098,8 @@ def prueba_pantalla(t, c, eq, hx, hz):
             '%.2f x %.2f m, planeta %.2f m' % (r['w'], r['h'], 0.85 * r['h']))
     pan = sala.op('pantalla')
     lz = pan.op('lienzo') if pan is not None else None
-    uvs = uvs_lienzo(lz)
+    err_uv = []
+    uvs = uvs_lienzo(lz, err_uv)
     t.check('v34: la pantalla lleva el render entero de FASE1 (mat_pantalla, Color Map = imagen_fase1, uv de 0 a 1) '
             'y se coloca y escala sola (sala_motor.pantalla)',
             pan is not None and str(sala.op('mat_pantalla').par.colormap.val).split('/')[-1] == 'imagen_fase1'
@@ -2081,7 +2108,7 @@ def prueba_pantalla(t, c, eq, hx, hz):
             and float(pan.par.scale.eval()) == 1.0 and float(sala.op('esfera').par.scale.eval()) < 1e-3
             and all(n_ in str(sala.op(rn).par.geometry.val).split() for rn in ('render_sala', 'render_plano')
                     for n_ in ('pantalla', 'esfera')),
-            'uv %s; lienzo: %s' % (uvs, diag_lienzo(lz)))
+            'uv %s; lienzo: %s%s' % (uvs, diag_lienzo(lz), ('; al leer la uv: ' + err_uv[0]) if err_uv else ''))
     # entera en la vista entrada: sus cuatro esquinas dentro del cuadro (80 grados, 16:9)
     p, m_ = sm.vista_entrada(c, None, 'entrada')
 
