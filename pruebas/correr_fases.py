@@ -53,7 +53,7 @@ FASES = ['fase12_base.py', 'fase3_semilla.py', 'fase4_desborde.py', 'fase5_espec
          'fase29_fila.py', 'fase30_relampago.py', 'fase31_historico.py',
          'fase32_juego.py', 'fase33_monstruo.py', 'fase34_zanjas.py', 'fase35_rescate.py', 'fase36_luzjuego.py',
          'fase37_armas.py', 'fase38_trumpzilla.py', 'fase39_mal.py', 'fase40_godzilla.py',
-         'fase41_nefanyamuto.py', 'fase42_godzilla_azul.py']
+         'fase41_nefanyamuto.py', 'fase42_godzilla_azul.py', 'fase43_ronda_genozilla.py']
 SALA = 'sala_virtual.py'           # no es una fase: la maqueta de la instalacion
 # con --hasta, la sala se monta tras las fases si el corte llega a esta (sus demos juegan a
 # GENoZilla con lo de las fases 32 a 40); antes no, y sin ella no se juega la partida simulada
@@ -140,6 +140,10 @@ def partida(sim, fps=30.0, ronda=60.0):
     base.par.Probllegada = 0.0
     base.par.Duracionronda = ronda
     base.par.Rondas = 2
+    rgz = getattr(base.par, 'Rondagenozilla', None)     # la partida de dos rondas, sin la ronda GENoZilla
+    rgz0 = rgz.eval() if rgz is not None else None
+    if rgz is not None:
+        rgz.val = False
     base.par.Modojuego = True
     tfila = base.par.Tfila.eval()
     base.par.Tfila = 1.0                # las filas cavan al segundo: el monstruo sigue en su celda
@@ -270,6 +274,8 @@ def partida(sim, fps=30.0, ronda=60.0):
     hechos['estado'] = J['estado']
     base.par.Modojuego = False
     base.par.Tfila = tfila
+    if rgz is not None:
+        rgz.val = rgz0
     if godz is not None:
         godz.val = godz0
     if nefa is not None:
