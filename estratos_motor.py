@@ -318,6 +318,15 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v144: EL MONSTRUO NO SUELTA LO QUE DEVORA. Cada Recalculo pasos el
+#                 monstruo volvia a elegir presa (occ / (1 + coste)) tambien mientras comia:
+#                 la celda que devoraba bajaba y, en un mundo denso, una vecina llena valia
+#                 mas que lo que le quedaba (15 / 2 > 6), asi que la dejaba a medias. Picaba
+#                 la capa de arriba de todo, crecia a forma grande y no vaciaba ninguna:
+#                 sin brotes del mal (GENoZilla 2, Aparece, fallaba en el mundo de FASE1).
+#                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
+#                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
+#                 sombra de la cara oculta y la tregua mandan como antes).
 #                 Motor v143 (fase 32 v3): LA PARTIDA LIBRE, PARA PRUEBAS. Con Partidalibre
 #                 la partida no tiene reloj ni rondas: el mundo sigue combatiendo hasta
 #                 que gana un bando (victoria_libre). El mal gana cuando tiene Dominio de
@@ -416,7 +425,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v143'
+MOTOR_VERSION = 'motor v144'
 
 import math
 import time as _time
@@ -18628,6 +18637,22 @@ def recalcular_objetivo(W, cfg, m, now=None):
     return t
 
 
+def devorando(W, cfg, m, comer):
+    """Motor v144: esta en su objetivo, devorandolo, y aun le queda que comer."""
+    t = m.get('objetivo')
+    return (m.get('estado') == 'devora' and t is not None and t == m.get('celda') and W['occ'][t] > 0
+            and comer(W, cfg, m, t))
+
+
+def no_soltar(m, t):
+    """Motor v144: tras recalcular, quien devoraba t sigue en t hasta vaciarla (antes, en
+    un mundo denso, una vecina llena valia mas que lo que le quedaba y la dejaba a medias).
+    Manda el recalculo si lo han acorralado (cerco) o se ha quedado en la cara oculta."""
+    if m.get('acorralado') or m.get('sombra') or m.get('objetivo') == t:
+        return
+    m['objetivo'], m['camino'], m['estado'] = t, [], 'devora'
+
+
 def actualizar_tam(cfg, m):
     ti = max(0.1, min(1.0, cfg['tam_inicial']))
     om = max(1, int(cfg['ocupacion_max']))
@@ -18783,9 +18808,12 @@ def monstruo_paso(W, cfg, now, m=None):
         m['estado'] = 'busca'
     m['recalc'] += 1
     t = m['objetivo']
+    comiendo = devorando(W, cfg, m, comestible)
     if m['recalc'] >= max(1, int(cfg['recalculo'])) or t is None or \
             (not comestible(W, cfg, m, t) and not m.get('sombra')):  # v137: en la oscuridad, su objetivo es una pulsacion
         recalcular_objetivo(W, cfg, m, now)
+        if comiendo:
+            no_soltar(m, t)             # motor v144: acaba la celda que devora
     if m['objetivo'] is None or m['celda'] != m['objetivo']:
         return
     m['estado'] = 'devora'
@@ -20540,9 +20568,12 @@ def godzilla_paso(W, cfg, now):
         g['estado'] = 'busca'
     g['recalc'] += 1
     t = g['objetivo']
+    comiendo = devorando(W, cfg, g, comestible_bien)
     if g['recalc'] >= max(1, int(cfg['recalculo'])) or t is None or \
             (not comestible_bien(W, cfg, g, t) and not g.get('sombra')):  # v137
         recalcular_bien(W, cfg, g, now)
+        if comiendo:
+            no_soltar(g, t)             # motor v144: acaba la celda del mal que devora
     if g['objetivo'] is None or g['celda'] != g['objetivo']:
         return
     g['estado'] = 'devora'
