@@ -334,6 +334,16 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v147 (fase 43): LA RONDA GENOZILLA. Con Rondagenozilla (encendido)
+#                 la ronda ya no empieza al encender Modojuego: empieza cuando aparece el
+#                 primer monstruo (cualquiera) o cuando el mundo colapsa (un fin de ciclo o
+#                 el colapso de la fase 23, que en modo juego vuelven a contar). Dura
+#                 Duracionronda (6 min). Si el mundo colapsa a mitad, se entierra, la
+#                 ronda cuenta y empieza otra de 6 min; la PARTIDA acaba cuando una ronda
+#                 llega a sus 6 min (Rondas ya no cuenta): gana quien domina el globo al
+#                 final. Titulos en el centro del mundo (titulo_juego): «3, 2, 1» y
+#                 «GENoZilla Begins!!!» al empezar; los 5 s del final, estroboscopio y
+#                 cuenta atras «5, 4, 3, 2, 1» y «Stratos x GENoZilla Ends!!!».
 #                 Motor v146 (fase 42): EL GODZILLA AZUL, el segundo monstruo del bien.
 #                 Con Trumpzilla y NefanyaMuto a la vez el mal hacia mucho dano: solo
 #                 mientras los dos estan en pie sale otro Godzilla (azul cobalto, placas
@@ -437,7 +447,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v146'
+MOTOR_VERSION = 'motor v147'
 
 import math
 import time as _time
@@ -681,6 +691,7 @@ DEFAULT_CFG = dict(
     # fases 32 a 37: el juego «El devorador» (lo apagado por defecto: Modojuego y las armas)
     modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1, marca_publico=1,
     partida_libre=0, dominio=1.0,       # motor v143: la partida libre (pruebas), hasta que gane un bando
+    ronda_gz=1, titulo_juego=1,         # motor v147 (fase 43): la ronda desde el primer monstruo y los titulos
     umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3, dano_monstruo=0.5,
     paso_monstruo=32, paso_grande=16, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0, saltos_monstruo=1, tiempo_salto=0.15, bote_salto=0.15,
@@ -1774,6 +1785,9 @@ def cycle_tick(W, cfg, now, dt, tempo, playing):
         if motivo and not juego_on(W, cfg):     # fase 32: en modo juego entierra la ronda
             W['beats'] = min(W['beats'], bpb - 1e-6)
             return close_cycle(W, cfg, now, motivo)
+        if motivo and colapso_gz_on(W, cfg):    # motor v147: en la ronda GENoZilla, el mundo colapsa
+            W['beats'] = min(W['beats'], bpb - 1e-6)
+            return colapso_gz(W, cfg, now, motivo)
     return None
 
 
@@ -2702,8 +2716,11 @@ def tick(W, cfg, now, tempo=120.0, playing=True):
     if cfg['nivel'] >= 28:              # fase 28: la noche acaba (y las losetas dejan de emitir)
         noche_tick(W, cfg, now)
     if cfg['nivel'] >= 23:              # fase 23: la luz de la sala y el colapso
-        if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo'] and not juego_on(W, cfg):
-            out['ciclo'] = close_cycle(W, cfg, now, 'colapso')
+        if sala_luz_tick(W, cfg, now) == 'colapso' and not out['ciclo']:
+            if not juego_on(W, cfg):
+                out['ciclo'] = close_cycle(W, cfg, now, 'colapso')
+            elif colapso_gz_on(W, cfg):     # motor v147: el colapso de la sala tambien
+                out['ciclo'] = colapso_gz(W, cfg, now, 'colapso')
     if cfg['nivel'] >= 32:              # fase 32: el juego (con Modojuego)
         r = juego_tick(W, cfg, now)
         if r and not out['ciclo']:
@@ -17995,7 +18012,7 @@ def sala_luz_tick(W, cfg, now):
     s['hz'] = hz_estrobo(cfg, b) if est == DOMINANTE and not noche else 0.0
     jl = luz_juego_on(W, cfg)           # fase 36: en modo juego, la luz cuenta la partida
     if jl:
-        s['hz'] = hz_juego(W, cfg, noche)
+        s['hz'] = hz_juego(W, cfg, noche, now)
     if s['hz'] > 0.0 and now - s['estrobo_t'] >= 1.0 / s['hz'] - 1e-9:
         if limitador_destellos(W, cfg, now, 'estrobo'):
             s['estrobo_t'] = now
@@ -18006,7 +18023,7 @@ def sala_luz_tick(W, cfg, now):
     a = 1.0 if noche or s['bano'] == [0.0, 0.0, 0.0, 0.0] else 1.0 - math.exp(-dt / BANO_SUAVE)
     s['bano'] = [x + (o - x) * a for x, o in zip(s['bano'], obj)]
     # colapso (D8)
-    if cfg['colapso_on'] and b > BALANCE_COLAPSO and not noche and not jl:
+    if cfg['colapso_on'] and b > BALANCE_COLAPSO and not noche and (not jl or colapso_gz_on(W, cfg)):
         if s['desde'] is None:
             s['desde'] = now
         if now - s['desde'] >= cfg['max_erosion']:
@@ -18166,6 +18183,9 @@ def juego_al_dia(W, cfg, now):
         if not W.get('juego'):
             W['juego'] = juego_nuevo(cfg, now)
             W['aviso'] = 'modo juego: ronda 1 de %d' % int(cfg['rondas'])
+            if rondas_gz(cfg):          # motor v147: la ronda espera al primer monstruo
+                gz_al_dia(W, cfg, now)
+                W['aviso'] = 'modo juego GENoZilla: la ronda empieza con el primer monstruo'
         return W['juego']
     if 'juego' in W or 'bloqueadas' in W:
         juego_apagar(W, cfg)
@@ -18192,6 +18212,9 @@ def nueva_partida(W, cfg, now):
     J = W['juego'] = juego_nuevo(cfg, now)
     J['ultimoseq'] = dict(viejo.get('ultimoseq', {}))
     W['aviso'] = 'nueva partida: ronda 1 de %d' % int(cfg['rondas'])
+    if rondas_gz(cfg):                  # motor v147: la ronda espera al primer monstruo
+        gz_al_dia(W, cfg, now)
+        W['aviso'] = 'nueva partida GENoZilla: la ronda empieza con el primer monstruo'
     return J
 
 
@@ -18215,17 +18238,23 @@ def tiempo_ronda(W, cfg, now):
     J = W.get('juego') or {}
     if partida_libre(cfg):              # motor v143: sin reloj, el tiempo que lleva
         return max(0.0, now - J.get('t_libre', J.get('t0', now)))
+    if rondas_gz(cfg) and not (J.get('gz') or {}).get('corre'):
+        return float(cfg['duracion_ronda'])      # motor v147: la ronda aun no ha empezado
     return max(0.0, cfg['duracion_ronda'] - max(0.0, now - J.get('t0', now)))
 
 
-def fin_de_ronda(W, cfg, now, gana=None):
+def fin_de_ronda(W, cfg, now, gana=None, motivo=None):
     """El recuento, el entierro forzado (close_cycle: la concha, la clasificacion
     y la noche de la fase 28) y la ronda siguiente; tras Rondas, espera. Motor v143:
-    con gana ('publico' o 'mal'), la partida libre acaba con ese ganador (espera)."""
+    con gana ('publico' o 'mal'), la partida libre acaba con ese ganador (espera).
+    Motor v147: con motivo (un fin de ciclo o 'colapso'), el mundo ha colapsado a
+    mitad de una ronda GENoZilla: se entierra con ese motivo y empieza otra."""
     J = W['juego']
     pub, mal = recuento(W)
     J['resultados'].append(dict(ronda=J['ronda'], publico=pub, mal=mal, gana=gana or ganador(pub, mal), t=now))
-    ev = close_cycle(W, cfg, now, 'ronda')
+    if motivo is not None:
+        J['resultados'][-1]['colapso'] = motivo
+    ev = close_cycle(W, cfg, now, motivo or 'ronda')
     ev['juego'] = dict(J['resultados'][-1])
     J['recuento'] = dict(publico=0, mal=0)
     J['mon'] = mon_nuevo(0, cfg['tam_inicial'])
@@ -18242,7 +18271,19 @@ def fin_de_ronda(W, cfg, now, gana=None):
     J['rescate_cas'] = {}
     J['paso'] = 0
     J['t0'] = now
-    if gana is not None:                # motor v143: la partida libre, ganada
+    gz = rondas_gz(cfg)
+    if gz and motivo is not None:       # motor v147: el mundo colapsa, otra ronda de 6 min ya
+        empezar_ronda_gz(W, cfg, now, 'colapso')
+        W['aviso'] = 'el mundo colapsa (%s): ronda %d (la %d: publico %d, mal %d)' % (
+            motivo, J['ronda'], J['ronda'] - 1, pub, mal)
+    elif gz and gana is None:           # motor v147: la ronda llega a sus 6 min: fin de la partida
+        J['estado'] = 'espera'
+        G = J.setdefault('gz', {})
+        G['corre'] = False
+        G['titulo'] = dict(tipo='ends', t=float(now), gana=ganador(pub, mal), publico=pub, mal=mal)
+        W['aviso'] = 'fin de la partida GENoZilla: gana %s (publico %d, mal %d, %d ronda%s)' % (
+            BANDO[ganador(pub, mal)], pub, mal, J['ronda'], '' if J['ronda'] == 1 else 's')
+    elif gana is not None:              # motor v143: la partida libre, ganada
         J['resultados'][-1]['libre'] = True
         J['estado'] = 'espera'
         W['aviso'] = 'fin de la partida libre: gana %s (publico %d, mal %d, %s)' % (
@@ -18295,12 +18336,165 @@ def resultado_partida(J):
     """Rondas ganadas por cada bando (en empate de rondas, gana el publico). Motor
     v143: la partida libre la gana quien gano su final."""
     rs = J.get('resultados', [])
+    if rs and J.get('gz') is not None and not rs[-1].get('libre'):     # motor v147: la ronda final manda
+        r = rs[-1]
+        return dict(publico=r['publico'], mal=r['mal'], gana=r['gana'])
     if rs and rs[-1].get('libre'):
         r = rs[-1]
         return dict(publico=int(r['gana'] == 'publico'), mal=int(r['gana'] == 'mal'), gana=r['gana'])
     p = sum(1 for r in rs if r['gana'] == 'publico')
     m = len(rs) - p
     return dict(publico=p, mal=m, gana='mal' if m > p else 'publico')
+
+
+# --- la ronda GENoZilla (motor v147, fase 43) ---------------------------------------
+# La ronda empieza cuando aparece el primer monstruo (cualquiera de los cuatro) o
+# cuando el mundo colapsa, y dura Duracionronda (6 min). Si el mundo colapsa a
+# mitad (un fin de ciclo de la fase 6 o el colapso de la fase 23), se entierra,
+# la ronda cuenta y empieza otra; la partida acaba cuando una ronda llega a sus
+# 6 min. J['gz'] = {corre, titulo}; titulo = {tipo: begins | ronda | ends, t, ...}.
+
+FINAL_GZ = 5                    # s de cuenta atras (y estroboscopio) al final de la ronda
+CUENTA_GZ = 3                   # «3, 2, 1» antes de «GENoZilla Begins!!!»
+T_BEGINS = 2.5                  # s de «GENoZilla Begins!!!» (tras la cuenta)
+T_RONDA_GZ = 3.0                # s del titulo de una ronda tras un colapso
+T_ENDS = 6.0                    # s de «Stratos x GENoZilla Ends!!!»
+COL_TIT_CUENTA = (1.0, 0.78, 0.18)      # oro: la cuenta del principio
+COL_TIT_BEGINS = (1.0, 0.86, 0.30)
+COL_TIT_FINAL = (1.0, 0.22, 0.14)       # rojo: la cuenta del final
+COL_TIT_ENDS = (0.96, 0.96, 1.0)
+
+
+def rondas_gz(cfg):
+    """Rondagenozilla (fase 43), con reloj (la partida libre no tiene rondas)."""
+    return cfg['nivel'] >= 43 and bool(cfg.get('ronda_gz', 1)) and not partida_libre(cfg)
+
+
+def gz_al_dia(W, cfg, now):
+    """J['gz'] al encender: la ronda espera al primer monstruo (ronda 0)."""
+    J = W['juego']
+    if J.get('gz') is None:
+        J['gz'] = dict(corre=False, titulo=None, colapsos=0)
+        J['ronda'] = 0
+        J['t0'] = float(now)
+    return J['gz']
+
+
+def monstruo_en_pie(J):
+    """Algun monstruo (del mal o del bien) en el planeta."""
+    return any(x is not None and x.get('estado') not in ('espera', 'muere') and x.get('celda') is not None
+               for x in (J.get('mon'), J.get('nefa'), J.get('bien'), J.get('azul')))
+
+
+def empezar_ronda_gz(W, cfg, now, por):
+    """La ronda siguiente empieza ya: 6 min de reloj. La primera, con «3, 2, 1
+    GENoZilla Begins!!!»; las de despues de un colapso, con su numero."""
+    J = W['juego']
+    G = gz_al_dia(W, cfg, now)
+    J['ronda'] += 1
+    J['t0'] = float(now)
+    G['corre'] = True
+    G['por'] = por
+    if por == 'colapso':
+        G['colapsos'] = G.get('colapsos', 0) + 1
+    G['titulo'] = dict(tipo='begins' if J['ronda'] == 1 else 'ronda', t=float(now), ronda=J['ronda'], por=por)
+    if por != 'colapso':
+        W['aviso'] = 'GENoZilla: empieza la ronda %d (%s)' % (J['ronda'], por)
+    J['ev']['empieza'] = dict(ronda=J['ronda'], por=por, t=float(now))
+    return J['ronda']
+
+
+def colapso_gz_on(W, cfg):
+    """El mundo puede colapsar en modo juego: ronda GENoZilla, partida en marcha."""
+    return juego_on(W, cfg) and rondas_gz(cfg) and W['juego']['estado'] == 'juego'
+
+
+def colapso_gz(W, cfg, now, motivo):
+    """El mundo colapsa en modo juego. Con la ronda en marcha, cuenta y empieza
+    otra; antes del primer monstruo, se entierra y empieza la primera."""
+    J = W['juego']
+    G = gz_al_dia(W, cfg, now)
+    if G['corre']:
+        return fin_de_ronda(W, cfg, now, motivo=motivo)
+    ev = close_cycle(W, cfg, now, motivo)
+    empezar_ronda_gz(W, cfg, now, 'colapso')
+    W['aviso'] = 'el mundo colapsa (%s): empieza la ronda %d' % (motivo, J['ronda'])
+    return ev
+
+
+def final_gz(W, cfg, now):
+    """Los segundos que quedan (5, 4, 3, 2, 1) en los ultimos FINAL_GZ s de una
+    ronda GENoZilla en marcha; None si no."""
+    J = W.get('juego')
+    if not J or now is None or J.get('estado') != 'juego' or not rondas_gz(cfg) \
+            or not (J.get('gz') or {}).get('corre') or not juego_on(W, cfg):
+        return None
+    q = cfg['duracion_ronda'] - (now - J['t0'])
+    if q <= 0.0 or q > FINAL_GZ + 1e-9:
+        return None
+    return int(math.ceil(q - 1e-9))
+
+
+def _pop(u, dur=1.0):
+    """(alfa, escala) de un rotulo que entra de golpe, grande, y se asienta: u en s
+    desde que entra, dur lo que dura."""
+    if u < 0.0 or u >= dur:
+        return 0.0, 1.0
+    e = math.exp(-u / 0.12)
+    sale = max(0.0, min(1.0, (dur - u) / 0.18))
+    return max(0.0, min(1.0, min(u / 0.05, 1.0) * sale)), 1.0 + 0.35 * e
+
+
+def titulo_gz(W, cfg, now):
+    """El titulo del centro del mundo ahora: dict(texto, sub, alfa, escala, color)
+    o None. «3, 2, 1» y «GENoZilla Begins!!!» al empezar; «RONDA n» tras un
+    colapso; la cuenta «5 ... 1» del final y «Stratos x GENoZilla Ends!!!»."""
+    t = _titulo_gz(W, cfg, now)
+    if t is not None:                   # los largos, mas pequenos: caben en el ancho del render
+        t['escala'] *= min(1.0, float(TIT_CABE) / max(1, len(t['texto'])))
+    return t
+
+
+TIT_CABE = 16                   # caracteres que caben a tamano entero (Titulojuego, 1280 px)
+
+
+def _titulo_gz(W, cfg, now):
+    J = W.get('juego')
+    if not J or not cfg.get('titulo_juego', 1) or not rondas_gz(cfg) or not juego_on(W, cfg):
+        return None
+    q = final_gz(W, cfg, now)
+    if q is not None:
+        u = (now - J['t0']) - (cfg['duracion_ronda'] - q)       # s desde que empieza este numero
+        a, k = _pop(u, 1.0)
+        return dict(texto=str(q), sub='STRATOS x GENoZilla', alfa=a, escala=k * 1.25, color=COL_TIT_FINAL)
+    T = (J.get('gz') or {}).get('titulo')
+    if not T:
+        return None
+    u = now - T['t']
+    if T['tipo'] == 'begins':
+        if u < CUENTA_GZ:
+            n = CUENTA_GZ - int(u)
+            a, k = _pop(u - int(u), 1.0)
+            return dict(texto=str(n), sub='STRATOS x GENoZilla', alfa=a, escala=k * 1.25, color=COL_TIT_CUENTA)
+        a, k = _pop(u - CUENTA_GZ, T_BEGINS)
+        if a <= 0.0:
+            return None
+        return dict(texto='GENoZilla Begins!!!', sub='RONDA 1  ·  %s' % _mmss(cfg['duracion_ronda']),
+                    alfa=a, escala=k, color=COL_TIT_BEGINS)
+    if T['tipo'] == 'ronda':
+        a, k = _pop(u, T_RONDA_GZ)
+        if a <= 0.0:
+            return None
+        return dict(texto='RONDA %d' % T['ronda'], sub='EL MUNDO COLAPSA  ·  %s' % _mmss(cfg['duracion_ronda']),
+                    alfa=a, escala=k, color=COL_TIT_BEGINS)
+    if T['tipo'] == 'ends':
+        a, k = _pop(u, T_ENDS)
+        if a <= 0.0:
+            return None
+        return dict(texto='Stratos x GENoZilla Ends!!!',
+                    sub='GANA %s   %d - %d' % (BANDO[T['gana']].upper(), T['publico'], T['mal']),
+                    alfa=a, escala=k, color=COL_TIT_ENDS)
+    return None
 
 
 def juego_al_enterrar(W, cfg, now):
@@ -18363,7 +18557,14 @@ def juego_avanzar(W, cfg, now, semis):
         J['t_libre'] = float(now)       # motor v143: desde cuando se combate sin reloj
     elif not libre:
         J.pop('t_libre', None)
-    if J.pop('fin_ya', False) or (not libre and now - J['t0'] >= cfg['duracion_ronda'] - 1e-9):
+    gz = rondas_gz(cfg)
+    if gz:
+        gz_al_dia(W, cfg, now)
+    elif J.get('gz') is not None:       # motor v147: Rondagenozilla apagado a mitad: la ronda de siempre
+        J.pop('gz', None)
+        J['ronda'], J['t0'] = max(1, J['ronda']), float(now)
+    corre = not gz or J['gz']['corre']
+    if J.pop('fin_ya', False) or (corre and not libre and now - J['t0'] >= cfg['duracion_ronda'] - 1e-9):
         return fin_de_ronda(W, cfg, now)
     if cfg['nivel'] >= 33:
         monstruo_reloj(W, cfg, now)
@@ -18373,6 +18574,8 @@ def juego_avanzar(W, cfg, now, semis):
         nefa_reloj(W, cfg, now)
     if cfg['nivel'] >= 42:              # fase 42: el Godzilla azul, con los dos del mal en pie
         azul_reloj(W, cfg, now)
+    if gz and not J['gz']['corre'] and monstruo_en_pie(J):
+        empezar_ronda_gz(W, cfg, now, 'monstruo')       # motor v147: el primer monstruo empieza la ronda
     J['semi_f'] += max(0.0, float(semis))
     k = 0
     while J['semi_f'] >= 1.0 - 1e-9 and k < SEMIS_MAX:
@@ -19489,8 +19692,11 @@ def bano_juego(W, cfg, now, noche):
     return obj
 
 
-def hz_juego(W, cfg, noche):
-    """El estroboscopio, mientras el monstruo esta en forma grande."""
+def hz_juego(W, cfg, noche, now=None):
+    """El estroboscopio, mientras el monstruo esta en forma grande. Motor v147: y
+    en los ultimos FINAL_GZ s de la ronda GENoZilla."""
+    if not noche and final_gz(W, cfg, W.get('t') if now is None else now) is not None:
+        return min(float(DESTELLOS_MAX), max(0.0, cfg['max_hz']))
     m = W['juego']['mon']
     if noche or m['estado'] in ('espera', 'muere') or not grande(m):
         return 0.0
@@ -22275,6 +22481,11 @@ def _legend_juego(W, c):
         if ult.get('libre'):            # motor v143
             return '  JUEGO    fin de la partida libre   gana %s   (publico %d   mal %d)   Nuevapartida' % (
                 BANDO[ult['gana']], ult['publico'], ult['mal'])
+        if J.get('gz') is not None:     # motor v147: la ronda final manda
+            return '  JUEGO    fin GENoZilla   gana %s   publico %d   mal %d   (%d ronda%s, %d colapso%s)   ' \
+                'Nuevapartida' % (BANDO[rp['gana']], rp['publico'], rp['mal'], J['ronda'],
+                                  '' if J['ronda'] == 1 else 's', J['gz'].get('colapsos', 0),
+                                  '' if J['gz'].get('colapsos', 0) == 1 else 's')
         return '  JUEGO    fin   gana %s %d-%d   (ronda %d: publico %d   mal %d)   Nuevapartida' % (
             rp['gana'], rp['publico'], rp['mal'], J['ronda'], ult['publico'], ult['mal'])
     if partida_libre(c):                # motor v143: sin reloj, lo que lleva y lo que falta para ganar
@@ -22283,6 +22494,14 @@ def _legend_juego(W, c):
         return '  JUEGO    libre   %s   publico %d   mal %d   (globo)   %s%s' % (
             _mmss(tiempo_ronda(W, c, W.get('t') or 0.0)), r['publico'], r['mal'], meta,
             '' if J.get('mal_visto') else ', sin el mal aun')
+    if J.get('gz') is not None and rondas_gz(c):     # motor v147: la ronda GENoZilla
+        if not J['gz']['corre']:
+            return '  JUEGO    GENoZilla   esperando al primer monstruo (o al colapso)   publico %d   mal %d' % (
+                r['publico'], r['mal'])
+        q = final_gz(W, c, W.get('t') or 0.0)
+        return '  JUEGO    GENoZilla ronda %d   %s%s   publico %d   mal %d   (globo)   colapsos %d' % (
+            J['ronda'], _mmss(tiempo_ronda(W, c, W.get('t') or 0.0)), '   FINAL %d' % q if q else '',
+            r['publico'], r['mal'], J['gz'].get('colapsos', 0))
     return '  JUEGO    ronda %d/%d   %s   publico %d   mal %d   (globo)' % (
         J['ronda'], int(c['rondas']), _mmss(tiempo_ronda(W, c, W.get('t') or 0.0)), r['publico'], r['mal'])
 
@@ -22953,6 +23172,9 @@ def cfg():
         c.update(azul=int(bool(_p('Godzillaazul', True))),
                  alto_azul=max(0.2, min(4.0, _p('Altoazul', c['alto_azul']))),
                  emocion_azul=fa if fa in EMOCIONES_MON else 'auto')
+    if c['nivel'] >= 43:                # fase 43: la ronda GENoZilla y sus titulos
+        c.update(ronda_gz=int(bool(_p('Rondagenozilla', True))),
+                 titulo_juego=int(bool(_p('Titulojuego', True))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -25773,6 +25995,30 @@ def _legend_piel(c):
     return '  PIEL     turno %d/%d   celdas %d   inmediatas %d   %s%s   %s   %s' \
         % (inf.get('turno', 0), inf.get('turnos', 0), inf.get('celdas', 0), inf.get('inmediatas', 0), publica,
            ' (ahora)' if inf.get('publica') else '', py, arq)
+
+
+def titulo(que, frame=None):
+    """Motor v147 (fase 43): el titulo del centro del mundo para los Text TOP de
+    FASE1 (titulo_juego, titulo_juego_sombra, titulo_juego_sub). que: 'texto',
+    'sub', 'alfa', 'escala', 'r', 'g' o 'b'. Una vez por fotograma."""
+    f = absTime.frame
+    if _CACHE.get('tit_frame') != f:
+        try:
+            W, c = world(), cfg_foto()
+            _CACHE['tit'] = titulo_gz(W, c, absTime.seconds) if c['nivel'] >= 43 else None
+        except Exception:
+            _CACHE['tit'] = None
+        _CACHE['tit_frame'] = f
+    t = _CACHE.get('tit')
+    if que in ('texto', 'sub'):
+        return t[que] if t else ''
+    if que == 'alfa':
+        return float(t['alfa']) if t else 0.0
+    if que == 'escala':
+        return float(t['escala']) if t else 1.0
+    if que in ('r', 'g', 'b'):
+        return float(t['color']['rgb'.index(que)]) if t else 1.0
+    return 0.0
 
 
 def legend(frame=None):

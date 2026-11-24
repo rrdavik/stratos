@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v102'
+VERSION_COMUN = 'comun v103'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -5787,7 +5787,8 @@ def guardar_sala(base, nombres):
     a 39, que prueban a Trumpzilla solo). comun v99: y Nefanyamuto (fase 41). comun v100:
     y Partidalibre (motor v143: las autopruebas juegan rondas con reloj)."""
     guarda = {}
-    for nm in list(nombres) + ['Godzilla', 'Nefanyamuto', 'Godzillaazul', 'Partidalibre']:   # comun v102: y el azul
+    for nm in list(nombres) + ['Godzilla', 'Nefanyamuto', 'Godzillaazul', 'Partidalibre',    # comun v102: y el azul
+                               'Rondagenozilla']:     # comun v103: y la ronda GENoZilla (fase 43)
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -5848,13 +5849,14 @@ class SalaJuego(object):
     avanza a mano; una semicorchea son SEMI s (120 BPM)."""
     SEMI = 0.125
 
-    def __init__(self, base, m, t0, godzilla=False, nefanya=False, azul=False):
+    def __init__(self, base, m, t0, godzilla=False, nefanya=False, azul=False, rondagz=False):
         self.base, self.m = base, m
         self.reloj = [float(t0)]
         self.tb = base.op('sala_personas')
         self.godzilla = godzilla            # comun v91: sin Godzilla (fase 40), salvo que se pida
         self.nefanya = nefanya              # comun v99: sin NefanyaMuto (fase 41), salvo que se pida
         self.azul = azul                    # comun v102: sin el Godzilla azul (fase 42), salvo que se pida
+        self.rondagz = rondagz              # comun v103: rondas de siempre, sin la ronda GENoZilla (fase 43)
 
     @property
     def now(self):
@@ -5881,6 +5883,8 @@ class SalaJuego(object):
             self.base.par.Godzillaazul = bool(self.azul)
         if has_par(self.base, 'Partidalibre'):     # comun v100: rondas con reloj (la fase 32 prueba la libre)
             self.base.par.Partidalibre = False
+        if has_par(self.base, 'Rondagenozilla'):   # comun v103: la ronda GENoZilla, solo si se pide
+            self.base.par.Rondagenozilla = bool(self.rondagz)
         W, c = m.world(), m.cfg()
         for _ in range(conchas):
             m.end_cycle(W, c, self.reloj[0])

@@ -246,6 +246,10 @@ LAS DEMOS (v30, sala v18, motor v140)
   seccion no pasa la autoprueba, su linea dice ademas lo que devolvieron sus
   notas (prende, no prende, cumbre...), los errores del caso y si espero; la de
   Quietos, construyen, la ocupacion de sus cuatro celdas antes y despues.
+  v44 (sala v28, motor v147): LA RONDA GENOZILLA. Con la fase 43, out_render sale
+  de con_titulo_juego (el render con el titulo de la ronda en el centro del
+  mundo): la pantalla de la sala lo ve. La demo GENoZilla apaga Rondagenozilla
+  mientras dura (sus capitulos llevan su propio fin de ronda).
 
 COMO USARLO
 -----------
@@ -261,7 +265,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v43  (sala v27: el porque del rescate de GENoZilla cuando falla)'
+VERSION = 'sala_virtual v44  (sala v28: la esfera ve el titulo de la ronda GENoZilla; la demo, sin ella)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
@@ -876,7 +880,8 @@ setexpr(esfera, 'ry', "%s.giro_esfera(absTime.frame)" % SM)     # v9: el planeta
 # redes distintas: el cable no se hacia y esfera_mini, esfera_media, con_esfera,
 # con_rotulo y monitor_sala se quedaban en error por falta de entrada.
 out_render = get_or_make(fase1, 'outTOP', 'out_render', 960, -300)
-connect(out_render, fase1.op('render'), 0)
+# v44: con la fase 43, el render con el titulo de la ronda GENoZilla en el centro del mundo
+connect(out_render, fase1.op('con_titulo_juego') or fase1.op('render'), 0)
 try:
     out_render.color = (0.1, 0.8, 0.9)
 except Exception:

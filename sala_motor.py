@@ -183,9 +183,13 @@
 #   v27         EL PORQUE DEL RESCATE DE GENOZILLA. Si el capitulo 4 (Rescatar un brote) no
 #               pasa, su linea dice cuantas personas llego a haber encima del brote y en sus
 #               vecinas (y cuantos aliados hacen falta) y cuanto duro la cuenta de Taliados.
+#   v28         GENOZILLA SIN LA RONDA GENOZILLA. La ronda de la fase 43 (motor v147,
+#               Rondagenozilla: empieza con el primer monstruo, acaba la partida a los
+#               6 min) no casa con los capitulos de la demo, que fuerzan su fin de ronda:
+#               la demo la apaga mientras dura y al salir vuelve como estaba.
 # =============================================================================
 
-SALA_VERSION = 'sala v27'
+SALA_VERSION = 'sala v28'
 
 import math
 
@@ -2130,7 +2134,8 @@ DEMOS_ETIQUETAS = ['1 Paseo: entran y salen, a veces en grupo; algo de la obra l
                    'Vacia: nadie']
 # lo que cada demo pone en FASE1 mientras dura (y devuelve al salir): GENoZilla juega;
 # las demas no (el monstruo se comeria lo que construye el publico)
-PARS_DEMO = dict(Fuente='simulada', Modojuego=True, Partidalibre=False)    # v25: sin la partida libre
+PARS_DEMO = dict(Fuente='simulada', Modojuego=True, Partidalibre=False,    # v25: sin la partida libre
+                 Rondagenozilla=False)     # v28: el guion lleva sus capitulos, sin la ronda GENoZilla (fase 43)
 PARS_SECCION = dict(Fuente='simulada', Modojuego=False)
 PARS_CAPITULO = sorted(set(k for sec in SECCIONES.values() for cp in sec['casos'] for k in cp['pars'])
                        | set(k for sec in SECCIONES.values() for k in sec['pars']) | set(ARMAS)
