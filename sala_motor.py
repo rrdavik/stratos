@@ -172,9 +172,13 @@
 #   v24         LA PANTALLA, EN LA PARED DEL FONDO. Centrada (antes, en la esquina de arriba a
 #               la izquierda), pegada al techo. La imagen de FASE1 la pone un GLSL MAT que saca
 #               su coordenada de la posicion del punto (sala_virtual v40).
+#   v25         GENOZILLA SIN PARTIDA LIBRE. La partida libre de las pruebas (motor v143,
+#               Partidalibre: sin reloj, hasta que gana un bando) acabaria un capitulo en
+#               cuanto ganara alguien. La demo GENoZilla la apaga mientras dura, como
+#               enciende Modojuego, y al salir vuelve como estaba.
 # =============================================================================
 
-SALA_VERSION = 'sala v24'
+SALA_VERSION = 'sala v25'
 
 import math
 
@@ -2119,7 +2123,7 @@ DEMOS_ETIQUETAS = ['1 Paseo: entran y salen, a veces en grupo; algo de la obra l
                    'Vacia: nadie']
 # lo que cada demo pone en FASE1 mientras dura (y devuelve al salir): GENoZilla juega;
 # las demas no (el monstruo se comeria lo que construye el publico)
-PARS_DEMO = dict(Fuente='simulada', Modojuego=True)
+PARS_DEMO = dict(Fuente='simulada', Modojuego=True, Partidalibre=False)    # v25: sin la partida libre
 PARS_SECCION = dict(Fuente='simulada', Modojuego=False)
 PARS_CAPITULO = sorted(set(k for sec in SECCIONES.values() for cp in sec['casos'] for k in cp['pars'])
                        | set(k for sec in SECCIONES.values() for k in sec['pars']) | set(ARMAS)

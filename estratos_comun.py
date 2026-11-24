@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v99'
+VERSION_COMUN = 'comun v100'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -5707,9 +5707,10 @@ def pagina_version(base, fase, etiqueta, version):
 def guardar_sala(base, nombres):
     """Lo que una autoprueba de sala cambia: parametros y la tabla sala_personas.
     comun v91: tambien Godzilla (SalaJuego lo apaga en las autopruebas de las fases 32
-    a 39, que prueban a Trumpzilla solo). comun v99: y Nefanyamuto (fase 41)."""
+    a 39, que prueban a Trumpzilla solo). comun v99: y Nefanyamuto (fase 41). comun v100:
+    y Partidalibre (motor v143: las autopruebas juegan rondas con reloj)."""
     guarda = {}
-    for nm in list(nombres) + ['Godzilla', 'Nefanyamuto']:
+    for nm in list(nombres) + ['Godzilla', 'Nefanyamuto', 'Partidalibre']:
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -5798,6 +5799,8 @@ class SalaJuego(object):
             self.base.par.Godzilla = bool(self.godzilla)
         if has_par(self.base, 'Nefanyamuto'):
             self.base.par.Nefanyamuto = bool(self.nefanya)
+        if has_par(self.base, 'Partidalibre'):     # comun v100: rondas con reloj (la fase 32 prueba la libre)
+            self.base.par.Partidalibre = False
         W, c = m.world(), m.cfg()
         for _ in range(conchas):
             m.end_cycle(W, c, self.reloj[0])
