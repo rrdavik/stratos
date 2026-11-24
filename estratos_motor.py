@@ -318,6 +318,13 @@
 #                 la fila tiene por donde cavar. En el Cebo, el guion lleva al monstruo a
 #                 la torre (en un mundo lleno habria cebos mejores). Fin de ronda cuenta el
 #                 mundo de verdad (sin la siembra al azar del globo).
+#                 Motor v145: UNA FAMILIA QUE YA NO EXISTE NO ROMPE LA MEZCLA. Al madurar
+#                 (v143) la lista de familias disponibles se congela y se devolvia tal
+#                 cual; si guardaba una que el catalogo ya no tiene (menos variantes
+#                 cargadas que cuando se guardo el mundo: vegetacion:frio:2), cada nota que
+#                 fundaba una celda paraba en un KeyError. Ahora disponibles_al_dia quita de
+#                 la lista lo que no esta en familias(cfg), congelada o no, y
+#                 familias_listas tampoco mira lo que no exista.
 #                 Motor v144: EL MONSTRUO NO SUELTA LO QUE DEVORA. Cada Recalculo pasos el
 #                 monstruo volvia a elegir presa (occ / (1 + coste)) tambien mientras comia:
 #                 la celda que devoraba bajaba y, en un mundo denso, una vecina llena valia
@@ -425,7 +432,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v144'
+MOTOR_VERSION = 'motor v145'
 
 import math
 import time as _time
@@ -7363,6 +7370,10 @@ def disponibles_al_dia(W, cfg, est=None):
     ciclo = int(W.get('ciclo_n', 1))
     if M.get('ciclo') != ciclo or not isinstance(M.get('disp'), dict):
         M['disp'], M['ciclo'], M['congelado'] = {}, ciclo, False
+    por_id = familias(cfg)['por_id']    # motor v145: fuera las que el catalogo ya no tiene
+    for t_, l_ in list(M['disp'].items()):
+        if any(f not in por_id for f in l_ or ()):
+            M['disp'][t_] = [f for f in l_ if f in por_id]
     madura = est.get('regimen') == 'madurez'
     if madura and M.get('congelado'):
         return M['disp']
@@ -7428,8 +7439,8 @@ def familias_listas(W, cfg, t, own=None):
     disp = disponibles_al_dia(W, cfg)
     fam = familias(cfg)
     linea = _linea_de(t, own) if own is not None else None
-    return [fid for fid in (disp.get(t) or []) if (linea is None or fam['por_id'][fid]['linea'] == linea)
-            and familia_lista(cfg, fid)]
+    return [fid for fid in (disp.get(t) or []) if fid in fam['por_id']          # motor v145
+            and (linea is None or fam['por_id'][fid]['linea'] == linea) and familia_lista(cfg, fid)]
 
 
 def hay_familia_lista(W, cfg, t, own=None):
@@ -10792,6 +10803,30 @@ def _autoprueba_mezcla(cfg, res):
                                                                          if W['tema_c'][x] >= 0 else '-', ult[2])
     res.append(('persistencia: una celda erosionada de 5 a 1 conserva especie y familia; vaciada y refundada, '
                 'las recibe de nuevo con las reglas del regimen en vigor (madurez: el sorteo)', bien_p, det_p))
+    # 7b (motor v145). una familia que ya no existe en la lista congelada (un mundo guardado con mas
+    # variantes): una nota en una celda vacia la funda igual, sin KeyError, y la lista queda limpia
+    import copy as _copy
+    Wv = _copy.deepcopy(W)
+    Mv = _mezcla_al_dia(Wv)
+    disponibles_al_dia(Wv, c)
+    viejas = ('vegetacion:frio:99', 'informal:999', 'mina:999')
+    for t_, f_ in zip((NAT, CIU, IND), viejas):
+        Mv['disp'].setdefault(t_, []).append(f_)
+    Mv['congelado'] = True
+    xv = next((i for i in range(N) if Wv['occ'][i] == 0 and Wv['sp'][i] != MAL), None)
+    bien_v, det_v = False, 'sin celda vacia'
+    if xv is not None:
+        try:
+            _mezcla_nota(Wv, c, GEO, xv, t1 + 1.0 / 30)
+            tick(Wv, c, t1 + 2.0 / 30, 120.0, True)
+            quedan = [f_ for l_ in Mv['disp'].values() for f_ in l_ if f_ not in fam['por_id']]
+            bien_v = Wv['tema_c'][xv] >= 0 and not quedan
+            det_v = 'celda %d fundada como %s; quedan %s' % (xv, TEMAS[Wv['tema_c'][xv]] if Wv['tema_c'][xv] >= 0
+                                                             else '-', quedan)
+        except Exception as e:
+            det_v = 'error %r' % e
+    res.append(('madurez con una familia que ya no existe en la lista congelada (vegetacion:frio:99...): una nota '
+                'funda la celda vacia sin error y la lista queda sin ella', bien_v, det_v))
     # 8. sin descargar lo implantado: un mundo con una celda en cada familia de la vegetacion; la
     # cuota de la naturaleza baja (el pico pasa al 80 %) y la familia solo sale al destruir su celda
     _autoprueba_descarga(c, res)
