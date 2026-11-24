@@ -2,7 +2,7 @@
 =============================================================================
 ESTRATOS - FASE 35: RESCATAR BROTES
 =============================================================================
-Requiere la fase 34. Cuatro personas coordinadas convierten un brote del mal
+Requiere la fase 34. Tres personas coordinadas convierten un brote del mal
 en una celda del publico.
 
 QUE HACE
@@ -23,7 +23,7 @@ QUE HACE
                rescate empieza de cero.
   ULTIMO SEQ   se apunta en cada nota del SEQ1 (geo) o del SEQ2 (arq) que prende
                en una celda.
-  LEYENDA      RESCATE  celda 33   aliados 3/3   2.1/3.0 s
+  LEYENDA      RESCATE  celda 33   aliados 2/2   2.1/3.0 s
 
 PROBAR
 ------
@@ -41,7 +41,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase35 v1  (el devorador: rescatar brotes del mal entre cuatro)'
+VERSION = 'fase35 v2  (el devorador: rescatar brotes del mal entre tres)'
 banner(VERSION)
 
 base = require_base(35)
@@ -53,10 +53,13 @@ m = motor.module
 # -----------------------------------------------------------------------------
 
 page = get_page(base, 'Fase35')
-add_par(base, page, 'int', 'Aliados', 'Aliados del rescate', 3, 1, 6, clamp=True)
+add_par(base, page, 'int', 'Aliados', 'Aliados del rescate', 2, 1, 6, clamp=True)
 add_par(base, page, 'float', 'Taliados', 'Tiempo del rescate (s)', 3.0, 0.5, 20.0, clamp=True)
 add_par(base, page, 'pulse', 'Simrescate', 'Simular rescate')
-ok('pagina Fase35: Aliados 3, Taliados 3 s, Simrescate')
+# v2: el rescate pide 2 aliados (antes 3). Un proyecto que seguia en 3 pasa a 2 una sola vez;
+# un valor puesto a mano se respeta
+renew_default(base, 'Aliados', 3, 2)
+ok('pagina Fase35: Aliados 2, Taliados 3 s, Simrescate')
 
 set_render(base)
 
@@ -121,12 +124,12 @@ def _prueba(t, m):
     antes = (W['sp'][c0], c0 in W['juego']['rescates'])
     leg = m._legend_rescate(W, c)
     S.camara(W, c, [k0] + al, seg=0.6)
-    t.check('rescate con 1 + Aliados (3) sostenidos Taliados s; con un aliado menos, o un instante menos, nada',
+    t.check('rescate con 1 + Aliados (2) sostenidos Taliados s; con un aliado menos, o un instante menos, nada',
             len(al) == int(c['aliados']) and menos == m.MAL and antes == (m.MAL, True) and W['sp'][c0] == m.ARQ,
             'aliados en %s' % al)
     t.check('la especie es la del ultimo secuenciador (arq); se conservan ocupacion y carga; own, la nueva',
             W['occ'][c0] == 3 and W['carga'][c0] == 1 and W['own'][c0] == m.ARQ and W['juego']['rescatados'] == 1)
-    t.check('la linea RESCATE: celda, aliados y tiempo', leg.startswith('  RESCATE  celda %d   aliados 3/3   ' % c0)
+    t.check('la linea RESCATE: celda, aliados y tiempo', leg.startswith('  RESCATE  celda %d   aliados %d/%d   ' % (c0, len(al), len(al)))
             and leg.endswith('/%.1f s' % TA), leg.strip())
 
     # 2. si alguien se va antes, vuelve a cero; sin ultimo secuenciador, geologia

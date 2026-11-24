@@ -685,7 +685,7 @@ DEFAULT_CFG = dict(
     paso_monstruo=32, paso_grande=16, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0, saltos_monstruo=1, tiempo_salto=0.15, bote_salto=0.15,
     zanja_juego=1, profundidad_agua=4, ritmo_agua=4, desborde_agua=2, ahoga=0.5,
-    aliados=3, t_aliados=3.0, luz_juego=1,
+    aliados=2, t_aliados=3.0, luz_juego=1,
     arma_cerco=0, arma_pison=0, arma_estatuas=0, arma_grito=0, arma_relampago=0,
     hambre=1, n_pison=3, encoge=0.05, t_quietud=4.0, umbral_silencio=0.3, t_piedra=6.0, prof_grito=2,
     recarga_grito=30.0, t_aturdido=4.0,
@@ -21834,7 +21834,7 @@ def demo_refs(W, cfg, cap, libres=None):
             # v133: el mal no desborda sobre el publico (D4): sus vecinas, libres para que crezca
             r['despejar'] = list(NEIGH[r['brote']]) if r['brote'] is not None else []
         else:
-            r['aliadas'] = _vecinas_a_la_vista(W, cfg, r['brote'], max(1, int(cfg.get('aliados', 3))), libres)
+            r['aliadas'] = _vecinas_a_la_vista(W, cfg, r['brote'], max(1, int(cfg.get('aliados', 2))), libres)
     elif cap == 5:
         r['torre'] = cel(9.0, 4.0)      # a 130 grados: el camino corto pasa por la cara visible
         r['salida'] = cel(1.0, 4.0)

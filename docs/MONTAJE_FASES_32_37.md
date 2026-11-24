@@ -17,7 +17,7 @@ Turf War de toda la sala contra un monstruo. El público construye quedándose q
 | 33 v6 | `fase33_monstruo.py` | GENoZilla más lento y a saltos de media celda: `Pasomonstruo` 32 y `Pasogrande` 16 (8 y 4 negras por celda); `Saltosmonstruo`, `Tiemposalto` 0,15 s y `Botesalto` 0,15 | v126 |
 | 33 v10 | `fase33_monstruo.py` | El monstruo acaba la celda que devora antes de buscar otra (Trumpzilla, NefanyaMuto y Godzilla). Antes, en un mundo denso, la dejaba a medias por una vecina llena: picaba de todo, crecía y no dejaba brotes del mal (fallaba GENoZilla 2, *Aparece*, en el mundo de FASE1) | v144 |
 | 34 | `fase34_zanjas.py` | Zanjas de las filas, caída del monstruo y agua | v108 |
-| 35 | `fase35_rescate.py` | Rescatar brotes entre cuatro | v109 |
+| 35 | `fase35_rescate.py` | Rescatar brotes entre tres | v109 |
 | 36 | `fase36_luzjuego.py` | La luz de sala cuenta la partida | v110 |
 | 37 | `fase37_armas.py` | Armas opcionales: cerco, pisotón, estatuas, grito y relámpago (apagadas) | v111 |
 
@@ -239,12 +239,12 @@ exec(open('C:/Users/DareDave/Downloads/est/fase35_rescate.py').read())
 
 ### Parámetros (página Fase35)
 
-`Aliados` 3 · `Taliados` 3 s · `Simrescate` (pulso: una persona en la casilla de `Simcasilla` y `Aliados` en casillas que miran a vecinas de su celda, en la tabla `sala_personas`)
+`Aliados` 2 · `Taliados` 3 s · `Simrescate` (pulso: una persona en la casilla de `Simcasilla` y `Aliados` en casillas que miran a vecinas de su celda, en la tabla `sala_personas`)
 
 ### Leyenda
 
 ```
-RESCATE  celda 33   aliados 3/3   2.1/3.0 s
+RESCATE  celda 33   aliados 2/2   2.1/3.0 s
 RESCATE  -   (rescatados 2)
 ```
 
@@ -254,7 +254,7 @@ RESCATE  -   (rescatados 2)
 
 ### Autoprueba
 
-- Rescate con 1 + 3 durante `Taliados`; con un aliado menos, o un instante menos, nada.
+- Rescate con 1 + 2 durante `Taliados`; con un aliado menos, o un instante menos, nada.
 - La especie es la de `ultimoseq` (o geología); `occ` y `carga` se conservan; si alguien se va, vuelve a cero.
 - Tras el rescate crece con las reglas de siempre y el monstruo puede volver a elegirla. `ultimoseq` nota a nota. `Simrescate`.
 
@@ -352,6 +352,6 @@ Una por arma con su interruptor encendido y las demás apagadas; con todas apaga
 - **Fase 33 v6 (motor v126): más lento y a saltos.** `Pasomonstruo` 32 (8 negras por celda, media celda cada 4) y `Pasogrande` 16 (4 negras, media celda cada 2); quien tenía 24 y 12 pasa a 32 y 16 una sola vez, y un valor puesto a mano se respeta. Si los saltos se ven bruscos, sube `Tiemposalto`; si el bote distrae, baja `Botesalto` (0: sin bote); `Saltosmonstruo` apagado vuelve al deslizamiento continuo.
 - **`Tfila`** (fase 29) y **`Conchasporpersona`**: deciden lo rápido que se cava y lo honda que queda la zanja; con pocas conchas en el planeta (al empezar la jornada) las zanjas salen poco hondas. Entierra unas cuantas conchas antes de abrir la partida.
 - **`Profundidadagua`** y **`Ahoga`**: una fila de 4 ahoga con 4 conchas por debajo; si el público no consigue reunir a 4, prueba 3.
-- **`Aliados`** y **`Taliados`**: cuatro personas tres segundos. Con la cámara real, mira la línea `RESCATE` para ver si las celdas vecinas caen en las casillas que esperas (las celdas son más anchas que las casillas).
+- **`Aliados`** y **`Taliados`**: tres personas tres segundos. Con la cámara real, mira la línea `RESCATE` para ver si las celdas vecinas caen en las casillas que esperas (las celdas son más anchas que las casillas).
 - **Armas**: una a una, empezando por el cerco y el pisotón (no necesitan micrófono). `Umbralsilencio` con la sala en silencio real: mira el flujo del micrófono en la línea `MICRO` (fase 21).
 - **Rendimiento**: el juego entero cuesta menos de 1 ms por fotograma en Python (el Dijkstra es de 85 celdas y se hace cada 4 pasos de juego); mídelo con el diagnóstico de la fase 18 (`pruebas/diagnostico_fps.py`).
