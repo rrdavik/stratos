@@ -183,9 +183,14 @@
 #   v27         EL PORQUE DEL RESCATE DE GENOZILLA. Si el capitulo 4 (Rescatar un brote) no
 #               pasa, su linea dice cuantas personas llego a haber encima del brote y en sus
 #               vecinas (y cuantos aliados hacen falta) y cuanto duro la cuenta de Taliados.
+#   v28         EL RESCATE CON SUS TRES ALIADOS. En TouchDesigner el capitulo 4 llegaba a 2 de
+#               3 aliados: el brote solo tenia dos vecinas a la vista de la sala y el tercero
+#               no tenia adonde ir. Ahora el brote se elige entre los que tienen Aliados
+#               vecinas a la vista (si ninguno, el que mas) y, si aun faltan, los que sobran
+#               van a otra casilla de una vecina ya usada.
 # =============================================================================
 
-SALA_VERSION = 'sala v27'
+SALA_VERSION = 'sala v28'
 
 import math
 
@@ -1749,8 +1754,10 @@ CAPITULOS = [
                                          '{taliados} s.',
          dur=15.0, pars=dict(Tfila=60.0),
          coreo=_sitios([('suelo', 4, 8.5), ('suelo', 2, 8.5), ('suelo', 7, 8.5), ('suelo', 3, 8.5)])
-         + [[0.0, 0, ('celda', 'brote', 0.0, 0.0)], [2.0, 1, ('celda', ('aliadas', 0), 0.0, 0.0)],
-            [2.2, 2, ('celda', ('aliadas', 1), 0.0, 0.0)], [2.4, 3, ('celda', ('aliadas', 2), 0.0, 0.0)]],
+         + [[0.0, 0, ('celda', 'brote', 0.0, 0.0)],
+            [2.0, 1, ('celda', ('aliadas', 0), 0.0, 0.0, ('aliadas_j', 0))],
+            [2.2, 2, ('celda', ('aliadas', 1), 0.0, 0.0, ('aliadas_j', 1))],
+            [2.4, 3, ('celda', ('aliadas', 2), 0.0, 0.0, ('aliadas_j', 2))]],
          rotulos=[(0.0, 'Quien esta encima alimenta el mal mientras llegan los aliados.'),
                   (4.0, 'Con los cuatro en su sitio empieza la cuenta de {taliados} segundos.'),
                   (9.0, 'Rescatado: pasa a la especie del ultimo secuenciador y sigue creciendo al ritmo normal.')]),
@@ -2378,6 +2385,8 @@ def destino_a_punto(c, F, d, refs, evitar=()):
     p = None
     if kind == 'celda':
         dx, dz, j = list(d[2:5]) + [0.0, 0.0, 0][len(d[2:5]):]
+        if not isinstance(j, (int, float)):     # v28: j de un sitio del guion (aliadas_j)
+            j = _ref(refs, j) or 0
         p = punto_de_celda(m, W, c1, _ref(refs, d[1]), _GZ.get('libres'), j)
     elif kind == 'monstruo':
         J = W.get('juego') or {}
@@ -2742,16 +2751,30 @@ def brote_vivo(F, c1, W, k, refs, libres):
     orden = sorted(vac, key=lambda x: ((vac[x] % cols - k0 % cols) ** 2 + (vac[x] // cols - k0 // cols) ** 2, x))
     if k == 3:
         orden = [x for x in orden if sum(1 for v in m.NEIGH[x] if vacia(v)) >= BROTE_VECINAS]
+    na = max(1, int(c1.get('aliados', 3)))
+    vistas = {}
+    if k == 4 and orden:                # v28: un brote con Aliados vecinas a la vista (si no, el que mas)
+        for x in orden[:BROTE_MIRA]:
+            vistas[x] = m._vecinas_a_la_vista(W, c1, x, na, libres)
+            if len(vistas[x]) >= na:
+                break
+        orden = [max(vistas, key=lambda x: (len(vistas[x]), -orden.index(x)))] + orden
     b = orden[0] if orden else None
     r['brote'] = b
     r['musica'] = [b] if b is not None else []
     r['despejar'] = []
     if k == 4 and b is not None:
-        r['aliadas'] = m._vecinas_a_la_vista(W, c1, b, max(1, int(c1.get('aliados', 3))), libres)
+        vs = vistas.get(b) or m._vecinas_a_la_vista(W, c1, b, na, libres) or list(m.NEIGH[b][:1])
+        # v28: con menos vecinas a la vista que aliados, los que sobran van a otra casilla de una
+        # vecina ya usada (j: la casilla siguiente que la mira, o la misma en diagonal): antes el
+        # tercero se quedaba sin sitio y no llegaba (aliados 2 de 3 en TouchDesigner)
+        r['aliadas'] = [vs[q % len(vs)] for q in range(na)]
+        r['aliadas_j'] = [q // len(vs) for q in range(na)]
     return r
 
 
 BROTE_VECINAS = 3           # v21: vecinas vacias que pide el brote del capitulo 3 para desbordar
+BROTE_MIRA = 24             # v28: brotes candidatos del capitulo 4 en que se miran las vecinas a la vista
 
 
 def falta_caso(demo, k, F, c1, W, refs):

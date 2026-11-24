@@ -261,7 +261,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v43  (sala v27: el porque del rescate de GENoZilla cuando falla)'
+VERSION = 'sala_virtual v44  (sala v28: el rescate de GENoZilla siempre con sus tres aliados)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
