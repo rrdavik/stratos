@@ -6,7 +6,10 @@ Sesion de 20 minutos por escena (fase 18), sobre el motor sin TouchDesigner.
     python3 pruebas/sesion_escena.py mezcla 5     # la mezcla de especies (Tema = auto, fase 11 v22)
 
 La escena mezcla informa ademas del reparto final de la sesion frente a la cuota
-(MEZCLA de la leyenda: construido, tramo, cuota y globo).
+(MEZCLA de la leyenda: regimen, construido, tramo o sorteo, cuota y globo) y, desde
+la fase 11 v27 (motor v143), de cada mundo: cuando aparece la ciudad y la
+industria (minutos desde que empieza el mundo y construido), cuantas veces a una celda le toco ciudad o
+industria y salio naturaleza por no tener suelo firme (agua) y si el mundo madura.
 
 A 120 BPM y 30 fotogramas por segundo: SEQ1 en semicorcheas (cambia de
 pattern cada 4 minutos con una rafaga de All Notes Off: A, B, A, C, A),
@@ -67,7 +70,8 @@ def sesion(nombre, minutos=20.0, fps=30.0, tempo=120.0, muestra=0.5):
     caja = pads_corte[1] if len(pads_corte) > 1 else (pads_corte[0] if pads_corte else 0)
     aranazo = next((k for k in range(8) if m.es_aranazo(c, k)), 4)
     datos = dict(dens=[], piezas=[], ms=[], luz=[], particulas=[], colgados=[], eras=0, frentes=0,
-                 px=[], chops=[])
+                 px=[], chops=[], mundos=[])
+    mundo = None                        # motor v143: lo que pasa en cada mundo de la mezcla
     pend = []
     k_paso = -1
     t = 0.0
@@ -99,7 +103,24 @@ def sesion(nombre, minutos=20.0, fps=30.0, tempo=120.0, muestra=0.5):
                 m.erosion(W, c, caja, 100, t)    # caja: corte cada 8 compases
             if p % 64 == 40:
                 m.erosion(W, c, aranazo, 100, t)  # un aranazo cada 4 compases
+        M = W.get('mezcla') or {} if c.get('tema_auto') else {}
+        rech0 = M.get('rechazos', 0)
         out = m.tick(W, c, t, tempo, True)
+        if c.get('tema_auto'):
+            if mundo is None or out.get('ciclo'):
+                if mundo is not None:
+                    mundo['agua'] = rech0
+                mundo = dict(ciclo=W.get('ciclo_n', 1), ciudad=None, industria=None, madura=None, agua=0, t0=t)
+                datos['mundos'].append(mundo)
+            M = W['mezcla']
+            cnt = m.celdas_de(W)
+            pct = 100.0 * m.construido_real(W, c)
+            for k, t_ in (('ciudad', m.CIU), ('industria', m.IND)):
+                if mundo[k] is None and cnt[t_]:
+                    mundo[k] = ((t - mundo['t0']) / 60.0, pct)     # minutos desde que empezo el mundo
+            if mundo['madura'] is None and M.get('regimen') == 'madurez':
+                mundo['madura'] = ((t - mundo['t0']) / 60.0, pct)
+            mundo['agua'] = M.get('rechazos', 0)
         if out.get('frente'):
             datos['frentes'] += 1
         if out.get('ciclo'):
@@ -159,6 +180,13 @@ def informe(nombre, d, minutos):
         print('   %-6s %s' % ('OK' if bien else 'FALLO', texto))
     if d.get('mezcla'):
         print('   reparto final: %s' % d['mezcla'])
+
+    def cuando(x):
+        return 'min %.1f (construido %d %%)' % (x[0], round(x[1])) if x else 'no'
+    for k, mu in enumerate(d.get('mundos') or []):
+        print('   mundo %d (desde el min %.1f): ciudad %s, industria %s, madura %s, %d rechazos por agua'
+              % (k + 1, mu['t0'] / 60.0, cuando(mu['ciudad']), cuando(mu['industria']), cuando(mu['madura']),
+                 mu['agua']))
     return all(b for _, b in criterios)
 
 

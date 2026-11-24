@@ -40,6 +40,11 @@ LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
   cortes la leen por celda. Temaenciclo no se aplica con Tema = auto; con auto,
   lo heredado queda neutro (sin especie hasta su primera nota) y el tramo vuelve
   al primero.
+  v5 (motor v143, fase 11 v27): el SUELO FIRME lee el registro. Una celda donde
+  la concha tenia algo construido (ocupacion mayor que 0) es suelo firme en el
+  mundo siguiente: alli la ciudad y la industria pueden fundarse sin que antes
+  crezca naturaleza. Lo vacio en la concha sigue siendo agua. Al enterrar, el
+  regimen vuelve a crecimiento y se borran las huellas de la naturaleza.
 
 COMO USARLO
 -----------
@@ -50,7 +55,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase15 v4  (la mezcla de especies: conchas mixtas, la especie de cada celda en el registro)'
+VERSION = 'fase15 v5  (el suelo firme de la mezcla lee la ocupacion por celda del registro; motor v143)'
 banner(VERSION)
 
 base = require_base(15)

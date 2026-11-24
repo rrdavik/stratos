@@ -332,49 +332,58 @@ EL OCEANO PARA TODOS Y LO CONSTRUIDO, MAS RICO (v21, motor v120, comun v89)
   Las piezas nuevas necesitan geometria: esta fase las construye (modelos/
   edi_<diseno>_<v> y mod_ciu_...).
 
-LA MEZCLA DE ESPECIES (v22, motor v121)
----------------------------------------
+LA MEZCLA DE ESPECIES (v22, motor v121; v27, motor v143)
+---------------------------------------------------------
   El mundo deja de tener una sola especie. Con Tema = auto (de fabrica) empieza
   siempre en naturaleza; segun se construye terreno, la ciudad nace junto al agua
   y se extiende por contagio, y despues la industria nace en el borde de la
-  ciudad. La especie de una celda (y su familia de piezas) se fija al fundarse y
-  no cambia hasta que la celda se vacia del todo.
+  ciudad. Ciudad e industria solo construyen sobre SUELO FIRME (v27). Al 95 %
+  construido el mundo MADURA (v27). La especie de una celda (y su familia de
+  piezas) se fija al fundarse y no cambia hasta que la celda se vacia del todo.
   CONSTRUIDO  celdas con especie / (celdas del globo x Topeconstruido, 0,6): el
-              60 % cuenta como 100 %. No cuentan las semillas neutras heredadas
-              (hasta su primera nota) ni el mal. Simconstruido (0-100) lo fuerza
-              para probar los tramos; -1, el real.
+              60 % cuenta como 100 % (el 95 % de la madurez es el 57 % del globo).
+              No cuentan las semillas neutras heredadas (hasta su primera nota)
+              ni el mal. Simconstruido (0-100) lo fuerza para probar los tramos;
+              -1, el real.
   TABLA       mezcla_especies (editable a mano: construido naturaleza ciudad
-              industria, en %). v25 (motor v128): cada fila es la mezcla de lo
-              construido en su umbral; entre dos filas, lo que se construye se
-              reparte a ritmo constante. La cuota es la del pico de construido del
-              mundo (solo avanza; el entierro lo devuelve a 0): el techo de celdas
-              de la ciudad y la industria y la parte de la biblioteca de las tres.
-              Una fila que no suma 100 se normaliza (aviso en la leyenda).
+              industria, en %). v27: por TRAMOS, cada fila vale desde su umbral
+              hasta el siguiente (una que no suma 100 se normaliza, con aviso):
                 construido  N    C    I
                   0 %      100   0    0
-                 25 %      100   0    0     (aqui empiezan la ciudad y la industria)
-                100 %       30  40   30
-              Del 25 al 100 %, de cada 15 celdas nuevas 1 es naturaleza, 8 ciudad
-              y 6 industria (al 62,5 %, 44/32/24).
-  RESERVA     Reservanaturaleza (0,3): un 30 % de lo construido es siempre
-              naturaleza. Si una fila (tambien una editada a mano) da menos, la
-              ciudad y la industria se reparten el 70 % en su proporcion.
-  TECHO       Techonaturaleza (3, v25): la naturaleza no pasa de su cuota mas de 3
-              puntos. Pasado ese techo (las notas caen lejos de la ciudad), la
-              especie mas lejos de su cuota puede fundar otra mancha aunque su
-              deficit no pase de Valvula.
-  SUCESION    1 contagio: la celda nueva que toca ciudad o industria es de esa
-              especie si esta por debajo de su cuota (si toca las dos, la mas lejos
-              de su cuota; en empate, la ciudad). 2 fundacion: con la fundacion
-              abierta (puede crecer y no tiene celdas, o su deficit pasa de Valvula
-              puntos, o pasado el techo de la naturaleza), la ciudad se funda
-              tocando un rio o un lago (sin agua, la formacion natural mas ocupada)
-              y la industria tocando la ciudad (v25: la primera, en cuanto puede;
-              despues, si compite con el contagio de la ciudad, gana la que mas
-              lejos esta de su cuota; si hay varias candidatas a la vez, la que
-              toca relieve). Tras
-              Paciencia celdas sin candidata, la siguiente funda donde caiga. 3 el
-              resto, naturaleza. Los satelites heredan especie y familia del nucleo.
+                 25 %       60  40    0
+                 50 %       40  30   30
+                 75 %       20  40   40
+                 95 %      madurez (Madurezmezcla, un parametro, no una fila)
+  CRECIMIENTO hasta que el construido llega por primera vez a Madurezmezcla. El
+              tramo es el del pico de construido del mundo (solo avanza: la
+              erosion no lo hace retroceder; el entierro lo devuelve al primero).
+              Su fila da la CUOTA: el techo de celdas de la ciudad y la industria
+              y la parte de la biblioteca de las tres.
+              1 contagio: la celda nueva con suelo firme que toca ciudad o
+              industria es de esa especie si esta por debajo de su cuota (si toca
+              las dos, la mas lejos de su cuota; en empate, la ciudad). 2
+              fundacion: con la fundacion abierta (puede crecer y no tiene celdas
+              o su deficit pasa de Valvula puntos), la ciudad se funda tocando un
+              rio o un lago (sin agua, la formacion natural mas ocupada) y la
+              industria tocando la ciudad (mejor si toca relieve). Tras Paciencia
+              celdas CON SUELO FIRME sin candidata, la siguiente con suelo firme
+              funda donde caiga. 3 el resto, naturaleza.
+  MADUREZ     (v27) la primera vez que el construido llega a Madurezmezcla (95)
+              y hasta el entierro, aunque luego baje. Lo implantado se queda; no
+              hay cuotas, contagio, fundacion, valvula ni paciencia: cada celda que
+              se funda SORTEA su especie con la fila del construido ACTUAL (con
+              menos del 25 %, todo naturaleza), sin mirar a las vecinas. Las
+              familias disponibles quedan congeladas (las de la fila del 95 %).
+  SUELO FIRME (v27, Suelofirme) ciudad e industria solo se fundan donde en este
+              mundo se fundo naturaleza (su huella queda aunque se vacie) o queda
+              una concha con algo construido en la celda (no quitada por cortes,
+              escision ni zanja), y nunca sobre el agua visible (rio, lago, agua de
+              zanja). Si les toca una celda sin suelo firme (contagio, fundacion,
+              paciencia, sorteo o desborde), es naturaleza: la nota nunca se
+              pierde. En el primer mundo, la ciudad solo nace donde la bateria ha
+              vaciado naturaleza; desde el segundo, tambien sobre la concha.
+  SATELITES   heredan especie y familia del nucleo, salvo sobre agua con un nucleo
+              de ciudad o industria: naturaleza, con familia propia.
   FAMILIAS    la unidad de carga: una evolucion completa de una linea (brote, cada
               etapa con su diseno y su variante; obra, remates, puentes,
               protagonista e hibridos). Vegetacion: una por bioma y variante;
@@ -383,22 +392,33 @@ LA MEZCLA DE ESPECIES (v22, motor v121)
               (Ordenfamilias = ciclo; fijo, siempre el mismo). Una familia con
               celdas no se descarga. La cola carga o descarga Cargaporfotograma
               geometrias por fotograma; el tramo siguiente se precarga a Precarga
-              puntos de su umbral. El Render TOP dibuja lo cargado.
+              puntos de su umbral (20, 45 y 70 %). El Render TOP dibuja lo cargado.
   REDES       cada una dentro de su especie: un rio termina en la primera celda
               que no es naturaleza (la ciudad queda en la desembocadura), las
               carreteras solo por la ciudad, las vias y la red solo por la industria.
-  Con Tema fijo (naturaleza, ciudad o industria), como antes; un cambio de Tema en
-  directo solo afecta a las celdas que se fundan despues.
-  Leyenda: MEZCLA construido 52% (tramo 25) cuota N/C/I 58/24/17 globo 61/24/15
-           manchas C1 I1 familias 9+4/7/2 cola 3
+  Con Tema fijo (naturaleza, ciudad o industria), como antes, sin tabla ni suelo
+  firme; un cambio de Tema en directo solo afecta a las celdas que se fundan
+  despues. v27: fuera Reservanaturaleza y Techonaturaleza.
+  Leyenda, en crecimiento:
+    MEZCLA crec construido 52% (tramo 50) cuota N/C/I 40/30/30 globo 61/30/9
+           manchas C1 I1 suelo 48% familias 9+4/7/2 cola 3
+  en madurez:
+    MEZCLA madurez construido 88% sorteo 20/40/40 globo 24/41/35 manchas C3 I2
+           suelo 71% agua 5 familias 4+6/9/7 cola 0
+  (globo: el reparto real; suelo: celdas del globo con suelo firme; agua: veces
+  que a una celda le toco ciudad o industria y salio naturaleza por no tener
+  suelo firme; familias 9+4: 9 disponibles y 4 en uso fuera de la cuota)
 
 PROBAR SIN BEATSTEP
 -------------------
-  Mezcla: Tema = auto y Simconstruido en 0, 25, 62,5 y 100 (la leyenda da
-  100/0/0, 100/0/0, 44/32/24 y 30/40/30). Con Simconstruido -1 y Sembrarzona en
-  zonas distintas: todo empieza en naturaleza; pasado el 25 %, la primera celda
-  nueva junto a un rio funda la ciudad y solo las que la tocan salen de ciudad;
-  la primera celda nueva que toca la ciudad funda la industria.
+  Mezcla: Tema = auto y Simconstruido en 0, 25, 50 y 75 (la leyenda da 100/0/0,
+  60/40/0, 40/30/30 y 20/40/40). En 95 la leyenda pasa a madurez; bajarlo a 60
+  da sorteo 40/30/30 sin volver a crec (Forzarciclo lo devuelve a crecimiento).
+  Con Simconstruido -1 y Sembrarzona en zonas distintas de un mundo nuevo: todo
+  empieza en naturaleza; pasado el 25 %, la ciudad no aparece hasta que una
+  celda de naturaleza junto a un rio se vacia y se vuelve a sembrar; sembrar
+  sobre agua junto a la ciudad da naturaleza. Pasado el 50 %, la industria
+  aparece pegada a la ciudad.
 
   Sembrarzona (Nota, SEQ1) o Sembrarzona2 (Nota2, SEQ2) dos veces con cada
   tema: cluster, puentes y protagonista. Sembrar en la misma celda con
@@ -413,7 +433,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase11 v26  (los bancos de la corta, taludes de tierra con normales planas; motor v129, comun v97)'
+VERSION = 'fase11 v27  (la mezcla por tramos, la madurez y el suelo firme; motor v143, comun v99)'
 banner(VERSION)
 
 base = require_base(11)
@@ -433,18 +453,24 @@ if renew_default(base, 'Tema', 'naturaleza', 'auto'):
     info('v22: Tema pasa a auto (estaba en naturaleza, el valor de fabrica de antes)')
 # v22 (motor v121): la mezcla de especies
 add_par(base, page, 'float', 'Topeconstruido', 'Tope de construido (fraccion ocupada que es el 100 %)', 0.6, 0.3, 1.0)
-# v23 (motor v122): un 30 % de lo construido, siempre naturaleza
-add_par(base, page, 'float', 'Reservanaturaleza', 'Reserva de naturaleza (fraccion de lo construido)', 0.3, 0.0, 1.0,
-        clamp=True)
+# v27 (motor v143): la madurez (Madurezmezcla: Umbralmadurez ya es la madurez del ciclo, fase 6) y el
+# suelo firme; fuera Reservanaturaleza (v23) y Techonaturaleza (v25): la tabla por tramos y la madurez
+# las sustituyen (la reserva dejaria la ultima fila en 30/35/35 y el techo abria manchas sin Valvula)
+add_par(base, page, 'float', 'Madurezmezcla', 'Umbral de madurez (% construido: se acaban las cuotas)', 95.0, 50.0,
+        100.0, clamp=True)
+add_par(base, page, 'toggle', 'Suelofirme', 'Suelo firme (ciudad e industria, donde hubo naturaleza o hay concha)',
+        True)
+quitados_v27 = [nm for nm in ('Reservanaturaleza', 'Techonaturaleza') if remove_par(base, nm)]
+if quitados_v27:
+    info('v27: quitados %s (la tabla por tramos y la madurez los sustituyen)' % ' y '.join(quitados_v27))
 add_par(base, page, 'float', 'Valvula', 'Valvula de fundacion (puntos de deficit para otra mancha)', 10.0, 0.0, 50.0)
-# v25 (motor v128): la naturaleza no se pasa de su cuota mas de estos puntos
-add_par(base, page, 'float', 'Techonaturaleza', 'Techo de la naturaleza (puntos sobre su cuota)', 3.0, 0.0, 50.0)
-add_par(base, page, 'int', 'Paciencia', 'Paciencia de fundacion (celdas nuevas)', 8, 0, 64, clamp=True)
+add_par(base, page, 'int', 'Paciencia', 'Paciencia de fundacion (celdas nuevas con suelo firme)', 8, 0, 64, clamp=True)
 add_par(base, page, 'menu', 'Ordenfamilias', 'Orden de familias', 'ciclo', menu=m.ORDEN_FAMILIAS,
         menu_labels=['Por ciclo (cada mundo, otras)', 'Fijo (siempre el mismo)'])
 add_par(base, page, 'float', 'Precarga', 'Precarga (puntos antes del umbral)', 5.0, 0.0, 20.0)
 add_par(base, page, 'int', 'Cargaporfotograma', 'Carga por fotograma (geometrias)', 4, 1, 32, clamp=True)
-add_par(base, page, 'float', 'Simconstruido', 'Simular construido (%; -1 el real)', -1.0, -1.0, 100.0)
+add_par(base, page, 'float', 'Simconstruido', 'Simular construido (%; -1 el real; desde Madurezmezcla, madura)', -1.0,
+        -1.0, 100.0)
 add_par(base, page, 'float', 'Pesovecina', 'Peso de las vecinas en la presion', 0.5, 0.0, 2.0)
 add_par(base, page, 'float', 'Umbralvecindad', 'Presion para fundirse (cluster)', 4.0, 1.0, 20.0)
 add_par(base, page, 'int', 'Mincluster', 'Celdas minimas de un cluster', 2, 2, 20, clamp=True)
@@ -566,7 +592,8 @@ ok('pagina Fase11: Tema (auto desde la v22), Pesovecina 0,5, Umbralvecindad 4, M
    'Recursos, Epoca (eras), Variantesind 3, Bancospornota 1, Maxbancos 6, Maxbastidor 3, Emisiones 0,5, '
    'Maxhumo 6000, Lodind 60; v14: Oceano, Volcanes 0,2, Detalle, Resolucion (720p); v16: Pradera 300000, Mata 0,16; v17: Tierra 0,75; v18: Radionucleo 8, Inundacion 0,08; '
    'v22: Tema (auto), Topeconstruido 0,6, Valvula 10, Paciencia 8, Ordenfamilias (ciclo), Precarga 5, '
-   'Cargaporfotograma 4, Simconstruido -1; v23: Reservanaturaleza 0,3; v25: Techonaturaleza 3')
+   'Cargaporfotograma 4, Simconstruido -1; v27: Madurezmezcla 95, Suelofirme (fuera Reservanaturaleza y '
+   'Techonaturaleza)')
 if quitados:
     info('v8: quitados los parametros de los arboles de pisos (%s)' % ', '.join(quitados))
 
@@ -594,8 +621,8 @@ def mezcla_al_dia_td(base, m):
 
 
 if mezcla_al_dia_td(base, m):
-    ok('mezcla_especies: la tabla de la mezcla (v25: 0 % y 25 % 100/0/0, 100 % 30/40/30; '
-       'entre filas, a ritmo constante)')
+    ok('mezcla_especies: la tabla de la mezcla (v27, por tramos: 0 % 100/0/0, 25 % 60/40/0, 50 % 40/30/30, '
+       '75 % 20/40/40; al 95 %, Madurezmezcla, el mundo madura)')
 else:
     info('mezcla_especies editada a mano: se conserva. Para volver a la de fabrica, borrala y relanza')
 
@@ -639,7 +666,11 @@ leeme(base, 11, """FASE 11 - LA PIEL
   v22, la mezcla: la especie de cada celda se fija al fundarse (contagio,
   fundacion junto al agua o en el borde de la ciudad, naturaleza) y dura hasta
   vaciarse; las piezas se cargan por familias, Cargaporfotograma por fotograma.
-  Leyenda MEZCLA: construido, tramo, cuotas, reparto, manchas, familias, cola.
+  v27: tabla por tramos (0/25/50/75 %), madurez al 95 % (Madurezmezcla: lo
+  destruido se refunda por sorteo) y suelo firme (Suelofirme: ciudad e
+  industria solo donde hubo naturaleza o hay concha, nunca en el agua).
+  Leyenda MEZCLA: regimen, construido, tramo o sorteo, cuotas, reparto,
+  manchas, suelo, agua, familias, cola.
   Vecinas con presion >= Umbralvecindad se funden: puentes (dosel, meseta,
   pasarela, podio) y pieza protagonista en la capital.
   Compuestos por juego del caos (Caos, Maxpiezas): misma semilla, mismo
@@ -2393,15 +2424,25 @@ def _prueba_mezcla(t, m):
     try:
         base.par.Tema = 'auto'
         defecto = filas[1:] == [[('%g' % x) for x in f] for f in m.MEZCLA_DEF]
-        # v25: las filas de fabrica y un punto entre filas (62,5 %: 44/32/24, a ritmo constante)
-        puntos = [(f[0], f[1:]) for f in m.MEZCLA_DEF] + [(62.5, (44.0, 32.0, 24.0))]
-        for pct, fila in puntos:
+        W['mezcla']['regimen'] = 'crecimiento'      # (se devuelve como estaba en el finally)
+        # v27: los cuatro tramos (crecimiento); 95 madura; 60 sortea con 40/30/30 sin volver a crec
+        for pct, fila in [(f[0], f[1:]) for f in m.MEZCLA_DEF]:
             base.par.Simconstruido = pct
             ley = m.legend()
-            if 'MEZCLA' not in ley or (defecto and 'cuota N/C/I %d/%d/%d' % tuple(int(x) for x in fila) not in ley):
+            if 'MEZCLA crec' not in ley or (defecto and 'cuota N/C/I %d/%d/%d' % tuple(int(x) for x in fila)
+                                             not in ley):
                 malas.append('%g%%' % pct)
-        t.check('leyenda MEZCLA: Tema auto y Simconstruido en 0, 25, 62,5 y 100 dan 100/0/0, 100/0/0, 44/32/24 '
-                'y 30/40/30', not malas, 'mal %s' % malas)
+        mad = []
+        for pct, txt in ((95.0, 'sorteo 20/40/40'), (60.0, 'sorteo 40/30/30')):
+            base.par.Simconstruido = pct
+            m.mezcla_estado(W, m.cfg(), True)      # lo que hace mezcla_tick (solo toca W['mezcla'])
+            ley = m.legend()
+            if 'MEZCLA madurez' not in ley or (defecto and txt not in ley) or ' suelo ' not in ley \
+                    or ' agua ' not in ley:
+                mad.append('%g%%' % pct)
+        t.check('leyenda MEZCLA: Tema auto y Simconstruido en 0, 25, 50 y 75 dan crec con 100/0/0, 60/40/0, '
+                '40/30/30 y 20/40/40; en 95 madurez (sorteo 20/40/40) y bajarlo a 60 da sorteo 40/30/30 sin volver '
+                'a crec', not malas and not mad, 'mal %s %s' % (malas, mad))
         base.par.Simconstruido = -1
         c = m.cfg()
         m.carga_tick(W, c)

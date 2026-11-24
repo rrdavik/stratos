@@ -7,7 +7,8 @@ Regresion de la mezcla de especies (fase 11 v22, motor v121), sin TouchDesigner.
 Con Tema fijo en cada especie (naturaleza, ciudad, industria), la misma sesion de
 sesion_escena.py (SEQ1, SEQ2, bombo, caja y aranazos, fines de ciclo) en el motor de
 la referencia (git show <ref>:estratos_motor.py) y en el de esta copia: el mismo
-mundo W (sin los campos nuevos de la mezcla: tema_c, fam y mezcla) y las mismas
+mundo W (sin los campos nuevos de la mezcla: tema_c, fam y mezcla; desde el motor
+v143, huella_nat y fund_c) y las mismas
 filas de build_instances en cada muestra. Sale con 1 si algo cambia.
 """
 
@@ -20,7 +21,7 @@ import tempfile
 AQUI = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(AQUI)
 sys.path.insert(0, AQUI)
-NUEVOS = ('tema_c', 'fam', 'mezcla')
+NUEVOS = ('tema_c', 'fam', 'mezcla', 'huella_nat', 'fund_c')     # motor v143: huella_nat y fund_c
 
 
 def cargar(nombre, ruta):
