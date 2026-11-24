@@ -49,6 +49,9 @@ PROBAR
   Modojuego. Simnefa: aparece ya. Simbaile: Trumpzilla y NefanyaMuto en celdas
   vecinas bailan 8 tiempos y uno lanza su golpe (Golpebaile fija quien).
 
+  v2 (comun v101): sus parametros, en la pagina Monstruos con los de los
+  otros monstruos; un proyecto de antes los mueve alli y quita la Fase41.
+
 COMO USARLO
 -----------
   Copia la carpeta sprites del repositorio en la carpeta de los scripts y:
@@ -59,7 +62,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase41 v1  (NefanyaMuto: aparece al 50 %, siembra el mal; el baile y los golpes especiales)'
+VERSION = 'fase41 v2  (sus parametros, en la pagina Monstruos con los de todos los monstruos)'
 banner(VERSION)
 
 base = require_base(41)
@@ -67,10 +70,15 @@ motor = install_core(base, CARPETA, 41)
 m = motor.module
 
 # -----------------------------------------------------------------------------
-# PARAMETROS (pagina Fase41)
+# PARAMETROS (pagina Monstruos)
 # -----------------------------------------------------------------------------
 
-page = get_page(base, 'Fase41')
+# comun v101: en la pagina Monstruos, con los de los otros monstruos (antes, Fase41). Un
+# proyecto de antes los pasa alli con su valor; la pagina Fase41, vacia, se quita
+PARS_PAGINA = ('Nefanyamuto', 'Umbralnefa', 'Tiemposbaile', 'Golpebaile', 'Radioabsorbe', 'Largozanjanefa',
+               'Profzanjanefa', 'Altonefa', 'Emocionnefa', 'Simnefa', 'Simbaile')
+page, _movidos = sacar_a_monstruos(base, PARS_PAGINA)
+add_par(base, page, 'header', 'Hnefa', 'NefanyaMuto (fase 41)')
 add_par(base, page, 'toggle', 'Nefanyamuto', 'NefanyaMuto (el segundo monstruo del mal)', True)
 add_par(base, page, 'float', 'Umbralnefa', 'Construido para que aparezca (0 a 1)', 0.5, 0.0, 1.0, clamp=True)
 add_par(base, page, 'int', 'Tiemposbaile', 'Tiempos del baile', 8, 1, 64, clamp=True)
@@ -84,7 +92,8 @@ add_par(base, page, 'menu', 'Emocionnefa', 'Emocion de NefanyaMuto', 'auto', men
         menu_labels=['Auto (por su estado)'] + [e.capitalize() for e in m.EMOCIONES_NEFA])
 add_par(base, page, 'pulse', 'Simnefa', 'Simular NefanyaMuto (aparece ya)')
 add_par(base, page, 'pulse', 'Simbaile', 'Simular el baile (junto a Trumpzilla)')
-ok('pagina Fase41: Nefanyamuto, Umbralnefa 0,5, Tiemposbaile 8, Golpebaile (azar), Radioabsorbe 2, '
+monstruos_al_dia(base, _movidos)
+ok('pagina Monstruos (Fase41): Nefanyamuto, Umbralnefa 0,5, Tiemposbaile 8, Golpebaile (azar), Radioabsorbe 2, '
    'Largozanjanefa 5, Profzanjanefa 3, Altonefa 0,9, Emocionnefa (auto), Simnefa, Simbaile')
 
 # -----------------------------------------------------------------------------

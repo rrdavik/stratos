@@ -79,7 +79,7 @@ Para añadir caras: más celdas en `COLS × FILAS`, el nombre en `EMOCIONES` del
 
 En cada fila de `trumpzilla`, el alfa lleva `cara + 16 × animación` (el sprite) o `256` (la sombra). El eje z local de la instancia es hacia donde camina; el shader lo usa para voltear el dibujo. La cara se lee del atlas con `texelFetch` (sin suavizar).
 
-### Parámetros (página Fase38)
+### Parámetros (página Monstruos; hasta la fase 38 v2, página Fase38)
 
 | Parámetro | Defecto | Qué hace |
 |---|---|---|

@@ -36,6 +36,8 @@ import os
 
 from PIL import Image, ImageDraw, ImageFont
 
+from igualar_brillo import igualar, lamina as lamina_igualada     # la misma claridad para todos los monstruos
+
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CELDA_W, CELDA_H = 192, 256
 COLS, FILAS = 4, 3
@@ -431,8 +433,9 @@ def main():
         atlas.paste(im, (x, y))
         lamina.alpha_composite(im, (x, y))
         d.text((x + 4, y + 2), '%d %s' % (k, nombre), fill=(255, 230, 0, 255), font=fuente)
+    atlas = igualar(atlas)                  # la claridad comun (igualar_brillo.py)
     atlas.save(os.path.join(AQUI, 'godzilla_emociones.png'))
-    lamina.save(os.path.join(AQUI, 'godzilla_emociones_lamina.png'))
+    lamina_igualada(atlas, EMOCIONES).save(os.path.join(AQUI, 'godzilla_emociones_lamina.png'))
     print('godzilla_emociones.png (%d x %d) y la lamina' % atlas.size)
 
 

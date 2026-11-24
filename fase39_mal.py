@@ -78,6 +78,8 @@ PROBAR
   (cartel, grua, a oscuras, se enciende) y el coloso detras. Especiemal apagado:
   el velo provisional de la fase 33.
 
+  v4 (comun v101): Montierra pasa a la pagina Monstruos, con su valor.
+
 COMO USARLO
 -----------
   Copia la carpeta sprites del repositorio en la carpeta de los scripts y:
@@ -88,7 +90,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase39 v3  (la discoteca y sus focos, el neon de lo terminado, los yates en el mar y demonios mas pequenos)'
+VERSION = 'fase39 v4  (Montierra, en la pagina Monstruos con los demas parametros de los monstruos)'
 banner(VERSION)
 
 base = require_base(39)
@@ -107,10 +109,14 @@ add_par(base, page, 'float', 'Tamanoemblema', 'Tamano del emblema (celdas)', 0.3
 add_par(base, page, 'float', 'Brilloemblema', 'Brillo del emblema (neon)', 1.0, 0.1, 4.0, clamp=True)
 add_par(base, page, 'float', 'Altomal', 'Alto de los edificios del mal (x la planta)', 1.5, 0.5, 4.0, clamp=True)
 add_par(base, page, 'toggle', 'Demoniomal', 'El demonio de los clusters', True)
-add_par(base, page, 'toggle', 'Montierra', 'El monstruo solo anda por tierra (con Oceano)', True)
+# v4 (comun v101): Montierra, en la pagina Monstruos con los demas de los monstruos
+pmon, _movidos = sacar_a_monstruos(base, ('Montierra',))
+add_par(base, pmon, 'header', 'Hterreno', 'Por donde andan (fase 39)')
+add_par(base, pmon, 'toggle', 'Montierra', 'Los monstruos solo andan por tierra (con Oceano)', True)
+monstruos_al_dia(base, _movidos)
 add_par(base, page, 'pulse', 'Simmal', 'Simular cluster del mal')
 ok('pagina Fase39: Especiemal, Vecinasencierro 3, Pasosobramal 8, Tamanoemblema 0,35, Brilloemblema 1, '
-   'Altomal 1,5, Demoniomal, Montierra, Simmal')
+   'Altomal 1,5, Demoniomal, Simmal; Montierra, en la pagina Monstruos')
 
 # v2: los emblemas de la v1 (0,45) se veian grandes: un proyecto con 0,45 pasa a 0,35, una sola vez
 try:

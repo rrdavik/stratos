@@ -86,7 +86,7 @@ python3 sprites/hacer_atlas_mal.py
 
 Para añadir emblemas: el dibujo y el nombre en `EMBLEMAS` del script y en `EMBLEMAS_MAL` del motor (mismo orden), y su sitio en `EMBLEMA_DE`.
 
-### Parámetros (página Fase39)
+### Parámetros (página Fase39; Montierra, desde la fase 39 v4, en la página Monstruos)
 
 | Parámetro | Defecto | Qué hace |
 |---|---|---|

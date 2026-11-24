@@ -144,7 +144,7 @@ exec(open('C:/Users/DareDave/Downloads/est/fase33_monstruo.py').read())
 
 El alfa de cada instancia lleva rugosidad + 2 × parte (0 velo, 1 cuerpo, 2 ojos, 3 tocón).
 
-### Parámetros (página Fase33)
+### Parámetros (página Monstruos; hasta la fase 33 v10, página Fase33)
 
 `Umbralaparicion` 0,25 · `Tamanoinicial` 0,5 · `Ocupacionmax` 8 · `Ritmodevora` 2 · `Ritmogrande` 3 · `Danomonstruo` 0,5 (fase 33 v5) · `Pasomonstruo` 32 · `Pasogrande` 16 (fase 33 v6; 24 y 12 en la v4, 16 y 8 antes) · `Costezanja` 2 · `Saltosmonstruo` encendido · `Tiemposalto` 0,15 s · `Botesalto` 0,15 (fase 33 v6) · `Recalculo` 4 · `Esperamonstruo` 8 s · `Verobjetivo` encendido · `Simmonstruo` (pulso: aparece ya) · `Simceldamon` 0
 

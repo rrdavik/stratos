@@ -57,6 +57,11 @@ PROBAR
   (fase 34): cae con susto y llora en la zanja; con 4, panico con el agua y se
   hunde. Spritemonstruo apagado: la esfera de la fase 33.
 
+  v3 (comun v101): sus parametros, en la pagina Monstruos (fuera la Fase38).
+  Pixelsprite, Inclinasprite y Brillosprite valen para los tres sprites. Los
+  tres atlas, con la misma claridad (sprites/igualar_brillo.py): Godzilla ya
+  no sale claro ni NefanyaMuto oscuro bajo las mismas luces.
+
 COMO USARLO
 -----------
   Copia la carpeta sprites del repositorio en la carpeta de los scripts y:
@@ -67,7 +72,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase38 v2  (Trumpzilla mas pequeno e iluminado por las luces del planeta; Brillosprite)'
+VERSION = 'fase38 v3  (pagina Monstruos; los tres sprites con la misma claridad)'
 banner(VERSION)
 
 base = require_base(38)
@@ -75,20 +80,25 @@ motor = install_core(base, CARPETA, 38)
 m = motor.module
 
 # -----------------------------------------------------------------------------
-# PARAMETROS (pagina Fase38)
+# PARAMETROS (pagina Monstruos)
 # -----------------------------------------------------------------------------
 
-page = get_page(base, 'Fase38')
+# comun v101: en la pagina Monstruos, con los de los otros monstruos (antes, Fase38). Un
+# proyecto de antes los pasa alli con su valor; la pagina Fase38, vacia, se quita
+PARS_PAGINA = ('Spritemonstruo', 'Emocion', 'Altosprite', 'Pixelsprite', 'Inclinasprite', 'Brillosprite')
+page, _movidos = sacar_a_monstruos(base, PARS_PAGINA)
+add_par(base, page, 'header', 'Hsprites', 'Trumpzilla y los sprites (fase 38)')
 add_par(base, page, 'toggle', 'Spritemonstruo', 'Monstruo en sprite (Trumpzilla)', True)
-add_par(base, page, 'menu', 'Emocion', 'Emocion', 'auto', menu=['auto'] + list(m.EMOCIONES_MON),
+add_par(base, page, 'menu', 'Emocion', 'Emocion de Trumpzilla', 'auto', menu=['auto'] + list(m.EMOCIONES_MON),
         menu_labels=['Auto (por su estado)'] + [e.capitalize() for e in m.EMOCIONES_MON])
-add_par(base, page, 'float', 'Altosprite', 'Alto del sprite (celdas, por tam)', 0.8, 0.2, 4.0, clamp=True)
-add_par(base, page, 'int', 'Pixelsprite', 'Pixelado (filas de pixeles; 0 tal cual)', 0, 0, 256, clamp=True)
-add_par(base, page, 'float', 'Inclinasprite', 'Inclinacion maxima hacia la normal (grados)', 30.0, 0.0, 180.0,
+add_par(base, page, 'float', 'Altosprite', 'Alto de Trumpzilla (celdas, por tam)', 0.8, 0.2, 4.0, clamp=True)
+add_par(base, page, 'int', 'Pixelsprite', 'Pixelado de los sprites (filas; 0 tal cual)', 0, 0, 256, clamp=True)
+add_par(base, page, 'float', 'Inclinasprite', 'Inclinacion de los sprites hacia la normal (grados)', 30.0, 0.0, 180.0,
         clamp=True)
-add_par(base, page, 'float', 'Brillosprite', 'Brillo del sprite (bajo las luces del planeta)', 1.0, 0.1, 3.0,
+add_par(base, page, 'float', 'Brillosprite', 'Brillo de los sprites (los tres monstruos)', 1.0, 0.1, 3.0,
         clamp=True)
-ok('pagina Fase38: Spritemonstruo, Emocion (auto), Altosprite 0,8, Pixelsprite 0, Inclinasprite 30, '
+monstruos_al_dia(base, _movidos)
+ok('pagina Monstruos (Fase38): Spritemonstruo, Emocion (auto), Altosprite 0,8, Pixelsprite 0, Inclinasprite 30, '
    'Brillosprite 1')
 
 # v2: la mitad de alto. Un proyecto con el Altosprite de la v1 (1,6) pasa a 0,8, una sola vez
