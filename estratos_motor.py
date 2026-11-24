@@ -327,6 +327,11 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v145 (fase 42): EL GODZILLA AZUL, el segundo monstruo del bien.
+#                 Con Trumpzilla y NefanyaMuto a la vez el mal hacia mucho dano: solo
+#                 mientras los dos estan en pie sale otro Godzilla (azul cobalto, placas
+#                 de hielo cian) que devora el mal y crea como el verde, y lucha con
+#                 NefanyaMuto (el verde sigue con Trumpzilla). Si queda uno solo, se va.
 #                 Motor v143 (fase 32 v3): LA PARTIDA LIBRE, PARA PRUEBAS. Con Partidalibre
 #                 la partida no tiene reloj ni rondas: el mundo sigue combatiendo hasta
 #                 que gana un bando (victoria_libre). El mal gana cuando tiene Dominio de
@@ -425,7 +430,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v144'
+MOTOR_VERSION = 'motor v145'
 
 import math
 import time as _time
@@ -686,6 +691,8 @@ DEFAULT_CFG = dict(
     # fase 41: NefanyaMuto, el segundo monstruo del mal
     nefanya=1, umbral_nefa=0.5, tiempos_baile=8, golpe_baile=0, radio_absorbe=2, largo_zanja_nefa=5,
     prof_zanja_nefa=3, alto_nefa=0.9, emocion_nefa='auto',
+    # fase 42: el Godzilla azul, el segundo monstruo del bien
+    azul=1, alto_azul=0.8, emocion_azul='auto',
 )
 
 
@@ -18193,6 +18200,9 @@ def fin_de_ronda(W, cfg, now, gana=None):
     if 'nefa' in J:                     # fase 41: NefanyaMuto tambien
         J['nefa'] = nefa_nuevo(0, cfg)
         J['baile'] = J['tregua_baile'] = None
+    if 'azul' in J:                     # fase 42: el Godzilla azul tambien
+        J['azul'] = bien_nuevo(0, cfg)
+        J['lucha_azul'] = J['tregua_azul'] = None
     J['rescates'] = {}
     J['rescate_cas'] = {}
     J['paso'] = 0
@@ -18272,7 +18282,7 @@ def juego_al_enterrar(W, cfg, now):
     J['rescate_cas'] = {}
     J['filas'] = {}
     W.pop('bloqueadas', None)
-    for m in (J['mon'], J.get('bien'), J.get('nefa')):     # v142: y NefanyaMuto
+    for m in (J['mon'], J.get('bien'), J.get('nefa'), J.get('azul')):     # v142: y NefanyaMuto; v145: y el azul
         if m is None:
             continue
         m['objetivo'], m['camino'], m['mov'] = None, [], 0.0
@@ -18326,6 +18336,8 @@ def juego_avanzar(W, cfg, now, semis):
         godzilla_reloj(W, cfg, now)
     if cfg['nivel'] >= 41:              # fase 41: NefanyaMuto aparece con el mundo construido al 50 %
         nefa_reloj(W, cfg, now)
+    if cfg['nivel'] >= 42:              # fase 42: el Godzilla azul, con los dos del mal en pie
+        azul_reloj(W, cfg, now)
     J['semi_f'] += max(0.0, float(semis))
     k = 0
     while J['semi_f'] >= 1.0 - 1e-9 and k < SEMIS_MAX:
@@ -18364,6 +18376,10 @@ def semicorchea_juego(W, cfg, now):
         mover_monstruo(W, cfg, now, nefa_estado(W, cfg))
         encuentro_baile(W, cfg, now)
         baile_semi(W, cfg, now)
+    if cfg['nivel'] >= 42 and azul_on(W, cfg):    # fase 42: el Godzilla azul anda; junto a NefanyaMuto, la lucha
+        encuentro_azul(W, cfg, now)
+        mover_azul(W, cfg, now)
+        encuentro_azul(W, cfg, now)
     if J['semis'] % max(1, int(cfg['paso_juego'])) == 0:
         J['paso'] += 1
         paso_de_juego(W, cfg, now)
@@ -18382,6 +18398,9 @@ def paso_de_juego(W, cfg, now):
         lucha_paso(W, cfg, now)
     if cfg['nivel'] >= 41 and nefa_on(W, cfg):     # fase 41: NefanyaMuto devora y siembra el mal
         monstruo_paso(W, cfg, now, nefa_estado(W, cfg))
+    if cfg['nivel'] >= 42:              # fase 42: el Godzilla azul devora el mal y crea; su lucha cuenta
+        azul_paso(W, cfg, now)
+        lucha_azul_paso(W, cfg, now)
 
 
 def _giro_juego(W, cfg):
@@ -18929,6 +18948,8 @@ def build_juego(W, cfg, now, out):
         out['godzilla'] = []
     if lvl >= 41:
         out['nefanyamuto'] = []
+    if lvl >= 42:
+        out['godzilla_azul'] = []
     if not juego_on(W, cfg):
         if cfg.get('marca_publico', 1):     # motor v132: la marca del publico, tambien sin juego
             out['marcas'] = filas_marcas(W, cfg)
@@ -18958,6 +18979,8 @@ def build_juego(W, cfg, now, out):
             out['godzilla'] = filas_godzilla(W, cfg, J['bien'], now)
         if lvl >= 41 and cfg.get('nefanya', 1) and J.get('nefa') is not None:     # fase 41: NefanyaMuto
             out['nefanyamuto'] = filas_nefa(W, cfg, J['nefa'], now)
+        if lvl >= 42 and cfg.get('azul', 1) and J.get('azul') is not None:     # fase 42: el Godzilla azul
+            out['godzilla_azul'] = filas_azul(W, cfg, J['azul'], now)
         if cfg.get('ver_objetivo', 1) and m['objetivo'] is not None and m['estado'] not in ('espera', 'muere'):
             c = m['objetivo']
             r0 = base_radius(W, cfg, c)
@@ -19053,7 +19076,7 @@ def seguir_saltos(W, cfg, now):
     celda, la celda entera, otro camino), empieza un salto de Tiemposalto s desde el
     destino de antes. Si salta a otro sitio (aparece, la demo lo pone), sin salto."""
     J = W.get('juego') or {}
-    for m in (J.get('mon'), J.get('bien'), J.get('nefa')):
+    for m in (J.get('mon'), J.get('bien'), J.get('nefa'), J.get('azul')):
         if m is None:
             continue
         d = destino_mon(W, cfg, m) if cfg.get('saltos_monstruo', 1) else None
@@ -20367,12 +20390,12 @@ def comestible_bien(W, cfg, g, c):
 def muro_tregua(W, cfg, m):
     """Fase 40: durante la tregua, la celda del rival y sus vecinas son muro (menos la propia).
     Motor v142: dos treguas, la de la lucha (Trumpzilla y Godzilla) y la del baile
-    (Trumpzilla y NefanyaMuto)."""
+    (Trumpzilla y NefanyaMuto). Motor v145: y la del Godzilla azul con NefanyaMuto."""
     if cfg['nivel'] < 40:
         return set()
     J = W.get('juego') or {}
     out = set()
-    for clave, a, b in (('tregua', 'mon', 'bien'), ('tregua_baile', 'mon', 'nefa')):
+    for clave, a, b in (('tregua', 'mon', 'bien'), ('tregua_baile', 'mon', 'nefa'), ('tregua_azul', 'nefa', 'azul')):
         T = J.get(clave)
         if not T or J.get('paso', 0) >= T.get('hasta', 0):
             continue
@@ -20523,11 +20546,14 @@ def mover_godzilla(W, cfg, now):
     """Una semicorchea: avanza por su camino una celda cada Pasomonstruo (Pasogrande)
     semicorcheas, como Trumpzilla; la zanja cuesta Costezanja. Motor v131: solo por
     tierra, como Trumpzilla (si el mar le corta el camino, recalcula)."""
-    if not godzilla_on(W, cfg):
-        return
+    if godzilla_on(W, cfg) and W['juego'].get('bien') is not None:
+        _mover_bien(W, cfg, now, W['juego']['bien'])
+
+
+def _mover_bien(W, cfg, now, g):
+    """El paso de un Godzilla (motor v145: el verde o el azul)."""
     J = W['juego']
-    g = J.get('bien')
-    if g is None or g['estado'] not in ('aparece', 'busca', 'devora') or g['celda'] is None:
+    if g['estado'] not in ('aparece', 'busca', 'devora') or g['celda'] is None:
         return
     if not g['camino']:
         g['mov'] = 0.0
@@ -20556,11 +20582,13 @@ def godzilla_paso(W, cfg, now):
     """Un paso de juego de Godzilla: recalcula y devora el mal (Ritmodevora o
     Ritmogrande por Danomonstruo, como Trumpzilla); la celda vaciada, un brote de la
     creacion."""
-    if not godzilla_on(W, cfg):
-        return
-    J = W['juego']
-    g = J.get('bien')
-    if g is None or g['estado'] in ('espera', 'se_va', 'lucha') or g['celda'] is None:
+    if godzilla_on(W, cfg) and W['juego'].get('bien') is not None:
+        _paso_bien(W, cfg, now, W['juego']['bien'])
+
+
+def _paso_bien(W, cfg, now, g):
+    """Un paso de juego de un Godzilla (motor v145: el verde o el azul)."""
+    if g['estado'] in ('espera', 'se_va', 'lucha') or g['celda'] is None:
         return
     if retirandose(g):
         return
@@ -20688,7 +20716,7 @@ def terminar_lucha(W, cfg, now):
 
 # --- lo visual (fase 40) ----------------------------------------------------------
 
-def emocion_godzilla(W, cfg, g, now):
+def emocion_godzilla(W, cfg, g, now, vista=None, fija=None):
     """(emocion, animacion) de Godzilla, la primera que vale:
       se va (llega gente)     calma      adios     saluda y se hunde T_HUNDE s
       lucha                   furia      lucha     da el manotazo (mueca y tiembla: lo recibe)
@@ -20699,9 +20727,10 @@ def emocion_godzilla(W, cfg, g, now):
       busca y anda            enfado     camina    furia si es grande
       sin mal que comer       calma      respira
       quieto                  serio      respira
-    Con Emociongodzilla distinta de auto, esa cara con la animacion del estado."""
+    Con Emociongodzilla distinta de auto, esa cara con la animacion del estado.
+    Motor v145: vista y fija, las del Godzilla azul (emocion_azul)."""
     J = W['juego']
-    v = _vista_mon(g, now, _VISTA_BIEN)
+    v = _vista_mon(g, now, _VISTA_BIEN if vista is None else vista)
     c = g['celda']
     big = grande(g)
     if g['estado'] == 'se_va':
@@ -20722,7 +20751,7 @@ def emocion_godzilla(W, cfg, g, now):
         e, a = 'calma', 'respira'
     else:
         e, a = 'serio', 'respira'
-    fija = cfg.get('emocion_godzilla', 'auto')
+    fija = cfg.get('emocion_godzilla', 'auto') if fija is None else fija
     if fija in EMOCIONES_MON:
         e = fija
     return e, a
@@ -21206,6 +21235,8 @@ def emocion_nefa(W, cfg, x, now):
         e, a = 'panico', 'hunde'
     elif x['estado'] == 'baile':
         e, a = emocion_baile(W, cfg, x, now, 'nefanyamuto')
+    elif x['estado'] == 'lucha':        # motor v145: con el Godzilla azul (da y recibe, como Trumpzilla)
+        e, a = (('mueca', 'tiembla') if manotazo(x, now) == 0 else ('furia', 'lucha'))
     elif x.get('anillo') is not None and 0.0 <= now - x['anillo'] < T_ANILLO:
         e, a = 'furia', 'anillo'
     elif x['estado'] == 'cae' or now - v['t_caida'] < T_SUSTO:
@@ -21320,6 +21351,307 @@ def _legend_baile(W, c):
     if en_tregua_baile(W):
         return '  BAILE    tregua %d pasos   %s' % (J['tregua_baile']['hasta'] - J['paso'], cuenta)
     return '  BAILE    -   %s' % cuenta
+
+
+# =============================================================================
+# 1. NUCLEO - El Godzilla azul, el segundo monstruo del bien (fase 42, motor v145)
+# =============================================================================
+# Con Trumpzilla y NefanyaMuto a la vez en el planeta, el mal hacia demasiado dano: el
+# Godzilla verde solo puede con uno. El Godzilla azul es otro Godzilla (las mismas
+# formas y caras, la piel azul cobalto y las placas de hielo cian) que lucha por el bien.
+#   CUANDO     solo mientras los DOS monstruos del mal estan en pie a la vez (ni
+#              esperando ni ahogados), con o sin gente en la sala. Si queda uno solo (o
+#              ninguno), se va: saluda con la flor y se hunde T_HUNDE s. Vuelve cuando
+#              vuelven a estar los dos (como pronto Esperamonstruo s despues de irse).
+#   APARECE    en la celda vacia de la cara visible mas cercana al borde por el que entran
+#              las celdas con el giro, lejos de los otros tres monstruos (ni sus celdas ni
+#              sus vecinas). En tierra.
+#   COME MAL   con las reglas del Godzilla verde (_mover_bien, _paso_bien): el objetivo,
+#              el ritmo, el dano, el paso, el tamano, solo por tierra; la celda del mal que
+#              vacia recibe un brote de la creacion.
+#   LUCHA      su rival es NefanyaMuto (el verde sigue con Trumpzilla): si quedan en
+#              celdas contiguas, fuera de su tregua, la lucha de la fase 40 (al borde,
+#              manotazos Pasoslucha pasos, cada uno vuelve por donde vino y Tregua pasos
+#              sin cruzarse). Asi los dos del mal tienen cada uno quien los pare.
+#   EMOCIONES  las del Godzilla verde (emocion_godzilla), en su atlas
+#              sprites/godzilla_azul_emociones.png. NefanyaMuto, en la lucha, furia
+#              cuando da y mueca cuando recibe, como Trumpzilla.
+# Todo va en W['juego']['azul'], ['lucha_azul'] y ['tregua_azul'] (se vacian con el modo
+# y en cada ronda) y en la geometria 'godzilla_azul' (mat_godzilla_azul). Con
+# Godzillaazul apagado, el juego es el de la fase 41.
+
+_VISTA_AZUL = {}
+
+
+def azul_on(W, cfg):
+    return cfg['nivel'] >= 42 and bool(cfg.get('azul', 1)) and juego_on(W, cfg)
+
+
+def azul_estado(W, cfg):
+    J = W['juego']
+    g = J.get('azul')
+    if g is None:
+        g = J['azul'] = bien_nuevo(0, cfg)
+    return g
+
+
+def en_pie(x):
+    """En el planeta, ni esperando ni ahogado (puede estar cayendo, luchando o bailando)."""
+    return x is not None and x.get('celda') is not None and x.get('estado') not in ('espera', 'muere')
+
+
+def dos_del_mal(W, cfg):
+    """Trumpzilla y NefanyaMuto, los dos en pie a la vez."""
+    J = W['juego']
+    return nefa_on(W, cfg) and en_pie(J.get('mon')) and en_pie(J.get('nefa'))
+
+
+def celda_aparicion_azul(W, cfg, vis=None):
+    """La celda vacia de la cara visible mas cercana al borde de entrada (otro desempate),
+    lejos de Trumpzilla, NefanyaMuto y el Godzilla verde. Prefiere la tierra."""
+    J = W['juego']
+    vis = cara_visible(cfg) if vis is None else vis
+    lejos = set()
+    for x in (J.get('mon'), J.get('nefa'), J.get('bien')):
+        if x is not None and x.get('celda') is not None and x['estado'] != 'espera':
+            lejos |= {x['celda']} | set(NEIGH[x['celda']])
+    mar = mar_mon(W, cfg)
+    libre = []
+    for grupo in (vis, range(N)):
+        libre = [i for i in grupo if W['occ'][i] <= 0 and i not in J['zanjas'] and i not in mar and i not in lejos]
+        if libre:
+            break
+    if not libre:                       # todo lo vacio es mar: en una isla
+        libre = [i for i in vis if W['occ'][i] > 0 and W['sp'][i] != MAL and i not in J['zanjas'] and i not in lejos]
+    if not libre:
+        libre = [i for i in vis if W['occ'][i] > 0 and i not in J['zanjas'] and i not in lejos]
+    if not libre:
+        return None
+    lon0 = float(cfg.get('lon_central', 0.0))
+    sg = J.get('giro', 1.0)
+    n = azul_estado(W, cfg)['n']
+
+    def borde(i):
+        d = (lonlat_celda(i)[1] - lon0 + 180.0) % 360.0 - 180.0
+        return (sg * d, _hash01(i, n + 1, 42))
+    return max(libre, key=borde)
+
+
+def aparecer_azul(W, cfg, now, celda):
+    J = W['juego']
+    viejo = azul_estado(W, cfg)
+    g = J['azul'] = bien_nuevo(viejo['n'] + 1, cfg)
+    g.update(estado='aparece', celda=int(celda), t_estado=now)
+    recalcular_bien(W, cfg, g, now)
+    J['ev']['godzilla_azul'] = dict(t=now, celda=int(celda), n=g['n'])
+    W['aviso'] = 'Godzilla azul #%d en la celda %d' % (g['n'], celda)
+    W['dirty'] = True
+    return g
+
+
+def se_va_azul(W, cfg, g, now):
+    """Ya no estan los dos del mal: el Godzilla azul saluda y se hunde T_HUNDE s."""
+    if W['juego'].get('lucha_azul'):
+        terminar_lucha_azul(W, cfg, now)
+    g.update(estado='se_va', t_estado=now, objetivo=None, camino=[], mov=0.0, retira=None)
+    W['aviso'] = 'Godzilla azul #%d se va: ya no estan los dos monstruos del mal' % g['n']
+    W['dirty'] = True
+
+
+def azul_reloj(W, cfg, now):
+    """Cada fotograma: con los dos del mal en pie, aparece; si queda uno, se va."""
+    J = W['juego']
+    if not azul_on(W, cfg):
+        g = J.get('azul')
+        if g is not None and g['estado'] != 'espera':      # apagado: fuera del planeta
+            J['azul'] = bien_nuevo(g['n'], cfg)
+            J['lucha_azul'] = None
+        return
+    g = azul_estado(W, cfg)
+    dos = dos_del_mal(W, cfg)
+    if g['estado'] == 'se_va':
+        if now - (g.get('t_estado') or now) >= T_HUNDE - 1e-9:
+            g.update(estado='espera', celda=None, t_muerte=now)
+        return
+    if g['estado'] != 'espera':
+        if not dos:
+            se_va_azul(W, cfg, g, now)
+        return
+    if not dos or (g.get('t_muerte') is not None and now - g['t_muerte'] < cfg['espera_monstruo'] - 1e-9):
+        return
+    c = celda_aparicion_azul(W, cfg)
+    if c is not None:
+        aparecer_azul(W, cfg, now, c)
+        encuentro_azul(W, cfg, now)
+
+
+def mover_azul(W, cfg, now):
+    if azul_on(W, cfg) and W['juego'].get('azul') is not None:
+        _mover_bien(W, cfg, now, W['juego']['azul'])
+
+
+def azul_paso(W, cfg, now):
+    if azul_on(W, cfg) and W['juego'].get('azul') is not None:
+        _paso_bien(W, cfg, now, W['juego']['azul'])
+
+
+# --- la lucha del Godzilla azul con NefanyaMuto (fase 42) ---------------------------
+
+def en_tregua_azul(W):
+    J = W['juego']
+    T = J.get('tregua_azul')
+    return bool(T) and J['paso'] < T.get('hasta', 0)
+
+
+def encuentro_azul(W, cfg, now):
+    """Si NefanyaMuto y el Godzilla azul quedan en celdas contiguas (o en la misma), fuera
+    de su tregua, empieza su lucha."""
+    if not azul_on(W, cfg) or not nefa_on(W, cfg):
+        return False
+    J = W['juego']
+    x, g = J.get('nefa'), J.get('azul')
+    if J.get('lucha_azul') or x is None or g is None or en_tregua_azul(W):
+        return False
+    libres = ('aparece', 'busca', 'devora')
+    if x['estado'] not in libres or g['estado'] not in libres:
+        return False
+    if x['celda'] is None or g['celda'] is None:
+        return False
+    if x['celda'] != g['celda'] and g['celda'] not in NEIGH[x['celda']]:
+        return False
+    J['luchas_azul'] = J.get('luchas_azul', 0) + 1
+    J['lucha_azul'] = dict(t0=now, paso0=J['paso'], nefa=x['celda'], azul=g['celda'], n=J['luchas_azul'])
+    for a, b in ((x, g), (g, x)):
+        a.update(estado='lucha', rival=b['celda'], t_estado=now, mov=0.0, retira=None)
+    J['ev']['lucha_azul'] = dict(t=now, nefa=x['celda'], azul=g['celda'])
+    W['aviso'] = 'lucha: NefanyaMuto (celda %d) contra el Godzilla azul (celda %d)' % (x['celda'], g['celda'])
+    W['dirty'] = True
+    return True
+
+
+def lucha_azul_paso(W, cfg, now):
+    """Cada paso de juego: tras Pasoslucha pasos, cada uno se va por donde vino. Si uno
+    deja de luchar (NefanyaMuto se ahoga o cae, el azul se va), se acaba."""
+    J = W['juego']
+    L = J.get('lucha_azul')
+    if not L:
+        return
+    x, g = J.get('nefa'), J.get('azul')
+    if x is None or g is None or x['estado'] != 'lucha' or g['estado'] != 'lucha' or not azul_on(W, cfg):
+        terminar_lucha_azul(W, cfg, now)
+    elif J['paso'] - L['paso0'] >= int(cfg.get('pasos_lucha', 8)):
+        terminar_lucha_azul(W, cfg, now)
+
+
+def terminar_lucha_azul(W, cfg, now):
+    """Fin: los que siguen luchando vuelven a la celda de la que venian; la tregua."""
+    J = W['juego']
+    x, g = J.get('nefa'), J.get('azul')
+    for a, b in ((x, g), (g, x)):
+        if a is None or a['estado'] != 'lucha':
+            continue
+        rc = b['celda'] if b is not None and b.get('celda') is not None else None
+        dest = celda_retirada(W, cfg, a, rc, True)
+        a.update(estado='busca', rival=None, objetivo=None, mov=0.0, t_estado=now, recalc=0,
+                 camino=[dest] if dest is not None else [], retira=dest)
+        if dest is None:
+            a['recalc'] = 10 ** 6
+    J['lucha_azul'] = None
+    J['tregua_azul'] = dict(hasta=J['paso'] + int(cfg.get('tregua', 16)), desde=J['paso'])
+    J['ev']['fin_lucha_azul'] = dict(t=now)
+    W['dirty'] = True
+
+
+# --- lo visual (fase 42) ----------------------------------------------------------
+
+def filas_azul(W, cfg, g, now):
+    """El sprite del Godzilla azul y su sombra (filas de 'godzilla_azul'): las caras del
+    verde (Emocionazul fija una), en su atlas. Al irse, se hunde T_HUNDE s."""
+    if g is None or g['celda'] is None or g['estado'] == 'espera':
+        return []
+    f = 0.0
+    if g['estado'] == 'se_va':
+        f = (now - (g.get('t_estado') if g.get('t_estado') is not None else now)) / T_HUNDE
+        if f >= 1.0:
+            return []
+    e, a = emocion_azul(W, cfg, g, now)
+    return _filas_sprite(W, cfg, g, now, e, a, f, cfg.get('alto_azul', 0.8))
+
+
+def emocion_azul(W, cfg, g, now):
+    return emocion_godzilla(W, cfg, g, now, _VISTA_AZUL, cfg.get('emocion_azul', 'auto'))
+
+
+def sim_azul(W, cfg, now, celda=None):
+    """Simazul: aparece ya (sin esperar a los dos del mal), en la celda de aparicion o en
+    celda. Si no estan los dos, se ira enseguida: Simluchaazul los pone."""
+    if not juego_on(W, cfg):
+        return 'AZUL     enciende antes Modojuego'
+    if cfg['nivel'] < 42 or not cfg.get('azul', 1):
+        return 'AZUL     enciende antes Godzillaazul (Monstruos)'
+    c = celda_aparicion_azul(W, cfg) if celda is None else max(0, min(N - 1, int(celda)))
+    if c is None:
+        return 'AZUL     no hay celda vacia donde aparecer'
+    g = aparecer_azul(W, cfg, now, c)
+    encuentro_azul(W, cfg, now)
+    return 'AZUL     #%d aparece en la celda %d   objetivo %s%s' % (
+        g['n'], c, g['objetivo'] if g['objetivo'] is not None else '-',
+        '' if dos_del_mal(W, cfg) else '   (sin los dos del mal, se ira)')
+
+
+def sim_lucha_azul(W, cfg, now):
+    """Simluchaazul: Trumpzilla en Simceldamon (si no esta), NefanyaMuto lejos de el y el
+    Godzilla azul junto a NefanyaMuto: su lucha."""
+    if not juego_on(W, cfg):
+        return 'LUCHAZUL enciende antes Modojuego'
+    if cfg['nivel'] < 42 or not cfg.get('azul', 1) or not cfg.get('nefanya', 1):
+        return 'LUCHAZUL enciende antes Godzillaazul y Nefanyamuto (Monstruos)'
+    J = W['juego']
+    m = J['mon']
+    if not en_pie(m) or m['estado'] in ('lucha', 'baile'):
+        m = aparecer(W, cfg, now, max(0, min(N - 1, int(cfg['sim_celda_mon']))))
+    if J.get('baile'):
+        terminar_baile(W, cfg, now)
+    J['tregua_azul'] = J['lucha_azul'] = None
+    x = J.get('nefa')
+    if not en_pie(x) or x['estado'] in ('lucha', 'baile'):
+        c = celda_aparicion_nefa(W, cfg)
+        if c is None:
+            return 'LUCHAZUL no hay celda para NefanyaMuto'
+        x = aparecer_nefa(W, cfg, now, c)
+    mar = mar_mon(W, cfg)
+    cerca = {m['celda']} | set(NEIGH[m['celda']])
+    v = min(NEIGH[x['celda']], key=lambda y: (y in cerca, y in mar, W['occ'][y] > 0, _hash01(y, 43)))
+    aparecer_azul(W, cfg, now, v)
+    encuentro_azul(W, cfg, now)
+    return 'LUCHAZUL NefanyaMuto en la celda %d, el Godzilla azul en la %d: %s' % (
+        x['celda'], v, 'manotazos' if J.get('lucha_azul') else 'no luchan')
+
+
+def _legend_azul(W, c):
+    """AZUL (fase 42): el estado, la celda, el objetivo, el tamano y la cara; esperando,
+    cuantos del mal hay en pie; y su lucha con NefanyaMuto."""
+    J = W.get('juego')
+    if not c.get('azul', 1):
+        return '  AZUL     apagado (Godzillaazul)'
+    if not J:
+        return '  AZUL     -'
+    g = J.get('azul') or bien_nuevo(0, c)
+    now = W.get('t') or 0.0
+    L = J.get('lucha_azul')
+    if L:
+        lucha = 'lucha %d/%d pasos con NefanyaMuto' % (min(J['paso'] - L['paso0'], int(c['pasos_lucha'])),
+                                                        int(c['pasos_lucha']))
+    elif en_tregua_azul(W):
+        lucha = 'tregua %d pasos' % (J['tregua_azul']['hasta'] - J['paso'])
+    else:
+        lucha = 'luchas %d' % J.get('luchas_azul', 0)
+    if g['estado'] in ('espera', 'se_va') or g['celda'] is None:
+        del_mal = sum(1 for x in (J.get('mon'), J.get('nefa')) if en_pie(x))
+        return '  AZUL     #%d  %s   del mal en pie %d (aparece con 2)   %s' % (g['n'], g['estado'], del_mal, lucha)
+    return '  AZUL     #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d   cara %s   %s' % (
+        g['n'], g['estado'], g['celda'], g['objetivo'] if g['objetivo'] is not None else '-', g['tam'],
+        min(g['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), emocion_azul(W, c, g, now)[0], lucha)
 
 
 # --- la demo GENoZilla de la sala virtual (motor v119) ---------------------------------
@@ -22050,6 +22382,7 @@ def chop_names(c=None):
     extra += ['i_emblemas_mal'] if c['nivel'] >= 39 else []                     # fase 39: emblemas y demonios
     extra += ['i_godzilla'] if c['nivel'] >= 40 else []                         # fase 40: Godzilla
     extra += ['i_nefanyamuto'] if c['nivel'] >= 41 else []                      # fase 41: NefanyaMuto
+    extra += ['i_godzilla_azul'] if c['nivel'] >= 42 else []                    # fase 42: el Godzilla azul
     # motor v75: i_humo (el humo en la GPU, v74: sin esto sus filas no se recocian) e
     # i_vagones (los trenes, en cajas; las demas particulas son motas suaves)
     return CHOP_NAMES + ['i_particulas', 'i_humo', 'i_vagones'] + extra + \
@@ -22579,6 +22912,11 @@ def cfg():
                  prof_zanja_nefa=max(1, min(12, int(_p('Profzanjanefa', c['prof_zanja_nefa'])))),
                  alto_nefa=max(0.2, min(4.0, _p('Altonefa', c['alto_nefa']))),
                  emocion_nefa=fn if fn in EMOCIONES_NEFA else 'auto')
+    if c['nivel'] >= 42:                # fase 42: el Godzilla azul
+        fa = _p('Emocionazul', 'auto')
+        c.update(azul=int(bool(_p('Godzillaazul', True))),
+                 alto_azul=max(0.2, min(4.0, _p('Altoazul', c['alto_azul']))),
+                 emocion_azul=fa if fa in EMOCIONES_MON else 'auto')
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -23441,6 +23779,12 @@ def on_pulse(name):
     elif name == 'Simbaile':            # fase 41: NefanyaMuto junto a Trumpzilla: el baile
         juego_al_dia(W, c, now)
         print(sim_baile(W, c, now))
+    elif name == 'Simazul':             # fase 42: el Godzilla azul aparece ya
+        juego_al_dia(W, c, now)
+        print(sim_azul(W, c, now))
+    elif name == 'Simluchaazul':        # fase 42: el Godzilla azul junto a NefanyaMuto: su lucha
+        juego_al_dia(W, c, now)
+        print(sim_lucha_azul(W, c, now))
     elif name == 'Capturarfondo':       # fase 22: el suelo vacio de referencia
         print(capturar_fondo(c))
     elif name == 'Reiniciarcuentas':    # fase 22: los contadores del sorteo
@@ -25649,6 +25993,8 @@ def _legend():
     if lvl >= 41:                       # fase 41: NefanyaMuto y el baile
         lines.append(_legend_nefa(W, c))
         lines.append(_legend_baile(W, c))
+    if lvl >= 42:                       # fase 42: el Godzilla azul y su lucha
+        lines.append(_legend_azul(W, c))
     return '\n'.join(lines)
 
 

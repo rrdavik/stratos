@@ -33,7 +33,8 @@ LUM_OBJETIVO = 72.0             # luminancia media (0-255) de los pixeles opacos
 PESOS = np.array([0.299, 0.587, 0.114])
 ATLAS = (('trumpzilla_emociones.png', 'hacer_atlas_trumpzilla.py'),
          ('godzilla_emociones.png', 'hacer_atlas_godzilla.py'),
-         ('nefanyamuto_emociones.png', 'hacer_atlas_nefanyamuto.py'))
+         ('nefanyamuto_emociones.png', 'hacer_atlas_nefanyamuto.py'),
+         ('godzilla_azul_emociones.png', 'hacer_atlas_godzilla_azul.py'))
 
 
 def luminancia(im):
