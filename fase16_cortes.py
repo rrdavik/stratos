@@ -52,6 +52,9 @@ LA MEZCLA DE ESPECIES (motor v121, fase 11 v22)
 -----------------------------------------------
   Sin cambio de logica: los cortes leen la especie de cada celda del registro
   de la concha (una concha mixta ensena fosiles, cimientos o galerias segun la celda).
+  v7 (motor v143, fase 11 v27): un corte que llega al nucleo quita la concha de
+  la celda tambien para el SUELO FIRME: si en este mundo no crecio alli
+  naturaleza, vuelve a ser agua para la ciudad y la industria.
 
 COMO USARLO
 -----------
@@ -62,7 +65,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase16 v6  (restos distinguibles: esqueletos en la ciudad, maquinaria en la industria, dolares y demonios del mal)'
+VERSION = 'fase16 v7  (un corte hasta el nucleo quita el suelo firme de la mezcla; motor v143)'
 banner(VERSION)
 
 base = require_base(16)
