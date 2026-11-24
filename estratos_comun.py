@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v101'
+VERSION_COMUN = 'comun v102'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -42,6 +42,7 @@ RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'r
                 'marcas', 'brotes_mal', 'tocon', 'monstruo', 'agua_juego', 'trumpzilla',
                 'godzilla',                        # comun v91 (fase 40): Godzilla, el monstruo de la creacion
                 'nefanyamuto',                     # comun v99 (fase 41): NefanyaMuto, el segundo monstruo del mal
+                'godzilla_azul',                   # comun v102 (fase 42): el Godzilla azul, el segundo del bien
                 'particulas', 'humo',
                 'luz_conchas',                     # comun v93: sin luz_celda (la loseta de luz)
                 'luz_local',                       # lo transparente (motas, humo) y las capas aditivas, al final
@@ -2642,6 +2643,8 @@ def install_core(base, carpeta, fase):
         godzilla_al_dia(base, carpeta)
     if base.op('nefanyamuto') is not None:     # comun v99 (fase 41): NefanyaMuto
         nefanyamuto_al_dia(base, carpeta)
+    if base.op('godzilla_azul') is not None:   # comun v102 (fase 42): el Godzilla azul
+        godzilla_azul_al_dia(base, carpeta)
     try:
         motor.module.cfg_foto_pausa(False)     # comun v51: la configuracion por fotograma, de nuevo
     except Exception:
@@ -2928,6 +2931,7 @@ def particulas_al_dia(base, crear=False):
 SPRITE_ATLAS = 'sprites/trumpzilla_emociones.png'
 GODZILLA_ATLAS = 'sprites/godzilla_emociones.png'           # comun v91 (fase 40)
 NEFA_ATLAS = 'sprites/nefanyamuto_emociones.png'            # comun v99 (fase 41)
+AZUL_ATLAS = 'sprites/godzilla_azul_emociones.png'          # comun v102 (fase 42)
 SPRITE_U = "parent().op('frame_u')['sprite_t']"
 LUCES_SPRITE = ('uLuz0', 'uLuz0Col', 'uLuz1', 'uLuz1Col', 'uLuz2', 'uLuz2Col', 'uAmbiente')   # comun v86
 
@@ -3178,6 +3182,15 @@ def nefanyamuto_al_dia(base, carpeta, crear=False):
     diez caras y despiste y pasmado)."""
     return _sprite_al_dia(base, carpeta, crear, 'nefanyamuto', 'mat_nefanyamuto', 'nefanyamuto_atlas', NEFA_ATLAS,
                           (-440, 2900), (1180, 460), (1400, 420), 'NefanyaMuto en sprite')
+
+
+def godzilla_azul_al_dia(base, carpeta, crear=False):
+    """comun v102 (fase 42): el Godzilla azul, el segundo monstruo del bien. La geometria
+    'godzilla_azul' con mat_godzilla_azul: los shaders de Trumpzilla con el atlas
+    sprites/godzilla_azul_emociones.png (godzilla_azul_atlas): el Godzilla verde con otra
+    paleta, del mismo formato."""
+    return _sprite_al_dia(base, carpeta, crear, 'godzilla_azul', 'mat_godzilla_azul', 'godzilla_azul_atlas',
+                          AZUL_ATLAS, (-440, 2960), (1180, 540), (1400, 500), 'el Godzilla azul en sprite')
 
 
 def godzilla_al_dia(base, carpeta, crear=False):
@@ -5774,7 +5787,7 @@ def guardar_sala(base, nombres):
     a 39, que prueban a Trumpzilla solo). comun v99: y Nefanyamuto (fase 41). comun v100:
     y Partidalibre (motor v143: las autopruebas juegan rondas con reloj)."""
     guarda = {}
-    for nm in list(nombres) + ['Godzilla', 'Nefanyamuto', 'Partidalibre']:
+    for nm in list(nombres) + ['Godzilla', 'Nefanyamuto', 'Godzillaazul', 'Partidalibre']:   # comun v102: y el azul
         try:
             guarda[nm] = getattr(base.par, nm).eval()
         except Exception:
@@ -5835,12 +5848,13 @@ class SalaJuego(object):
     avanza a mano; una semicorchea son SEMI s (120 BPM)."""
     SEMI = 0.125
 
-    def __init__(self, base, m, t0, godzilla=False, nefanya=False):
+    def __init__(self, base, m, t0, godzilla=False, nefanya=False, azul=False):
         self.base, self.m = base, m
         self.reloj = [float(t0)]
         self.tb = base.op('sala_personas')
         self.godzilla = godzilla            # comun v91: sin Godzilla (fase 40), salvo que se pida
         self.nefanya = nefanya              # comun v99: sin NefanyaMuto (fase 41), salvo que se pida
+        self.azul = azul                    # comun v102: sin el Godzilla azul (fase 42), salvo que se pida
 
     @property
     def now(self):
@@ -5863,6 +5877,8 @@ class SalaJuego(object):
             self.base.par.Godzilla = bool(self.godzilla)
         if has_par(self.base, 'Nefanyamuto'):
             self.base.par.Nefanyamuto = bool(self.nefanya)
+        if has_par(self.base, 'Godzillaazul'):
+            self.base.par.Godzillaazul = bool(self.azul)
         if has_par(self.base, 'Partidalibre'):     # comun v100: rondas con reloj (la fase 32 prueba la libre)
             self.base.par.Partidalibre = False
         W, c = m.world(), m.cfg()
