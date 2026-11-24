@@ -73,7 +73,7 @@ Trumpzilla, en el baile: *ríe* / *carcajada* con la animación *baile*; en su g
 | `mat_nefanyamuto` | GLSL MAT | Los shaders de Trumpzilla con el sampler `sAtlas` en `nefanyamuto_atlas`; mismos uniformes (`Pixelsprite`, `Inclinasprite`, `Brillosprite` valen para todos) |
 | `nefanyamuto_atlas` | Movie File In TOP | `sprites/nefanyamuto_emociones.png` |
 
-### Parámetros (página Fase41)
+### Parámetros (página Monstruos; en la fase 41 v1, página Fase41)
 
 | Parámetro | Defecto | Qué hace |
 |---|---|---|
@@ -130,3 +130,23 @@ BAILE    tregua 9 pasos   (bailes 1, golpes T 0 / N 1, absorbidas 0)
 - `Simbaile`, las líneas `NEFANYA` y `BAILE`, `Nefanyamuto` apagado (acaba el baile) y `Modojuego` apagado.
 
 La partida simulada de `correr_fases.py` (fases 32 a 37) sigue probando a Trumpzilla solo: apaga Godzilla y NefanyaMuto mientras dura.
+
+---
+
+## La página Monstruos y la misma claridad para los tres sprites (24-nov-2026)
+
+| Script | Versión | Comun |
+|---|---|---|
+| `fase33_monstruo.py`, `fase38_trumpzilla.py`, `fase39_mal.py`, `fase40_godzilla.py`, `fase41_nefanyamuto.py` | v11, v3, v4, v4, v2 | v101 |
+
+**Todos los parámetros de los monstruos, en una página.** La página **Monstruos** de FASE1 junta lo que estaba en las páginas Fase33, Fase38, Fase40 y Fase41, y `Montierra` de la Fase39, en este orden y con un título por sección: *Monstruo: aparición, apetito y pasos (fase 33)*, *Trumpzilla y los sprites (fase 38)*, *Por dónde andan (fase 39)*, *Godzilla (fase 40)* y *NefanyaMuto (fase 41)*. Las armas (Fase37), las zanjas (Fase34) y el rescate (Fase35) se quedan en sus páginas: son del público.
+
+En un proyecto de antes basta con relanzar las fases (o `recargar_todo.py`): cada una saca sus parámetros de su página vieja guardando el valor, la expresión y el modo, los vuelve a crear en Monstruos y les devuelve lo que tenían; las páginas Fase33, Fase38, Fase40 y Fase41, ya vacías, se quitan (`sacar_a_monstruos` y `monstruos_al_dia`, comun v101). Algunas etiquetas dicen ahora de quién son: *Emocion de Trumpzilla*, *Alto de Trumpzilla*, y `Pixelsprite`, `Inclinasprite` y `Brillosprite` *de los sprites* (valen para los tres).
+
+**La misma claridad.** Los tres atlas venían de orígenes distintos y bajo las mismas luces Godzilla se veía claro (luminancia media 99) y NefanyaMuto oscuro (52; Trumpzilla, 65). `sprites/igualar_brillo.py` lleva los tres a la misma luminancia media de lo opaco (72) con una curva de gamma por canal (el negro sigue negro y el blanco blanco) y rehace las láminas de prueba. Los tres `hacer_atlas_*.py` lo llaman antes de guardar, así que un atlas rehecho sale ya igualado. Copia otra vez la carpeta `sprites/` en la de los scripts.
+
+```bash
+python3 sprites/igualar_brillo.py
+```
+
+La hoja `docs/Estratos_parametros.xlsx` tiene la pestaña nueva **Parámetros Monstruos** (los 45 parámetros y los 5 títulos, con su Nº, qué hacen, la clave y las funciones del motor) y, en «Todos los parámetros», la página Monstruos, las etiquetas nuevas, `Partidalibre` y `Dominio` (Fase32 v3) y los 11 de NefanyaMuto (393 en total).

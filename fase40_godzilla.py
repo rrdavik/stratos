@@ -54,6 +54,9 @@ PROBAR
   a ser del publico. Simlucha: Trumpzilla y Godzilla en celdas vecinas, se dan
   manotazos 8 pasos y cada uno se va por donde vino.
 
+  v4 (comun v101): sus parametros, en la pagina Monstruos con los de los
+  otros monstruos; un proyecto de antes los mueve alli y quita la Fase40.
+
 COMO USARLO
 -----------
   Copia la carpeta sprites del repositorio en la carpeta de los scripts y:
@@ -64,7 +67,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase40 v3  (Godzilla solo anda por tierra, como Trumpzilla; las carreteras y vias cruzan el agua)'
+VERSION = 'fase40 v4  (sus parametros, en la pagina Monstruos con los de todos los monstruos)'
 banner(VERSION)
 
 base = require_base(40)
@@ -72,10 +75,15 @@ motor = install_core(base, CARPETA, 40)
 m = motor.module
 
 # -----------------------------------------------------------------------------
-# PARAMETROS (pagina Fase40)
+# PARAMETROS (pagina Monstruos)
 # -----------------------------------------------------------------------------
 
-page = get_page(base, 'Fase40')
+# comun v101: en la pagina Monstruos, con los de los otros monstruos (antes, Fase40). Un
+# proyecto de antes los pasa alli con su valor; la pagina Fase40, vacia, se quita
+PARS_PAGINA = ('Godzilla', 'Godzillasala', 'Tvacia', 'Malgodzilla', 'Pasoslucha', 'Tregua', 'Altogodzilla',
+               'Emociongodzilla', 'Simgodzilla', 'Simlucha')
+page, _movidos = sacar_a_monstruos(base, PARS_PAGINA)
+add_par(base, page, 'header', 'Hgodzilla', 'Godzilla (fase 40)')
 add_par(base, page, 'toggle', 'Godzilla', 'Godzilla (el monstruo de la creacion)', True)
 add_par(base, page, 'menu', 'Godzillasala', 'Cuando sale', 'vacia', menu=list(m.GODZILLA_SALA),
         menu_labels=['Solo con la sala vacia', 'Siempre'])
@@ -88,7 +96,8 @@ add_par(base, page, 'menu', 'Emociongodzilla', 'Emocion de Godzilla', 'auto', me
         menu_labels=['Auto (por su estado)'] + [e.capitalize() for e in m.EMOCIONES_MON])
 add_par(base, page, 'pulse', 'Simgodzilla', 'Simular Godzilla (aparece ya)')
 add_par(base, page, 'pulse', 'Simlucha', 'Simular la lucha (junto a Trumpzilla)')
-ok('pagina Fase40: Godzilla, Godzillasala (vacia), Tvacia 15 s, Malgodzilla 1, Pasoslucha 8, Tregua 16, '
+monstruos_al_dia(base, _movidos)
+ok('pagina Monstruos (Fase40): Godzilla, Godzillasala (vacia), Tvacia 15 s, Malgodzilla 1, Pasoslucha 8, Tregua 16, '
    'Altogodzilla 0,8, Emociongodzilla (auto), Simgodzilla, Simlucha')
 
 # -----------------------------------------------------------------------------

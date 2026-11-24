@@ -56,6 +56,8 @@ import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 from scipy import ndimage
 
+from igualar_brillo import igualar, lamina as lamina_igualada     # la misma claridad para todos los monstruos
+
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CELDA_W, CELDA_H = 192, 256
 COLS, FILAS = 4, 3
@@ -994,8 +996,9 @@ def main(args):
         atlas.paste(im, (x, y))
         lamina.alpha_composite(im, (x, y))
         d.text((x + 4, y + 2), '%d %s' % (i, nombre), fill=(255, 230, 0, 255))
+    atlas = igualar(atlas)                  # la claridad comun (igualar_brillo.py)
     atlas.save(os.path.join(AQUI, 'nefanyamuto_emociones.png'))
-    lamina.save(os.path.join(AQUI, 'nefanyamuto_emociones_lamina.png'))
+    lamina_igualada(atlas, EMOCIONES).save(os.path.join(AQUI, 'nefanyamuto_emociones_lamina.png'))
     print('nefanyamuto_emociones.png (%d x %d), escala %.3f, y la lamina' % (atlas.size + (escala,)))
 
 

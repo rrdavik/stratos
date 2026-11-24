@@ -40,6 +40,8 @@ import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
 
+from igualar_brillo import igualar     # la misma claridad para todos los monstruos
+
 AQUI = os.path.dirname(os.path.abspath(__file__))
 CELDA_W, CELDA_H = 192, 256
 COLS, FILAS = 4, 3
@@ -241,6 +243,7 @@ def hacer(enfado, cuatro_a, cuatro_b, serio, salida):
     atlas = Image.new('RGBA', (COLS * CELDA_W, FILAS * CELDA_H), (0, 0, 0, 0))
     for k, nombre in enumerate(EMOCIONES):
         atlas.paste(a_celda(fuentes[nombre]), ((k % COLS) * CELDA_W, (k // COLS) * CELDA_H))
+    atlas = igualar(atlas)                  # la claridad comun (igualar_brillo.py)
     atlas.save(salida)
     lamina = Image.new('RGBA', atlas.size, (70, 74, 80, 255))
     lamina.alpha_composite(atlas)

@@ -370,6 +370,9 @@ class Page(object):
     def appendMenu(self, name, label=None):
         return self._append(name, 'menu', label, '')
 
+    def appendHeader(self, name, label=None):
+        return self._append(name, 'header', label, '')
+
     def appendRGB(self, name, label=None):
         return [self._append(name + c, 'float', label, 0.0)[0] for c in 'rgb']
 

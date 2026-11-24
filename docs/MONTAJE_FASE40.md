@@ -76,7 +76,7 @@ python3 sprites/hacer_atlas_godzilla.py
 
 El shader (comun v91) suma dos animaciones: 7 *lucha* (se inclina y se echa hacia donde mira, con un temblor rápido) y 8 *adiós* (se mece despacio; el motor lo hunde).
 
-### Parámetros (página Fase40)
+### Parámetros (página Monstruos; hasta la fase 40 v3, página Fase40)
 
 | Parámetro | Defecto | Qué hace |
 |---|---|---|

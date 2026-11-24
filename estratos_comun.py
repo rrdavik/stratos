@@ -32,7 +32,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v100'
+VERSION_COMUN = 'comun v101'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -429,6 +429,12 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
         for k, v in enumerate(default or (1.0, 1.0, 1.0)):
             p[k].default = p[k].val = v
         return True
+    elif kind == 'header':               # comun v101: un titulo de seccion (sin valor)
+        try:
+            page.appendHeader(name, label=label)
+        except Exception:
+            pass
+        return True
     elif kind == 'menu':
         p = page.appendMenu(name, label=label)
         p[0].menuNames = menu
@@ -450,6 +456,64 @@ def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
     if default is not None:
         p[0].default = p[0].val = default
     return True
+
+
+# --- comun v101: la pagina Monstruos ------------------------------------------
+# Todos los parametros de los monstruos (fases 33, 38, 40 y 41, y Montierra de la 39)
+# van juntos en la pagina Monstruos, por secciones (un titulo por monstruo). Un proyecto
+# de antes los tiene en Fase33, Fase38... : sacar_a_monstruos() los quita de alli
+# (guardando valor, expresion y modo), la fase los vuelve a crear con add_par en
+# Monstruos y monstruos_al_dia() les devuelve lo que tenian y quita las paginas vacias.
+
+PAGINA_MONSTRUOS = 'Monstruos'
+
+
+def sacar_a_monstruos(base, nombres):
+    """La pagina Monstruos y lo que tenian los parametros de nombres que estaban en otra
+    pagina (que se quitan de ella): {nombre: (pagina, valor, expresion, modo)}."""
+    page = get_page(base, PAGINA_MONSTRUOS)
+    guardados = {}
+    for nm in nombres:
+        if not has_par(base, nm):
+            continue
+        try:
+            p = getattr(base.par, nm)
+            pg = p.page.name if p.page is not None else ''
+            if pg == PAGINA_MONSTRUOS:
+                continue
+            estilo = str(getattr(p, 'style', '') or getattr(p, 'kind', '')).lower()
+            val = None if estilo in ('pulse', 'header') else p.val
+            guardados[nm] = (pg, val, p.expr, p.mode)
+            p.destroy()
+        except Exception as e:
+            info('%s: no pude sacarlo de su pagina (%s)' % (nm, e))
+    return page, guardados
+
+
+def monstruos_al_dia(base, guardados):
+    """Devuelve a los parametros movidos a Monstruos su valor, expresion y modo, y quita
+    las paginas que se quedaron vacias."""
+    for nm, (pg, val, expr, modo) in guardados.items():
+        try:
+            p = getattr(base.par, nm)
+            if val is not None:
+                p.val = val
+            if expr:
+                p.expr = expr
+            p.mode = modo
+        except Exception as e:
+            info('no pude devolver a %s lo que tenia (%s)' % (nm, e))
+    for pg in sorted(set(g[0] for g in guardados.values()) - {'', PAGINA_MONSTRUOS}):
+        try:
+            if not any(q.page is not None and q.page.name == pg for q in base.customPars):
+                for x in list(base.customPages):
+                    if x.name == pg:
+                        x.destroy()
+                ok('pagina %s: vacia, fuera (sus parametros, en Monstruos)' % pg)
+        except Exception as e:
+            info('no pude quitar la pagina %s (vacia): %s' % (pg, e))
+    if guardados:
+        ok('pagina Monstruos: %s, movidos con su valor' % ', '.join(sorted(guardados)))
 
 
 def _default_al_dia(base, kind, name, default):

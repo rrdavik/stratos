@@ -68,6 +68,10 @@ PROBAR
   denso, dejaba la celda a medias por una vecina llena: picaba de todo, crecia
   y no dejaba brotes del mal.
 
+  v11 (comun v101): sus parametros pasan a la pagina Monstruos, con los de
+  Trumpzilla, Godzilla y NefanyaMuto (un titulo por seccion). Un proyecto de
+  antes los mueve alli con su valor y quita la pagina Fase33, vacia.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase33_monstruo.py').read())
@@ -77,7 +81,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v10  (motor v144: el monstruo acaba la celda que devora antes de buscar otra)'
+VERSION = 'fase33 v11  (sus parametros, en la pagina Monstruos con los de todos los monstruos)'
 banner(VERSION)
 
 base = require_base(33)
@@ -85,10 +89,16 @@ motor = install_core(base, CARPETA, 33)
 m = motor.module
 
 # -----------------------------------------------------------------------------
-# PARAMETROS (pagina Fase33)
+# PARAMETROS (pagina Monstruos)
 # -----------------------------------------------------------------------------
 
-page = get_page(base, 'Fase33')
+# comun v101: en la pagina Monstruos, con los de los otros monstruos (antes, Fase33). Un
+# proyecto de antes los pasa alli con su valor; la pagina Fase33, vacia, se quita
+PARS_PAGINA = ('Umbralaparicion', 'Tamanoinicial', 'Ocupacionmax', 'Ritmodevora', 'Ritmogrande',
+               'Danomonstruo', 'Pasomonstruo', 'Pasogrande', 'Costezanja', 'Saltosmonstruo', 'Tiemposalto',
+               'Botesalto', 'Recalculo', 'Esperamonstruo', 'Verobjetivo', 'Simmonstruo', 'Simceldamon')
+page, _movidos = sacar_a_monstruos(base, PARS_PAGINA)
+add_par(base, page, 'header', 'Hmonstruo', 'Monstruo: aparicion, apetito y pasos (fase 33)')
 add_par(base, page, 'float', 'Umbralaparicion', 'Umbral de aparicion', 0.25, 0.0, 1.0, clamp=True)
 add_par(base, page, 'float', 'Tamanoinicial', 'Tamano inicial (celdas)', 0.5, 0.1, 1.0, clamp=True)
 add_par(base, page, 'int', 'Ocupacionmax', 'Ocupacion maxima', 8, 4, 16, clamp=True)
@@ -99,6 +109,17 @@ add_par(base, page, 'int', 'Ritmogrande', 'Ritmo grande (escalones por paso)', 3
 add_par(base, page, 'float', 'Danomonstruo', 'Dano del monstruo (x ritmo)', 0.5, 0.0, 2.0, clamp=True)
 add_par(base, page, 'int', 'Pasomonstruo', 'Paso del monstruo (semicorcheas)', 32, 1, 128, clamp=True)
 add_par(base, page, 'int', 'Pasogrande', 'Paso grande (semicorcheas)', 16, 1, 128, clamp=True)
+add_par(base, page, 'float', 'Costezanja', 'Coste en zanja', 2.0, 1.0, 5.0, clamp=True)
+# v6: a saltos de media celda (pos_monstruo del motor v126); apagado, el deslizamiento de antes
+add_par(base, page, 'toggle', 'Saltosmonstruo', 'Saltos de media celda', True)
+add_par(base, page, 'float', 'Tiemposalto', 'Tiempo de cada salto (s)', 0.15, 0.0, 1.0, clamp=True)
+add_par(base, page, 'float', 'Botesalto', 'Bote del salto (x alto)', 0.15, 0.0, 1.0, clamp=True)
+add_par(base, page, 'int', 'Recalculo', 'Recalculo de objetivo (pasos)', 4, 1, 32, clamp=True)
+add_par(base, page, 'float', 'Esperamonstruo', 'Espera de reaparicion (s)', 8.0, 0.0, 120.0, clamp=True)
+add_par(base, page, 'toggle', 'Verobjetivo', 'Ver objetivo', True)
+add_par(base, page, 'pulse', 'Simmonstruo', 'Simular monstruo')
+add_par(base, page, 'int', 'Simceldamon', 'Celda del monstruo simulado', 0, 0, m.N - 1)
+monstruos_al_dia(base, _movidos)
 # v4: GENoZilla anda un tercio mas lento (16 -> 24 y 8 -> 12 semicorcheas por celda). Un
 # proyecto con los valores de antes pasa a los nuevos una sola vez; el tope sube a 128
 # v6: mas lento aun: 8 negras por celda (32 semicorcheas) y 4 en grande (16). Una sola vez
@@ -113,17 +134,7 @@ for _nm, _viejo, _nuevo in (('Pasomonstruo', 16, 24), ('Pasogrande', 8, 12),
             _p.max = 128
     except Exception:
         pass
-add_par(base, page, 'float', 'Costezanja', 'Coste en zanja', 2.0, 1.0, 5.0, clamp=True)
-# v6: a saltos de media celda (pos_monstruo del motor v126); apagado, el deslizamiento de antes
-add_par(base, page, 'toggle', 'Saltosmonstruo', 'Saltos de media celda', True)
-add_par(base, page, 'float', 'Tiemposalto', 'Tiempo de cada salto (s)', 0.15, 0.0, 1.0, clamp=True)
-add_par(base, page, 'float', 'Botesalto', 'Bote del salto (x alto)', 0.15, 0.0, 1.0, clamp=True)
-add_par(base, page, 'int', 'Recalculo', 'Recalculo de objetivo (pasos)', 4, 1, 32, clamp=True)
-add_par(base, page, 'float', 'Esperamonstruo', 'Espera de reaparicion (s)', 8.0, 0.0, 120.0, clamp=True)
-add_par(base, page, 'toggle', 'Verobjetivo', 'Ver objetivo', True)
-add_par(base, page, 'pulse', 'Simmonstruo', 'Simular monstruo')
-add_par(base, page, 'int', 'Simceldamon', 'Celda del monstruo simulado', 0, 0, m.N - 1)
-ok('pagina Fase33: Umbralaparicion 0,25, Tamanoinicial 0,5, Ocupacionmax 8, Ritmodevora 2, Ritmogrande 3, '
+ok('pagina Monstruos (Fase33): Umbralaparicion 0,25, Tamanoinicial 0,5, Ocupacionmax 8, Ritmodevora 2, Ritmogrande 3, '
    'Danomonstruo 0,5 (v5: la mitad de dano), '
    'Pasomonstruo 32, Pasogrande 16 (v6: 8 y 4 negras por celda), Costezanja 2, '
    'Saltosmonstruo (v6: a saltos de media celda), Tiemposalto 0,15 s, Botesalto 0,15, '
