@@ -283,6 +283,8 @@ def _prueba(t, m):
     W['cambio_pendiente'] = True
     W['compases_ciclo'] = 10 ** 6
     W['beats'] = float(c['beats_per_bar']) - 1e-3
+    W['clock']['last_note_t'] = S.now           # el reloj del ciclo corre: hay notas recientes
+    W['clock']['stop_t'] = -1e9
     ev2 = m.cycle_tick(W, c, S.now + 0.1, 0.01, 120.0, True)
     J = W['juego']
     t.check('un fin de ciclo (cambio de pattern) en modo juego tambien colapsa: ronda 3',
