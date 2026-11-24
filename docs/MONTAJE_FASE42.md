@@ -5,7 +5,7 @@
 
 | Fase | Script | Qué hace | Motor | Comun |
 |---|---|---|---|---|
-| 42 | `fase42_godzilla_azul.py` | El Godzilla azul (sale con los dos monstruos del mal a la vez, devora el mal, crea) y su lucha con NefanyaMuto | v145 | v102 |
+| 42 | `fase42_godzilla_azul.py` | El Godzilla azul (sale con los dos monstruos del mal a la vez, devora el mal, crea) y su lucha con NefanyaMuto | v146 | v102 |
 
 ```python
 exec(open('C:/Users/DareDave/Downloads/est/fase42_godzilla_azul.py').read())
