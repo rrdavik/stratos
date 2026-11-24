@@ -1748,11 +1748,11 @@ CAPITULOS = [
     dict(nombre='Rescatar un brote', sub='Una persona encima y {aliados} aliados en las celdas vecinas durante '
                                          '{taliados} s.',
          dur=15.0, pars=dict(Tfila=60.0),
-         coreo=_sitios([('suelo', 4, 8.5), ('suelo', 2, 8.5), ('suelo', 7, 8.5), ('suelo', 3, 8.5)])
+         coreo=_sitios([('suelo', 4, 8.5), ('suelo', 2, 8.5), ('suelo', 7, 8.5)])
          + [[0.0, 0, ('celda', 'brote', 0.0, 0.0)], [2.0, 1, ('celda', ('aliadas', 0), 0.0, 0.0)],
-            [2.2, 2, ('celda', ('aliadas', 1), 0.0, 0.0)], [2.4, 3, ('celda', ('aliadas', 2), 0.0, 0.0)]],
+            [2.2, 2, ('celda', ('aliadas', 1), 0.0, 0.0)]],
          rotulos=[(0.0, 'Quien esta encima alimenta el mal mientras llegan los aliados.'),
-                  (4.0, 'Con los cuatro en su sitio empieza la cuenta de {taliados} segundos.'),
+                  (4.0, 'Con los tres en su sitio empieza la cuenta de {taliados} segundos.'),
                   (9.0, 'Rescatado: pasa a la especie del ultimo secuenciador y sigue creciendo al ritmo normal.')]),
     dict(nombre='Cebo y zanja trampa',
          sub='Una torre atrae al monstruo; una fila quieta {tfila} s cava una zanja en su camino.',
@@ -2747,7 +2747,7 @@ def brote_vivo(F, c1, W, k, refs, libres):
     r['musica'] = [b] if b is not None else []
     r['despejar'] = []
     if k == 4 and b is not None:
-        r['aliadas'] = m._vecinas_a_la_vista(W, c1, b, max(1, int(c1.get('aliados', 3))), libres)
+        r['aliadas'] = m._vecinas_a_la_vista(W, c1, b, max(1, int(c1.get('aliados', 2))), libres)
     return r
 
 
@@ -3521,7 +3521,7 @@ def cerrar_capitulo(F, now):
 # --- titulo, rotulo y leyenda ---------------------------------------------------
 
 def _valores_texto(F):
-    v = dict(tfila='4', taliados='3', tquietud='4', tpiedra='6', taturdido='4', recarga='30', aliados='3',
+    v = dict(tfila='4', taliados='3', tquietud='4', tpiedra='6', taturdido='4', recarga='30', aliados='2',
              gana='Gana la sala.', cuanto='0,5', probllegada='0,6', tparada='3')
     if F is None:
         return v

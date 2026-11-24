@@ -178,16 +178,16 @@ En modo juego se levanta la exclusión de las fases 13 y 29: el agua de juego en
 
 ## 5. Fase 35 · Rescatar brotes
 
-**Qué hace.** Cuatro personas coordinadas convierten un brote del mal en una celda del público.
+**Qué hace.** Tres personas coordinadas convierten un brote del mal en una celda del público.
 
 - **Condición.** Una persona en la celda del mal (la que mira su casilla) y `Aliados` personas o más en celdas vecinas (`vecinas6`), todas sostenidas `Taliados` segundos sobre la ocupación binaria de la fase 24. Pueden compartir celda vecina.
 - **Efecto.** La celda pasa a la especie de `W['juego']['ultimoseq'][celda]`, el último secuenciador que la tocó (geología o arquitectura; si ninguno, geología). Conserva `occ` y `carga`, y sigue su evolución con las reglas y el ritmo de construcción de siempre. `own` pasa a la nueva especie.
 - **Mientras tanto.** Hasta completarse, la persona de encima alimenta el mal con las reglas normales (fase 22). Si alguien se va antes de `Taliados`, el rescate se reinicia.
 - **`ultimoseq`.** Se actualiza en cada nota del SEQ1 (`geo`) o del SEQ2 (`arq`) que cae en una celda.
 
-**Parámetros (página Fase35).** `Aliados` 3 · `Taliados` 3 s · `Simrescate` (pulso: pone una persona en la celda de `Simcasilla` y `Aliados` en vecinas).
+**Parámetros (página Fase35).** `Aliados` 2 · `Taliados` 3 s · `Simrescate` (pulso: pone una persona en la celda de `Simcasilla` y `Aliados` en vecinas).
 
-**Leyenda.** `RESCATE  celda 33   aliados 3/3   2.1/3.0 s`
+**Leyenda.** `RESCATE  celda 33   aliados 2/2   2.1/3.0 s`
 
 **Prueba manual.** Un brote crecido a 3; `Simrescate`: a los 3 s la celda es del público con ocupación 3 y la especie del último secuenciador. Quitar un aliado a los 2 s: no hay rescate y el contador vuelve a cero.
 
@@ -250,7 +250,7 @@ Todas quedan como parámetro. Las marcadas como confirmadas las ha cerrado Dave;
 | D8 | ¿Ritmos por paso de juego (una negra, `Pasojuego` 4 semicorcheas)? | Monstruo pequeño 2 escalones, grande 3, agua 4 (desborde 2) | Confirmada |
 | D9 | ¿Se hereda el mal al enterrar? | No (`Herenciamal` 0) | Confirmada |
 
-Ya decidido por Dave (no tocar): el público alimenta el mal si se para sobre un brote; tres aliados 3 s lo rescatan a la especie del último secuenciador y sigue al ritmo normal; el monstruo pequeño no devora coronas ni fusiones; el agua aflora en zanjas profundas, llena a ×4 y desborda a ×2; el monstruo devora a ×2 pequeño y ×3 grande.
+Ya decidido por Dave (no tocar): el público alimenta el mal si se para sobre un brote; dos aliados 3 s lo rescatan a la especie del último secuenciador y sigue al ritmo normal; el monstruo pequeño no devora coronas ni fusiones; el agua aflora en zanjas profundas, llena a ×4 y desborda a ×2; el monstruo devora a ×2 pequeño y ×3 grande.
 
 ---
 
@@ -284,7 +284,7 @@ Ya decidido por Dave (no tocar): el público alimenta el mal si se para sobre un
 | `Desbordeagua` | Desborde del agua | Fase34 | Entero | 2 | 1–16 | Escalones por paso hacia zanjas vecinas |
 | `Ahoga` | Nivel que ahoga | Fase34 | Decimal | 0,5 | 0,1–1 | Fracción de zanja llena que mata al monstruo |
 | `Simzanja` | Simular zanja | Fase34 | Pulso | | | Zanja de `Simfila` celdas desde `Simcasilla` |
-| `Aliados` | Aliados del rescate | Fase35 | Entero | 3 | 1–6 | Personas en vecinas para rescatar un brote |
+| `Aliados` | Aliados del rescate | Fase35 | Entero | 2 | 1–6 | Personas en vecinas para rescatar un brote |
 | `Taliados` | Tiempo del rescate (s) | Fase35 | Decimal | 3 | 0,5–20 | Segundos sostenidos |
 | `Simrescate` | Simular rescate | Fase35 | Pulso | | | Persona en la celda y aliados en vecinas |
 | `Luzjuego` | Luz de juego | Fase36 | Interruptor | Encendido | | La luz de sala cuenta la partida |
