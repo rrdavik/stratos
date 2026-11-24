@@ -21464,8 +21464,9 @@ def azul_reloj(W, cfg, now):
     if not azul_on(W, cfg):
         g = J.get('azul')
         if g is not None and g['estado'] != 'espera':      # apagado: fuera del planeta
+            if J.get('lucha_azul'):     # NefanyaMuto deja de luchar y sigue a lo suyo
+                terminar_lucha_azul(W, cfg, now)
             J['azul'] = bien_nuevo(g['n'], cfg)
-            J['lucha_azul'] = None
         return
     g = azul_estado(W, cfg)
     dos = dos_del_mal(W, cfg)
