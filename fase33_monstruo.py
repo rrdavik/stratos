@@ -63,6 +63,11 @@ PROBAR
   brote: crece como mal. Dejar que devore 8 escalones: forma grande, mas
   rapido, 3 por negra, y va a por la corona.
 
+  v10 (motor v144): el monstruo acaba la celda que devora. Antes, cada
+  Recalculo pasos volvia a elegir presa tambien mientras comia y, en un mundo
+  denso, dejaba la celda a medias por una vecina llena: picaba de todo, crecia
+  y no dejaba brotes del mal.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/fase33_monstruo.py').read())
@@ -72,7 +77,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase33 v9  (autoprueba del salto: el bote al salir y al aterrizar, a una millonesima)'
+VERSION = 'fase33 v10  (motor v144: el monstruo acaba la celda que devora antes de buscar otra)'
 banner(VERSION)
 
 base = require_base(33)
@@ -517,6 +522,29 @@ def _prueba(t, m, copy):
         mo = m.aparecer(W, c, S.now, v2)
         t.check('en la cara visible prefiere la presa visible aunque haya otra oculta con mas ocupacion',
                 mo['objetivo'] == v1 and not mo['sombra'], 'objetivo %s' % mo['objetivo'])
+
+    # 11. v10 (motor v144): no suelta lo que devora. Comiendo una celda de 2 con una vecina de
+    # Umbralfusion - 1 (6 / 2 = 3 > 2), antes la dejaba a medias en el recalculo siguiente
+    W, c = S.nuevo(4)
+    J = W['juego']
+    vis = sorted(m.cara_visible(c))
+    x = next((i for i in vis if any(j in vis for j in m.NEIGH[i])), None)
+    if x is not None:
+        y = next(j for j in m.NEIGH[x] if j in vis)
+        yo = max(3, int(c['th_fusion']) - 1)
+        _poner(m, W, x, 2)
+        _poner(m, W, y, yo)
+        mo = m.aparecer(W, c, S.now, x)
+        antes = m.objetivo(W, c, mo)[0]
+        mo.update(objetivo=x, camino=[], estado='devora', recalc=int(c['recalculo']) - 1)
+        S.pasos(W, c, 1)
+        uno = (mo['objetivo'], W['occ'][x], W['occ'][y])
+        S.pasos(W, c, 1)
+        t.check('v10 (motor v144): devorando una celda de 2 con una vecina de %d, que en el recalculo vale mas '
+                '(%d / 2), no la suelta: la acaba (brote del mal) y luego va a por la vecina' % (yo, yo),
+                antes == y and uno == (x, 1, yo) and W['sp'][x] == m.MAL and J['brotes'] == 1
+                and W['occ'][y] == yo and mo['objetivo'] == y,
+                'recalculo %s, tras un paso %s, brotes %d, objetivo %s' % (antes, uno, J['brotes'], mo['objetivo']))
 
 
 run_test(base, prueba)
