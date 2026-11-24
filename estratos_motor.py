@@ -334,7 +334,7 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
-#                 Motor v145 (fase 42): EL GODZILLA AZUL, el segundo monstruo del bien.
+#                 Motor v146 (fase 42): EL GODZILLA AZUL, el segundo monstruo del bien.
 #                 Con Trumpzilla y NefanyaMuto a la vez el mal hacia mucho dano: solo
 #                 mientras los dos estan en pie sale otro Godzilla (azul cobalto, placas
 #                 de hielo cian) que devora el mal y crea como el verde, y lucha con
@@ -437,7 +437,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v145'
+MOTOR_VERSION = 'motor v146'
 
 import math
 import time as _time
@@ -18317,7 +18317,7 @@ def juego_al_enterrar(W, cfg, now):
     J['rescate_cas'] = {}
     J['filas'] = {}
     W.pop('bloqueadas', None)
-    for m in (J['mon'], J.get('bien'), J.get('nefa'), J.get('azul')):     # v142: y NefanyaMuto; v145: y el azul
+    for m in (J['mon'], J.get('bien'), J.get('nefa'), J.get('azul')):     # v142: y NefanyaMuto; v146: y el azul
         if m is None:
             continue
         m['objetivo'], m['camino'], m['mov'] = None, [], 0.0
@@ -20425,7 +20425,7 @@ def comestible_bien(W, cfg, g, c):
 def muro_tregua(W, cfg, m):
     """Fase 40: durante la tregua, la celda del rival y sus vecinas son muro (menos la propia).
     Motor v142: dos treguas, la de la lucha (Trumpzilla y Godzilla) y la del baile
-    (Trumpzilla y NefanyaMuto). Motor v145: y la del Godzilla azul con NefanyaMuto."""
+    (Trumpzilla y NefanyaMuto). Motor v146: y la del Godzilla azul con NefanyaMuto."""
     if cfg['nivel'] < 40:
         return set()
     J = W.get('juego') or {}
@@ -20586,7 +20586,7 @@ def mover_godzilla(W, cfg, now):
 
 
 def _mover_bien(W, cfg, now, g):
-    """El paso de un Godzilla (motor v145: el verde o el azul)."""
+    """El paso de un Godzilla (motor v146: el verde o el azul)."""
     J = W['juego']
     if g['estado'] not in ('aparece', 'busca', 'devora') or g['celda'] is None:
         return
@@ -20622,7 +20622,7 @@ def godzilla_paso(W, cfg, now):
 
 
 def _paso_bien(W, cfg, now, g):
-    """Un paso de juego de un Godzilla (motor v145: el verde o el azul)."""
+    """Un paso de juego de un Godzilla (motor v146: el verde o el azul)."""
     if g['estado'] in ('espera', 'se_va', 'lucha') or g['celda'] is None:
         return
     if retirandose(g):
@@ -20763,7 +20763,7 @@ def emocion_godzilla(W, cfg, g, now, vista=None, fija=None):
       sin mal que comer       calma      respira
       quieto                  serio      respira
     Con Emociongodzilla distinta de auto, esa cara con la animacion del estado.
-    Motor v145: vista y fija, las del Godzilla azul (emocion_azul)."""
+    Motor v146: vista y fija, las del Godzilla azul (emocion_azul)."""
     J = W['juego']
     v = _vista_mon(g, now, _VISTA_BIEN if vista is None else vista)
     c = g['celda']
@@ -21270,7 +21270,7 @@ def emocion_nefa(W, cfg, x, now):
         e, a = 'panico', 'hunde'
     elif x['estado'] == 'baile':
         e, a = emocion_baile(W, cfg, x, now, 'nefanyamuto')
-    elif x['estado'] == 'lucha':        # motor v145: con el Godzilla azul (da y recibe, como Trumpzilla)
+    elif x['estado'] == 'lucha':        # motor v146: con el Godzilla azul (da y recibe, como Trumpzilla)
         e, a = (('mueca', 'tiembla') if manotazo(x, now) == 0 else ('furia', 'lucha'))
     elif x.get('anillo') is not None and 0.0 <= now - x['anillo'] < T_ANILLO:
         e, a = 'furia', 'anillo'
@@ -21389,7 +21389,7 @@ def _legend_baile(W, c):
 
 
 # =============================================================================
-# 1. NUCLEO - El Godzilla azul, el segundo monstruo del bien (fase 42, motor v145)
+# 1. NUCLEO - El Godzilla azul, el segundo monstruo del bien (fase 42, motor v146)
 # =============================================================================
 # Con Trumpzilla y NefanyaMuto a la vez en el planeta, el mal hacia demasiado dano: el
 # Godzilla verde solo puede con uno. El Godzilla azul es otro Godzilla (las mismas
