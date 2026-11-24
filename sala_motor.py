@@ -176,9 +176,13 @@
 #               Partidalibre: sin reloj, hasta que gana un bando) acabaria un capitulo en
 #               cuanto ganara alguien. La demo GENoZilla la apaga mientras dura, como
 #               enciende Modojuego, y al salir vuelve como estaba.
+#   v26         EL PORQUE DE UN CASO QUE FALLA. La comprobacion de un caso de las demos de
+#               seccion que no pasa dice ademas lo que devolvieron sus notas (prende, no
+#               prende, cumbre...), los errores del caso y si espero; la de Quietos,
+#               construyen, la ocupacion de sus cuatro celdas antes y despues.
 # =============================================================================
 
-SALA_VERSION = 'sala v25'
+SALA_VERSION = 'sala v26'
 
 import math
 
@@ -2653,6 +2657,10 @@ def capitulo(c, t, F, now, k):
             falta = None
             print('SALA  demo %s: no pude mirar lo que necesita el caso %d (%s)' % (demo, k, e))
         if falta:
+            try:                        # sala v26: cuantas veces espero (para la comprobacion)
+                _GZ['reg']['esperas'] = _GZ['reg'].get('esperas', 0) + 1
+            except Exception:
+                pass
             _GZ['espera'] = dict(cap=k, que=falta, desde=previa['desde'] if previa else t, revisa=t + ESPERA_CADA)
             _GZ['t_titulo'], _GZ['t0'] = t, t + TITULO
             if previa is None and not _GZ.get('callado'):
@@ -2874,6 +2882,11 @@ def gz_tick(c, t, F, now, emular=False):
             if not _GZ.get('err_caso'):
                 _GZ['err_caso'] = True
                 print('SALA  demo %s: fallo en el caso %d (%s)' % (demo, _GZ['cap'], e))
+            try:                        # sala v26: el error, en la comprobacion del caso
+                er = _GZ['reg'].setdefault('errores', {})
+                er[repr(e)[:120]] = er.get(repr(e)[:120], 0) + 1
+            except Exception:
+                pass
     foco_tick(c, F, t, ev)
     if not emular:
         a_la_tabla(c, F, t, ev)
@@ -2995,6 +3008,9 @@ def _nota(F, W, c1, celda, now, cada):
     nota = m.cell_note(celda)
     r = m.note_on(W, c1, m.GEO, nota, 100, now, m.tempo()) or {}
     _GZ.setdefault('sueltas', []).append((nota, now + 0.5 * cada))
+    est = (_GZ.get('reg') or {}).setdefault('estados', {})      # sala v26: lo que devolvio cada nota
+    e = str(r.get('estado'))
+    est[e] = est.get(e, 0) + 1
     return r.get('estado') not in ('no prende', 'fuera de rango')
 
 
@@ -3085,7 +3101,23 @@ def _promedio(xs):
 
 
 def comprobar_caso(F, demo, k, reg, now):
-    """La comprobacion del caso k de una demo de seccion: (bien, que)."""
+    """La comprobacion del caso k de una demo de seccion: (bien, que). Sala v26: si falla,
+    el porque (lo que devolvieron las notas, los errores y si espero) al final de que."""
+    bien, que = _comprobar_caso(F, demo, k, reg, now)
+    if not bien:
+        extra = []
+        if reg.get('estados'):
+            extra.append('notas: ' + ', '.join('%s %d' % kv for kv in sorted(reg['estados'].items())))
+        if reg.get('errores'):
+            extra.append('errores: ' + '; '.join('%s x%d' % kv for kv in sorted(reg['errores'].items())))
+        if reg.get('esperas'):
+            extra.append('espero %d veces' % reg['esperas'])
+        if extra:
+            que += ' [' + ' | '.join(extra) + ']'
+    return bien, que
+
+
+def _comprobar_caso(F, demo, k, reg, now):
     m = F.m
     W, c1 = F.W(), F.cfg()
     occ0 = reg.get('occ0') or list(W['occ'])
@@ -3118,8 +3150,8 @@ def comprobar_caso(F, demo, k, reg, now):
     if demo == 'huella' and k == 0:
         q = [x for x in (_GZ.get('refs') or {}).get('quietos', ()) if x is not None]
         suben = [x for x in q if W['occ'][x] > occ0[x]]
-        return incl >= 4 and len(suben) >= 3, '%d inclusiones dejadas, %d de %d celdas construyen' % (
-            incl, len(suben), len(q))
+        return incl >= 4 and len(suben) >= 3, '%d inclusiones dejadas, %d de %d celdas construyen (%s)' % (
+            incl, len(suben), len(q), ', '.join('celda %s occ %s -> %s' % (x, occ0[x], W['occ'][x]) for x in q))
     if demo == 'huella':
         e = reg.get('esc') or {}
         pr = reg.get('esc_prof') or []

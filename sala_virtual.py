@@ -242,6 +242,11 @@ LAS DEMOS (v30, sala v18, motor v140)
   acabaria un capitulo en cuanto ganara alguien. GENoZilla la apaga mientras dura,
   como enciende Modojuego, y al salir vuelve como estaba.
 
+  v42 (sala v26): EL PORQUE DE UN CASO QUE FALLA. Si un caso de las demos de
+  seccion no pasa la autoprueba, su linea dice ademas lo que devolvieron sus
+  notas (prende, no prende, cumbre...), los errores del caso y si espero; la de
+  Quietos, construyen, la ocupacion de sus cuatro celdas antes y despues.
+
 COMO USARLO
 -----------
     exec(open('C:/Users/DareDave/Downloads/est/sala_virtual.py').read())
@@ -256,7 +261,7 @@ import math
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'sala_virtual v41  (GENoZilla apaga la partida libre de las pruebas mientras dura)'
+VERSION = 'sala_virtual v42  (sala v26: el porque de un caso de las demos que falla)'
 banner(VERSION)
 SALA_PATH = '/project1/SALA'
 
