@@ -180,9 +180,12 @@
 #               seccion que no pasa dice ademas lo que devolvieron sus notas (prende, no
 #               prende, cumbre...), los errores del caso y si espero; la de Quietos,
 #               construyen, la ocupacion de sus cuatro celdas antes y despues.
+#   v27         EL PORQUE DEL RESCATE DE GENOZILLA. Si el capitulo 4 (Rescatar un brote) no
+#               pasa, su linea dice cuantas personas llego a haber encima del brote y en sus
+#               vecinas (y cuantos aliados hacen falta) y cuanto duro la cuenta de Taliados.
 # =============================================================================
 
-SALA_VERSION = 'sala v26'
+SALA_VERSION = 'sala v27'
 
 import math
 
@@ -3380,6 +3383,18 @@ def observar(F, now, tc):
     if mo.get('estado') == 'muere':
         reg['murio'] = True
     reg['n_max'] = max(reg.get('n_max', 0), mo.get('n', 0))
+    b = (_GZ.get('refs') or {}).get('brote')
+    if _GZ.get('cap') == 4 and b is not None:   # sala v27: el porque del rescate
+        try:
+            pc = m.personas_por_celda(W, F.cfg())
+            reg['res_encima'] = max(reg.get('res_encima', 0), pc.get(b, 0))
+            reg['res_aliados'] = max(reg.get('res_aliados', 0), sum(pc.get(x, 0) for x in m.NEIGH[b]))
+            if b in (J.get('rescates') or {}):
+                reg['res_cuenta'] = max(reg.get('res_cuenta', 0.0), now - J['rescates'][b])
+            reg['res_occ_max'] = max(reg.get('res_occ_max', 0), W['occ'][b])
+            reg['res_mal'] = W['sp'][b] == m.MAL
+        except Exception as e:
+            reg['res_error'] = repr(e)[:120]
     try:
         if m.noche_nivel(W, F.cfg(), now) > 0.0:
             reg['noche'] = True
@@ -3427,9 +3442,14 @@ def comprobar_capitulo(F, k, reg, now):
         b = refs.get('brote')
         if b is None:
             return False, 'sin brote'
-        return (W['sp'][b] in (m.GEO, m.ARQ) and W['occ'][b] >= 4 and J.get('rescatados', 0) >= 1,
-                'celda %d: especie %s, ocupacion %d, rescates %d' % (b, W['sp'][b], W['occ'][b],
-                                                                     J.get('rescatados', 0)))
+        bien = W['sp'][b] in (m.GEO, m.ARQ) and W['occ'][b] >= 4 and J.get('rescatados', 0) >= 1
+        que = 'celda %d: especie %s, ocupacion %d, rescates %d' % (b, W['sp'][b], W['occ'][b], J.get('rescatados', 0))
+        if not bien:                    # sala v27: el porque (lo que vio durante el capitulo)
+            que += ' [encima %d personas como mucho, aliados %d (hacen falta %d), cuenta %.1f de %.1f s%s]' % (
+                reg.get('res_encima', 0), reg.get('res_aliados', 0), int(c1['aliados']),
+                reg.get('res_cuenta', 0.0), float(c1['t_aliados']),
+                (', error ' + reg['res_error']) if reg.get('res_error') else '')
+        return bien, que
     if k == 5:
         b = W.get('bloqueadas') or {}
         zj = J.get('zanjas') or {}
