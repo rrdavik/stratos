@@ -617,6 +617,7 @@ tema y seccion; si no esta, se queda en la pagina que pida su fase.
 | `Partidalibre` | Partida libre (pruebas) |
 | `Dominio` | Dominio para ganar (libre) |
 | `Titulojuego` | Titulos de la ronda en el centro del mundo |
+| `Marcador` | Marcador de la partida (celdas, ronda y monstruos en pie) |
 
 **Marcas y luz**
 

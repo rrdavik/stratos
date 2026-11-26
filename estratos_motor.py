@@ -334,6 +334,12 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v149 (fase 43 v3): EL MARCADOR. Con Marcador (encendido), en modo
+#                 juego, encima del mundo: arriba a la izquierda las celdas construidas
+#                 (del publico) y las del mal; a su lado un recuadro con los monstruos en
+#                 pie en cada momento, cada uno con la cara y la animacion de su sprite
+#                 del mundo (marcador_gz: atlas, cara y animacion por casilla); arriba a
+#                 la derecha la ronda y su reloj (rojo en los 5 s finales).
 #                 Motor v148 (fase 43 v2): LO HEREDADO CUENTA EN EL REPARTO. Hasta ahora, al
 #                 enterrar, cada celda heredada quedaba NEUTRA (sin especie hasta su primera
 #                 nota) y el pico de la mezcla volvia a 0: el mundo nuevo empezaba en el
@@ -455,7 +461,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v148'
+MOTOR_VERSION = 'motor v149'
 
 import math
 import time as _time
@@ -701,6 +707,7 @@ DEFAULT_CFG = dict(
     partida_libre=0, dominio=1.0,       # motor v143: la partida libre (pruebas), hasta que gane un bando
     ronda_gz=1, titulo_juego=1,         # motor v147 (fase 43): la ronda desde el primer monstruo y los titulos
     herencia_reparto=1,                 # motor v148 (fase 43 v2): lo heredado cuenta en el reparto de especies
+    marcador=1,                         # motor v149 (fase 43 v3): el marcador de la partida encima del mundo
     umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3, dano_monstruo=0.5,
     paso_monstruo=32, paso_grande=16, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0, saltos_monstruo=1, tiempo_salto=0.15, bote_salto=0.15,
@@ -18519,6 +18526,65 @@ def _titulo_gz(W, cfg, now):
     return None
 
 
+# --- el marcador (motor v149, fase 43 v3) --------------------------------------------
+# Encima del mundo, en modo juego: las celdas construidas (publico) y las del mal arriba
+# a la izquierda; a su lado, un recuadro con los monstruos en pie, cada uno en su casilla
+# con la cara y la animacion de su sprite del mundo; la ronda y su reloj arriba a la
+# derecha. El dibujo es de FASE1 (marcador_monstruos, un GLSL TOP con los cuatro atlas, y
+# Text TOP); aqui, lo que muestra.
+
+MARCADOR_MON = ('trumpzilla', 'nefanyamuto', 'godzilla', 'godzilla_azul')     # el atlas (entrada) de cada uno
+MARCADOR_CASILLAS = 4
+
+
+def marcador_on(W, cfg):
+    return cfg['nivel'] >= 43 and bool(cfg.get('marcador', 1)) and juego_on(W, cfg)
+
+
+def monstruos_en_pie(W, cfg, now):
+    """[(atlas, cara, animacion, bando)] de los monstruos en el planeta ahora, en el orden
+    de MARCADOR_MON; cara y animacion, las de su sprite (indices de EMOCIONES_* y
+    ANIMS_MON)."""
+    J = W['juego']
+    out = []
+    quien = (('mon', 0, emocion_mon, 'mal', 38), ('nefa', 1, emocion_nefa, 'mal', 41),
+             ('bien', 2, emocion_godzilla, 'bien', 40), ('azul', 3, emocion_azul, 'bien', 42))
+    for k, atlas, fn, bando, nivel in quien:
+        x = J.get(k)
+        if x is None or cfg['nivel'] < nivel or x.get('estado') in (None, 'espera') or x.get('celda') is None:
+            continue
+        try:
+            e, a = fn(W, cfg, x, now)
+        except Exception:
+            e, a = 'serio', 'respira'
+        caras = EMOCIONES_NEFA if k == 'nefa' else EMOCIONES_MON
+        out.append((atlas, caras.index(e) if e in caras else 0, ANIMS_MON.index(a) if a in ANIMS_MON else 0,
+                    bando))
+    return out[:MARCADOR_CASILLAS]
+
+
+def marcador_gz(W, cfg, now):
+    """Lo que muestra el marcador, o None: dict(publico, mal, ronda (texto), reloj
+    (texto), final (los 5 s), monstruos [(atlas, cara, animacion, bando)])."""
+    if not marcador_on(W, cfg):
+        return None
+    J = W['juego']
+    r = J.get('recuento') or {}
+    gz = J.get('gz') is not None and rondas_gz(cfg)
+    if J['estado'] != 'juego':
+        ronda, reloj = 'FIN', '0:00'
+    elif partida_libre(cfg):
+        ronda, reloj = 'PARTIDA LIBRE', _mmss(tiempo_ronda(W, cfg, now))
+    elif gz and not J['gz']['corre']:
+        ronda, reloj = 'ESPERANDO', _mmss(cfg['duracion_ronda'])
+    elif gz:
+        ronda, reloj = 'RONDA %d' % J['ronda'], _mmss(tiempo_ronda(W, cfg, now))
+    else:
+        ronda, reloj = 'RONDA %d/%d' % (J['ronda'], int(cfg['rondas'])), _mmss(tiempo_ronda(W, cfg, now))
+    return dict(publico=int(r.get('publico', 0)), mal=int(r.get('mal', 0)), ronda=ronda, reloj=reloj,
+                final=final_gz(W, cfg, now) is not None, monstruos=monstruos_en_pie(W, cfg, now))
+
+
 def juego_al_enterrar(W, cfg, now):
     """end_cycle en modo juego, tras la herencia: las zanjas, el agua y las celdas
     bloqueadas se quedan en el mundo enterrado (la concha nueva las tapiza); los
@@ -23197,7 +23263,8 @@ def cfg():
     if c['nivel'] >= 43:                # fase 43: la ronda GENoZilla y sus titulos
         c.update(ronda_gz=int(bool(_p('Rondagenozilla', True))),
                  titulo_juego=int(bool(_p('Titulojuego', True))),
-                 herencia_reparto=int(bool(_p('Herenciareparto', True))))
+                 herencia_reparto=int(bool(_p('Herenciareparto', True))),
+                 marcador=int(bool(_p('Marcador', True))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),
@@ -26018,6 +26085,44 @@ def _legend_piel(c):
     return '  PIEL     turno %d/%d   celdas %d   inmediatas %d   %s%s   %s   %s' \
         % (inf.get('turno', 0), inf.get('turnos', 0), inf.get('celdas', 0), inf.get('inmediatas', 0), publica,
            ' (ahora)' if inf.get('publica') else '', py, arq)
+
+
+def marcador(que, frame=None):
+    """Motor v149 (fase 43 v3): el marcador para los operadores de FASE1. que: 'on',
+    'bien', 'mal' (textos), 'ronda', 'reloj', 'final' (1 en los 5 s finales), 'n' (monstruos
+    en pie) o 'm0' ... 'm3' + 'a' (atlas, -1 vacia), 'c' (cara), 'g' (animacion), 'b'
+    (bando: 0 mal, 1 bien). Una vez por fotograma."""
+    f = absTime.frame
+    if _CACHE.get('mar_frame') != f:
+        try:
+            W, c = world(), cfg_foto()
+            _CACHE['mar'] = marcador_gz(W, c, absTime.seconds) if c['nivel'] >= 43 else None
+        except Exception:
+            _CACHE['mar'] = None
+        _CACHE['mar_frame'] = f
+    M = _CACHE.get('mar')
+    if que == 'on':
+        return 1.0 if M else 0.0
+    if not M:
+        return 0.0 if (que[:1] == 'm' and que[-1:] != 'a') or que in ('final', 'n') else \
+            (-1.0 if que[:1] == 'm' else '')
+    if que == 'bien':
+        return 'CONSTRUIDAS  %d' % M['publico']
+    if que == 'mal':
+        return 'MAL  %d' % M['mal']
+    if que in ('ronda', 'reloj'):
+        return M[que]
+    if que == 'final':
+        return 1.0 if M['final'] else 0.0
+    if que == 'n':
+        return float(len(M['monstruos']))
+    if que[:1] == 'm' and len(que) == 3:
+        k, campo = int(que[1]), que[2]
+        if k >= len(M['monstruos']):
+            return -1.0 if campo == 'a' else 0.0
+        a, cara, anim, bando = M['monstruos'][k]
+        return float(dict(a=a, c=cara, g=anim, b=1 if bando == 'bien' else 0)[campo])
+    return 0.0
 
 
 def titulo(que, frame=None):
