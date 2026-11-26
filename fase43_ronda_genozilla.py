@@ -34,9 +34,10 @@ QUE HACE
                neutro y el mundo nuevo volvia al 100 % naturaleza. Apagado, como
                antes.
   MARCADOR     v3-v4 (motor v149-v150): con Marcador (encendido), en modo
-               juego, encima del mundo, arriba a la izquierda dos recuadros:
-               NATURAL EVOLUTION (las celdas del publico) con los monstruos del
-               bien en accion (Godzilla y el azul) y, debajo, OUTBREAKS OF EVIL
+               juego, encima del mundo, arriba a la izquierda dos recuadros
+               seguidos (v5): NATURAL EVOLUTION (las celdas del publico) con los
+               monstruos del bien en accion (Godzilla y el azul) y, a su derecha,
+               OUTBREAKS OF EVIL
                (las celdas del mal) con Trumpzilla y NefanyaMuto. Cada monstruo
                en su casilla con la cara y la animacion de su sprite del mundo
                (respira, camina, devora, tiembla, lucha, baile...). Arriba a la
@@ -83,7 +84,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase43 v4  (el marcador por bandos: NATURAL EVOLUTION y OUTBREAKS OF EVIL; nunca tapa el mundo)'
+VERSION = 'fase43 v5  (el marcador por bandos: NATURAL EVOLUTION y OUTBREAKS OF EVIL seguidos; nunca tapa el mundo)'
 banner(VERSION)
 
 base = require_base(43)
@@ -175,7 +176,7 @@ def over(nombre, arriba, abajo, x, y):
 # OPERADORES (v4): el marcador encima del mundo
 # -----------------------------------------------------------------------------
 # Arriba a la izquierda, dos recuadros: NATURAL EVOLUTION (las celdas del publico y
-# los monstruos del bien en accion: Godzilla y el azul) y, debajo, OUTBREAKS OF EVIL
+# los monstruos del bien en accion: Godzilla y el azul) y, a su derecha (v5), OUTBREAKS OF EVIL
 # (las celdas del mal y Trumpzilla y NefanyaMuto). Cada monstruo en su casilla, con la
 # cara y la animacion de su sprite del mundo (las mismas cuentas que sprite_vertex).
 # Arriba a la derecha, el reloj de la ronda. Los fondos y los monstruos, en un GLSL TOP
@@ -190,9 +191,9 @@ PAD = 8
 CABECERA = 38                           # el alto del titulo de cada recuadro
 CAJA_W = 290
 CAJA_H = CABECERA + CASILLA_H + PAD
-CAJA_X = MARGEN
-CAJA_BIEN_Y = ALTO - MARGEN - CAJA_H                    # abajo a la izquierda (y hacia arriba)
-CAJA_MAL_Y = CAJA_BIEN_Y - 12 - CAJA_H
+CAJA_X = MARGEN                                         # NATURAL EVOLUTION, arriba a la izquierda
+CAJA_MAL_X = CAJA_X + CAJA_W + 12                       # v5: OUTBREAKS OF EVIL, seguido a su derecha
+CAJA_Y = ALTO - MARGEN - CAJA_H                         # los dos a la misma altura (y hacia arriba)
 RELOJ_W, RELOJ_H = 220, 96
 
 MARCADOR_PIXEL = """// Estratos - el marcador de la partida (fase 43 v4): NATURAL EVOLUTION (el bien) y
@@ -396,8 +397,8 @@ for i, n in enumerate(m.MARCADOR_MON):
 uniforme(mon_top, 0, 'uMar', [MAR % 'on', MAR % 'final', 'absTime.seconds', 0])
 for k, nombre in enumerate(('b0', 'b1', 'e0', 'e1')):
     uniforme(mon_top, 1 + k, 'u' + nombre.upper(), [MAR % (nombre + x) for x in 'acg'] + [0])
-uniforme(mon_top, 5, 'uCajaB', [CAJA_X, CAJA_BIEN_Y, CAJA_W, CAJA_H])
-uniforme(mon_top, 6, 'uCajaE', [CAJA_X, CAJA_MAL_Y, CAJA_W, CAJA_H])
+uniforme(mon_top, 5, 'uCajaB', [CAJA_X, CAJA_Y, CAJA_W, CAJA_H])
+uniforme(mon_top, 6, 'uCajaE', [CAJA_MAL_X, CAJA_Y, CAJA_W, CAJA_H])
 uniforme(mon_top, 7, 'uReloj', [ANCHO - MARGEN - RELOJ_W, ALTO - MARGEN - RELOJ_H, RELOJ_W, RELOJ_H])
 uniforme(mon_top, 8, 'uCasilla', [CASILLA_W, CASILLA_H, PAD, CABECERA])
 # v4: si el shader no compila (o le faltan entradas), el marcador se queda transparente
@@ -451,8 +452,8 @@ def marcador_top(nombre, x, y, que, tam, color, alinea, dx, dy, color_expr=None)
 X_TXT = CAJA_X + 16
 t_bien, b1 = marcador_top('marcador_bien', 300, -980, 'bien', 22, (0.55, 1.0, 0.68), 'left', X_TXT,
                           -(MARGEN + 9))
-t_mal, b2 = marcador_top('marcador_mal', 300, -1060, 'mal', 22, (1.0, 0.55, 0.48), 'left', X_TXT,
-                         -(ALTO - CAJA_MAL_Y - CAJA_H + 9))
+t_mal, b2 = marcador_top('marcador_mal', 300, -1060, 'mal', 22, (1.0, 0.55, 0.48), 'left', CAJA_MAL_X + 16,
+                         -(MARGEN + 9))
 t_ronda, b3 = marcador_top('marcador_ronda', 300, -1140, 'ronda', 20, (0.92, 0.92, 0.96), 'right', -(MARGEN + 18),
                            -(MARGEN + 10))
 fin_rgb = ["1.0", "0.35 if %s else 1.0" % (MAR % 'final'), "0.30 if %s else 1.0" % (MAR % 'final')]
