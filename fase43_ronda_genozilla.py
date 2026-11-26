@@ -33,6 +33,14 @@ QUE HACE
                el tramo con el que empieza el mundo nuevo. Hasta ahora quedaba
                neutro y el mundo nuevo volvia al 100 % naturaleza. Apagado, como
                antes.
+  MARCADOR     v3 (motor v149): con Marcador (encendido), en modo juego, encima
+               del mundo: arriba a la izquierda CONSTRUIDAS (celdas del publico)
+               y MAL (las del mal); a su lado, un recuadro con los monstruos en pie
+               en cada momento (hasta 4: Trumpzilla, NefanyaMuto, Godzilla, el
+               azul), cada uno en su casilla con la cara y la animacion de su
+               sprite del mundo (respira, camina, devora, tiembla, lucha, baile...)
+               y un marco rojo (mal) o verde (bien); arriba a la derecha, la ronda
+               y su reloj (rojo en los 5 s finales).
   APAGADO      Rondagenozilla apagado: las rondas de siempre (fase 32). La
                partida libre (Partidalibre) tampoco tiene rondas. La demo
                GENoZilla de la sala la apaga mientras dura.
@@ -46,6 +54,10 @@ OPERADORES (en /project1/FASE1)
   con_titulo_sombra, con_titulo_texto, con_titulo_juego Over TOP: el titulo
                encima del render. con_rotulo (la leyenda) y out_render (la sala
                virtual) salen de con_titulo_juego.
+  marcador_monstruos (GLSL TOP, marcador_pixel; los cuatro atlas de entrada),
+  marcador_bien, marcador_mal, marcador_ronda, marcador_reloj (Text TOP) y
+  con_marcador_* (Over TOP): el marcador encima del render (con_marcador),
+  debajo de los titulos.
 
 PARAMETROS (Juego: Partida; Herenciareparto en Crecimiento: Especies y mezcla)
 -----------------------------------------------------------------------------
@@ -68,7 +80,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase43 v2  (la ronda GENoZilla y titulos; lo heredado cuenta en el reparto de especies)'
+VERSION = 'fase43 v3  (el marcador: celdas, ronda y los monstruos en pie gesticulando)'
 banner(VERSION)
 
 base = require_base(43)
@@ -80,9 +92,10 @@ add_par(base, page, 'toggle', 'Rondagenozilla', 'Ronda GENoZilla (desde el prime
         True)
 add_par(base, page, 'toggle', 'Titulojuego', 'Titulos de la ronda en el centro del mundo', True)
 add_par(base, page, 'toggle', 'Herenciareparto', 'Lo heredado cuenta en el reparto de especies', True)
-ok('parametros de la fase 43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos); la ronda dura '
-   'Duracionronda (%d s)' % int(base.par.Duracionronda.eval()) if has_par(base, 'Duracionronda') else
-   'parametros de la fase 43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos)')
+add_par(base, page, 'toggle', 'Marcador', 'Marcador de la partida (celdas, ronda y monstruos en pie)', True)
+ok('parametros de la fase 43: Rondagenozilla, Titulojuego, Herenciareparto y Marcador (encendidos); la ronda '
+   'dura Duracionronda (%d s)' % int(base.par.Duracionronda.eval()) if has_par(base, 'Duracionronda') else
+   'parametros de la fase 43: Rondagenozilla, Titulojuego, Herenciareparto y Marcador (encendidos)')
 
 
 # -----------------------------------------------------------------------------
@@ -155,11 +168,254 @@ def over(nombre, arriba, abajo, x, y):
     return o
 
 
+# -----------------------------------------------------------------------------
+# OPERADORES (v3): el marcador encima del mundo
+# -----------------------------------------------------------------------------
+# A la izquierda, arriba: las celdas construidas (del publico) y las del mal; a su lado,
+# el recuadro de los monstruos en pie, cada uno en su casilla con la cara y la
+# animacion de su sprite del mundo (las mismas cuentas que sprite_vertex); a la
+# derecha, la ronda y su reloj. Los fondos y los monstruos, en un GLSL TOP
+# (marcador_monstruos, con los cuatro atlas de entrada); los textos, Text TOP.
+
+MAR = "parent().op('motor').module.marcador('%s', absTime.frame)"
+ANCHO, ALTO = 1280, 720
+MARGEN = 16
+CASILLA_W, CASILLA_H = 72, 96           # una casilla de monstruo (el aspecto del atlas, 0,75)
+CAJA_PAD = 6
+PANEL_W, PANEL_H = 230, CASILLA_H + 2 * CAJA_PAD     # los paneles de los contadores, del alto del recuadro
+CAJA_X = MARGEN + PANEL_W + 12          # el recuadro de los monstruos, al lado del contador
+
+MARCADOR_PIXEL = """// Estratos - el marcador de la partida (fase 43 v3): los paneles de los contadores y
+// el recuadro de los monstruos en pie. Cada casilla dibuja su monstruo con la cara del
+// atlas (4 x 3 celdas) y la animacion de su sprite del mundo (sprite_vertex).
+// Entradas: 0 trumpzilla, 1 nefanyamuto, 2 godzilla, 3 godzilla_azul (sus atlas).
+uniform vec4 uMar;          // x encendido, y monstruos en pie, z el reloj (s), w los 5 s finales
+uniform vec4 uM0;           // por casilla: x atlas (-1 vacia), y cara, z animacion, w bando (0 mal, 1 bien)
+uniform vec4 uM1;
+uniform vec4 uM2;
+uniform vec4 uM3;
+uniform vec4 uCaja;         // x y (abajo a la izquierda), ancho, alto del recuadro (pixeles)
+uniform vec4 uPanel;        // ancho, alto de los paneles, margen, pad de las casillas
+uniform vec4 uCasilla;      // ancho, alto de una casilla
+
+out vec4 fragColor;
+
+vec4 atlasFetch(int k, ivec2 p)
+{
+    if (k == 0) return texelFetch(sTD2DInputs[0], p, 0);
+    if (k == 1) return texelFetch(sTD2DInputs[1], p, 0);
+    if (k == 2) return texelFetch(sTD2DInputs[2], p, 0);
+    return texelFetch(sTD2DInputs[3], p, 0);
+}
+
+ivec2 atlasTam(int k)
+{
+    if (k == 0) return textureSize(sTD2DInputs[0], 0);
+    if (k == 1) return textureSize(sTD2DInputs[1], 0);
+    if (k == 2) return textureSize(sTD2DInputs[2], 0);
+    return textureSize(sTD2DInputs[3], 0);
+}
+
+float caja(vec2 p, vec2 a, vec2 b, float r)     // 1 dentro del rectangulo redondeado a-b
+{
+    vec2 c = 0.5 * (a + b);
+    vec2 h = 0.5 * (b - a) - vec2(r);
+    vec2 q = abs(p - c) - h;
+    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+    return 1.0 - smoothstep(-1.0, 1.0, d);
+}
+
+vec4 sobre(vec4 abajo, vec4 arriba)
+{
+    float a = arriba.a + abajo.a * (1.0 - arriba.a);
+    vec3 c = a > 0.0 ? (arriba.rgb * arriba.a + abajo.rgb * abajo.a * (1.0 - arriba.a)) / a : vec3(0.0);
+    return vec4(c, a);
+}
+
+vec4 monstruo(vec2 p, vec4 M, float slot)
+{
+    int k = int(M.x + 0.5);
+    int cara = int(M.y + 0.5);
+    int anim = int(M.z + 0.5);
+    vec2 o = vec2(uCaja.x + uPanel.w + slot * (uCasilla.x + uPanel.w), uCaja.y + uPanel.w);
+    vec2 a = o, b = o + uCasilla.xy;
+    vec3 tono = M.w > 0.5 ? vec3(0.35, 0.95, 0.55) : vec3(1.0, 0.32, 0.25);
+    vec4 out_ = vec4(0.0);
+    float marco = caja(p, a, b, 7.0) - caja(p, a + 2.0, b - 2.0, 5.0);
+    out_ = sobre(out_, vec4(tono * 0.20, 0.55 * caja(p, a, b, 7.0)));
+    // la misma animacion que el sprite del mundo (sprite_vertex), en la casilla
+    float t = uMar.z + 1.7 * slot;
+    vec2 kk = vec2(1.0);
+    vec2 d = vec2(0.0);
+    float rot = 0.0;
+    if (anim == 0) {
+        kk = vec2(1.0 - 0.012 * sin(t * 2.4), 1.0 + 0.025 * sin(t * 2.4));
+    } else if (anim == 1) {
+        d.y = 0.035 * abs(sin(t * 6.0));
+        rot = 0.07 * sin(t * 6.0);
+    } else if (anim == 2) {
+        float m = sin(t * 9.0);
+        kk = vec2(1.0 - 0.04 * m, 1.0 + 0.06 * m);
+    } else if (anim == 3 || anim == 4) {
+        d = vec2(0.025 * sin(t * 47.0), 0.010 * sin(t * 31.0));
+    } else if (anim == 6) {
+        rot = 0.15 * sin(t * 3.0);
+    } else if (anim == 7) {
+        float g = 0.6 + 0.4 * sin(t * 20.0);
+        d = vec2(-0.08 * g, 0.015 * abs(sin(t * 10.0)));
+        rot = 0.12 * g;
+    } else if (anim == 8) {
+        rot = 0.06 * sin(t * 2.0);
+    } else if (anim == 9) {
+        float bb = sin(t * 4.0);
+        rot = 0.11 * bb;
+        d = vec2(0.05 * bb, 0.06 * abs(sin(t * 8.0)));
+        kk = vec2(1.0 + 0.03 * sin(t * 8.0), 1.0 - 0.03 * sin(t * 8.0));
+    } else if (anim == 10) {
+        float g = sin(t * 14.0);
+        kk = vec2(1.0 + 0.035 * g);
+        d = vec2(0.012 * sin(t * 41.0), 0.0);
+    }
+    float w = uCasilla.x * 0.86, h = uCasilla.y * 0.86;
+    vec2 pie = vec2(0.5 * (a.x + b.x), a.y + 0.05 * uCasilla.y);
+    vec2 q = p - pie - d * vec2(w, h);
+    q = vec2(q.x * cos(rot) + q.y * sin(rot), -q.x * sin(rot) + q.y * cos(rot));
+    vec2 uv = vec2(q.x / (kk.x * w) + 0.5, q.y / (kk.y * h));
+    if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0 && caja(p, a, b, 7.0) > 0.5) {
+        vec2 tam = vec2(atlasTam(k));
+        vec2 celda = tam / vec2(4.0, 3.0);
+        float col = mod(float(cara), 4.0);
+        float fila = floor(float(cara) / 4.0 + 1e-3);
+        vec2 px = (vec2(col, 2.0 - fila) + uv) * celda;      // la fila 0 del atlas, arriba
+        vec4 tx = atlasFetch(k, ivec2(clamp(px, vec2(0.0), tam - 1.0)));
+        if (tx.a > 0.5) {
+            vec3 rgb = tx.rgb / tx.a;
+            if (anim == 5)
+                rgb = vec3(dot(rgb, vec3(0.30, 0.59, 0.11))) * vec3(0.80, 0.78, 0.74);
+            else if (anim == 6)
+                rgb = mix(rgb, vec3(1.0), 0.35 * step(0.5, fract(uMar.z * 3.0)));
+            out_ = sobre(out_, vec4(rgb, 1.0));
+        }
+    }
+    out_ = sobre(out_, vec4(tono, marco));
+    return out_;
+}
+
+void main()
+{
+    vec2 p = gl_FragCoord.xy;
+    vec4 c = vec4(0.0);
+    if (uMar.x > 0.5) {
+        float W = uTDOutputInfo.res.z, H = uTDOutputInfo.res.w;
+        float m = uPanel.z;
+        vec4 fondo = vec4(0.02, 0.02, 0.03, 0.62);
+        c = sobre(c, fondo * vec4(1.0, 1.0, 1.0, caja(p, vec2(m, H - m - uPanel.y), vec2(m + uPanel.x, H - m), 10.0)));
+        vec4 fr = uMar.w > 0.5 ? vec4(0.35, 0.02, 0.02, 0.72) : fondo;      // el reloj, rojo al final
+        c = sobre(c, fr * vec4(1.0, 1.0, 1.0, caja(p, vec2(W - m - uPanel.x, H - m - uPanel.y), vec2(W - m, H - m), 10.0)));
+        c = sobre(c, fondo * vec4(1.0, 1.0, 1.0, caja(p, uCaja.xy, uCaja.xy + uCaja.zw, 10.0)));
+        if (uM0.x > -0.5) c = sobre(c, monstruo(p, uM0, 0.0));
+        if (uM1.x > -0.5) c = sobre(c, monstruo(p, uM1, 1.0));
+        if (uM2.x > -0.5) c = sobre(c, monstruo(p, uM2, 2.0));
+        if (uM3.x > -0.5) c = sobre(c, monstruo(p, uM3, 3.0));
+    }
+    fragColor = TDOutputSwizzle(vec4(c.rgb * c.a, c.a));     // premultiplicado, como los TOP
+}
+"""
+
+
+def uniforme(o, k, nombre, exprs):
+    setp_any(o, ['vec%dname' % k, 'uniname%d' % k], nombre)
+    for ch, e in zip('xyzw', exprs):
+        if isinstance(e, str):
+            setexpr(o, 'vec%dvalue%s' % (k, ch), e)
+        else:
+            setp(o, 'vec%dvalue%s' % (k, ch), e)
+
+
+px_dat = get_or_make(base, 'textDAT', 'marcador_pixel', 300, -900)
+px_dat.text = MARCADOR_PIXEL
+mon_top = get_or_make(base, 'glslTOP', 'marcador_monstruos', 300, -800)
+setp_any(mon_top, ['pixeldat'], 'marcador_pixel')
+setmenu(mon_top, ['outputresolution'], ['custom'], None)
+setp_any(mon_top, ['resolutionw'], ANCHO)
+setp_any(mon_top, ['resolutionh'], ALTO)
+setmenu(mon_top, ['format'], ['rgba8fixed', 'rgba8'], None)
+atlas_ok = True
+for i, n in enumerate(m.MARCADOR_MON):
+    at = base.op(n + '_atlas')
+    if at is None:
+        atlas_ok = False
+        continue
+    try:
+        mon_top.inputConnectors[i].disconnect()
+    except Exception:
+        pass
+    connect(mon_top, at, i)
+caja_h = CASILLA_H + 2 * CAJA_PAD
+caja_w = m.MARCADOR_CASILLAS * (CASILLA_W + CAJA_PAD) + CAJA_PAD
+uniforme(mon_top, 0, 'uMar', [MAR % 'on', MAR % 'n', 'absTime.seconds', MAR % 'final'])
+for k in range(m.MARCADOR_CASILLAS):
+    uniforme(mon_top, 1 + k, 'uM%d' % k, [MAR % ('m%d%s' % (k, x)) for x in 'acgb'])
+uniforme(mon_top, 5, 'uCaja', [CAJA_X, ALTO - MARGEN - caja_h, caja_w, caja_h])
+uniforme(mon_top, 6, 'uPanel', [PANEL_W, PANEL_H, MARGEN, CAJA_PAD])
+uniforme(mon_top, 7, 'uCasilla', [CASILLA_W, CASILLA_H, 0, 0])
+
+LETRA_MAR = letra(['Bahnschrift', 'Impact', 'Arial Black', 'Arial'])
+
+
+def marcador_top(nombre, x, y, que, tam, color, alinea, dx, dy, color_expr=None):
+    o = get_or_make(base, 'textTOP', nombre, x, y)
+    setmenu(o, ['outputresolution'], ['custom'], None)
+    setp_any(o, ['resolutionw'], ANCHO)
+    setp_any(o, ['resolutionh'], ALTO)
+    setp_any(o, ['font', 'fontfamily'], LETRA_MAR)
+    for n in ('fontsizex', 'fontsize', 'fontsizey'):
+        setp(o, n, tam)
+    setp_any(o, ['alignx'], alinea)
+    setp_any(o, ['aligny'], 'top')
+    setmenu(o, ['positionunit', 'positionunits'], ['pixels'], None)
+    setp_any(o, ['positionx', 'textx'], dx)
+    setp_any(o, ['positiony', 'texty'], dy)
+    for ch in 'rgb':
+        setp_any(o, ['bgcolor' + ch, 'backgroundcolor' + ch], 0.0)
+    transp = setp_any(o, ['bgalpha', 'backgroundalpha', 'bgcolora'], 0.0)
+    for i, ch in enumerate('rgb'):
+        if color_expr is not None:
+            setexpr(o, 'fontcolor' + ch, color_expr[i])
+        else:
+            setp_any(o, ['fontcolor' + ch, 'color' + ch], color[i])
+    setp_any(o, ['fontalpha', 'fontcolora'], 1.0)
+    setexpr(o, 'text', MAR % que)
+    return o, bool(transp)
+
+
+X_TXT = MARGEN + 16
+t_bien, b1 = marcador_top('marcador_bien', 300, -980, 'bien', 26, (1.0, 0.82, 0.45), 'left', X_TXT, -(MARGEN + 18))
+t_mal, b2 = marcador_top('marcador_mal', 300, -1060, 'mal', 26, (0.86, 0.52, 1.0), 'left', X_TXT, -(MARGEN + 60))
+t_ronda, b3 = marcador_top('marcador_ronda', 300, -1140, 'ronda', 24, (0.92, 0.92, 0.96), 'right', -(MARGEN + 16),
+                           -(MARGEN + 14))
+fin_rgb = ["1.0", "0.35 if %s else 1.0" % (MAR % 'final'), "0.30 if %s else 1.0" % (MAR % 'final')]
+t_reloj, b4 = marcador_top('marcador_reloj', 300, -1220, 'reloj', 44, None, 'right', -(MARGEN + 16),
+                           -(MARGEN + 46), color_expr=fin_rgb)
+h1 = over('con_marcador_fondo', mon_top, base.op('render'), 520, -800)
+h2 = over('con_marcador_bien', t_bien, h1, 520, -980)
+h3 = over('con_marcador_mal', t_mal, h2, 520, -1060)
+h4 = over('con_marcador_ronda', t_ronda, h3, 520, -1140)
+h5 = over('con_marcador', t_reloj, h4, 520, -1220)
+if atlas_ok and b1 and b2 and b3 and b4:
+    ok('marcador: celdas construidas y del mal (arriba a la izquierda), el recuadro de los monstruos en pie '
+       '(marcador_monstruos, %d casillas, con los atlas de los cuatro) y la ronda con su reloj (arriba a la '
+       'derecha), encima del render (con_marcador)' % m.MARCADOR_CASILLAS)
+else:
+    info('marcador: faltan atlas de monstruos (%s) o no pude hacer transparente algun Text TOP'
+         % ', '.join(n + '_atlas' for n in m.MARCADOR_MON if base.op(n + '_atlas') is None))
+
+
 render = base.op('render')
 sombra, t1 = titulo_top('titulo_juego_sombra', 520, -560, TAM_TIT, (0.0, 0.0, 0.0), LETRA_TIT, dx=7, dy=-7)
 texto, t2 = titulo_top('titulo_juego', 520, -640, TAM_TIT, None, LETRA_TIT)
 sub, t3 = titulo_top('titulo_juego_sub', 520, -720, TAM_SUB, (0.92, 0.92, 0.96), LETRA_SUB, dy=-120, sub=True)
-c1 = over('con_titulo_sombra', sombra, render, 740, -560)
+c1 = over('con_titulo_sombra', sombra, base.op('con_marcador') or render, 740, -560)
 c2 = over('con_titulo_texto', texto, c1, 740, -640)
 c3 = over('con_titulo_juego', sub, c2, 740, -720)
 rot = base.op('con_rotulo')
@@ -193,7 +449,10 @@ leeme(base, 43, """FASE 43 - LA RONDA GENOZILLA
   (Titulojuego): 3, 2, 1 y GENoZilla Begins!!!; RONDA n tras un colapso; los
   5 s finales, estroboscopio y 5 ... 1; al acabar, Stratos x GENoZilla Ends!!!
   v2: con Herenciareparto, lo heredado conserva su especie y cuenta en el
-  reparto (construido, globo N/C/I y el tramo del mundo nuevo).""")
+  reparto (construido, globo N/C/I y el tramo del mundo nuevo).
+  v3: Marcador: celdas construidas y del mal arriba a la izquierda, a su lado
+  los monstruos en pie gesticulando como sus sprites, y la ronda con su reloj
+  arriba a la derecha.""")
 
 print_report()
 
@@ -203,7 +462,7 @@ print_report()
 # -----------------------------------------------------------------------------
 
 PARS43 = ('Fuente', 'Probllegada', 'Temaenciclo', 'Modojuego', 'Umbralaparicion', 'Umbralnefa', 'Simbalance',
-          'Colapsoon', 'Duracionronda', 'Rondas', 'Rondagenozilla', 'Titulojuego', 'Luzjuego', 'Herenciareparto')
+          'Colapsoon', 'Duracionronda', 'Rondas', 'Rondagenozilla', 'Titulojuego', 'Luzjuego', 'Herenciareparto', 'Marcador')
 
 
 def prueba(t):
@@ -371,6 +630,37 @@ def _prueba(t, m):
             and e1['tramo'] > 0 and d0 == [0, 0, 0] and e0['pico'] == 0.0 and e0['tramo'] == 0,
             'con: %s -> %s, construido %.0f %%, tramo %d; sin: %s, tramo %d'
             % (a1, d1, e1['construido'], e1['tramo'], d0, e0['tramo']))
+
+    # 10. v3: el marcador (los operadores, las celdas, la ronda y los monstruos en pie)
+    base.par.Marcador = True
+    S3 = SalaJuego(base, m, absTime.seconds + 10400.0, rondagz=True)
+    W, c = S3.nuevo(4)
+    for k, x in enumerate(vis[::5]):
+        _poner(m, W, x, 2 + k % 3)
+    S3.semis(W, c, 1)
+    M0 = m.marcador_gz(W, c, S3.now)
+    rec0 = dict(W['juego']['recuento'])
+    _poner(m, W, a, 4)
+    mo = m.aparecer(W, c, S3.now, a)
+    S3.semis(W, c, 1)
+    M1 = m.marcador_gz(W, c, S3.now)
+    cara, anim = m.emocion_mon(W, c, mo, S3.now)
+    sh = base.op('con_titulo_sombra')
+    ops = all(base.op(n) is not None for n in ('marcador_monstruos', 'marcador_pixel', 'marcador_bien',
+                                               'marcador_mal', 'marcador_ronda', 'marcador_reloj', 'con_marcador'))
+    cable = sh is not None and len(sh.inputs) > 1 and sh.inputs[1] is base.op('con_marcador')
+    base.par.Marcador = False
+    apagado = m.marcador_gz(W, m.cfg(), S3.now)
+    t.check('el marcador: construidas y mal (el recuento), ESPERANDO sin monstruo; con Trumpzilla, RONDA 1, su '
+            'reloj y su casilla con la cara y la animacion de su sprite; los operadores encima del render y '
+            'debajo de los titulos; Marcador apagado, nada',
+            ops and cable and M0 is not None and M0['ronda'] == 'ESPERANDO' and M0['monstruos'] == []
+            and M0['publico'] == rec0['publico'] and M0['mal'] == rec0['mal'] and M1['ronda'] == 'RONDA 1'
+            and M1['reloj'] == '0:20' and len(M1['monstruos']) == 1 and M1['monstruos'][0][0] == 0
+            and M1['monstruos'][0][1] == m.EMOCIONES_MON.index(cara)
+            and M1['monstruos'][0][2] == m.ANIMS_MON.index(anim) and M1['monstruos'][0][3] == 'mal'
+            and apagado is None,
+            'operadores %s cable %s | %s | %s' % (ops, cable, M0, M1))
 
 
 run_test(base, prueba)

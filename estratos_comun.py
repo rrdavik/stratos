@@ -666,7 +666,8 @@ PAGINAS_TEMAS = [
     ]),
     ('Juego', [
         ('Hpartida', 'Partida', ['Modojuego', 'Rondagenozilla', 'Duracionronda', 'Rondas', 'Pasojuego',
-                                 'Nuevapartida', 'Partidalibre', 'Dominio', 'Titulojuego']),
+                                 'Nuevapartida', 'Partidalibre', 'Dominio', 'Titulojuego',
+                                 'Marcador']),
         ('Hmarcas', 'Marcas y luz', ['Marcajugador', 'Marcapublico', 'Luzjuego']),
         ('Hzanja', 'Zanja', ['Zanjajuego', 'Profundidadagua', 'Ritmoagua', 'Desbordeagua', 'Ahoga',
                              'Simzanja']),
