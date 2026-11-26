@@ -180,6 +180,7 @@ def _prueba(t, m, copy):
 
     # 1. con Modojuego apagado, el mismo mundo que sin la fase
     W, c = S.nuevo(4, juego=False)
+    c = dict(c, herencia_reparto=0)     # la herencia de la mezcla de la fase 43 no es del juego
     W0 = copy.deepcopy(W)
     c31 = dict(c, nivel=31)
     WA = copy.deepcopy(W0)

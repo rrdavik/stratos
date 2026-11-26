@@ -334,6 +334,14 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v148 (fase 43 v2): LO HEREDADO CUENTA EN EL REPARTO. Hasta ahora, al
+#                 enterrar, cada celda heredada quedaba NEUTRA (sin especie hasta su primera
+#                 nota) y el pico de la mezcla volvia a 0: el mundo nuevo empezaba en el
+#                 primer tramo (100 % naturaleza) aunque el globo estuviera medio lleno, y ni
+#                 el construido ni el globo N/C/I de la leyenda contaban lo heredado. Con
+#                 Herenciareparto (encendido) la celda heredada conserva su especie y su
+#                 familia, cuenta en el construido y en el globo, y el pico del mundo nuevo
+#                 empieza en el construido heredado (su tramo y su cuota). Apagado, como antes.
 #                 Motor v147 (fase 43): LA RONDA GENOZILLA. Con Rondagenozilla (encendido)
 #                 la ronda ya no empieza al encender Modojuego: empieza cuando aparece el
 #                 primer monstruo (cualquiera) o cuando el mundo colapsa (un fin de ciclo o
@@ -447,7 +455,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v147'
+MOTOR_VERSION = 'motor v148'
 
 import math
 import time as _time
@@ -692,6 +700,7 @@ DEFAULT_CFG = dict(
     modo_juego=0, duracion_ronda=360.0, rondas=4, paso_juego=4, herencia_mal=0.0, marca_jugador=1, marca_publico=1,
     partida_libre=0, dominio=1.0,       # motor v143: la partida libre (pruebas), hasta que gane un bando
     ronda_gz=1, titulo_juego=1,         # motor v147 (fase 43): la ronda desde el primer monstruo y los titulos
+    herencia_reparto=1,                 # motor v148 (fase 43 v2): lo heredado cuenta en el reparto de especies
     umbral_aparicion=0.25, tam_inicial=0.5, ocupacion_max=8, ritmo_devora=2, ritmo_grande=3, dano_monstruo=0.5,
     paso_monstruo=32, paso_grande=16, coste_zanja=2.0, recalculo=4, espera_monstruo=8.0, ver_objetivo=1,
     sim_celda_mon=0, saltos_monstruo=1, tiempo_salto=0.15, bote_salto=0.15,
@@ -7160,8 +7169,11 @@ def mezcla_enterrar(W, cfg):
     naturaleza ni fundaciones; las conchas siguen siendo suelo firme). Con Tema = auto, cada semilla neutra lleva una
     familia de naturaleza de las que estan cargadas (para dibujarse)."""
     M = _mezcla_al_dia(W)
+    sigue = herencia_reparto(cfg)       # motor v148: lo heredado conserva su especie y cuenta
     for i in range(N):
         if W['occ'][i] > 0 and W['own'][i] and W['sp'][i] != MAL:
+            if sigue and W['tema_c'][i] >= 0:
+                continue                # su especie y su familia, como estaban
             W['tema_c'][i] = NEUTRA
         else:
             W['tema_c'][i] = -1
@@ -7170,10 +7182,20 @@ def mezcla_enterrar(W, cfg):
              regimen='crecimiento', congelado=False, rechazos=0, madurez=None)
     W['huella_nat'] = [0] * N           # motor v143: el suelo firme del mundo nuevo, sin huellas
     W['fund_c'] = [0] * N
+    if sigue:                           # motor v148: el mundo nuevo empieza en el tramo de lo heredado
+        filas, _ = mezcla_tabla(cfg)
+        M['pico'] = 100.0 * construido_real(W, cfg)
+        M['tramo'] = tramo_de(filas, M['pico'])
     if mezcla_on(cfg):
         for i in range(N):
             if W['tema_c'][i] == NEUTRA:
                 W['fam'][i] = familia_neutra(W, cfg, i)
+
+
+def herencia_reparto(cfg):
+    """Herenciareparto (fase 43 v2): lo heredado conserva su especie y cuenta en el reparto.
+    Solo con Tema = auto (la mezcla): con un tema fijo, cada era es de su tema."""
+    return cfg['nivel'] >= 43 and bool(cfg.get('herencia_reparto', 1)) and mezcla_on(cfg)
 
 
 # --- las familias ---------------------------------------------------------------------
@@ -23174,7 +23196,8 @@ def cfg():
                  emocion_azul=fa if fa in EMOCIONES_MON else 'auto')
     if c['nivel'] >= 43:                # fase 43: la ronda GENoZilla y sus titulos
         c.update(ronda_gz=int(bool(_p('Rondagenozilla', True))),
-                 titulo_juego=int(bool(_p('Titulojuego', True))))
+                 titulo_juego=int(bool(_p('Titulojuego', True))),
+                 herencia_reparto=int(bool(_p('Herenciareparto', True))))
     if c['nivel'] >= 18:
         c.update(diagnostico=int(_p('Diagnostico', False)),
                  luz_calida=max(0.0, min(1.0, _p('Luzcalida', c['luz_calida']))),

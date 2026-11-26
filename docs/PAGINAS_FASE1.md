@@ -127,6 +127,7 @@ tema y seccion; si no esta, se queda en la pagina que pida su fase.
 | `Ordenfamilias` | Orden de familias |
 | `Precarga` | Precarga (puntos antes del umbral) |
 | `Cargaporfotograma` | Carga por fotograma (geometrias) |
+| `Herenciareparto` | Lo heredado cuenta en el reparto de especies |
 
 **Clusters y compuestos**
 

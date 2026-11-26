@@ -27,6 +27,12 @@ QUE HACE
                  al acabar      «Stratos x GENoZilla Ends!!!» y quien gana
                El estroboscopio pasa por el limitador comun (3 destellos por
                segundo como mucho).
+  HERENCIA     v2 (motor v148): con Herenciareparto (encendido), al enterrar,
+               lo heredado conserva su especie (naturaleza, ciudad, industria)
+               y cuenta en el reparto: en el construido, en el globo N/C/I y en
+               el tramo con el que empieza el mundo nuevo. Hasta ahora quedaba
+               neutro y el mundo nuevo volvia al 100 % naturaleza. Apagado, como
+               antes.
   APAGADO      Rondagenozilla apagado: las rondas de siempre (fase 32). La
                partida libre (Partidalibre) tampoco tiene rondas. La demo
                GENoZilla de la sala la apaga mientras dura.
@@ -41,10 +47,10 @@ OPERADORES (en /project1/FASE1)
                encima del render. con_rotulo (la leyenda) y out_render (la sala
                virtual) salen de con_titulo_juego.
 
-PARAMETROS (pagina Fase43)
---------------------------
-  Rondagenozilla (encendido), Titulojuego (encendido). Duracionronda (Fase32),
-  360 s.
+PARAMETROS (Juego: Partida; Herenciareparto en Crecimiento: Especies y mezcla)
+-----------------------------------------------------------------------------
+  Rondagenozilla (encendido), Titulojuego (encendido), Herenciareparto
+  (encendido). Duracionronda (Fase32), 360 s.
 
 PROBAR
 ------
@@ -62,7 +68,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase43 v1  (la ronda GENoZilla: empieza con el primer monstruo o el colapso; titulos de combate)'
+VERSION = 'fase43 v2  (la ronda GENoZilla y titulos; lo heredado cuenta en el reparto de especies)'
 banner(VERSION)
 
 base = require_base(43)
@@ -73,9 +79,10 @@ page = get_page(base, 'Fase43')
 add_par(base, page, 'toggle', 'Rondagenozilla', 'Ronda GENoZilla (desde el primer monstruo; 6 min acaban la partida)',
         True)
 add_par(base, page, 'toggle', 'Titulojuego', 'Titulos de la ronda en el centro del mundo', True)
-ok('parametros de la fase 43: Rondagenozilla y Titulojuego (encendidos); la ronda dura Duracionronda (%d s)'
-   % int(base.par.Duracionronda.eval()) if has_par(base, 'Duracionronda') else
-   'parametros de la fase 43: Rondagenozilla y Titulojuego (encendidos)')
+add_par(base, page, 'toggle', 'Herenciareparto', 'Lo heredado cuenta en el reparto de especies', True)
+ok('parametros de la fase 43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos); la ronda dura '
+   'Duracionronda (%d s)' % int(base.par.Duracionronda.eval()) if has_par(base, 'Duracionronda') else
+   'parametros de la fase 43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos)')
 
 
 # -----------------------------------------------------------------------------
@@ -184,7 +191,9 @@ leeme(base, 43, """FASE 43 - LA RONDA GENOZILLA
   mitad, se entierra, la ronda cuenta y empieza otra de 6 min. La partida acaba
   cuando una ronda llega a sus 6 min. Titulos en el centro del mundo
   (Titulojuego): 3, 2, 1 y GENoZilla Begins!!!; RONDA n tras un colapso; los
-  5 s finales, estroboscopio y 5 ... 1; al acabar, Stratos x GENoZilla Ends!!!""")
+  5 s finales, estroboscopio y 5 ... 1; al acabar, Stratos x GENoZilla Ends!!!
+  v2: con Herenciareparto, lo heredado conserva su especie y cuenta en el
+  reparto (construido, globo N/C/I y el tramo del mundo nuevo).""")
 
 print_report()
 
@@ -194,7 +203,7 @@ print_report()
 # -----------------------------------------------------------------------------
 
 PARS43 = ('Fuente', 'Probllegada', 'Temaenciclo', 'Modojuego', 'Umbralaparicion', 'Umbralnefa', 'Simbalance',
-          'Colapsoon', 'Duracionronda', 'Rondas', 'Rondagenozilla', 'Titulojuego', 'Luzjuego')
+          'Colapsoon', 'Duracionronda', 'Rondas', 'Rondagenozilla', 'Titulojuego', 'Luzjuego', 'Herenciareparto')
 
 
 def prueba(t):
@@ -341,6 +350,27 @@ def _prueba(t, m):
             'titulos',
             J.get('gz') is None and J['ronda'] == 2 and J['estado'] == 'juego' and m.titulo_gz(W, c, S2.now) is None,
             'ronda %d' % J['ronda'])
+
+
+    # 9. v2: lo heredado conserva su especie y cuenta en el reparto (Herenciareparto)
+    def enterrar(sigue):
+        c9 = m._mezcla_cfg(m.cfg(), nivel=43, herencia_reparto=sigue)
+        W9 = m._mezcla_mundo(c9)
+        for k, x in enumerate(range(0, m.N, 2)):
+            W9['occ'][x], W9['own'][x], W9['sp'][x] = 2, m.GEO, m.GEO
+            W9['tema_c'][x] = (m.NAT, m.CIU, m.IND)[k % 3]
+        antes = list(m.celdas_de(W9))
+        m.mezcla_enterrar(W9, c9)
+        e = m.mezcla_estado(W9, c9, avanzar=False)
+        return antes, list(m.celdas_de(W9)), e
+    a1, d1, e1 = enterrar(1)
+    a0, d0, e0 = enterrar(0)
+    t.check('Herenciareparto: al enterrar, lo heredado conserva su especie (N/C/I), cuenta en el construido y el '
+            'mundo nuevo empieza en su tramo; apagado, neutro y en el primer tramo, como antes',
+            d1 == a1 and sum(d1) > 0 and e1['construido'] > 0.0 and abs(e1['pico'] - e1['construido']) < 1e-9
+            and e1['tramo'] > 0 and d0 == [0, 0, 0] and e0['pico'] == 0.0 and e0['tramo'] == 0,
+            'con: %s -> %s, construido %.0f %%, tramo %d; sin: %s, tramo %d'
+            % (a1, d1, e1['construido'], e1['tramo'], d0, e0['tramo']))
 
 
 run_test(base, prueba)
