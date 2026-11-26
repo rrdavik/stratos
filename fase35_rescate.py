@@ -59,7 +59,7 @@ add_par(base, page, 'pulse', 'Simrescate', 'Simular rescate')
 # v2: el rescate pide 2 aliados (antes 3). Un proyecto que seguia en 3 pasa a 2 una sola vez;
 # un valor puesto a mano se respeta
 renew_default(base, 'Aliados', 3, 2)
-ok('pagina Fase35: Aliados 2, Taliados 3 s, Simrescate')
+ok('parametros de la fase 35: Aliados 2, Taliados 3 s, Simrescate')
 
 set_render(base)
 

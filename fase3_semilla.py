@@ -111,7 +111,7 @@ add_par(base, page, 'int', 'Umbralvel', 'Velocidad: pulido a partir de', 64, 1, 
 add_par(base, page, 'int', 'Velprueba', 'Velocidad de prueba', 100, 1, 127, clamp=True)
 add_par(base, page, 'pulse', 'Sembrar', 'Sembrar en Nota (prueba)')
 add_par(base, page, 'pulse', 'Resetmundo', 'Vaciar el mundo')
-ok('pagina Fase3: Shellthick, Alturafactor, Semillafrac, Costemax, Gatemax, '
+ok('parametros de la fase 3: Shellthick, Alturafactor, Semillafrac, Costemax, Gatemax, '
    'Umbralvel, Velprueba, Sembrar, Resetmundo, Balanceo, Balanceoper')
 
 # -----------------------------------------------------------------------------
@@ -135,7 +135,7 @@ leeme(base, 3, """FASE 3 - LA SEMILLA
   El gate largo crece mas que el corto; Gatemax 1, el gate no cuenta.
   El material lo fija la velocidad de la primera nota (Umbralvel):
   pulido o poroso.
-  Prueba sin BeatStep: elige Nota (pagina Fase2) y pulsa Sembrar.
+  Prueba sin BeatStep: elige Nota (pagina MIDI) y pulsa Sembrar.
   Resetmundo vacia el planeta.
   Balanceo inclina el eje (grados, cada Balanceoper s) para ver los
   polos; 0 lo apaga.""")
@@ -273,7 +273,7 @@ def prueba(t):
     # v13: la pagina mas corta
     fuera = [nm for nm in ('Growstep', 'Gatemode', 'Rotextra', 'Luzconchaspulso',
                            'Luzconchasreposo', 'Luzconchasalcance') if has_par(base, nm)]
-    t.check('pagina Fase3 sin Growstep, Gatemode, Rotextra ni los ajustes de la luz de las conchas',
+    t.check('parametros de la fase 3 sin Growstep, Gatemode, Rotextra ni los ajustes de la luz de las conchas',
             not fuera, 'siguen: %s' % ', '.join(fuera) if fuera else '')
     t.check('Luzconchas es una intensidad (1 = pulso 0,35)',
             abs(m.cfg()['luz_conchas_pulso'] - 0.35 * float(base.par.Luzconchas)) < 1e-9)
@@ -305,6 +305,6 @@ run_test(base, prueba)
 print('  Ahora: PLAY en el BeatStep con el SEQ1 sonando.')
 print('  Cada nota deja una formacion; las repetidas crecen hasta el limite,')
 print('  cada vez mas despacio (11 notas hasta el limite con Costemax 5).')
-print('  Sin BeatStep: Nota (pagina Fase2) + Sembrar (pagina Fase3).')
+print('  Sin BeatStep: Nota + Sembrar (pagina MIDI).')
 print('  Para empezar de cero: Resetmundo.')
 print('=' * 66)

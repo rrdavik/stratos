@@ -59,7 +59,7 @@ add_par(base, page, 'int', 'Profgrito', 'Profundidad del grito (conchas)', 2, 1,
 add_par(base, page, 'float', 'Recargagrito', 'Recarga del grito (s)', 30.0, 5.0, 300.0, clamp=True)
 add_par(base, page, 'toggle', 'Armarelampago', 'Arma: relampago', False)
 add_par(base, page, 'float', 'Taturdido', 'Tiempo aturdido (s)', 4.0, 1.0, 30.0, clamp=True)
-ok('pagina Fase37: Armacerco, Armapison, Armaestatuas, Armagrito y Armarelampago (apagadas), Hambre 1, '
+ok('parametros de la fase 37: Armacerco, Armapison, Armaestatuas, Armagrito y Armarelampago (apagadas), Hambre 1, '
    'Npison 3, Encoge 0,05, Tquietud 4 s, Umbralsilencio 0,3 (se fija en sala), Tpiedra 6 s, Profgrito 2, '
    'Recargagrito 30 s, Taturdido 4 s')
 

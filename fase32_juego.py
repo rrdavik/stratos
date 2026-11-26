@@ -93,7 +93,7 @@ add_par(base, page, 'toggle', 'Marcapublico', 'Marca tambien sin juego', True)  
 add_par(base, page, 'pulse', 'Nuevapartida', 'Nueva partida')
 add_par(base, page, 'toggle', 'Partidalibre', 'Partida libre (pruebas)', False)     # v3
 add_par(base, page, 'float', 'Dominio', 'Dominio para ganar (libre)', 1.0, 0.5, 1.0, clamp=True)     # v3
-ok('pagina Fase32: Modojuego (apagado), Duracionronda 360 s, Rondas 4, Pasojuego 4, Herenciamal 0, '
+ok('parametros de la fase 32: Modojuego (apagado), Duracionronda 360 s, Rondas 4, Pasojuego 4, Herenciamal 0, '
    'Marcajugador, Marcapublico (v2: la marca tambien sin juego), Nuevapartida, Partidalibre (v3: apagado, '
    'sin reloj hasta que gana un bando) y Dominio 1')
 

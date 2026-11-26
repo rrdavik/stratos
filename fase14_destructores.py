@@ -77,7 +77,7 @@ add_par(base, page, 'int', 'Pasospolvo', 'Pasos en que se disipa el polvo', 8, 1
 add_par(base, page, 'pulse', 'Escalar', 'Escalada de prueba: Golpesescalada aranazos con Padprueba')
 add_par(base, page, 'toggle', 'Apagon', 'Industria: la escalada de la energia es un apagon en cadena', True)
 add_par(base, page, 'toggle', 'Grisu', 'Industria: la escalada de la mina es una explosion de grisu', True)
-ok('pagina Fase14: Ventanaescalada 8, Golpesescalada 2, Pasosfuego 6, Maxfuego 6, Pasospolvo 8, Escalar; '
+ok('parametros de la fase 14: Ventanaescalada 8, Golpesescalada 2, Pasosfuego 6, Maxfuego 6, Pasospolvo 8, Escalar; '
    'v4: Apagon, Grisu')
 
 # -----------------------------------------------------------------------------

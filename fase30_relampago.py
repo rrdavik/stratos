@@ -22,7 +22,7 @@ QUE HACE
                interfaz DMX, el evento queda en el motor y en la leyenda.
   LEYENDA      RELAMPAGO hace 3.2 s   destellos 2/3 en el ultimo segundo   dmx artnet
 
-No tiene parametros nuevos. La pagina Fase30 lleva solo Version30, de solo
+No tiene parametros nuevos. La pagina Versiones lleva Version30, de solo
 lectura.
 
 PROBAR
@@ -40,7 +40,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase30 v1  (relampago: un destello blanco con prioridad al abrirse cada escision)'
+VERSION = 'fase30 v2  (Version30, en la pagina Versiones con las demas: las paginas por temas, comun v104)'
 banner(VERSION)
 
 base = require_base(30)
@@ -220,8 +220,9 @@ def _prueba(t, m):
     t.check('Simformarfila: a los 5 s, la escision y su relampago; la linea RELAMPAGO',
             len(W['escisiones']) == 1 and tr == W['escisiones'][0]['t0']
             and 'RELAMPAGO ' in leg and 'en el ultimo segundo' in leg and ('dmx' in linea_l), linea_l)
-    t.check('pagina Fase30: solo Version30, de solo lectura',
+    t.check('pagina Versiones: Version30, de solo lectura',
             has_par(base, 'Version30') and base.par.Version30.readOnly
+            and base.par.Version30.page.name == 'Versiones'
             and str(base.par.Version30.eval()).startswith('fase30 v'))
 
 

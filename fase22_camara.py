@@ -146,7 +146,7 @@ add_par(base, page, 'int', 'Simcasilla', 'Probar: casilla (0 = pantalla, izquier
 add_par(base, page, 'pulse', 'Simponer', 'Probar: poner una persona')
 add_par(base, page, 'pulse', 'Simquitar', 'Probar: quitarla')
 add_par(base, page, 'pulse', 'Simvaciar', 'Probar: vaciar la sala')
-ok('pagina Fase22: Activo, Cuanto 0,5 (tope 0,5), Pesocrear 1, Pesoerosion 1, Reiniciarcuentas; '
+ok('parametros de la fase 22: Activo, Cuanto 0,5 (tope 0,5), Pesocrear 1, Pesoerosion 1, Reiniciarcuentas; '
    'Fuente (camara), Sensor (femto o kinect), Alturamin 0,8, Alturamax 2,2, Capturarfondo, Archivofondo; Anchosala 5,4, '
    'Fondosala 4,5, Tamcasilla 0,5, Desenfoque 1, Ocupacionllena 0,6, Subida 2, Bajada 5; Loncentral '
    '(giro), Anchoangular 180, Latnorte 90, Latsur -90, Espejo; Simcasilla, Simponer, Simquitar, Simvaciar')

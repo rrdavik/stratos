@@ -78,7 +78,7 @@ add_par(base, page, 'float', 'Vigormax', 'Vigor maximo (gate ligado, naturaleza)
 add_par(base, page, 'int', 'Plantasligado', 'Plantas por gate ligado (ciudad)', 2, 1, 8, clamp=True)
 add_par(base, page, 'float', 'Gateprueba', 'Gate de los botones de prueba (pasos)', 0.5, 0.05, 8.0)
 add_par(base, page, 'toggle', 'Materialrespaldo', 'Material de respaldo (Phong, si el shader falla)', False)
-ok('pagina Fase12: Materialmodo (continuo), Rugmin 0,05, Rugmax 0,85, Vigormax 1,5, Plantasligado 2, '
+ok('parametros de la fase 12: Materialmodo (continuo), Rugmin 0,05, Rugmax 0,85, Vigormax 1,5, Plantasligado 2, '
    'Gateprueba 0,5, Materialrespaldo')
 # v9: las particulas y el humo (fase 11) ganan la rama de Materialrespaldo ahora que existe
 particulas_al_dia(base)
@@ -310,7 +310,7 @@ def _prueba_mezcla(t, m):
 
 
 run_test(base, prueba)
-print('  Ahora: Sembrar con Velprueba 10 y luego 120 (pagina Fase3, tras')
+print('  Ahora: Sembrar con Velprueba 10 y luego 120 (pagina MIDI, tras')
 print('  Resetmundo): pomez y obsidiana. Cambia Gateprueba (0,25, 1, 2) y mira')
 print('  el vigor de los arboles; en la ciudad, Gateprueba 2 sube 2 plantas.')
 print('  Si los modelos se ven negros o no se ven: Materialrespaldo y pegame')

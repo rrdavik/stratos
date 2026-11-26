@@ -579,7 +579,7 @@ add_par(base, page, 'int', 'Maxbastidor', 'Niveles maximos del bastidor (planta 
 add_par(base, page, 'float', 'Emisiones', 'Humo y vapor de la industria', 0.5, 0.0, 2.0)
 add_par(base, page, 'int', 'Maxhumo', 'Particulas de humo maximas', 6000, 0, 20000, clamp=True)
 add_par(base, page, 'float', 'Lodind', 'Remates pequenos de la industria desde (px por celda)', 60.0, 0.0, 400.0)
-ok('pagina Fase11: Tema (auto desde la v22), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
+ok('parametros de la fase 11: Tema (auto desde la v22), Pesovecina 0,5, Umbralvecindad 4, Mincluster 2, Caos 3,91, '
    'Maxpiezas 6, Avance (gates), Pasosetapa 2, Sembrarzona, Sembrarzona2; v5: Umbralmonte 8, '
    'Limitebosque 0,65, Limitenieve 0,9, Alturamonte 1, Lodnat 80, Tintebordenat 0,8; v8: '
    'Ligero, Refrescopiel 0,25 (v18; antes Refresconat), Turnos, Cachearq, Biomas, Variantes 2, Traslucidez 0,35, '
@@ -658,7 +658,7 @@ humo_al_dia(base, crear=True)           # comun v53: el humo, en la GPU (mat_hum
 set_render(base)
 
 leeme(base, 11, """FASE 11 - LA PIEL
-  Tema (pagina Fase11): auto (v22, de fabrica: la mezcla de especies, segun el
+  Tema (pagina Crecimiento): auto (v22, de fabrica: la mezcla de especies, segun el
   terreno construido y la tabla 'mezcla_especies'), naturaleza (vegetacion SEQ1,
   basalto SEQ2), ciudad (informal SEQ1, planificada SEQ2) o industria (mina
   SEQ1, energia SEQ2). Modelos en 'modelos', tabla 'catalogo' editable (tema
@@ -1636,7 +1636,7 @@ def _prueba_natural_(t, m):
             'NATURALEZA' in ley and 'biomas F/T/C' in ley and 'hojas' in ley and 'NATURA ' in ley)
     # v9: la pagina mas corta
     fuera = [nm for nm, _, _ in FASE11_FIJOS if has_par(base, nm)]
-    t.check('pagina Fase11 sin Rebote, Maxcaosnat, Varangulo, Cuantizar30, Inclinacion, '
+    t.check('parametros de la fase 11 sin Rebote, Maxcaosnat, Varangulo, Cuantizar30, Inclinacion, '
             'Densidadhoja ni Muroterraza', not fuera, 'siguen: %s' % ', '.join(fuera) if fuera else '')
     cf = m.cfg()
     t.check('los siete fijos, en su valor por defecto',
@@ -2555,7 +2555,7 @@ def _prueba_rendimiento_td(t, m):
 
 
 run_test(base, prueba)
-print('  Ahora: Sembrarzona dos veces (pagina Fase11) y mira el cluster, sus')
+print('  Ahora: Sembrarzona dos veces (pagina MIDI) y mira el cluster, sus')
 print('  puentes y la pieza protagonista. Cambia Tema y repite.')
 print('  Con el SEQ1 y el SEQ2 sonando: las obras avanzan con los gates')
 print('  (Avance = gates); sin notas en el cluster se quedan a medias.')

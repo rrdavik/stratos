@@ -31,7 +31,7 @@ QUE HACE
                catastrofe 1)
 
 No tiene operadores nuevos: la geometria de la fase 25 deja de dibujarlas.
-No tiene parametros nuevos: la pagina Fase26 lleva solo Version26, de solo
+No tiene parametros nuevos: la pagina Versiones lleva Version26, de solo
 lectura, para mantener una pagina por fase.
 
 PROBAR
@@ -51,7 +51,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase26 v1  (borrado: la erosion borra las inclusiones que quedan sobre su escalon)'
+VERSION = 'fase26 v2  (Version26, en la pagina Versiones con las demas: las paginas por temas, comun v104)'
 banner(VERSION)
 
 base = require_base(26)
@@ -258,8 +258,9 @@ def _prueba(t, m):
     t.check('cada borrado suma en su causa; la linea BORRADO',
             'BORRADO  vivas 0   borradas ' in leg and 'erosion ' in linea and 'micro ' in linea
             and 'corte ' in linea and 'catastrofe ' in linea and sum(W['incl_borradas'].values()) >= 1, linea)
-    t.check('pagina Fase26: solo Version26, de solo lectura',
+    t.check('pagina Versiones: Version26, de solo lectura',
             has_par(base, 'Version26') and base.par.Version26.readOnly
+            and base.par.Version26.page.name == 'Versiones'
             and str(base.par.Version26.eval()).startswith('fase26 v'))
 
 

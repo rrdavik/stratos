@@ -30,7 +30,7 @@ QUE HACE
                Nada se recompila ni sale del render.
   LEYENDA      NOCHE    4.0 s   quedan 2.3   emiten 12 inclusiones y 1 escision
 
-No tiene parametros nuevos: usa Noche (fase 23). La pagina Fase28 lleva solo
+No tiene parametros nuevos: usa Noche (fase 23). La pagina Versiones lleva
 Version28, de solo lectura.
 
 PROBAR
@@ -48,7 +48,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase28 v3  (autoprueba: sin loseta de luz en la celda, motor v125)'
+VERSION = 'fase28 v4  (Version28, en la pagina Versiones con las demas: las paginas por temas, comun v104)'
 banner(VERSION)
 
 base = require_base(28)
@@ -203,8 +203,9 @@ def _prueba(t, m):
     leg = m.legend()
     linea = ' '.join(l.strip() for l in leg.splitlines() if 'NOCHE' in l)
     t.check('leyenda NOCHE', 'NOCHE    4.0 s   quedan 4.0   emiten 3 inclusiones y 0 escisiones' in leg, linea)
-    t.check('pagina Fase28: solo Version28, de solo lectura',
+    t.check('pagina Versiones: Version28, de solo lectura',
             has_par(base, 'Version28') and base.par.Version28.readOnly
+            and base.par.Version28.page.name == 'Versiones'
             and str(base.par.Version28.eval()).startswith('fase28 v'))
 
 

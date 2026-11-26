@@ -145,7 +145,7 @@ try:
     base.par.Maxconchas.label = 'Losetas visibles por columna'
 except Exception:
     pass
-ok('pagina Fase8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Grosormax (1,5), '
+ok('parametros de la fase 8: Herencia (25 %), Maxconchas (24 por columna), Grosortiempo, Grosormax (1,5), '
    'Cortezamax (4), '
    'Colmatacion (0), Paleta (generaciones), Paletatono (20), Paletacroma (0,04), Paletaluz (0,35), '
    'Tapaneutra (0,6)')
@@ -187,7 +187,7 @@ leeme(base, 8, """FASE 8 - CONCHAS
   Radio nominal = nucleo + suma de grosores; suelo = nucleo + columna.
   Herencia (25 %) pasa a la capa nueva. Maxconchas losetas por columna;
   debajo, un zocalo hasta el nucleo, que ya no crece.
-  Prueba sin esperar: Forzarciclo (pagina Fase6).""")
+  Prueba sin esperar: Forzarciclo (pagina Ciclo).""")
 
 print_report()
 
@@ -495,7 +495,7 @@ def prueba(t):
     t.check('leyenda CONCHAS', 'CONCHAS' in m.legend())
     # v13: la pagina mas corta
     fuera = [nm for nm in ('Paletaalterna', 'Contrasteocupada', 'Tapaluz') if has_par(base, nm)]
-    t.check('pagina Fase8 sin Paletaalterna, Contrasteocupada ni Tapaluz', not fuera,
+    t.check('parametros de la fase 8 sin Paletaalterna, Contrasteocupada ni Tapaluz', not fuera,
             'siguen: %s' % ', '.join(fuera) if fuera else '')
     cf = m.cfg()
     t.check('el gris de la tapa es 0,8 x Paletaluz (0,28 por defecto)',

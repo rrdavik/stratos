@@ -74,7 +74,7 @@ m = motor.module
 page = get_page(base, 'Fase25')
 add_par(base, page, 'float', 'Probllegada', 'Probabilidad de huella al llegar', 0.6, 0.0, 1.0, clamp=True)
 add_par(base, page, 'float', 'Tparada', 'Tiempo de parada (s)', 3.0, 0.5, 30.0, clamp=True)
-ok('pagina Fase25: Probllegada 0,6 (1: toda llegada deja huella), Tparada 3 s')
+ok('parametros de la fase 25: Probllegada 0,6 (1: toda llegada deja huella), Tparada 3 s')
 
 # -----------------------------------------------------------------------------
 # OPERADORES

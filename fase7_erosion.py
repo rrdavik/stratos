@@ -204,9 +204,9 @@ viejos = [nm for nm in ('Pumpataque', 'Pumprelease', 'Capmodo', 'Capdur') if rem
 if viejos:
     ok('impulso v14: fuera %s (sin capacidad ni rampa; la caida, por pad en perfiles_erosion)'
        % ', '.join(viejos))
-ok('pagina Fase7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
+ok('parametros de la fase 7: Canaldrum (16), Notabase (36), Objetivo, Umbraldensidad, '
    'Padprueba, Erosionar, Luzdrum, Vidabalizadrum, Velref (0: sin velocidad)')
-ok('pagina Fase7 (impulso): Pumpamt (1; 0: sin pumping), Pumphorz (0,30), Pumptope (2)')
+ok('parametros de la fase 7 (impulso): Pumpamt (1; 0: sin pumping), Pumphorz (0,30), Pumptope (2)')
 
 COLS = ['pad', 'reduccion', 'radio', 'profundidad', 'modo', 'pulsos', 'pump_rel', 'tipo', 'rol']
 COLS_V13 = ['pad', 'reduccion', 'radio', 'profundidad', 'modo', 'capacidad', 'pump_rel', 'tipo', 'rol']
@@ -1047,7 +1047,7 @@ def prueba_impulso(t, m, cd):
     # v16: la pagina mas corta; cada intensidad a 0 apaga lo suyo
     fuera = [nm for nm in ('Balizasdrum', 'Erosionvel', 'Pumpon', 'Multradio', 'Pumphold',
                            'Pumpvelmin') if has_par(base, nm)]
-    t.check('pagina Fase7 sin Balizasdrum, Erosionvel, Pumpon, Multradio, Pumphold ni Pumpvelmin',
+    t.check('parametros de la fase 7 sin Balizasdrum, Erosionvel, Pumpon, Multradio, Pumphold ni Pumpvelmin',
             not fuera, 'siguen: %s' % ', '.join(fuera) if fuera else '')
     antes = (float(base.par.Luzdrum), int(base.par.Velref), float(base.par.Pumpamt))
     try:

@@ -47,8 +47,8 @@ OPERADORES (en /project1/FASE1)
                encima del render. con_rotulo (la leyenda) y out_render (la sala
                virtual) salen de con_titulo_juego.
 
-PARAMETROS (pagina Fase43)
---------------------------
+PARAMETROS (Juego: Partida; Herenciareparto en Crecimiento: Especies y mezcla)
+-----------------------------------------------------------------------------
   Rondagenozilla (encendido), Titulojuego (encendido), Herenciareparto
   (encendido). Duracionronda (Fase32), 360 s.
 
@@ -80,9 +80,9 @@ add_par(base, page, 'toggle', 'Rondagenozilla', 'Ronda GENoZilla (desde el prime
         True)
 add_par(base, page, 'toggle', 'Titulojuego', 'Titulos de la ronda en el centro del mundo', True)
 add_par(base, page, 'toggle', 'Herenciareparto', 'Lo heredado cuenta en el reparto de especies', True)
-ok('pagina Fase43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos); la ronda dura Duracionronda (%d s)'
-   % int(base.par.Duracionronda.eval()) if has_par(base, 'Duracionronda') else
-   'pagina Fase43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos)')
+ok('parametros de la fase 43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos); la ronda dura '
+   'Duracionronda (%d s)' % int(base.par.Duracionronda.eval()) if has_par(base, 'Duracionronda') else
+   'parametros de la fase 43: Rondagenozilla, Titulojuego y Herenciareparto (encendidos)')
 
 
 # -----------------------------------------------------------------------------

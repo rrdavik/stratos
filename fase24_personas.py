@@ -73,7 +73,7 @@ add_par(base, page, 'float', 'Separacioncabezas', 'Separacion minima entre cabez
 add_par(base, page, 'int', 'Confirmapersona', 'Fotogramas para confirmar una persona', 2, 1, 10, clamp=True)
 add_par(base, page, 'int', 'Simfila', 'Personas de la fila de prueba', 3, 1, 12, clamp=True)
 add_par(base, page, 'pulse', 'Simformarfila', 'Formar una fila')
-ok('pagina Fase24: Separacioncabezas 0,35 m, Confirmapersona 2, Simfila 3, Simformarfila')
+ok('parametros de la fase 24: Separacioncabezas 0,35 m, Confirmapersona 2, Simfila 3, Simformarfila')
 
 # -----------------------------------------------------------------------------
 # OPERADORES
