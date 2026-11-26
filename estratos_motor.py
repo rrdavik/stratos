@@ -334,6 +334,14 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v151 (fase 43 v6): CASILLAS FIJAS EN EL MARCADOR. Cada monstruo tiene
+#                 la suya (NATURAL EVOLUTION: Godzilla y el azul; OUTBREAKS OF EVIL:
+#                 Trumpzilla y NefanyaMuto): en accion, con su cara y su animacion; fuera
+#                 del planeta, en gris y quieto (marcador: 'b0' 'b1' 'e0' 'e1' + 'v', 1 en pie).
+#                 Motor v151 (fase 42 v2): EL GODZILLA AZUL SALE CON NEFANYAMUTO. Ya no
+#                 espera a que Trumpzilla y NefanyaMuto esten a la vez: aparece cuando
+#                 NefanyaMuto esta en pie (su rival) y se va cuando NefanyaMuto se ahoga
+#                 o desaparece (nefa_en_pie).
 #                 Motor v150 (fase 43 v4): EL MARCADOR POR BANDOS. Arriba a la izquierda,
 #                 NATURAL EVOLUTION (las celdas del publico y los monstruos del bien en
 #                 accion) y, debajo, OUTBREAKS OF EVIL (las celdas del mal y los suyos);
@@ -465,7 +473,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v150'
+MOTOR_VERSION = 'motor v151'
 
 import math
 import time as _time
@@ -18539,6 +18547,9 @@ def _titulo_gz(W, cfg, now):
 
 MARCADOR_MON = ('trumpzilla', 'nefanyamuto', 'godzilla', 'godzilla_azul')     # el atlas (entrada) de cada uno
 MARCADOR_CASILLAS = 4
+# motor v151: la casilla de cada monstruo (atlas de MARCADOR_MON): el bien b0 Godzilla, b1 el azul;
+# el mal e0 Trumpzilla, e1 NefanyaMuto
+MARCADOR_FIJAS = dict(b0=2, b1=3, e0=0, e1=1)
 
 
 def marcador_on(W, cfg):
@@ -18664,7 +18675,7 @@ def juego_avanzar(W, cfg, now, semis):
         godzilla_reloj(W, cfg, now)
     if cfg['nivel'] >= 41:              # fase 41: NefanyaMuto aparece con el mundo construido al 50 %
         nefa_reloj(W, cfg, now)
-    if cfg['nivel'] >= 42:              # fase 42: el Godzilla azul, con los dos del mal en pie
+    if cfg['nivel'] >= 42:              # fase 42: el Godzilla azul, con NefanyaMuto en pie (motor v151)
         azul_reloj(W, cfg, now)
     if gz and not J['gz']['corre'] and monstruo_en_pie(J):
         empezar_ronda_gz(W, cfg, now, 'monstruo')       # motor v147: el primer monstruo empieza la ronda
@@ -21739,6 +21750,12 @@ def dos_del_mal(W, cfg):
     return nefa_on(W, cfg) and en_pie(J.get('mon')) and en_pie(J.get('nefa'))
 
 
+def nefa_en_pie(W, cfg):
+    """Motor v151: NefanyaMuto en pie, lo que llama al Godzilla azul (hasta la v150, los
+    dos del mal a la vez)."""
+    return nefa_on(W, cfg) and en_pie(W['juego'].get('nefa'))
+
+
 def celda_aparicion_azul(W, cfg, vis=None):
     """La celda vacia de la cara visible mas cercana al borde de entrada (otro desempate),
     lejos de Trumpzilla, NefanyaMuto y el Godzilla verde. Prefiere la tierra."""
@@ -21783,7 +21800,7 @@ def aparecer_azul(W, cfg, now, celda):
 
 
 def se_va_azul(W, cfg, g, now):
-    """Ya no estan los dos del mal: el Godzilla azul saluda y se hunde T_HUNDE s."""
+    """Ya no esta NefanyaMuto: el Godzilla azul saluda y se hunde T_HUNDE s."""
     if W['juego'].get('lucha_azul'):
         terminar_lucha_azul(W, cfg, now)
     g.update(estado='se_va', t_estado=now, objetivo=None, camino=[], mov=0.0, retira=None)
@@ -21792,7 +21809,7 @@ def se_va_azul(W, cfg, g, now):
 
 
 def azul_reloj(W, cfg, now):
-    """Cada fotograma: con los dos del mal en pie, aparece; si queda uno, se va."""
+    """Cada fotograma: con NefanyaMuto en pie, aparece; sin el, se va (motor v151)."""
     J = W['juego']
     if not azul_on(W, cfg):
         g = J.get('azul')
@@ -21802,7 +21819,7 @@ def azul_reloj(W, cfg, now):
             J['azul'] = bien_nuevo(g['n'], cfg)
         return
     g = azul_estado(W, cfg)
-    dos = dos_del_mal(W, cfg)
+    dos = nefa_en_pie(W, cfg)          # motor v151: basta NefanyaMuto
     if g['estado'] == 'se_va':
         if now - (g.get('t_estado') or now) >= T_HUNDE - 1e-9:
             g.update(estado='espera', celda=None, t_muerte=now)
@@ -21917,7 +21934,7 @@ def emocion_azul(W, cfg, g, now):
 
 
 def sim_azul(W, cfg, now, celda=None):
-    """Simazul: aparece ya (sin esperar a los dos del mal), en la celda de aparicion o en
+    """Simazul: aparece ya (sin esperar a NefanyaMuto), en la celda de aparicion o en
     celda. Si no estan los dos, se ira enseguida: Simluchaazul los pone."""
     if not juego_on(W, cfg):
         return 'AZUL     enciende antes Modojuego'
@@ -21930,7 +21947,7 @@ def sim_azul(W, cfg, now, celda=None):
     encuentro_azul(W, cfg, now)
     return 'AZUL     #%d aparece en la celda %d   objetivo %s%s' % (
         g['n'], c, g['objetivo'] if g['objetivo'] is not None else '-',
-        '' if dos_del_mal(W, cfg) else '   (sin los dos del mal, se ira)')
+        '' if nefa_en_pie(W, cfg) else '   (sin NefanyaMuto, se ira)')
 
 
 def sim_lucha_azul(W, cfg, now):
@@ -21981,8 +21998,8 @@ def _legend_azul(W, c):
     else:
         lucha = 'luchas %d' % J.get('luchas_azul', 0)
     if g['estado'] in ('espera', 'se_va') or g['celda'] is None:
-        del_mal = sum(1 for x in (J.get('mon'), J.get('nefa')) if en_pie(x))
-        return '  AZUL     #%d  %s   del mal en pie %d (aparece con 2)   %s' % (g['n'], g['estado'], del_mal, lucha)
+        nefa = 'en pie' if en_pie(J.get('nefa')) else 'no esta'
+        return '  AZUL     #%d  %s   NefanyaMuto %s (aparece con el)   %s' % (g['n'], g['estado'], nefa, lucha)
     return '  AZUL     #%d  %s  celda %s -> %s  tam %.2f  acum %d/%d   cara %s   %s' % (
         g['n'], g['estado'], g['celda'], g['objetivo'] if g['objetivo'] is not None else '-', g['tam'],
         min(g['acum'], int(c['ocupacion_max'])), int(c['ocupacion_max']), emocion_azul(W, c, g, now)[0], lucha)
@@ -26121,13 +26138,16 @@ def marcador_valor(M, que):
         return 'NATURAL EVOLUTION   %d' % M['publico']
     if que == 'mal':
         return 'OUTBREAKS OF EVIL   %d' % M['mal']
-    if casilla and que[0] in 'be':      # motor v150: las casillas de cada bando
-        lista = [x for x in M['monstruos'] if x[3] == ('bien' if que[0] == 'b' else 'mal')]
-        k = int(que[1])
-        if k >= len(lista):
+    if casilla and que[0] in 'be':      # motor v151: una casilla fija por monstruo
+        atlas = MARCADOR_FIJAS[que[:2]] if que[:2] in MARCADOR_FIJAS else -1
+        if atlas < 0:
             return -1.0 if que[2] == 'a' else 0.0
-        a, cara, anim, _ = lista[k]
-        return float(dict(a=a, c=cara, g=anim).get(que[2], 0))
+        vivo = next((x for x in M['monstruos'] if x[0] == atlas), None)
+        if vivo is None:                # fuera del planeta: en gris y quieto (calma, piedra)
+            vals = dict(a=atlas, c=EMOCIONES_MON.index('calma'), g=ANIMS_MON.index('piedra'), v=0)
+        else:
+            vals = dict(a=atlas, c=vivo[1], g=vivo[2], v=1)
+        return float(vals.get(que[2], 0))
     if que in ('ronda', 'reloj'):
         return M[que]
     if que == 'final':

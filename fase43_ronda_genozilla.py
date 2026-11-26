@@ -43,7 +43,9 @@ QUE HACE
                (respira, camina, devora, tiembla, lucha, baile...). Arriba a la
                derecha, la ronda y su reloj (rojo en los 5 s finales). v4: si el
                shader del marcador no compila, marcador_seguro lo deja
-               transparente: el mundo nunca se tapa.
+               transparente: el mundo nunca se tapa. v6 (motor v151): una
+               casilla fija por monstruo (Godzilla y el azul; Trumpzilla y
+               NefanyaMuto): en gris y quieto mientras no esta en el planeta.
   APAGADO      Rondagenozilla apagado: las rondas de siempre (fase 32). La
                partida libre (Partidalibre) tampoco tiene rondas. La demo
                GENoZilla de la sala la apaga mientras dura.
@@ -84,7 +86,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase43 v5  (el marcador por bandos: NATURAL EVOLUTION y OUTBREAKS OF EVIL seguidos; nunca tapa el mundo)'
+VERSION = 'fase43 v6  (el marcador: una casilla fija por monstruo, el Godzilla azul incluido; en gris si no esta)'
 banner(VERSION)
 
 base = require_base(43)
@@ -202,7 +204,7 @@ MARCADOR_PIXEL = """// Estratos - el marcador de la partida (fase 43 v4): NATURA
 // su sprite del mundo (sprite_vertex). Entradas, segun las que haya: 0 trumpzilla,
 // 1 nefanyamuto, 2 godzilla, 3 godzilla_azul (sus atlas).
 uniform vec4 uMar;          // x encendido, y los 5 s finales, z el reloj (s)
-uniform vec4 uB0;           // por casilla: x atlas (-1 vacia), y cara, z animacion
+uniform vec4 uB0;           // por casilla: x atlas (-1 vacia), y cara, z animacion, w en pie (0: gris y quieto)
 uniform vec4 uB1;
 uniform vec4 uE0;
 uniform vec4 uE1;
@@ -321,12 +323,12 @@ vec4 casilla(vec2 p, vec4 M, vec4 C, float slot, vec3 tono)
                     rgb = vec3(dot(rgb, vec3(0.30, 0.59, 0.11))) * vec3(0.80, 0.78, 0.74);
                 else if (anim == 6)
                     rgb = mix(rgb, vec3(1.0), 0.35 * step(0.5, fract(uMar.z * 3.0)));
-                res = sobre(res, vec4(rgb, 1.0));
+                res = sobre(res, vec4(rgb, M.w > 0.5 ? 1.0 : 0.38));
             }
         }
     }
     float marco = dentro - rect(p, a0 + vec2(2.0), b0 - vec2(2.0), 6.0);
-    res = sobre(res, vec4(tono, marco * (M.x > -0.5 ? 1.0 : 0.35)));
+    res = sobre(res, vec4(tono, marco * (M.x > -0.5 && M.w > 0.5 ? 1.0 : 0.35)));
     return res;
 }
 
@@ -396,7 +398,7 @@ for i, n in enumerate(m.MARCADOR_MON):
         break                               # las entradas, seguidas: sin hueco
 uniforme(mon_top, 0, 'uMar', [MAR % 'on', MAR % 'final', 'absTime.seconds', 0])
 for k, nombre in enumerate(('b0', 'b1', 'e0', 'e1')):
-    uniforme(mon_top, 1 + k, 'u' + nombre.upper(), [MAR % (nombre + x) for x in 'acg'] + [0])
+    uniforme(mon_top, 1 + k, 'u' + nombre.upper(), [MAR % (nombre + x) for x in 'acgv'])
 uniforme(mon_top, 5, 'uCajaB', [CAJA_X, CAJA_Y, CAJA_W, CAJA_H])
 uniforme(mon_top, 6, 'uCajaE', [CAJA_MAL_X, CAJA_Y, CAJA_W, CAJA_H])
 uniforme(mon_top, 7, 'uReloj', [ANCHO - MARGEN - RELOJ_W, ALTO - MARGEN - RELOJ_H, RELOJ_W, RELOJ_H])
@@ -712,7 +714,10 @@ def _prueba(t, m):
                                                'marcador_bien', 'marcador_mal', 'marcador_ronda', 'marcador_reloj',
                                                'con_marcador'))
     cable = sh is not None and len(sh.inputs) > 1 and sh.inputs[1] is base.op('con_marcador')
-    vals = [m.marcador_valor(M1, q) for q in ('bien', 'mal', 'e0a', 'e0c', 'e0g', 'e1a', 'b0a')]
+    entradas = [o.name for o in base.op('marcador_monstruos').inputs]
+    cable = cable and entradas == [n + '_atlas' for n in m.MARCADOR_MON]     # el azul, la cuarta
+    vals = [m.marcador_valor(M1, q) for q in ('bien', 'mal', 'e0a', 'e0c', 'e0g', 'e0v', 'e1a', 'e1v', 'b1a',
+                                                'b1g', 'b1v')]
     base.par.Marcador = False
     apagado = m.marcador_gz(W, m.cfg(), S3.now)
     t.check('el marcador: construidas y mal (el recuento), ESPERANDO sin monstruo; con Trumpzilla, RONDA 1, su '
@@ -725,7 +730,8 @@ def _prueba(t, m):
             and M1['monstruos'][0][2] == m.ANIMS_MON.index(anim) and M1['monstruos'][0][3] == 'mal'
             and apagado is None
             and vals == ['NATURAL EVOLUTION   %d' % M1['publico'], 'OUTBREAKS OF EVIL   %d' % M1['mal'], 0.0,
-                         float(m.EMOCIONES_MON.index(cara)), float(m.ANIMS_MON.index(anim)), -1.0, -1.0],
+                         float(m.EMOCIONES_MON.index(cara)), float(m.ANIMS_MON.index(anim)), 1.0, 1.0, 0.0, 3.0,
+                         float(m.ANIMS_MON.index('piedra')), 0.0],
             'operadores %s cable %s | %s | %s | %s' % (ops, cable, M0, M1, vals))
 
 

@@ -2,17 +2,18 @@
 =============================================================================
 ESTRATOS - FASE 42: EL GODZILLA AZUL, EL SEGUNDO MONSTRUO DEL BIEN
 =============================================================================
-Requiere la fase 41. Con Trumpzilla y NefanyaMuto a la vez en el planeta el mal
+Requiere la fase 41. v2 (motor v151): sale con NefanyaMuto. Con Trumpzilla y NefanyaMuto a la vez en el planeta el mal
 hacia mucho dano: el Godzilla verde solo puede con uno. Esta fase pone otro
 Godzilla, azul, que lucha por el bien.
 
 QUE HACE
 --------
-  CUANDO       solo mientras los DOS monstruos del mal estan en pie a la vez
-               (Trumpzilla y NefanyaMuto, ni esperando ni ahogados), con o sin
-               gente en la sala. Si queda uno solo, se va: saluda con la flor y se
-               hunde. Vuelve cuando vuelven a estar los dos (como pronto
-               Esperamonstruo s despues de irse).
+  CUANDO       v2: mientras NefanyaMuto (su rival) esta en pie, ni esperando ni
+               ahogado, con o sin gente en la sala y este o no Trumpzilla. Si
+               NefanyaMuto se ahoga o desaparece, se va: saluda con la flor y se
+               hunde. Vuelve con el siguiente NefanyaMuto (como pronto
+               Esperamonstruo s despues de irse). (v1: solo con los dos del mal
+               a la vez.)
   APARECE      en la celda vacia de la cara visible por la que entran las celdas
                con el giro, lejos de los otros tres monstruos. En tierra.
   DEVORA EL MAL  con las reglas del Godzilla verde (objetivo, ritmo, dano, paso,
@@ -26,7 +27,7 @@ QUE HACE
                perla y placas de hielo cian; se rehace con
                sprites/hacer_atlas_godzilla_azul.py).
   LEYENDA      AZUL     #1  devora  celda 12 -> 12  tam 0.75  acum 4/8   cara rie   luchas 1
-               AZUL     #0  espera   del mal en pie 1 (aparece con 2)   luchas 0
+               AZUL     #0  espera   NefanyaMuto no esta (aparece con el)   luchas 0
 
 OPERADORES (en /project1/FASE1)
 -------------------------------
@@ -41,8 +42,8 @@ PARAMETROS (pagina Monstruos)
 PROBAR
 ------
   Modojuego. Simluchaazul: Trumpzilla, NefanyaMuto y el Godzilla azul junto a
-  NefanyaMuto: se dan manotazos. Simazul: aparece ya (si no estan los dos del
-  mal, se va enseguida).
+  NefanyaMuto: se dan manotazos. Simazul: aparece ya (si no esta NefanyaMuto,
+  se va enseguida).
 
 COMO USARLO
 -----------
@@ -54,7 +55,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase42 v1  (el Godzilla azul: con los dos monstruos del mal a la vez, lucha por el bien)'
+VERSION = 'fase42 v2  (el Godzilla azul sale con NefanyaMuto, su rival, y lucha por el bien)'
 banner(VERSION)
 
 base = require_base(42)
@@ -87,11 +88,11 @@ godzilla_azul_al_dia(base, CARPETA)
 set_render(base)
 
 leeme(base, 42, """FASE 42 - EL GODZILLA AZUL, EL SEGUNDO MONSTRUO DEL BIEN
-  Con Trumpzilla y NefanyaMuto a la vez en el planeta, sale otro Godzilla,
+  v2: con NefanyaMuto en el planeta, sale otro Godzilla,
   azul, que lucha por el bien: devora el mal y deja brotes de la creacion,
   como el verde. Su rival es NefanyaMuto: si se juntan, manotazos Pasoslucha
-  pasos y Tregua pasos sin cruzarse (el verde sigue con Trumpzilla). Si queda
-  un solo monstruo del mal, se va saludando. Simazul: aparece ya.
+  pasos y Tregua pasos sin cruzarse (el verde sigue con Trumpzilla). Si
+  NefanyaMuto se ahoga o se va, se va saludando. Simazul: aparece ya.
   Simluchaazul: su lucha junto a NefanyaMuto.""")
 
 print_report()
@@ -173,7 +174,7 @@ def _prueba(t, m, copy):
     d1, _ = m.dijkstra_mon(W, c, t1)
     n1 = max((x for x in lejos4 if x in d1), key=lambda x: (d1[x], -x))
 
-    # 2. con un solo monstruo del mal (o el azul apagado), la partida de la fase 41
+    # 2. solo con Trumpzilla (o el azul apagado), la partida de la fase 41
     def partida(cfg_):
         S2 = SalaJuego(base, m, absTime.seconds + 8600.0, nefanya=True, azul=True)
         W2, _ = S2.nuevo(4)
@@ -189,22 +190,23 @@ def _prueba(t, m, copy):
     r41, _ = partida(dict(c, nivel=41))
     r_off, _ = partida(dict(c, azul=0))
     r_uno, az_uno = partida(c)
-    t.check('con un solo monstruo del mal, o con Godzillaazul apagado, el juego da lo mismo que tras la fase 41 '
+    t.check('solo con Trumpzilla (sin NefanyaMuto), o con Godzillaazul apagado, el juego da lo mismo que tras la '
+            'fase 41 '
             '(el azul no sale)',
             r_off == r41 and r_uno == r41 and r41[2]['comidos'] > 0 and (az_uno or {}).get('n', 0) == 0,
             'comidos %d; iguales: apagado %s, uno solo %s; azul %s'
             % (r41[2]['comidos'], r_off == r41, r_uno == r41, (az_uno or {}).get('estado')))
 
-    # 3. con los dos del mal en pie, aparece lejos de ellos y va a por el mal; si queda uno, se va
+    # 3. v2: con NefanyaMuto en pie (sin Trumpzilla) aparece lejos de el y va a por el mal; si se ahoga, se va
     W, c = S.nuevo(4)
     _mal(m, W, c, a, 2, S.now)
     S.pasos(W, c, 1)
     antes = W['juego'].get('azul', {}).get('estado', 'espera') if W['juego'].get('azul') else 'espera'
-    mo = m.aparecer(W, c, S.now, t1)
     x = m.aparecer_nefa(W, c, S.now, n1)
     S.pasos(W, c, 1)
+    solo_nefa = W['juego']['mon']['estado'] == 'espera'
     g = W['juego'].get('azul') or {}
-    cerca = {t1, n1} | set(m.NEIGH[t1]) | set(m.NEIGH[n1])
+    cerca = {n1} | set(m.NEIGH[n1])
     sale = g.get('estado') in ('aparece', 'busca', 'devora') and g.get('celda') not in cerca \
         and g.get('objetivo') == a
     leg_sale = m._legend_azul(W, c)
@@ -214,9 +216,9 @@ def _prueba(t, m, copy):
     filas_va = m.build_instances(W, c, S.now).get('godzilla_azul', [])
     S.pasos(W, c, 6)
     fuera = (W['juego']['azul']['estado'], m.build_instances(W, c, S.now).get('godzilla_azul'))
-    t.check('sin los dos del mal no sale; con Trumpzilla y NefanyaMuto en pie aparece lejos de ellos y va a por el '
-            'mal; si NefanyaMuto se ahoga, se va (calma, adios, sin sombra) y desaparece',
-            antes == 'espera' and sale and vete[0] == 'se_va' and vete[1] == ('calma', 'adios')
+    t.check('sin NefanyaMuto no sale; con NefanyaMuto en pie (aunque Trumpzilla no este) aparece lejos de el y va a '
+            'por el mal; si NefanyaMuto se ahoga, se va (calma, adios, sin sombra) y desaparece',
+            antes == 'espera' and solo_nefa and sale and vete[0] == 'se_va' and vete[1] == ('calma', 'adios')
             and len(filas_va) == 1 and fuera == ('espera', []) and 'AZUL     #1' in leg_sale,
             'antes %s, %s celda %s -> %s, %s, %s | %s' % (antes, g.get('estado'), g.get('celda'), g.get('objetivo'),
                                                        vete, fuera[0], leg_sale.strip()))
@@ -298,5 +300,5 @@ def _prueba(t, m, copy):
 
 run_test(base, prueba)
 print('  Ahora: Modojuego; Simluchaazul: el Godzilla azul y NefanyaMuto se dan manotazos.')
-print('  En partida, sale solo cuando Trumpzilla y NefanyaMuto estan a la vez en el planeta.')
+print('  En partida, sale cuando NefanyaMuto esta en el planeta (v2) y se va cuando el se va.')
 print('=' * 66)
