@@ -90,7 +90,7 @@ add_par(base, page, 'menu', 'Interfazdmx', 'Salida DMX', 'artnet',
         menu=list(m.INTERFACES_DMX), menu_labels=['Art-Net', 'USB Pro'])
 add_par(base, page, 'int', 'Universodmx', 'Universo DMX', 0, 0, 255, clamp=True)
 add_par(base, page, 'float', 'Simbalance', 'Probar: forzar el balance (-1: el real)', -1.0, -1.0, 10.0, clamp=True)
-ok('pagina Fase23: Ventanabalance 30, Umbralestrobo 1,0, Salidaestrobo 0,8, Maxhz 3 (tope 3), Noche 4, '
+ok('parametros de la fase 23: Ventanabalance 30, Umbralestrobo 1,0, Salidaestrobo 0,8, Maxhz 3 (tope 3), Noche 4, '
    'Colapsoon (apagado), Maxerosion 15, Interfazdmx (Art-Net), Universodmx 0, Simbalance -1')
 
 # -----------------------------------------------------------------------------

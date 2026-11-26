@@ -4,7 +4,12 @@ ESTRATOS - PIEZAS COMUNES DE LAS FASES 3 A 11
 =============================================================================
 No se ejecuta solo: lo carga cada script de fase. Contiene:
 
-  - utilidades para crear nodos y parametros (las mismas de fase12_base.py)
+  - utilidades para crear nodos y parametros (las mismas de fase12_base.py).
+    comun v104: los parametros de FASE1 van en 15 paginas por temas
+    (PAGINAS_TEMAS: Planeta, MIDI, Crecimiento, Ciclo, Erosion, Naturaleza,
+    Ciudad, Camara, Vista, Modular, Sala, Presencia, Juego, Monstruos y
+    Versiones), no en una por fase; paginas_al_dia() pasa a su tema lo de un
+    proyecto de antes, con su valor
   - install_core(): instala o refresca el 'motor' y los DAT que lo usan
     (midi_callbacks, latido, reticula_callbacks, formas_callbacks, pulsos)
     y la luz de los secuenciadores (luz_conchas, Luzseq, Luzespecie). Todas las
@@ -32,7 +37,7 @@ import copy
 import math
 import re
 
-VERSION_COMUN = 'comun v103'
+VERSION_COMUN = 'comun v104'
 COMP_PATH = '/project1/FASE1'
 
 RENDER_ORDER = ['nucleo', 'estratos', 'terreno', 'pradera', 'tejido', 'rios', 'reticula', 'formas_porosas', 'formas_pulidas',
@@ -76,6 +81,12 @@ def print_report():
             bocetos_al_dia(b)
     except Exception as e:
         info('bocetos: no pude ponerlos al dia (%s)' % e)
+    try:                                # comun v104: las paginas por temas
+        b = op(COMP_PATH)
+        if b is not None:
+            paginas_al_dia(b)
+    except Exception as e:
+        info('paginas por temas: %s' % e)
     print('CAMBIOS')
     print('-' * 66)
     for line in report:
@@ -407,7 +418,11 @@ def get_page(base, name):
 def add_par(base, page, kind, name, label, default=None, lo=None, hi=None,
             menu=None, menu_labels=None, clamp=False):
     """Anade un parametro si no existe. Si ya existe no lo toca: conserva
-    lo que hayas ajustado a mano."""
+    lo que hayas ajustado a mano. comun v104: en FASE1, en la pagina de su tema
+    (PAGINAS_TEMAS), aunque la fase pida otra."""
+    tema = TEMA_DE.get(name)
+    if tema is not None and getattr(page, 'name', tema) != tema and (name == 'Nivel' or has_par(base, 'Nivel')):
+        page = get_page(base, tema)
     if has_par(base, name) or (kind == 'rgb' and has_par(base, name + 'r')):
         _default_al_dia(base, kind, name, default)
         return False
@@ -517,6 +532,347 @@ def monstruos_al_dia(base, guardados):
         ok('pagina Monstruos: %s, movidos con su valor' % ', '.join(sorted(guardados)))
 
 
+# --- comun v104: las paginas por temas -------------------------------------------
+# FASE1 llego a tener una pagina por fase (Fase1 ... Fase43, casi cuarenta pestanas).
+# Ahora los parametros van por temas: PAGINAS_TEMAS dice, en orden, que paginas hay y
+# que lleva cada una, por secciones (un titulo, H..., por seccion). add_par crea cada
+# parametro en la pagina de su tema aunque la fase pida la suya (get_page(base,
+# 'FaseN')), y paginas_al_dia() (run_test, al empezar y al acabar la autoprueba de cada
+# fase) pasa a su tema lo que un proyecto de antes tenga en las paginas FaseN, con su
+# valor, expresion y modo, ordena las paginas y quita las que se quedan vacias. Los
+# nombres de los parametros no cambian: el motor los lee igual.
+# Monstruos (comun v101) ya era por temas: sus fases la llevan (sacar_a_monstruos).
+# Las versiones de las fases sin parametros (Version26, Version28, Version30) y Nivel
+# van juntas en la pagina Versiones.
+
+PAGINA_VERSIONES = 'Versiones'
+
+PAGINAS_TEMAS = [
+    ('Planeta', [
+        ('Hgiro', 'Giro al tempo', ['Barsperturn', 'Tilt', 'Pausa', 'Balanceo', 'Balanceoper',
+                                    'Masterbeat']),
+        ('Hnucleo', 'Nucleo y reticula', ['Radionucleo', 'Showgrid', 'Leyenda']),
+    ]),
+    ('MIDI', [
+        ('Hseq1', 'SEQ1', ['Canal', 'Filtrar', 'Nota', 'Sembrar', 'Sembrarzona']),
+        ('Hseq2', 'SEQ2', ['Canal2', 'Filtrar2', 'Nota2', 'Sembrar2', 'Sembrarzona2']),
+        ('Hnotas', 'Notas de la reticula', ['Notapolosur', 'Notapolonorte', 'Fuerarango']),
+        ('Hvelocidad', 'Velocidad y gate', ['Umbralvel', 'Velprueba', 'Velref', 'Gateprueba']),
+        ('Hbateria', 'Bateria', ['Canaldrum', 'Notabase', 'Padprueba', 'Erosionar']),
+    ]),
+    ('Crecimiento', [
+        ('Hformaciones', 'Formaciones', ['Alturafactor', 'Semillafrac', 'Costemax', 'Gatemax',
+                                         'Umbralram', 'Pasoumbral', 'Tramoscumbre', 'Satelite']),
+        ('Hmaterial', 'Velocidad y gate: material y vigor', ['Materialmodo', 'Rugmin', 'Rugmax',
+                                                             'Vigormax', 'Plantasligado']),
+        ('Hespecies', 'Especies y mezcla', ['Tema', 'Temaenciclo', 'Topeconstruido', 'Madurezmezcla',
+                                            'Simconstruido', 'Suelofirme', 'Valvula', 'Paciencia',
+                                            'Ordenfamilias', 'Precarga', 'Cargaporfotograma']),
+        ('Hclusters', 'Clusters y compuestos', ['Pesovecina', 'Umbralvecindad', 'Mincluster', 'Caos',
+                                                'Maxpiezas', 'Mutacion', 'Mutacionfuente']),
+        ('Hobras', 'Obras', ['Avance', 'Pasosetapa', 'Obra']),
+        ('Hmundo', 'Mundo', ['Resetmundo']),
+    ]),
+    ('Ciclo', [
+        ('Hciclo', 'Fin de ciclo', ['Umbralmadurez', 'Umbralnovedad', 'Compasesquietos', 'Ciclomin',
+                                    'Ciclomax', 'Umbralterritorio', 'Cambioentierra', 'Giromin',
+                                    'Forzarciclo']),
+        ('Hconchas', 'Conchas', ['Shellthick', 'Maxconchas', 'Grosortiempo', 'Grosormax',
+                                 'Cortezamax', 'Colmatacion', 'Tierra']),
+        ('Hpaleta', 'Paleta de las conchas', ['Paleta', 'Paletatono', 'Paletacroma', 'Paletaluz',
+                                              'Tapaneutra']),
+        ('Hera', 'Herencia entre ciclos', ['Herencia', 'Rebrote']),
+    ]),
+    ('Erosion', [
+        ('Herosion', 'Erosion de la bateria', ['Objetivo', 'Umbraldensidad', 'Pumpamt', 'Pumphorz',
+                                               'Pumptope']),
+        ('Hcicatriz', 'Cicatriz', ['Cicatriz', 'Destello']),
+        ('Hcatastrofe', 'Escalada y catastrofes', ['Ventanaescalada', 'Golpesescalada', 'Pasosfuego',
+                                                   'Maxfuego', 'Pasospolvo', 'Apagon', 'Grisu',
+                                                   'Escalar']),
+        ('Hcortes', 'Cortes', ['Detalleexpuesto', 'Unircortes', 'Unirprueba']),
+    ]),
+    ('Naturaleza', [
+        ('Hrelieve', 'Relieve', ['Umbralmonte', 'Limitebosque', 'Limitenieve', 'Alturamonte',
+                                 'Oceano', 'Volcanes', 'Inundacion']),
+        ('Hbosque', 'Bosque', ['Biomas', 'Variantes', 'Traslucidez', 'Timidez', 'Emergentes', 'Orla',
+                               'Mezcla', 'Swaymax']),
+        ('Hcultivos', 'Bancales, mesetas y frutales', ['Terrazaspornota', 'Maxterrazas', 'Pasoterraza',
+                                                       'Riego', 'Colorcultivo', 'Alturameseta',
+                                                       'Maxniveles', 'Marco', 'Setos']),
+        ('Hrios', 'Rios y lagos', ['Rios', 'Maxrio', 'Colorrio', 'Anchorio', 'Anchominpx', 'Emisivorio',
+                                   'Lagos', 'Pruebario']),
+        ('Hpradera', 'Pradera y detalle', ['Pradera', 'Mata', 'Detalle', 'Ligero', 'Impostores',
+                                           'Lodnat', 'Tintebordenat']),
+    ]),
+    ('Ciudad', [
+        ('Hciudad', 'Ciudad', ['Lenguaje', 'Variantesciudad', 'Fijartipo', 'Oblicuidad', 'Alturaplanta',
+                               'Anchovano', 'Retranqueo', 'Torsionmax', 'Parasitospornota',
+                               'Maxparasitos', 'Modulomarco', 'Maxmarco', 'Capsulas',
+                               'Desfasefachada', 'Gruas', 'Maxgruas', 'Tinteventanas', 'Pasostinte',
+                               'Lodciudad']),
+        ('Hcarreteras', 'Carreteras y trafico', ['Carreteras', 'Minvia', 'Grosorvia', 'Pesotraza',
+                                                 'Trafico']),
+        ('Hindustria', 'Industria', ['Epoca', 'Variantesind', 'Recursos', 'Bancospornota', 'Maxbancos',
+                                     'Maxbastidor', 'Emisiones', 'Maxhumo', 'Lodind', 'Turno']),
+        ('Hredes', 'Ferrocarril y red electrica', ['Vias', 'Anchovia', 'Red', 'Minred', 'Pulsored',
+                                                   'Colorred']),
+        ('Hfrente', 'El frente del cambio de pattern', ['Pasosfrente', 'Frenteprueba']),
+    ]),
+    ('Camara', [
+        ('Hcamara', 'Camara', ['Modocamara', 'Encuadre', 'Camsuave', 'Camaltura', 'Camvel', 'Camfov']),
+        ('Hrasante', 'Rasante', ['Rasojo', 'Rasaltura', 'Rasfov', 'Rasmirada', 'Rasvel', 'Rasanillo']),
+    ]),
+    ('Vista', [
+        ('Hescenas', 'Escenas', ['Escena', 'Guardarescena', 'Cargarescena']),
+        ('Hactuacion', 'Actuacion y diagnostico', ['Modoactuacion', 'Diagnostico']),
+        ('Hrender', 'Render y rendimiento', ['Resolucion', 'Materialrespaldo', 'Refrescopiel', 'Turnos',
+                                             'Cachearq']),
+        ('Hluzseq', 'Luz de los secuenciadores', ['Luzseq', 'Luzespecie', 'Luzconchas']),
+        ('Hluzdrum', 'Luz de la bateria', ['Luzdrum', 'Vidabalizadrum']),
+        ('Hluzescena', 'Luz de la escena', ['Luzcalida']),
+        ('Hbocetos', 'Bocetos (alambre)', ['Bocetoseq1', 'Bocetoseq2', 'Bocetoconchas', 'Colorboceto',
+                                           'Bocetoreticula', 'Bocetohojas']),
+    ]),
+    ('Modular', [
+        ('Hmodentrada', 'Entrada', ['Fuentemodular', 'Puertoosc', 'Chopmodular', 'Rangomodular',
+                                    'Suavizado']),
+        ('Hmodmanual', 'Valores a mano (Fuentemodular = manual)', ['Lfo', 'Ruido', 'Espacio',
+                                                                   'Saturacion']),
+        ('Hmodefectos', 'Efectos', ['Vientomax', 'Respiracion', 'Smog', 'Niebla', 'Glitch']),
+    ]),
+    ('Sala', [
+        ('Hmic', 'Microfono', ['Fuentemic', 'Chopmic', 'Canalmic', 'Umbralonset', 'Reduccionmic',
+                               'Umbralcorte', 'Profundidadmic']),
+        ('Hcamsala', 'Camara cenital', ['Fuente', 'Sensor', 'Alturamin', 'Alturamax', 'Capturarfondo',
+                                        'Archivofondo']),
+        ('Hsuelo', 'El suelo y el planeta', ['Anchosala', 'Fondosala', 'Tamcasilla', 'Desenfoque',
+                                             'Ocupacionllena', 'Subida', 'Bajada', 'Loncentral',
+                                             'Anchoangular', 'Latnorte', 'Latsur', 'Espejo']),
+        ('Hpersonas', 'Personas', ['Separacioncabezas', 'Confirmapersona']),
+        ('Hsalaprueba', 'Probar la sala', ['Simcasilla', 'Simponer', 'Simquitar', 'Simvaciar', 'Simfila',
+                                           'Simformarfila']),
+        ('Hestrobo', 'Balance, estroboscopio y DMX', ['Ventanabalance', 'Umbralestrobo', 'Salidaestrobo',
+                                                      'Maxhz', 'Noche', 'Colapsoon', 'Maxerosion',
+                                                      'Interfazdmx', 'Universodmx', 'Simbalance']),
+    ]),
+    ('Presencia', [
+        ('Hpresencia', 'Presencia', ['Activo', 'Cuanto', 'Pesocrear', 'Pesoerosion',
+                                     'Reiniciarcuentas']),
+        ('Hhuella', 'Huella', ['Probllegada', 'Tparada', 'Minhuellas', 'Inclusionesmax']),
+        ('Hfila', 'Fila', ['Minfila', 'Tfila', 'Modofila', 'Conchasporpersona', 'Simsumar']),
+        ('Hhistorico', 'Historico', ['Exportartestigo', 'Carpetahistorico']),
+    ]),
+    ('Juego', [
+        ('Hpartida', 'Partida', ['Modojuego', 'Rondagenozilla', 'Duracionronda', 'Rondas', 'Pasojuego',
+                                 'Nuevapartida', 'Partidalibre', 'Dominio', 'Titulojuego']),
+        ('Hmarcas', 'Marcas y luz', ['Marcajugador', 'Marcapublico', 'Luzjuego']),
+        ('Hzanja', 'Zanja', ['Zanjajuego', 'Profundidadagua', 'Ritmoagua', 'Desbordeagua', 'Ahoga',
+                             'Simzanja']),
+        ('Hrescate', 'Rescate', ['Aliados', 'Taliados', 'Simrescate']),
+        ('Harmas', 'Armas', ['Armacerco', 'Hambre', 'Armapison', 'Npison', 'Encoge', 'Armaestatuas',
+                             'Tquietud', 'Umbralsilencio', 'Tpiedra', 'Armagrito', 'Profgrito',
+                             'Recargagrito', 'Armarelampago', 'Taturdido']),
+        ('Hmal', 'El mal', ['Herenciamal', 'Especiemal', 'Vecinasencierro', 'Pasosobramal',
+                            'Tamanoemblema', 'Brilloemblema', 'Altomal', 'Demoniomal', 'Simmal']),
+    ]),
+    (PAGINA_MONSTRUOS, []),             # la llevan sus fases (comun v101)
+    (PAGINA_VERSIONES, [
+        ('Hversiones', 'Versiones instaladas', ['Nivel', 'Version26', 'Version28', 'Version30']),
+    ]),
+]
+
+TEMA_DE = {}                # nombre del parametro (de un RGB, sin r g b) -> pagina
+for _pg, _secs in PAGINAS_TEMAS:
+    for _h, _etq, _nombres in _secs:
+        TEMA_DE[_h] = _pg
+        for _n in _nombres:
+            TEMA_DE[_n] = _pg
+
+
+def pagina_de(nombre, defecto=None):
+    """La pagina de un parametro: la de su tema (PAGINAS_TEMAS) o, si no tiene, defecto."""
+    return TEMA_DE.get(nombre, defecto)
+
+
+def _pagina_si_existe(base, nombre):
+    for pg in base.customPages:
+        if pg.name == nombre:
+            return pg
+    return None
+
+
+def _pars_de(base, nombre):
+    """Los parametros con ese nombre: uno, o los tres de un RGB (nombre + r g b)."""
+    if has_par(base, nombre):
+        return [getattr(base.par, nombre)]
+    if has_par(base, nombre + 'r'):
+        return [getattr(base.par, nombre + c) for c in 'rgb' if has_par(base, nombre + c)]
+    return []
+
+
+def _estilo(p):
+    """Float, Int, Toggle, Pulse, Str, Menu, StrMenu, RGB o Header (en minusculas)."""
+    return str(getattr(p, 'style', '') or getattr(p, 'kind', '') or 'float').lower()
+
+
+_FOTO = ('label', 'help', 'normMin', 'normMax', 'min', 'max', 'clampMin', 'clampMax', 'default',
+         'readOnly', 'val', 'expr', 'mode')
+
+
+def _foto(p):
+    """Todo lo de un parametro que hay que devolverle al crearlo en otra pagina."""
+    f = {}
+    for k in _FOTO + ('menuNames', 'menuLabels'):
+        try:
+            v = getattr(p, k)
+            f[k] = list(v) if k in ('menuNames', 'menuLabels') else v
+        except Exception:
+            pass
+    return f
+
+
+def _revelar(p, f):
+    """Le devuelve a p (recien creado) lo de la foto f: opciones del menu, rango, valor
+    por defecto, valor, expresion y modo; solo lectura, lo ultimo."""
+    for k in ('menuNames', 'menuLabels', 'help', 'normMin', 'normMax', 'min', 'max', 'clampMin',
+              'clampMax', 'default'):
+        if k in f:
+            try:
+                setattr(p, k, f[k])
+            except Exception:
+                pass
+    for k in ('val', 'expr', 'mode'):
+        if k in f and (k != 'expr' or f[k]):
+            try:
+                setattr(p, k, f[k])
+            except Exception:
+                pass
+    if f.get('readOnly'):
+        try:
+            p.readOnly = True
+        except Exception:
+            pass
+
+
+def mover_par(base, nombre, page):
+    """Pasa el parametro nombre (o los tres de un RGB) a la pagina page, con su valor,
+    expresion y modo. TouchDesigner no mueve parametros de pagina: se quita y se crea
+    igual en la otra. Devuelve si lo ha movido."""
+    ps = _pars_de(base, nombre)
+    if not ps:
+        return False
+    rgb = len(ps) == 3 and not has_par(base, nombre)
+    estilo = 'rgb' if rgb else _estilo(ps[0])
+    fotos = [_foto(p) for p in ps]
+    etiqueta = fotos[0].get('label') or nombre
+    for p in ps:
+        try:
+            p.destroy()             # de un RGB, el primero puede llevarse los tres
+        except Exception:
+            pass
+    if _pars_de(base, nombre):
+        info('%s: no pude quitarlo de su pagina para pasarlo a %s' % (nombre, page.name))
+        return False
+    crear = {'float': page.appendFloat, 'int': page.appendInt, 'toggle': page.appendToggle,
+             'pulse': page.appendPulse, 'str': page.appendStr, 'menu': page.appendMenu,
+             'rgb': page.appendRGB, 'header': getattr(page, 'appendHeader', None),
+             'strmenu': getattr(page, 'appendStrMenu', None)}.get(estilo)
+    if crear is None:
+        crear = page.appendFloat
+        info('%s: estilo %s desconocido, lo creo como Float' % (nombre, estilo))
+    if nombre in PULSOS_VALOR and 'val' in fotos[0]:
+        try:                    # para el DAT pulsos: recrearlo con su valor no es un cambio
+            movidos = dict(base.fetch('pars_movidos', {}, search=False) or {})
+            movidos[nombre] = fotos[0]['val']
+            base.store('pars_movidos', movidos)
+        except Exception:
+            pass
+    nuevos = list(crear(nombre, label=etiqueta))
+    for p, f in zip(nuevos, fotos):
+        _revelar(p, f)
+    return True
+
+
+def paginas_al_dia(base):
+    """comun v104: las paginas por temas (PAGINAS_TEMAS). Pasa a su tema lo que este en
+    otra pagina (un proyecto de antes: Fase1 ... Fase43, Estratos, Bocetos), pone los
+    titulos de seccion, ordena cada pagina y las paginas, y quita las que se quedan
+    vacias. Solo en FASE1 (la que tiene Nivel). Devuelve los parametros movidos."""
+    if not has_par(base, 'Nivel'):
+        return []
+    movidos = []
+    for pg_nombre, secciones in PAGINAS_TEMAS:
+        if not secciones:
+            continue
+        hay = [n for _h, _e, ns in secciones for n in ns if _pars_de(base, n)]
+        if not hay:
+            continue
+        page = get_page(base, pg_nombre)
+        orden = []
+        for h, etiqueta, nombres in secciones:
+            de_aqui = [n for n in nombres if _pars_de(base, n)]
+            if not de_aqui:
+                if has_par(base, h):
+                    remove_par(base, h)
+                continue
+            if has_par(base, h) and getattr(base.par, h).page.name != pg_nombre:
+                remove_par(base, h)
+            add_par(base, page, 'header', h, etiqueta)
+            orden.append(h)
+            for n in de_aqui:
+                p0 = _pars_de(base, n)[0]
+                if p0.page is None or p0.page.name != pg_nombre:
+                    if mover_par(base, n, page):
+                        movidos.append(n)
+                orden.append(n)
+        _ordenar_pagina(page, orden, base)
+    # las paginas que se quedaron vacias (las FaseN de antes), fuera
+    vacias = []
+    for pg in list(base.customPages):
+        try:
+            if not any(q.page is not None and q.page.name == pg.name for q in base.customPars):
+                vacias.append(pg.name)
+                pg.destroy()
+        except Exception as e:
+            info('no pude quitar la pagina %s (vacia): %s' % (pg.name, e))
+    _ordenar_paginas(base)
+    if movidos:
+        ok('paginas por temas: %d parametros pasados a su tema (%s ...)'
+           % (len(movidos), ', '.join(movidos[:6])))
+    if vacias:
+        ok('paginas vacias, fuera: %s' % ', '.join(vacias))
+    return movidos
+
+
+def _ordenar_pagina(page, orden, base):
+    """Los parametros de la pagina en el orden de PAGINAS_TEMAS (Page.sort de
+    TouchDesigner; un RGB va por su nombre de grupo o, si no, por sus componentes)."""
+    if not hasattr(page, 'sort'):
+        return
+    for nombres in (orden, [n + 'r' if not has_par(base, n) and has_par(base, n + 'r') else n
+                            for n in orden]):
+        try:
+            page.sort(*nombres)
+            return
+        except Exception:
+            continue
+    info('pagina %s: no pude ordenarla' % page.name)
+
+
+def _ordenar_paginas(base):
+    """Las paginas en el orden de PAGINAS_TEMAS; las que no estan en la lista, al final."""
+    temas = [pg for pg, _s in PAGINAS_TEMAS]
+    hay = [pg.name for pg in base.customPages]
+    orden = [pg for pg in temas if pg in hay] + [pg for pg in hay if pg not in temas]
+    if orden == hay:
+        return
+    try:
+        base.sortCustomPages(*orden)
+    except Exception as e:
+        info('no pude ordenar las paginas: %s' % e)
+
+
 def _default_al_dia(base, kind, name, default):
     """comun v50: un parametro que ya existe toma el valor por defecto de esta
     version (sin tocar su valor): las autopruebas lo usan como valor de fabrica."""
@@ -619,7 +975,7 @@ def current_level(base):
 
 
 def set_level(base, fase):
-    page = get_page(base, 'Estratos')
+    page = get_page(base, PAGINA_VERSIONES)      # comun v104 (antes, la pagina Estratos)
     add_par(base, page, 'int', 'Nivel', 'Ultima fase aplicada', 3, 3, 10)
     new = max(current_level(base), fase)
     base.par.Nivel = new
@@ -725,11 +1081,25 @@ def onPulse(par):
 
 
 def onValueChange(par, prev):
-    if par.name in ('Modoactuacion', 'Modocamara', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
-                    'Torsionmax', 'Variantesind', 'Interfazdmx'):
+    # comun v104: un parametro recien pasado a la pagina de su tema (paginas_al_dia) se
+    # crea de nuevo con el valor que tenia: no es un cambio (Escena no recarga su preset)
+    try:
+        movidos = parent().fetch('pars_movidos', None, search=False)
+        if movidos and par.name in movidos:
+            v = movidos.pop(par.name)
+            parent().store('pars_movidos', movidos)
+            if str(v) == str(par.eval()):
+                return
+    except Exception:
+        pass
+    if par.name in __VALOR__:
         op('motor').module.on_value(par.name, par.eval())
     return
 '''
+# los parametros cuyo cambio avisa al motor (on_value)
+PULSOS_VALOR = ('Modoactuacion', 'Modocamara', 'Escena', 'Variantes', 'Variantesciudad', 'Oblicuidad', 'Retranqueo',
+                'Torsionmax', 'Variantesind', 'Interfazdmx')
+PULSOS = PULSOS.replace('__VALOR__', repr(PULSOS_VALOR))
 
 FORMAS_CB = r'''# Script CHOP de instancias: cada uno pide al motor su lista por nombre
 # (i_formas_pulidas, i_formas_porosas, i_coronas, i_estratos, i_luz_conchas;
@@ -2172,7 +2542,7 @@ def fase4_al_dia(base):
                                  'Tamsatelite', 'Limsatelite') if has_par(base, nm))
     for nm in viejos:
         remove_par(base, nm)
-    ok('pagina Fase4: %s -> Pasoumbral %d (%s), Satelite %s; quitados %s'
+    ok('parametros de la fase 4: %s -> Pasoumbral %d (%s), Satelite %s; quitados %s'
        % (antes or 'sin umbrales', int(base.par.Pasoumbral.eval()),
           ', '.join(str(ram + k * int(base.par.Pasoumbral.eval())) for k in range(4)),
           str(round(float(base.par.Satelite.eval()), 2)).replace('.', ','), ', '.join(viejos)))
@@ -2230,7 +2600,7 @@ def fase6_al_dia(base):
             quitados.append('Compasesterritorio (8 compases)')
     _relabel(base, 'Giromin', GIROMIN_LABEL)
     if quitados:
-        ok('pagina Fase6: quitados %s' % ', '.join(quitados))
+        ok('parametros de la fase 6: quitados %s' % ', '.join(quitados))
 
 
 # --- la pagina Fase7, mas corta (comun v41, motor v61) ------------------------
@@ -2284,7 +2654,7 @@ def fase7_al_dia(base):
     for nm, lb in FASE7_LABELS.items():
         _relabel(base, nm, lb)
     if quitados:
-        ok('pagina Fase7: quitados %s' % ', '.join(quitados))
+        ok('parametros de la fase 7: quitados %s' % ', '.join(quitados))
 
 
 # --- la pagina Fase8, mas corta (comun v42, motor v62) ------------------------
@@ -2315,7 +2685,7 @@ def fase8_al_dia(base):
             quitados.append(nm)
     _relabel(base, 'Paletaluz', PALETALUZ_LABEL)
     if quitados:
-        ok('pagina Fase8: quitados %s' % ', '.join(quitados))
+        ok('parametros de la fase 8: quitados %s' % ', '.join(quitados))
 
 
 # --- la pagina Fase11, mas corta (comun v43, motor v63) -----------------------
@@ -2351,7 +2721,7 @@ def fase11_al_dia(base):
         if remove_par(base, nm):
             quitados.append(nm)
     if quitados:
-        ok('pagina Fase11: quitados %s (valores fijos)' % ', '.join(quitados))
+        ok('parametros de la fase 11: quitados %s (valores fijos)' % ', '.join(quitados))
 
 
 # --- la pagina Fase13, mas corta (comun v44, motor v64) -----------------------
@@ -2389,7 +2759,7 @@ def fase13_al_dia(base):
     _relabel(base, 'Grosorvia', GROSORVIA_LABEL)
     _relabel(base, 'Anchorio', ANCHORIO_LABEL)
     if quitados:
-        ok('pagina Fase13: quitados %s' % ', '.join(quitados))
+        ok('parametros de la fase 13: quitados %s' % ', '.join(quitados))
 
 
 # --- la pagina Fase21, mas corta (comun v45, motor v65) -----------------------
@@ -2464,7 +2834,7 @@ def fase21_al_dia(base):
         if remove_par(base, nm):
             quitados.append(nm)
     if quitados:
-        ok('pagina Fase21: quitados %s (valores fijos)' % ', '.join(quitados))
+        ok('parametros de la fase 21: quitados %s (valores fijos)' % ', '.join(quitados))
 
 
 def fase3_al_dia(base):
@@ -2483,7 +2853,7 @@ def fase3_al_dia(base):
         quitados.append('Growstep (lo calcula el motor)')
     _relabel(base, 'Gatemax', GATEMAX_LABEL)
     if quitados:
-        ok('pagina Fase3: quitados %s' % ', '.join(quitados))
+        ok('parametros de la fase 3: quitados %s' % ', '.join(quitados))
 
 
 def calibracion_al_dia(base):
@@ -3745,7 +4115,7 @@ def bocetos_al_dia(base):
         setexpr(g, 'material', con_boceto(base, g.name, expr))
         cambiadas += 1
     if cambiadas:
-        ok('bocetos: %d geometrias con su interruptor (pagina Bocetos: Bocetoseq1, Bocetoseq2, '
+        ok('bocetos: %d geometrias con su interruptor (pagina Vista: Bocetoseq1, Bocetoseq2, '
            'Bocetoconchas)' % cambiadas)
     return cambiadas
 
@@ -4035,7 +4405,7 @@ def install_luz_conchas(base, page):
     quitados = [nm for nm in ('Luzconchaspulso', 'Luzconchasreposo', 'Luzconchasalcance')
                 if remove_par(base, nm)]
     if viejo or quitados:
-        ok('pagina Fase3: Luzconchas es ahora la intensidad de la luz de las conchas (%s)%s'
+        ok('Luzconchas (pagina Vista) es ahora la intensidad de la luz de las conchas (%s)%s'
            % (str(round(float(base.par.Luzconchas.eval()), 2)).replace('.', ','),
               '; quitados %s' % ', '.join(quitados) if quitados else ''))
     mat = make_constant(base, 'mat_luz_conchas', 780, 780, (1.0, 1.0, 1.0))
@@ -4375,12 +4745,12 @@ def add_grid_pars(base):
     """Rango de notas de la reticula, en la pagina Fase3. Si estaban en
     otra pagina (version anterior), se mueven conservando su valor. Los
     polos van entre do1 (24) y do8 (108)."""
-    page = get_page(base, 'Fase3')
+    page = get_page(base, pagina_de('Notapolosur', 'Fase3'))
     keep = {}
     for nm in GRID_PARS:
         try:
             p = getattr(base.par, nm, None)
-            if p is not None and p.page.name != 'Fase3':
+            if p is not None and p.page.name != page.name:
                 keep[nm] = p.eval()
                 p.destroy()
         except Exception:
@@ -4406,13 +4776,13 @@ def add_grid_pars(base):
             base.par.Fuerarango = keep['Fuerarango']
         except Exception:
             pass
-    ok('pagina Fase3: Notapolosur (24, do1), Notapolonorte (108, do8), Fuerarango '
+    ok('pagina ' + page.name + ': Notapolosur (24, do1), Notapolonorte (108, do8), Fuerarango '
        '(plegar / ignorar / limitar). Cambiar el rango vacia el mundo')
     for nm in GRID_PARS:
         try:
             pg = getattr(base.par, nm).page.name
-            if pg != 'Fase3':
-                info('%s sigue en la pagina %s: no pude moverlo a Fase3' % (nm, pg))
+            if pg != page.name:
+                info('%s sigue en la pagina %s: no pude moverlo a %s' % (nm, pg, page.name))
         except Exception:
             pass
 
@@ -4430,7 +4800,7 @@ def apply_wobble(base):
         except Exception:
             pass
         if remove_par(base, 'Rotextra'):
-            ok('pagina Fase3: quitado Rotextra (Balanceo 0 apaga el balanceo)')
+            ok('parametros de la fase 3: quitado Rotextra (Balanceo 0 apaga el balanceo)')
     _relabel(base, 'Balanceo', BALANCEO_LABEL)
     names, sin_orden = [], []
     for g in list(base.children):
@@ -5762,10 +6132,11 @@ def columna_tabla(t, nombre):
 
 
 def pagina_version(base, fase, etiqueta, version):
-    """Una fase sin parametros nuevos lleva su pagina con un solo parametro de
-    solo lectura, VersionNN (P10 del plan v5): la version de su script."""
+    """Una fase sin parametros nuevos lleva un solo parametro de solo lectura,
+    VersionNN (P10 del plan v5): la version de su script. comun v104: todas en la
+    pagina Versiones (antes, cada una en su pagina FaseNN)."""
     nombre = 'Version%d' % fase
-    page = get_page(base, 'Fase%d' % fase)
+    page = get_page(base, PAGINA_VERSIONES)
     add_par(base, page, 'str', nombre, etiqueta, version)
     try:
         p = getattr(base.par, nombre)
@@ -5775,7 +6146,7 @@ def pagina_version(base, fase, etiqueta, version):
         p.readOnly = True
     except Exception as e:
         info('%s: no pude fijarlo (%s)' % (nombre, e))
-    ok('pagina Fase%d: %s (solo lectura), %s' % (fase, nombre, version))
+    ok('pagina %s: %s (solo lectura), %s' % (PAGINA_VERSIONES, nombre, version))
     return nombre
 
 
@@ -5818,7 +6189,13 @@ def run_test(base, fn):
     """comun v78 (motor v100): las autopruebas corren sin Oceano. Con el, la sedimentacion
     solo cubre lo creado, y casi todas (cortes, eras, huella, escisiones) entierran mundos
     vacios para apilar conchas en todas las celdas. Lo del oceano lo prueba la fase 11, que
-    lo enciende ella misma. Al acabar, Oceano vuelve a como estaba."""
+    lo enciende ella misma. Al acabar, Oceano vuelve a como estaba.
+    comun v104: antes y despues, paginas_al_dia() (las paginas por temas): antes de
+    Prueba, que guarda los parametros para devolverlos al acabar."""
+    try:
+        paginas_al_dia(base)
+    except Exception as e:
+        info('paginas por temas: %s' % e)
     t = Prueba(base)
     oce = None
     try:
@@ -5839,7 +6216,12 @@ def run_test(base, fn):
                 base.par.Oceano = oce
             except Exception:
                 pass
-    return t.finish()
+    resultado = t.finish()
+    try:
+        paginas_al_dia(base)        # lo que la prueba haya creado en otra pagina
+    except Exception as e:
+        print('  ..    paginas por temas: %s' % e)
+    return resultado
 
 
 # --- las autopruebas del juego (fases 32 a 37) -------------------------------------

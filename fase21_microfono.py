@@ -92,7 +92,7 @@ try:
     base.par.Umbralcorte.label = 'Ruido acumulado en 60 s que abre un corte'
 except Exception:
     pass
-ok('pagina Fase21: Fuentemic (microfono), Chopmic, Canalmic 0, Umbralonset 0,6, Reduccionmic 1, '
+ok('parametros de la fase 21: Fuentemic (microfono), Chopmic, Canalmic 0, Umbralonset 0,6, Reduccionmic 1, '
    'Umbralcorte 20 (en 60 s), Profundidadmic 3')
 
 # -----------------------------------------------------------------------------
@@ -455,7 +455,7 @@ def _prueba(t, m):
             and list(base.par.Fuentemic.menuNames) == ['microfono', 'chop'])
     # v3: la pagina mas corta
     fuera = [nm for nm, _, _ in FASE21_FIJOS if has_par(base, nm)]
-    t.check('pagina Fase21 sin Refractariomic ni Ventanaruido', not fuera,
+    t.check('parametros de la fase 21 sin Refractariomic ni Ventanaruido', not fuera,
             'siguen: %s' % ', '.join(fuera) if fuera else '')
     cf = m.cfg()
     t.check('tiempo muerto 0,12 s y ventana del ruido 60 s',

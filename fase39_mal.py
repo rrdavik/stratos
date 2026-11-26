@@ -115,7 +115,7 @@ add_par(base, pmon, 'header', 'Hterreno', 'Por donde andan (fase 39)')
 add_par(base, pmon, 'toggle', 'Montierra', 'Los monstruos solo andan por tierra (con Oceano)', True)
 monstruos_al_dia(base, _movidos)
 add_par(base, page, 'pulse', 'Simmal', 'Simular cluster del mal')
-ok('pagina Fase39: Especiemal, Vecinasencierro 3, Pasosobramal 8, Tamanoemblema 0,35, Brilloemblema 1, '
+ok('parametros de la fase 39: Especiemal, Vecinasencierro 3, Pasosobramal 8, Tamanoemblema 0,35, Brilloemblema 1, '
    'Altomal 1,5, Demoniomal, Simmal; Montierra, en la pagina Monstruos')
 
 # v2: los emblemas de la v1 (0,45) se veian grandes: un proyecto con 0,45 pasa a 0,35, una sola vez

@@ -39,7 +39,7 @@ No toca nada mas (Shellthick, Alturafactor, umbrales de la fase 4,
 camara, tema...).
 
 Lo ya enterrado no adelgaza de golpe: el radio nunca baja. Para ver la
-calibracion desde el principio, Resetmundo (pagina Fase3).
+calibracion desde el principio, Resetmundo (pagina Crecimiento).
 
 COMO USARLO
 -----------
@@ -88,7 +88,7 @@ ok('alturas: semilla %.2f, limite %.2f (Alturafactor %g x Shellthick %g), corona
    % (m.height_for(c, 1), lim, c['height_factor'], c['shell_thick'], m.altura_max(c)))
 if m.n_shells(W):
     info('el planeta ya tiene %d conchas (radio %.2f): lo enterrado no adelgaza de golpe; '
-         'para empezar de cero, Resetmundo (pagina Fase3)' % (m.n_shells(W), m.top_radius(W, c)))
+         'para empezar de cero, Resetmundo (pagina Crecimiento)' % (m.n_shells(W), m.top_radius(W, c)))
 if cambios:
     deshacer = "b = op('%s'); " % COMP_PATH + '; '.join(
         'b.par.%s = %s' % (n, int(a) if float(a).is_integer() else round(a, 4)) for n, a in cambios)

@@ -56,7 +56,7 @@ motor = install_core(base, CARPETA, 9)
 page = get_page(base, 'Fase9')
 add_par(base, page, 'float', 'Cicatriz', 'Duracion de la cicatriz (s)', 4.0, 0.2, 20.0)
 add_par(base, page, 'float', 'Destello', 'Intensidad del destello', 3.0, 0.0, 10.0)
-ok('pagina Fase9: Cicatriz (4 s), Destello (3)')
+ok('parametros de la fase 9: Cicatriz (4 s), Destello (3)')
 
 luz = get_or_make(base, 'lightCOMP', 'luz_destello', 260, -580)
 setmenu(luz, ['lighttype'], ['point'], 0)

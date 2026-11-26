@@ -61,7 +61,7 @@ m = motor.module
 page = get_page(base, 'Fase27')
 add_par(base, page, 'int', 'Minhuellas', 'Huellas minimas para estrato humano', 1, 1, 100, clamp=True)
 add_par(base, page, 'float', 'Inclusionesmax', 'Cobertura maxima de inclusiones', 0.8, 0.0, 1.0, clamp=True)
-ok('pagina Fase27: Minhuellas 1, Inclusionesmax 0,8 (80 % de la loseta)')
+ok('parametros de la fase 27: Minhuellas 1, Inclusionesmax 0,8 (80 % de la loseta)')
 if remove_par(base, 'Umbralpresencia'):
     ok('Umbralpresencia: quitado (v5 no lo usa: la banda la decide el recuento de huellas)')
 else:

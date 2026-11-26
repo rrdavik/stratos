@@ -147,7 +147,7 @@ if _mov:
     info('rasante: %s pasan a los valores de la v13 (tumbada, mirando al cenit)' % ', '.join(_mov))
 add_par(base, page, 'float', 'Rasvel', 'Rasante: velocidad, grados/s (0 = tripode)', 0.5, 0.0, 6.0)
 add_par(base, page, 'int', 'Rasanillo', 'Rasante: va entre el anillo de este numero y el anterior', 4, 1, 12)
-ok('pagina Fase10: Modocamara (globo), Encuadre (0,85), Camsuave (3 s), Modoactuacion, '
+ok('parametros de la fase 10: Modocamara (globo), Encuadre (0,85), Camsuave (3 s), Modoactuacion, '
    'Camaltura, Camvel; Camfov y rasante (Rasaltura, Rasfov, Rasmirada, Rasvel, Rasanillo)')
 
 
@@ -158,7 +158,7 @@ def quitar_planofinal(base):
 
 
 if quitar_planofinal(base):
-    ok('Planofinal: quitado de la pagina Fase10 (la camara la gobiernan Modocamara, Camaltura y Camvel)')
+    ok('Planofinal: quitado de los parametros de la fase 10 (la camara la gobiernan Modocamara, Camaltura y Camvel)')
 
 # --- camara -------------------------------------------------------------------
 def camara_al_motor(cam):

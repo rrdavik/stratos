@@ -45,7 +45,7 @@ la anterior NO pasa a la nueva.
 import td
 import math
 
-VERSION = 'fase12 v7  (fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda; leyenda ocultable; camara de globo; nucleo en malla)'
+VERSION = 'fase12 v8  (paginas Planeta y MIDI, comun v104; fase 1 + fase 2 + arreglo del render; reticula de polo a polo; luz de celda; leyenda ocultable; camara de globo; nucleo en malla)'
 print('=' * 66)
 print('EJECUTANDO: ' + VERSION)
 print('=' * 66)
@@ -208,7 +208,7 @@ if old is not None:
 
 base = mk(ROOT, 'baseCOMP', COMP_NAME, 0, 300)
 
-page = base.appendCustomPage('Fase1')
+page = base.appendCustomPage('Planeta')      # las paginas por temas (comun v104)
 p = page.appendFloat('Barsperturn', label='Compases por vuelta')
 p[0].default = p[0].val = 8.0
 p[0].normMin, p[0].normMax = 0.5, 32.0
@@ -221,9 +221,9 @@ p = page.appendToggle('Pausa', label='Pausar rotacion')
 p[0].default = p[0].val = False
 p = page.appendToggle('Leyenda', label='Mostrar leyenda')
 p[0].default = p[0].val = True
-ok('pagina Fase1: Barsperturn, Tilt, Showgrid, Pausa, Leyenda (ya no hay Bpm)')
+ok('pagina Planeta: Barsperturn, Tilt, Showgrid, Pausa, Leyenda (ya no hay Bpm)')
 
-page2 = base.appendCustomPage('Fase2')
+page2 = base.appendCustomPage('MIDI')
 p = page2.appendInt('Canal', label='Canal MIDI del SEQ1')
 p[0].min, p[0].max = 1, 16
 p[0].clampMin = p[0].clampMax = True
@@ -236,10 +236,10 @@ p[0].min, p[0].max = 0, 127
 p[0].clampMin = p[0].clampMax = True
 p[0].normMin, p[0].normMax = 0, 127
 p[0].default = p[0].val = 60
-ok('pagina Fase2: Canal (13), Filtrar, Nota')
+ok('pagina MIDI: Canal (13), Filtrar, Nota')
 
 # La reticula: los polos van entre do1 (24) y do8 (108)
-page3 = base.appendCustomPage('Fase3')
+page3 = page2                  # la reticula, en MIDI con el SEQ1
 p = page3.appendInt('Notapolosur', label='Polo sur: nota MIDI (24 do1 - 106)')
 p[0].min, p[0].max = 24, 106
 p[0].clampMin = p[0].clampMax = True
@@ -254,7 +254,7 @@ p = page3.appendMenu('Fuerarango', label='Notas fuera del rango')
 p[0].menuNames = ['plegar', 'ignorar', 'limitar']
 p[0].menuLabels = ['Plegar por octavas', 'Ignorar', 'Limitar al polo']
 p[0].default = p[0].val = 'plegar'
-ok('pagina Fase3: Notapolosur 24 (do1), Notapolonorte 108 (do8), Fuerarango plegar')
+ok('pagina MIDI: Notapolosur 24 (do1), Notapolonorte 108 (do8), Fuerarango plegar')
 
 
 
@@ -1205,15 +1205,15 @@ EL TIEMPO
   BeatStep -> midicontrolx -> tempo del proyecto -> FASE1
   FASE1 lee el tempo del proyecto (nodo 'ritmo'). No tiene parametro Bpm.
 
-LA RETICULA (pagina Fase3)
+LA RETICULA (pagina MIDI)
   Notapolosur / Notapolonorte  notas MIDI de los polos, entre 24 (do1) y 108 (do8)
   Fuerarango                   plegar por octavas, ignorar o limitar al polo
   Cada semitono del rango es una celda; en medio, un anillo por octava.
 
-PARAMETROS (pagina Fase1)
+PARAMETROS (pagina Planeta)
   Barsperturn, Tilt, Showgrid, Pausa
 
-EL SEQ1 (pagina Fase2)
+EL SEQ1 (pagina MIDI)
   Canal (13), Filtrar, Nota (muevela para probar sin BeatStep)
 
 Mas detalle en MONTAJE_FASE1.md y MONTAJE_FASES_3_10.md.

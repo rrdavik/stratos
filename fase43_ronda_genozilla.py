@@ -73,9 +73,9 @@ page = get_page(base, 'Fase43')
 add_par(base, page, 'toggle', 'Rondagenozilla', 'Ronda GENoZilla (desde el primer monstruo; 6 min acaban la partida)',
         True)
 add_par(base, page, 'toggle', 'Titulojuego', 'Titulos de la ronda en el centro del mundo', True)
-ok('pagina Fase43: Rondagenozilla y Titulojuego (encendidos); la ronda dura Duracionronda (%d s)'
+ok('parametros de la fase 43: Rondagenozilla y Titulojuego (encendidos); la ronda dura Duracionronda (%d s)'
    % int(base.par.Duracionronda.eval()) if has_par(base, 'Duracionronda') else
-   'pagina Fase43: Rondagenozilla y Titulojuego (encendidos)')
+   'parametros de la fase 43: Rondagenozilla y Titulojuego (encendidos)')
 
 
 # -----------------------------------------------------------------------------

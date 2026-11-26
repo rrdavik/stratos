@@ -80,7 +80,7 @@ page = get_page(base, 'Fase16')
 add_par(base, page, 'int', 'Detalleexpuesto', 'Piezas expuestas por celda del corte', 6, 0, 24, clamp=True)
 add_par(base, page, 'toggle', 'Unircortes', 'Dos cortes vecinos seguidos se unen (canon o galeria)', True)
 add_par(base, page, 'pulse', 'Unirprueba', 'Dos cortes vecinos seguidos alrededor de Nota')
-ok('pagina Fase16: Detalleexpuesto 6, Unircortes, Unirprueba')
+ok('parametros de la fase 16: Detalleexpuesto 6, Unircortes, Unirprueba')
 
 # -----------------------------------------------------------------------------
 # CATALOGO Y MODELOS: troncos fosiles, basalto, cimientos, sotano, calle y

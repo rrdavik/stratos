@@ -76,7 +76,7 @@ OBSOLETOS = ['Repsporciclo', 'Modociclo', 'Turnauto', 'Longmanual', 'Longfija', 
              'Pasosporcompas', 'Pasospornegra', 'Resetpatterns']
 quitados = [n for n in OBSOLETOS if remove_par(base, n)]
 if quitados:
-    ok('quitados de la pagina Fase6: %s (Barsperturn queda como estaba)' % ', '.join(quitados))
+    ok('parametros de la fase 6, quitados: %s (Barsperturn queda como estaba)' % ', '.join(quitados))
 
 page = get_page(base, 'Fase6')
 add_par(base, page, 'float', 'Umbralmadurez', 'Madurez minima para enterrar', 0.6, 0.0, 1.0)
@@ -97,7 +97,7 @@ add_par(base, page, 'float', 'Umbralterritorio', 'Territorio ocupado para la eda
 add_par(base, page, 'toggle', 'Cambioentierra', 'Cambio de pattern entierra el mundo', False)
 add_par(base, page, 'float', 'Giromin', GIROMIN_LABEL, 0.25, 0.0, 1.0)
 add_par(base, page, 'pulse', 'Forzarciclo', 'Terminar el ciclo ahora')
-ok('pagina Fase6: Umbralmadurez, Umbralnovedad, Compasesquietos, Ciclomin, Ciclomax, '
+ok('parametros de la fase 6: Umbralmadurez, Umbralnovedad, Compasesquietos, Ciclomin, Ciclomax, '
    'Umbralterritorio, Cambioentierra, Giromin, Forzarciclo (compas: %d negras, el de la '
    'linea de tiempo)' % motor.module.cfg()['beats_per_bar'])
 try:
@@ -256,7 +256,7 @@ def prueba(t):
             'giro_factor()' in base.op('ritmo').text)
     # v6: la pagina mas corta
     fuera = [nm for nm in ('Negrasporcompas', 'Girovivo', 'Compasesterritorio') if has_par(base, nm)]
-    t.check('pagina Fase6 sin Negrasporcompas, Girovivo ni Compasesterritorio', not fuera,
+    t.check('parametros de la fase 6 sin Negrasporcompas, Girovivo ni Compasesterritorio', not fuera,
             'siguen: %s' % ', '.join(fuera) if fuera else '')
     t.check('el compas del ciclo es el de la linea de tiempo',
             m.cfg()['beats_per_bar'] == int(base.op('ritmo').module.beats_per_bar()))

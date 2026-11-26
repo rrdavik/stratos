@@ -80,7 +80,7 @@ add_par(base, page, 'int', 'Ritmoagua', 'Ritmo del agua (escalones por paso)', 4
 add_par(base, page, 'int', 'Desbordeagua', 'Desborde del agua (escalones por paso)', 2, 1, 16, clamp=True)
 add_par(base, page, 'float', 'Ahoga', 'Nivel que ahoga (fraccion de la zanja)', 0.5, 0.1, 1.0, clamp=True)
 add_par(base, page, 'pulse', 'Simzanja', 'Simular zanja')
-ok('pagina Fase34: Zanjajuego, Profundidadagua 4, Ritmoagua 4, Desbordeagua 2, Ahoga 0,5, Simzanja')
+ok('parametros de la fase 34: Zanjajuego, Profundidadagua 4, Ritmoagua 4, Desbordeagua 2, Ahoga 0,5, Simzanja')
 
 # -----------------------------------------------------------------------------
 # OPERADORES

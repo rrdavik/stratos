@@ -73,7 +73,7 @@ add_par(base, page, 'int', 'Pasosfrente', 'Pasos que tarda el frente de polo a p
 add_par(base, page, 'str', 'Masterbeat', 'CHOP de master_beat (vacio: el pulso lo cuenta el motor)', '')
 add_par(base, page, 'pulse', 'Frenteprueba', 'Cambio de pattern de prueba: lanza el frente')
 add_par(base, page, 'toggle', 'Turno', 'Industria: el frente es un cambio de turno (ola de focos de sodio)', True)
-ok('pagina Fase17: Swaymax 6, Trafico 2, Pasosfrente 16, Masterbeat, Frenteprueba; v3: Turno')
+ok('parametros de la fase 17: Swaymax 6, Trafico 2, Pasosfrente 16, Masterbeat, Frenteprueba; v3: Turno')
 
 # la luz cenital, tenida por la estacion; las ventanas de la ciudad, encendidas
 if tiempo_al_dia(base):
