@@ -334,6 +334,10 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v150 (fase 43 v4): EL MARCADOR POR BANDOS. Arriba a la izquierda,
+#                 NATURAL EVOLUTION (las celdas del publico y los monstruos del bien en
+#                 accion) y, debajo, OUTBREAKS OF EVIL (las celdas del mal y los suyos);
+#                 arriba a la derecha, el reloj. marcador(): 'b0'/'b1' y 'e0'/'e1' + a c g.
 #                 Motor v149 (fase 43 v3): EL MARCADOR. Con Marcador (encendido), en modo
 #                 juego, encima del mundo: arriba a la izquierda las celdas construidas
 #                 (del publico) y las del mal; a su lado un recuadro con los monstruos en
@@ -461,7 +465,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v149'
+MOTOR_VERSION = 'motor v150'
 
 import math
 import time as _time
@@ -26089,7 +26093,8 @@ def _legend_piel(c):
 
 def marcador(que, frame=None):
     """Motor v149 (fase 43 v3): el marcador para los operadores de FASE1. que: 'on',
-    'bien', 'mal' (textos), 'ronda', 'reloj', 'final' (1 en los 5 s finales), 'n' (monstruos
+    'bien', 'mal' (textos: NATURAL EVOLUTION n, OUTBREAKS OF EVIL n), 'b0' 'b1' (el bien) y
+    'e0' 'e1' (el mal) + 'a' 'c' 'g' (atlas, cara, animacion; motor v150), 'ronda', 'reloj', 'final' (1 en los 5 s finales), 'n' (monstruos
     en pie) o 'm0' ... 'm3' + 'a' (atlas, -1 vacia), 'c' (cara), 'g' (animacion), 'b'
     (bando: 0 mal, 1 bien). Una vez por fotograma."""
     f = absTime.frame
@@ -26100,16 +26105,29 @@ def marcador(que, frame=None):
         except Exception:
             _CACHE['mar'] = None
         _CACHE['mar_frame'] = f
-    M = _CACHE.get('mar')
+    return marcador_valor(_CACHE.get('mar'), que)
+
+
+def marcador_valor(M, que):
+    """Un valor del marcador M (marcador_gz) para un operador (ver marcador)."""
     if que == 'on':
         return 1.0 if M else 0.0
+    casilla = len(que) == 3 and que[0] in 'mbe' and que[1].isdigit()
     if not M:
-        return 0.0 if (que[:1] == 'm' and que[-1:] != 'a') or que in ('final', 'n') else \
-            (-1.0 if que[:1] == 'm' else '')
+        if casilla:
+            return -1.0 if que[2] == 'a' else 0.0
+        return 0.0 if que in ('final', 'n') else ''
     if que == 'bien':
-        return 'CONSTRUIDAS  %d' % M['publico']
+        return 'NATURAL EVOLUTION   %d' % M['publico']
     if que == 'mal':
-        return 'MAL  %d' % M['mal']
+        return 'OUTBREAKS OF EVIL   %d' % M['mal']
+    if casilla and que[0] in 'be':      # motor v150: las casillas de cada bando
+        lista = [x for x in M['monstruos'] if x[3] == ('bien' if que[0] == 'b' else 'mal')]
+        k = int(que[1])
+        if k >= len(lista):
+            return -1.0 if que[2] == 'a' else 0.0
+        a, cara, anim, _ = lista[k]
+        return float(dict(a=a, c=cara, g=anim).get(que[2], 0))
     if que in ('ronda', 'reloj'):
         return M[que]
     if que == 'final':
