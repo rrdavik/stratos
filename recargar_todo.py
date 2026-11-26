@@ -14,8 +14,9 @@ QUE HACE
 --------
   - Si no existe /project1/FASE1 (proyecto nuevo), empieza por fase12_base.py.
     Si ya existe, NO la lanza (es la que crea el proyecto desde cero).
-  - Lanza fase3 ... fase42 en orden, las que haya en la carpeta (las que no
-    existan todavia se saltan en silencio).
+  - Lanza fase3 ... fase43 en orden, las que haya en la carpeta (las que no
+    existan todavia se saltan en silencio), y despues cualquier faseNN_*.py
+    posterior que encuentre en la carpeta (una fase nueva entra sola).
   - Relanza /project1/SALA con sala_virtual.py solo si ya estaba montada
     (poner SALA = True para montarla tambien si no lo estaba). Tambien si esta
     montada con otro nombre (SALA1, salap...): sala_virtual.py la renombra a SALA.
@@ -47,7 +48,25 @@ FASES_ORDEN = ['fase3_semilla.py', 'fase4_desborde.py', 'fase5_especies.py',
                'fase30_relampago.py', 'fase31_historico.py', 'fase32_juego.py', 'fase33_monstruo.py',
                'fase34_zanjas.py', 'fase35_rescate.py', 'fase36_luzjuego.py', 'fase37_armas.py',
                'fase38_trumpzilla.py', 'fase39_mal.py', 'fase40_godzilla.py',
-               'fase41_nefanyamuto.py', 'fase42_godzilla_azul.py']
+               'fase41_nefanyamuto.py', 'fase42_godzilla_azul.py', 'fase43_ronda_genozilla.py']
+
+
+def _fases_nuevas():
+    """Las fases de la carpeta posteriores a la ultima de FASES_ORDEN (faseNN_*.py),
+    en orden: una fase nueva entra sola aunque esta lista no se haya puesto al dia."""
+    import os
+    import re
+    ultima = max(int(re.match(r'fase(\d+)_', f).group(1)) for f in FASES_ORDEN)
+    try:
+        nombres = os.listdir(CARPETA)
+    except Exception:
+        return []
+    nuevas = []
+    for f in nombres:
+        r = re.match(r'fase(\d+)_.*\.py$', f)
+        if r and int(r.group(1)) > ultima and f not in FASES_ORDEN:
+            nuevas.append((int(r.group(1)), f))
+    return [f for _, f in sorted(nuevas)]
 
 
 class _Eco(object):
@@ -123,7 +142,7 @@ def _recargar():
     plan = []
     if op('/project1/FASE1') is None:
         plan.append('fase12_base.py')
-    plan += FASES_ORDEN
+    plan += FASES_ORDEN + _fases_nuevas()
     if SALA or op('/project1/SALA') is not None or _hay_sala():
         plan.append('sala_virtual.py')
 
