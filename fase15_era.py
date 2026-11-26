@@ -71,7 +71,7 @@ add_par(base, page, 'float', 'Pesotraza', 'Preferencia de las carreteras por las
         0.0, 1.0, clamp=True)
 add_par(base, page, 'toggle', 'Rebrote', 'Lo heredado en naturaleza brota de un banco de semillas', True)
 add_par(base, page, 'toggle', 'Temaenciclo', 'Un cambio de Tema espera al fin de ciclo', True)
-ok('pagina Fase15: Pesotraza 0,5, Rebrote, Temaenciclo')
+ok('parametros de la fase 15: Pesotraza 0,5, Rebrote, Temaenciclo')
 
 # las conchas, con el shader de la piel (lo hace install_core; aqui se comprueba)
 if not conchas_al_dia(base, m):

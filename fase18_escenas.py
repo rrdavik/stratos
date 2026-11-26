@@ -70,7 +70,7 @@ add_par(base, page, 'pulse', 'Cargarescena', 'Volver a la escena elegida')
 add_par(base, page, 'float', 'Luzcalida', 'Luz calida (0 fria de la fase 10, 1 de dia)', 0.0, 0.0, 1.0,
         clamp=True)
 add_par(base, page, 'toggle', 'Diagnostico', 'Capas de diagnostico: puentes, rutas y presion', False)
-ok('pagina Fase18: Escena, Guardarescena, Cargarescena, Luzcalida, Diagnostico')
+ok('parametros de la fase 18: Escena, Guardarescena, Cargarescena, Luzcalida, Diagnostico')
 
 tabla = get_or_make(base, 'tableDAT', 'escenas', -440, 140)
 if tabla.numRows <= 1 or tabla[0, 0] is None or tabla[0, 0].val != 'escena':

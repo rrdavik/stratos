@@ -78,7 +78,7 @@ m = motor.module
 page = get_page(base, 'Fase31')
 add_par(base, page, 'pulse', 'Exportartestigo', 'Exportar el testigo de la ultima escision')
 add_par(base, page, 'str', 'Carpetahistorico', 'Carpeta del historico', CARPETA + '/historico')
-ok('pagina Fase31: Exportartestigo, Carpetahistorico (%s/historico)' % CARPETA)
+ok('parametros de la fase 31: Exportartestigo, Carpetahistorico (%s/historico)' % CARPETA)
 
 # -----------------------------------------------------------------------------
 # OPERADORES

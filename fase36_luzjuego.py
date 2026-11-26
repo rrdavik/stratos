@@ -43,7 +43,7 @@ m = motor.module
 
 page = get_page(base, 'Fase36')
 add_par(base, page, 'toggle', 'Luzjuego', 'Luz de juego', True)
-ok('pagina Fase36: Luzjuego (encendido)')
+ok('parametros de la fase 36: Luzjuego (encendido)')
 
 set_render(base)
 

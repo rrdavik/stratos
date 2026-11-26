@@ -374,7 +374,28 @@ class Page(object):
         return self._append(name, 'header', label, '')
 
     def appendRGB(self, name, label=None):
-        return [self._append(name + c, 'float', label, 0.0)[0] for c in 'rgb']
+        ps = [self._append(name + c, 'float', label, 0.0)[0] for c in 'rgb']
+        for p in ps:
+            p.style = 'RGB'
+        return ps
+
+    def sort(self, *names):
+        """Como Page.sort de TouchDesigner: los parametros de la pagina en ese orden
+        (un RGB, por el nombre del grupo); los que no se nombran, despues."""
+        pars = self.owner.par._pars
+        mios = [p for p in pars.values() if p.custom and p.page is self]
+        orden = []
+        for n in names:
+            grupo = [p for p in mios if p.name == n] or \
+                [p for p in mios if getattr(p, 'style', '') == 'RGB' and p.name[:-1] == n]
+            if not grupo:
+                raise ValueError('Page.sort: %s no esta en la pagina %s' % (n, self.name))
+            orden += [p for p in grupo if not any(p is q for q in orden)]      # Par == compara valores
+        orden += [p for p in mios if not any(p is q for q in orden)]
+        for p in orden:
+            pars.pop(p.name)
+        for p in orden:
+            pars[p.name] = p
 
     def destroy(self):
         """Como TouchDesigner: quita la pagina y los parametros que le quedan."""
@@ -960,6 +981,12 @@ class OP(object):
     @property
     def customPages(self):
         return list(self._pages)
+
+    def sortCustomPages(self, *names):
+        """Como TouchDesigner: las paginas propias en ese orden; las demas, despues."""
+        por = {pg.name: pg for pg in self._pages}
+        orden = [por[n] for n in names if n in por]
+        self._pages[:] = orden + [pg for pg in self._pages if pg not in orden]
 
     @property
     def customPars(self):

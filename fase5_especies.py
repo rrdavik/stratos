@@ -46,14 +46,14 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase5 v6  (sin loseta de luz: el ambar del SEQ2 en la especie, motor v125)'
+VERSION = 'fase5 v7  (los parametros del SEQ2, en la pagina MIDI: las paginas por temas, comun v104)'
 banner(VERSION)
 
 base = require_base(5)
 motor = install_core(base, CARPETA, 5)
 
 PARS_SEQ2 = ('Canal2', 'Filtrar2', 'Nota2', 'Sembrar2')
-page = get_page(base, 'Fase2')
+page = get_page(base, pagina_de('Canal2', 'Fase2'))     # comun v104: la pagina MIDI
 
 # Proyecto anterior a la v4: los parametros estaban en la pagina Fase5. Se
 # quitan de ahi y se recrean en la Fase2 con el valor que tenian.
@@ -61,7 +61,7 @@ guardados = {}
 for nm in PARS_SEQ2:
     try:
         p = getattr(base.par, nm, None)
-        if p is not None and p.page is not None and p.page.name != 'Fase2':
+        if p is not None and p.page is not None and p.page.name not in ('Fase2', page.name):
             if nm != 'Sembrar2':                     # el pulso no guarda valor
                 guardados[nm] = p.eval()
             p.destroy()
@@ -143,8 +143,8 @@ def prueba(t):
     t.check('leyenda SEQ2', 'SEQ2' in m.legend())
     # Nota2 y Filtrar2, como Nota y Filtrar del SEQ1
     t.check('Nota2 guarda la ultima nota del SEQ2', int(base.par.Nota2) == 0x32)
-    t.check('los parametros del SEQ2 estan en la pagina Fase2, con los del SEQ1',
-            all(getattr(base.par, nm).page.name == 'Fase2' for nm in PARS_SEQ2 + ('Canal', 'Filtrar', 'Nota')))
+    t.check('los parametros del SEQ2 estan en la pagina MIDI, con los del SEQ1',
+            all(getattr(base.par, nm).page.name == pagina_de(nm, 'Fase2') for nm in PARS_SEQ2 + ('Canal', 'Filtrar', 'Nota')))
     t.check('la pagina Fase5 ya no existe', all(pg.name != 'Fase5' for pg in base.customPages))
     drum = int(base.par.Canaldrum) if has_par(base, 'Canaldrum') else 16
     libre = next(k for k in range(1, 16) if k not in (int(base.par.Canal), ch2, drum))

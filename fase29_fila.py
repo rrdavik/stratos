@@ -86,7 +86,7 @@ add_par(base, page, 'menu', 'Modofila', 'Forma de la fila', 'cadena',
         menu=list(m.MODOS_FILA), menu_labels=['Cadena (cualquier forma contigua)', 'Recta (en linea)'])
 add_par(base, page, 'int', 'Conchasporpersona', 'Conchas por persona', 1, 1, 12, clamp=True)
 add_par(base, page, 'pulse', 'Simsumar', 'Sumar una persona a la fila')
-ok('pagina Fase29: Minfila 3, Tfila 5 s, Modofila cadena, Conchasporpersona 1, Simsumar')
+ok('parametros de la fase 29: Minfila 3, Tfila 5 s, Modofila cadena, Conchasporpersona 1, Simsumar')
 
 # -----------------------------------------------------------------------------
 # OPERADORES

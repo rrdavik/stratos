@@ -137,7 +137,7 @@ add_par(base, page, 'int', 'Minred', 'Ocupacion minima de una formacion con corr
 add_par(base, page, 'float', 'Anchovia', 'Ancho del ferrocarril', 0.14, 0.02, 1.0)
 add_par(base, page, 'toggle', 'Pulsored', 'Pulsos por la red, al tempo', True)
 add_par(base, page, 'rgb', 'Colorred', 'Color de la red (violeta reservado)', m.COL_RED_DEF)
-ok('pagina Fase13: Rios, Carreteras, Minvia 2, Grosorvia 0,18 (carreteras), Maxrio 12; v2: Colorrio '
+ok('parametros de la fase 13: Rios, Carreteras, Minvia 2, Grosorvia 0,18 (carreteras), Maxrio 12; v2: Colorrio '
    '(v4: OKLCH 0,65 0,18 250), Anchorio 0,10 (el maximo, 3,4 x), Emisivorio 0,6, Lagos; v3: Anchominpx 4, '
    'Pruebario; v7: Vias, Red, Minred 2, Anchovia 0,14, Pulsored, Colorred')
 
@@ -484,7 +484,7 @@ def _prueba_v3(t, m):
             'RIOS     tramos' in m.legend() and 'px' in m.legend())
     # v6: la pagina mas corta
     fuera = [nm for nm in ('Anchomaxrio', 'Pendientemin') if has_par(base, nm)]
-    t.check('pagina Fase13 sin Anchomaxrio ni Pendientemin', not fuera,
+    t.check('parametros de la fase 13 sin Anchomaxrio ni Pendientemin', not fuera,
             'siguen: %s' % ', '.join(fuera) if fuera else '')
     cf = m.cfg()
     t.check('el rio mas caudaloso, 3,4 x Anchorio; el relieve minimo de una fuente, 0,01',

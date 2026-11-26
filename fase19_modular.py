@@ -95,7 +95,7 @@ add_par(base, page, 'float', 'Respiracion', 'LFO: respiracion de las ventanas', 
 add_par(base, page, 'float', 'Smog', 'Ruido: smog de la ciudad', 1.0, 0.0, 2.0)
 add_par(base, page, 'float', 'Niebla', 'Espacialidad: niebla de distancia', 1.0, 0.0, 1.0, clamp=True)
 add_par(base, page, 'float', 'Glitch', 'Saturacion: fracturas y glitch', 1.0, 0.0, 1.0, clamp=True)
-ok('pagina Fase19: Fuentemodular (osc), Puertoosc 9000, Chopmodular, Rangomodular, Suavizado, '
+ok('parametros de la fase 19: Fuentemodular (osc), Puertoosc 9000, Chopmodular, Rangomodular, Suavizado, '
    'Lfo Ruido Espacio Saturacion, Vientomax 12, Respiracion 0,75, Smog, Niebla, Glitch')
 
 osc = get_or_make(base, 'oscinCHOP', 'modular_osc', -660, 460)

@@ -77,7 +77,7 @@ if not has_par(base, 'Costemax'):
             5, 1, 12, clamp=True)
 if not has_par(base, 'Gatemax'):
     add_par(base, get_page(base, 'Fase3'), 'float', 'Gatemax', GATEMAX_LABEL, 1.25, 1.0, 2.0)
-ok('pagina Fase4: Umbralram (5), Pasoumbral (2: fusion 7, corona 9, cumbre 11), Tramoscumbre, '
+ok('parametros de la fase 4: Umbralram (5), Pasoumbral (2: fusion 7, corona 9, cumbre 11), Tramoscumbre, '
    'Satelite')
 
 materiales_formas(base)
@@ -173,7 +173,7 @@ def prueba(t):
     # v8: la pagina mas corta
     fuera = [nm for nm in ('Umbralfusion', 'Umbralcorona', 'Umbralcumbre', 'Tamsatelite',
                            'Limsatelite', 'Vecina') if has_par(base, nm)]
-    t.check('pagina Fase4: solo Umbralram, Pasoumbral, Tramoscumbre y Satelite',
+    t.check('parametros de la fase 4: solo Umbralram, Pasoumbral, Tramoscumbre y Satelite',
             not fuera and all(has_par(base, nm) for nm in FASE4_PARS),
             'siguen: %s' % ', '.join(fuera) if fuera else '')
     paso = int(base.par.Pasoumbral)
