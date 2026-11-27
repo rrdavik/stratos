@@ -55,7 +55,8 @@ OPERADORES (en /project1/FASE1)
   con_titulo_sombra, con_titulo_texto, con_titulo_juego Over TOP: el titulo
                encima del render. con_rotulo (la leyenda) y out_render (la sala
                virtual) salen de con_titulo_juego.
-  marcador_monstruos (GLSL TOP, marcador_pixel; los cuatro atlas de entrada),
+  marcador_monstruos (GLSL TOP, marcador_pixel; v10: una entrada, marcador_atlas,
+  el Movie File In de sprites/marcador_atlas.png con los cuatro atlas en uno),
   marcador_seguro (Switch TOP: transparente, marcador_vacio, si el shader
   falla), marcador_bien, marcador_mal, marcador_ronda, marcador_reloj (Text
   TOP) y con_marcador_* (Over TOP): el marcador encima del render
@@ -75,6 +76,7 @@ PROBAR
 
 COMO USARLO
 -----------
+  Copia la carpeta sprites del repositorio (v10: marcador_atlas.png) y:
     exec(open('C:/Users/DareDave/Downloads/est/fase43_ronda_genozilla.py').read())
 =============================================================================
 """
@@ -82,7 +84,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase43 v9  (el marcador: cada monstruo con su atlas por nombre; los Godzillas en verde, el mal en rojo)'
+VERSION = 'fase43 v10  (el marcador lee los cuatro monstruos de un solo atlas: los Godzillas en verde, el mal en rojo)'
 banner(VERSION)
 
 base = require_base(43)
@@ -196,8 +198,8 @@ CENTRO_Y = MARGEN + LINEA // 2          # el centro de la linea, desde arriba
 MARCADOR_PIXEL = """// Estratos - el marcador de la partida (fase 43 v8): en una linea, sin recuadros, los
 // monstruos de cada bando que estan en el planeta (los del bien tras NATURAL EVOLUTION,
 // los del mal tras OUTBREAKS OF EVIL), cada uno con la cara del atlas (4 x 3 celdas) y la
-// animacion de su sprite del mundo (sprite_vertex), con una sombra suave. Entradas, segun
-// las que haya: 0 trumpzilla, 1 nefanyamuto, 2 godzilla, 3 godzilla_azul (sus atlas).
+// animacion de su sprite del mundo (sprite_vertex), con una sombra suave. Una entrada (v10):
+// marcador_atlas, los cuatro atlas en uno.
 uniform vec4 uMar;          // x encendido, y los 5 s finales, z el reloj (s)
 uniform vec4 uB0;           // por hueco: x atlas (-1 vacio), y cara, z animacion
 uniform vec4 uB1;
@@ -211,34 +213,16 @@ layout(location = 0) out vec4 fragColor;
 
 vec4 atlasFetch(int k, vec2 uv, int cara)
 {
+    // v10: los cuatro atlas en uno (sprites/marcador_atlas.png, 2 x 2): arriba 0 trumpzilla y
+    // 1 nefanyamuto, abajo 2 godzilla y 3 godzilla_azul; cada uno de 4 x 3 caras
     vec4 t = vec4(0.0);
 #if TD_NUM_2D_INPUTS > 0
-    vec2 tam = vec2(1.0);
-    if (k == 0) tam = vec2(textureSize(sTD2DInputs[0], 0));
-#if TD_NUM_2D_INPUTS > 1
-    if (k == 1) tam = vec2(textureSize(sTD2DInputs[1], 0));
-#endif
-#if TD_NUM_2D_INPUTS > 2
-    if (k == 2) tam = vec2(textureSize(sTD2DInputs[2], 0));
-#endif
-#if TD_NUM_2D_INPUTS > 3
-    if (k == 3) tam = vec2(textureSize(sTD2DInputs[3], 0));
-#endif
-    vec2 celda = tam / vec2(4.0, 3.0);
-    float col = mod(float(cara), 4.0);
-    float fila = floor(float(cara) / 4.0 + 0.001);
-    vec2 px = (vec2(col, 2.0 - fila) + uv) * celda;      // la fila 0 del atlas, arriba
-    ivec2 ip = ivec2(clamp(px, vec2(0.0), tam - 1.0));
-    if (k == 0) t = texelFetch(sTD2DInputs[0], ip, 0);
-#if TD_NUM_2D_INPUTS > 1
-    if (k == 1) t = texelFetch(sTD2DInputs[1], ip, 0);
-#endif
-#if TD_NUM_2D_INPUTS > 2
-    if (k == 2) t = texelFetch(sTD2DInputs[2], ip, 0);
-#endif
-#if TD_NUM_2D_INPUTS > 3
-    if (k == 3) t = texelFetch(sTD2DInputs[3], ip, 0);
-#endif
+    vec2 tam = vec2(textureSize(sTD2DInputs[0], 0));
+    vec2 celda = tam / vec2(8.0, 6.0);
+    float col = mod(float(cara), 4.0) + 4.0 * float(k - 2 * (k / 2));
+    float fila = floor(float(cara) / 4.0 + 0.001) + 3.0 * float(k / 2);
+    vec2 px = (vec2(col, 5.0 - fila) + uv) * celda;      // la fila 0, arriba
+    t = texelFetch(sTD2DInputs[0], ivec2(clamp(px, vec2(0.0), tam - 1.0)), 0);
 #endif
     return t;
 }
@@ -398,24 +382,18 @@ def enchufar_en_orden(dst, srcs):
     return nombres_entradas(dst)
 
 
-atlas_ops = []
+# v10: una sola entrada, los cuatro atlas en uno (sprites/marcador_atlas.png): en TouchDesigner el
+# GLSL TOP se quedaba con tres de los cuatro atlas (se perdia uno distinto cada vez)
+ATLAS_MARCADOR = 'sprites/marcador_atlas.png'
+atlas_top = get_or_make(base, 'moviefileinTOP', 'marcador_atlas', 80, -800)
+setp_any(atlas_top, ['file'], CARPETA + '/' + ATLAS_MARCADOR)
+setmenu(atlas_top, ['inputfiltertype'], ['nearest'])
 faltan = []
-for n in m.MARCADOR_MON:
-    at = base.op(n + '_atlas')
-    if at is None:
-        faltan.append(n + '_atlas')
-        break                               # las entradas, seguidas: sin hueco
-    atlas_ops.append(at)
-ENTRADAS = enchufar_en_orden(mon_top, atlas_ops)
-for at in atlas_ops:                    # v9: el orden ya no importa (el motor busca cada atlas por nombre),
-    if at.name not in nombres_entradas(mon_top):     # pero tienen que estar los cuatro
-        try:
-            mon_top.inputConnectors[-1].connect(at)  # en el conector libre del final (no pisa ninguna)
-        except Exception:
-            pass
-ENTRADAS = nombres_entradas(mon_top)
-if sorted(ENTRADAS) != sorted(x.name for x in atlas_ops):
-    faltan.append('las entradas de marcador_monstruos (%s)' % ', '.join(ENTRADAS or ['ninguna']))
+if _png_medidas(CARPETA + '/' + ATLAS_MARCADOR) is None:
+    faltan.append(ATLAS_MARCADOR + ' (copia la carpeta sprites del repositorio)')
+ENTRADAS = enchufar_en_orden(mon_top, [atlas_top])
+if ENTRADAS != ['marcador_atlas']:
+    faltan.append('la entrada de marcador_monstruos (%s)' % ', '.join(ENTRADAS or ['ninguna']))
 uniforme(mon_top, 0, 'uMar', [MAR % 'on', MAR % 'final', 'absTime.seconds', 0])
 for k, nombre in enumerate(('b0', 'b1', 'e0', 'e1')):
     uniforme(mon_top, 1 + k, 'u' + nombre.upper(), [MAR % (nombre + x) for x in 'acg'] + [0])
@@ -736,8 +714,7 @@ def _prueba(t, m):
                                                'con_marcador'))
     bajo_titulo = nombres_entradas(sh) if sh is not None else []
     entradas = nombres_entradas(base.op('marcador_monstruos'))
-    cable = (len(bajo_titulo) > 1 and bajo_titulo[1] == 'con_marcador'
-             and sorted(entradas) == sorted(n + '_atlas' for n in m.MARCADOR_MON))     # los cuatro, en cualquier orden
+    cable = len(bajo_titulo) > 1 and bajo_titulo[1] == 'con_marcador' and entradas == ['marcador_atlas']
     vals = [m.marcador_valor(M1, q) for q in ('bien', 'mal', 'e0a', 'e0c', 'e0g', 'e0v', 'e1a', 'e1v', 'b1a',
                                                 'b1g', 'b1v')]
     # v8: en la linea, los de cada bando que estan y en su orden (verde y azul; Trumpzilla y NefanyaMuto)
@@ -746,9 +723,8 @@ def _prueba(t, m):
     My = dict(M1, monstruos=[(1, 0, 0, 'mal'), (3, 0, 0, 'bien')])
     solo_nefa = [m.marcador_valor(My, q) for q in ('e0a', 'e1a', 'b0a', 'b1a')]
     # v9: con las entradas en otro orden (como salian en TouchDesigner), cada uno con su atlas
-    revuelto = ['godzilla_azul_atlas', 'nefanyamuto_atlas', 'godzilla_atlas', 'trumpzilla_atlas']
-    por_nombre = [m.marcador_valor(Mx, q, revuelto) for q in ('b0a', 'b1a', 'e0a', 'e1a')]
-    sin_trump = m.marcador_valor(Mx, 'e0a', revuelto[:3])
+    por_nombre = [m.marcador_valor(Mx, q) for q in ('b0a', 'b1a', 'e0a', 'e1a')]     # v10: el atlas combinado
+    med = _png_medidas(CARPETA + '/' + ATLAS_MARCADOR)
     base.par.Marcador = False
     apagado = m.marcador_gz(W, m.cfg(), S3.now)
     t.check('el marcador: construidas y mal (el recuento), ESPERANDO sin monstruo; con Trumpzilla, RONDA 1, su '
@@ -764,7 +740,7 @@ def _prueba(t, m):
                          float(m.EMOCIONES_MON.index(cara)), float(m.ANIMS_MON.index(anim)), 1.0, -1.0, 0.0, -1.0,
                          0.0, 0.0]
             and orden == [2.0, 3.0, 0.0, 1.0] and solo_nefa == [1.0, -1.0, 3.0, -1.0]
-            and por_nombre == [2.0, 0.0, 3.0, 1.0] and sin_trump == -1.0,
+            and por_nombre == [2.0, 3.0, 0.0, 1.0] and med == (1152, 1152),
             'operadores %s cable %s (con_titulo_sombra <- %s; marcador_monstruos <- %s) | %s | %s | %s | %s %s %s'
             % (ops, cable, bajo_titulo, entradas, M0, M1, vals, orden, solo_nefa, por_nombre))
 

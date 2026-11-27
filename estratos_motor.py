@@ -334,6 +334,10 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v154 (fase 43 v10): UN SOLO ATLAS PARA EL MARCADOR. En TouchDesigner el
+#                 GLSL TOP del marcador se quedaba con tres de los cuatro atlas; ahora lee
+#                 de uno (sprites/marcador_atlas.png, los cuatro en 2 x 2) y 'b0a'... es el
+#                 numero del monstruo en el (MARCADOR_MON).
 #                 Motor v153 (fase 43 v9): CADA MONSTRUO CON SU ATLAS, POR NOMBRE. El shader
 #                 del marcador elegia el dibujo por el numero de entrada (0 trumpzilla, 1
 #                 nefanyamuto, 2 godzilla, 3 el azul); en TouchDesigner las entradas
@@ -482,7 +486,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v153'
+MOTOR_VERSION = 'motor v154'
 
 import math
 import time as _time
@@ -26130,12 +26134,8 @@ def marcador(que, frame=None):
             _CACHE['mar'] = marcador_gz(W, c, absTime.seconds) if c['nivel'] >= 43 else None
         except Exception:
             _CACHE['mar'] = None
-        try:                            # motor v153: las entradas de verdad del shader, por nombre
-            _CACHE['mar_ent'] = [o.name for o in parent().op('marcador_monstruos').inputs]
-        except Exception:
-            _CACHE['mar_ent'] = None
         _CACHE['mar_frame'] = f
-    return marcador_valor(_CACHE.get('mar'), que, _CACHE.get('mar_ent'))
+    return marcador_valor(_CACHE.get('mar'), que)     # motor v154: el atlas combinado (0-3)
 
 
 def marcador_valor(M, que, entradas=None):
