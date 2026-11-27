@@ -86,7 +86,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase43 v6  (el marcador: una casilla fija por monstruo, el Godzilla azul incluido; en gris si no esta)'
+VERSION = 'fase43 v7  (el marcador: los cuatro atlas siempre enchufados en orden; casilla fija por monstruo)'
 banner(VERSION)
 
 base = require_base(43)
@@ -165,12 +165,7 @@ def titulo_top(nombre, x, y, tam, color, fuente_, dx=0, dy=0, sub=False):
 
 def over(nombre, arriba, abajo, x, y):
     o = get_or_make(base, 'overTOP', nombre, x, y)
-    for i, src in ((0, arriba), (1, abajo)):
-        try:
-            o.inputConnectors[i].disconnect()
-        except Exception:
-            pass
-        connect(o, src, i)
+    enchufar_en_orden(o, [arriba, abajo])  # v7: arriba en la 0, abajo en la 1, sin correrse
     return o
 
 
@@ -385,17 +380,61 @@ setmenu(mon_top, ['outputresolution'], ['custom'], None)
 setp_any(mon_top, ['resolutionw'], ANCHO)
 setp_any(mon_top, ['resolutionh'], ALTO)
 setmenu(mon_top, ['format'], ['rgba8fixed', 'rgba8'], None)
-for i in range(len(m.MARCADOR_MON) - 1, -1, -1):        # se desenchufa todo y se enchufa en orden
+
+
+def nombres_entradas(o):
     try:
-        mon_top.inputConnectors[i].disconnect()
+        return [x.name for x in o.inputs]
+    except Exception:
+        return []
+
+
+def enchufar_en_orden(dst, srcs):
+    """v7: las entradas de dst, exactamente srcs y en ese orden (la entrada i, el atlas i
+    del shader). En TouchDesigner, al desenchufar una entrada las de detras se corren:
+    se desenchufa siempre la primera hasta dejarlo vacio y se enchufa cada una en la
+    primera libre. Si TouchDesigner tiene setInputs, primero eso. Devuelve los nombres."""
+    quiero = [x.name for x in srcs]
+    try:
+        if hasattr(dst, 'setInputs'):
+            dst.setInputs(list(srcs))
     except Exception:
         pass
+    if nombres_entradas(dst) == quiero:
+        return quiero
+    for _ in range(16):
+        if not dst.inputs:
+            break
+        try:
+            dst.inputConnectors[0].disconnect()
+        except Exception:
+            break
+    for i, src in enumerate(srcs):
+        hecho = False
+        try:
+            dst.inputConnectors[i].connect(src)
+            hecho = True
+        except Exception:
+            pass
+        if not hecho:
+            try:
+                src.outputConnectors[0].connect(dst)     # la primera entrada libre
+            except Exception:
+                pass
+    return nombres_entradas(dst)
+
+
+atlas_ops = []
 faltan = []
-for i, n in enumerate(m.MARCADOR_MON):
+for n in m.MARCADOR_MON:
     at = base.op(n + '_atlas')
-    if at is None or not connect(mon_top, at, i):
+    if at is None:
         faltan.append(n + '_atlas')
         break                               # las entradas, seguidas: sin hueco
+    atlas_ops.append(at)
+ENTRADAS = enchufar_en_orden(mon_top, atlas_ops)
+if ENTRADAS != [x.name for x in atlas_ops]:
+    faltan.append('el orden de las entradas (%s)' % ', '.join(ENTRADAS or ['ninguna']))
 uniforme(mon_top, 0, 'uMar', [MAR % 'on', MAR % 'final', 'absTime.seconds', 0])
 for k, nombre in enumerate(('b0', 'b1', 'e0', 'e1')):
     uniforme(mon_top, 1 + k, 'u' + nombre.upper(), [MAR % (nombre + x) for x in 'acgv'])
@@ -564,7 +603,7 @@ def _prueba(t, m):
     rot = base.op('con_rotulo')
     ops = all(base.op(n) is not None for n in ('titulo_juego', 'titulo_juego_sombra', 'titulo_juego_sub',
                                                'con_titulo_juego'))
-    cable = rot is None or (len(rot.inputs) > 1 and rot.inputs[1] is base.op('con_titulo_juego'))
+    cable = rot is None or nombres_entradas(rot)[1:2] == ['con_titulo_juego']
     t.check('titulo_juego, su sombra y titulo_juego_sub encima del render (con_titulo_juego); con_rotulo sale de el',
             ops and cable, 'operadores %s, con_rotulo %s' % (ops, cable))
 
@@ -713,9 +752,10 @@ def _prueba(t, m):
     ops = all(base.op(n) is not None for n in ('marcador_monstruos', 'marcador_pixel', 'marcador_seguro',
                                                'marcador_bien', 'marcador_mal', 'marcador_ronda', 'marcador_reloj',
                                                'con_marcador'))
-    cable = sh is not None and len(sh.inputs) > 1 and sh.inputs[1] is base.op('con_marcador')
-    entradas = [o.name for o in base.op('marcador_monstruos').inputs]
-    cable = cable and entradas == [n + '_atlas' for n in m.MARCADOR_MON]     # el azul, la cuarta
+    bajo_titulo = nombres_entradas(sh) if sh is not None else []
+    entradas = nombres_entradas(base.op('marcador_monstruos'))
+    cable = (len(bajo_titulo) > 1 and bajo_titulo[1] == 'con_marcador'
+             and entradas == [n + '_atlas' for n in m.MARCADOR_MON])        # el azul, la cuarta
     vals = [m.marcador_valor(M1, q) for q in ('bien', 'mal', 'e0a', 'e0c', 'e0g', 'e0v', 'e1a', 'e1v', 'b1a',
                                                 'b1g', 'b1v')]
     base.par.Marcador = False
@@ -732,7 +772,8 @@ def _prueba(t, m):
             and vals == ['NATURAL EVOLUTION   %d' % M1['publico'], 'OUTBREAKS OF EVIL   %d' % M1['mal'], 0.0,
                          float(m.EMOCIONES_MON.index(cara)), float(m.ANIMS_MON.index(anim)), 1.0, 1.0, 0.0, 3.0,
                          float(m.ANIMS_MON.index('piedra')), 0.0],
-            'operadores %s cable %s | %s | %s | %s' % (ops, cable, M0, M1, vals))
+            'operadores %s cable %s (con_titulo_sombra <- %s; marcador_monstruos <- %s) | %s | %s | %s'
+            % (ops, cable, bajo_titulo, entradas, M0, M1, vals))
 
 
 run_test(base, prueba)
