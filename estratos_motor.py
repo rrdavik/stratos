@@ -334,7 +334,10 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
-#                 Motor v151 (fase 43 v6): CASILLAS FIJAS EN EL MARCADOR. Cada monstruo tiene
+#                 Motor v152 (fase 43 v8): EL MARCADOR EN UNA LINEA. Solo salen los monstruos
+#                 que estan en el planeta, en el orden de su bando (Godzilla verde y luego
+#                 el azul; Trumpzilla y luego NefanyaMuto): marcador 'b0' 'b1' 'e0' 'e1'.
+#                 Motor v151 (fase 43 v6): CASILLAS FIJAS EN EL MARCADOR (hasta la v152). Cada monstruo tiene
 #                 la suya (NATURAL EVOLUTION: Godzilla y el azul; OUTBREAKS OF EVIL:
 #                 Trumpzilla y NefanyaMuto): en accion, con su cara y su animacion; fuera
 #                 del planeta, en gris y quieto (marcador: 'b0' 'b1' 'e0' 'e1' + 'v', 1 en pie).
@@ -473,7 +476,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v151'
+MOTOR_VERSION = 'motor v152'
 
 import math
 import time as _time
@@ -18547,9 +18550,9 @@ def _titulo_gz(W, cfg, now):
 
 MARCADOR_MON = ('trumpzilla', 'nefanyamuto', 'godzilla', 'godzilla_azul')     # el atlas (entrada) de cada uno
 MARCADOR_CASILLAS = 4
-# motor v151: la casilla de cada monstruo (atlas de MARCADOR_MON): el bien b0 Godzilla, b1 el azul;
-# el mal e0 Trumpzilla, e1 NefanyaMuto
-MARCADOR_FIJAS = dict(b0=2, b1=3, e0=0, e1=1)
+# motor v152: el orden de cada bando en la linea (atlas de MARCADOR_MON): primero Godzilla verde y
+# Trumpzilla, luego el azul y NefanyaMuto; solo los que estan en el planeta
+MARCADOR_ORDEN = dict(bien=(2, 3), mal=(0, 1))
 
 
 def marcador_on(W, cfg):
@@ -26138,16 +26141,14 @@ def marcador_valor(M, que):
         return 'NATURAL EVOLUTION   %d' % M['publico']
     if que == 'mal':
         return 'OUTBREAKS OF EVIL   %d' % M['mal']
-    if casilla and que[0] in 'be':      # motor v151: una casilla fija por monstruo
-        atlas = MARCADOR_FIJAS[que[:2]] if que[:2] in MARCADOR_FIJAS else -1
-        if atlas < 0:
+    if casilla and que[0] in 'be':      # motor v152: los de cada bando que estan, en su orden
+        orden = MARCADOR_ORDEN['bien' if que[0] == 'b' else 'mal']
+        lista = sorted((x for x in M['monstruos'] if x[0] in orden), key=lambda x: orden.index(x[0]))
+        k = int(que[1])
+        if k >= len(lista):
             return -1.0 if que[2] == 'a' else 0.0
-        vivo = next((x for x in M['monstruos'] if x[0] == atlas), None)
-        if vivo is None:                # fuera del planeta: en gris y quieto (calma, piedra)
-            vals = dict(a=atlas, c=EMOCIONES_MON.index('calma'), g=ANIMS_MON.index('piedra'), v=0)
-        else:
-            vals = dict(a=atlas, c=vivo[1], g=vivo[2], v=1)
-        return float(vals.get(que[2], 0))
+        a, cara, anim, _ = lista[k]
+        return float(dict(a=a, c=cara, g=anim, v=1).get(que[2], 0))
     if que in ('ronda', 'reloj'):
         return M[que]
     if que == 'final':
