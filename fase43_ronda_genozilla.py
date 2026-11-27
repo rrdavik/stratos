@@ -82,7 +82,7 @@ COMO USARLO
 CARPETA = 'C:/Users/DareDave/Downloads/est'
 exec(open(CARPETA + '/estratos_comun.py', encoding='utf-8').read())
 
-VERSION = 'fase43 v8  (el marcador en una linea, pequeno y sin recuadros; los monstruos segun aparecen)'
+VERSION = 'fase43 v9  (el marcador: cada monstruo con su atlas por nombre; los Godzillas en verde, el mal en rojo)'
 banner(VERSION)
 
 base = require_base(43)
@@ -185,7 +185,7 @@ MARGEN = 16
 LINEA = 48                              # el alto de la linea (y de los monstruos)
 SPRITE_W, SPRITE_H = 36, 48             # un monstruo (el aspecto del atlas, 0,75)
 PAD = 6
-TEXTO_W = 200                           # lo que ocupa cada titulo con su numero
+TEXTO_W = 270                           # lo que ocupa cada titulo con su numero (v9: Bahnschrift es ancha)
 BIEN_TXT_X = MARGEN
 BIEN_SPR_X = BIEN_TXT_X + TEXTO_W
 MAL_TXT_X = BIEN_SPR_X + 2 * (SPRITE_W + PAD) + 24
@@ -392,7 +392,7 @@ def enchufar_en_orden(dst, srcs):
             pass
         if not hecho:
             try:
-                src.outputConnectors[0].connect(dst)     # la primera entrada libre
+                dst.inputConnectors[-1].connect(src)     # v9: el ultimo conector, el libre (no pisa la 0)
             except Exception:
                 pass
     return nombres_entradas(dst)
@@ -407,8 +407,15 @@ for n in m.MARCADOR_MON:
         break                               # las entradas, seguidas: sin hueco
     atlas_ops.append(at)
 ENTRADAS = enchufar_en_orden(mon_top, atlas_ops)
-if ENTRADAS != [x.name for x in atlas_ops]:
-    faltan.append('el orden de las entradas (%s)' % ', '.join(ENTRADAS or ['ninguna']))
+for at in atlas_ops:                    # v9: el orden ya no importa (el motor busca cada atlas por nombre),
+    if at.name not in nombres_entradas(mon_top):     # pero tienen que estar los cuatro
+        try:
+            mon_top.inputConnectors[-1].connect(at)  # en el conector libre del final (no pisa ninguna)
+        except Exception:
+            pass
+ENTRADAS = nombres_entradas(mon_top)
+if sorted(ENTRADAS) != sorted(x.name for x in atlas_ops):
+    faltan.append('las entradas de marcador_monstruos (%s)' % ', '.join(ENTRADAS or ['ninguna']))
 uniforme(mon_top, 0, 'uMar', [MAR % 'on', MAR % 'final', 'absTime.seconds', 0])
 for k, nombre in enumerate(('b0', 'b1', 'e0', 'e1')):
     uniforme(mon_top, 1 + k, 'u' + nombre.upper(), [MAR % (nombre + x) for x in 'acg'] + [0])
@@ -730,7 +737,7 @@ def _prueba(t, m):
     bajo_titulo = nombres_entradas(sh) if sh is not None else []
     entradas = nombres_entradas(base.op('marcador_monstruos'))
     cable = (len(bajo_titulo) > 1 and bajo_titulo[1] == 'con_marcador'
-             and entradas == [n + '_atlas' for n in m.MARCADOR_MON])        # el azul, la cuarta
+             and sorted(entradas) == sorted(n + '_atlas' for n in m.MARCADOR_MON))     # los cuatro, en cualquier orden
     vals = [m.marcador_valor(M1, q) for q in ('bien', 'mal', 'e0a', 'e0c', 'e0g', 'e0v', 'e1a', 'e1v', 'b1a',
                                                 'b1g', 'b1v')]
     # v8: en la linea, los de cada bando que estan y en su orden (verde y azul; Trumpzilla y NefanyaMuto)
@@ -738,6 +745,10 @@ def _prueba(t, m):
     orden = [m.marcador_valor(Mx, q) for q in ('b0a', 'b1a', 'e0a', 'e1a')]
     My = dict(M1, monstruos=[(1, 0, 0, 'mal'), (3, 0, 0, 'bien')])
     solo_nefa = [m.marcador_valor(My, q) for q in ('e0a', 'e1a', 'b0a', 'b1a')]
+    # v9: con las entradas en otro orden (como salian en TouchDesigner), cada uno con su atlas
+    revuelto = ['godzilla_azul_atlas', 'nefanyamuto_atlas', 'godzilla_atlas', 'trumpzilla_atlas']
+    por_nombre = [m.marcador_valor(Mx, q, revuelto) for q in ('b0a', 'b1a', 'e0a', 'e1a')]
+    sin_trump = m.marcador_valor(Mx, 'e0a', revuelto[:3])
     base.par.Marcador = False
     apagado = m.marcador_gz(W, m.cfg(), S3.now)
     t.check('el marcador: construidas y mal (el recuento), ESPERANDO sin monstruo; con Trumpzilla, RONDA 1, su '
@@ -752,9 +763,10 @@ def _prueba(t, m):
             and vals == ['NATURAL EVOLUTION   %d' % M1['publico'], 'OUTBREAKS OF EVIL   %d' % M1['mal'], 0.0,
                          float(m.EMOCIONES_MON.index(cara)), float(m.ANIMS_MON.index(anim)), 1.0, -1.0, 0.0, -1.0,
                          0.0, 0.0]
-            and orden == [2.0, 3.0, 0.0, 1.0] and solo_nefa == [1.0, -1.0, 3.0, -1.0],
-            'operadores %s cable %s (con_titulo_sombra <- %s; marcador_monstruos <- %s) | %s | %s | %s | %s %s'
-            % (ops, cable, bajo_titulo, entradas, M0, M1, vals, orden, solo_nefa))
+            and orden == [2.0, 3.0, 0.0, 1.0] and solo_nefa == [1.0, -1.0, 3.0, -1.0]
+            and por_nombre == [2.0, 0.0, 3.0, 1.0] and sin_trump == -1.0,
+            'operadores %s cable %s (con_titulo_sombra <- %s; marcador_monstruos <- %s) | %s | %s | %s | %s %s %s'
+            % (ops, cable, bajo_titulo, entradas, M0, M1, vals, orden, solo_nefa, por_nombre))
 
 
 run_test(base, prueba)

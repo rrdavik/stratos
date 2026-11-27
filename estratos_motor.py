@@ -334,6 +334,12 @@
 #                 Ahora quien devora una celda que aun puede comer la acaba (no_soltar):
 #                 Trumpzilla, NefanyaMuto y Godzilla. El recalculo sigue (el cerco, la
 #                 sombra de la cara oculta y la tregua mandan como antes).
+#                 Motor v153 (fase 43 v9): CADA MONSTRUO CON SU ATLAS, POR NOMBRE. El shader
+#                 del marcador elegia el dibujo por el numero de entrada (0 trumpzilla, 1
+#                 nefanyamuto, 2 godzilla, 3 el azul); en TouchDesigner las entradas
+#                 quedaban en otro orden y salian el azul en el rojo y sin Trumpzilla.
+#                 Ahora 'b0a'... da la entrada de marcador_monstruos que tiene el atlas de
+#                 ese monstruo, buscandolo por su nombre (-1 si no esta enchufado).
 #                 Motor v152 (fase 43 v8): EL MARCADOR EN UNA LINEA. Solo salen los monstruos
 #                 que estan en el planeta, en el orden de su bando (Godzilla verde y luego
 #                 el azul; Trumpzilla y luego NefanyaMuto): marcador 'b0' 'b1' 'e0' 'e1'.
@@ -476,7 +482,7 @@
 # guardar el .toe y a recargar el motor.
 # =============================================================================
 
-MOTOR_VERSION = 'motor v152'
+MOTOR_VERSION = 'motor v153'
 
 import math
 import time as _time
@@ -26124,12 +26130,18 @@ def marcador(que, frame=None):
             _CACHE['mar'] = marcador_gz(W, c, absTime.seconds) if c['nivel'] >= 43 else None
         except Exception:
             _CACHE['mar'] = None
+        try:                            # motor v153: las entradas de verdad del shader, por nombre
+            _CACHE['mar_ent'] = [o.name for o in parent().op('marcador_monstruos').inputs]
+        except Exception:
+            _CACHE['mar_ent'] = None
         _CACHE['mar_frame'] = f
-    return marcador_valor(_CACHE.get('mar'), que)
+    return marcador_valor(_CACHE.get('mar'), que, _CACHE.get('mar_ent'))
 
 
-def marcador_valor(M, que):
-    """Un valor del marcador M (marcador_gz) para un operador (ver marcador)."""
+def marcador_valor(M, que, entradas=None):
+    """Un valor del marcador M (marcador_gz) para un operador (ver marcador). Motor v153:
+    con entradas (los nombres de las entradas de marcador_monstruos), el atlas ('b0a'...)
+    es la entrada que tiene el de ese monstruo (-1 si no esta)."""
     if que == 'on':
         return 1.0 if M else 0.0
     casilla = len(que) == 3 and que[0] in 'mbe' and que[1].isdigit()
@@ -26148,6 +26160,9 @@ def marcador_valor(M, que):
         if k >= len(lista):
             return -1.0 if que[2] == 'a' else 0.0
         a, cara, anim, _ = lista[k]
+        if que[2] == 'a' and entradas is not None:
+            nombre = MARCADOR_MON[a] + '_atlas'
+            return float(entradas.index(nombre)) if nombre in entradas else -1.0
         return float(dict(a=a, c=cara, g=anim, v=1).get(que[2], 0))
     if que in ('ronda', 'reloj'):
         return M[que]
